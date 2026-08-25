@@ -3,8 +3,8 @@
  * generate-rules.mjs — régénère le bloc « PROFIL-GÉNÉRÉ » de firestore.rules depuis
  * le profil d'un client.
  *
- *   node scripts/generate-rules.mjs --client taofic_ajagbe          # régénère le bloc
- *   node scripts/generate-rules.mjs --client taofic_ajagbe --check  # échoue si dérive (CI)
+ *   node scripts/generate-rules.mjs --client c2egf_burkina          # régénère le bloc
+ *   node scripts/generate-rules.mjs --client c2egf_burkina --check  # échoue si dérive (CI)
  *
  * Ne touche QUE la région entre les marqueurs PROFIL-GÉNÉRÉ ; le reste des règles est
  * écrit à la main. Comportement-préservant : pour un profil dont dealer.networks vaut

@@ -66,7 +66,7 @@ beforeAll(() => {
   if (PROJECT_ID !== 'demo-akayis-test') {
     throw new Error(`SÉCURITÉ : projectId doit être "demo-akayis-test". Valeur reçue : "${PROJECT_ID}"`)
   }
-  if (PROJECT_ID === 'taofic-ajagbe') {
+  if (['taofic-ajagbe', 'c2egf-b0b5a'].includes(PROJECT_ID)) {
     throw new Error('SÉCURITÉ : projectId de production interdit.')
   }
   if (getApps().length === 0) {

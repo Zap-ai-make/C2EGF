@@ -5,11 +5,10 @@
  * Aucun fichier front n'est édité pour ce client : le profil est la seule
  * source de variation (front, firestore.rules générées, functions).
  *
- * ⚠ `firebaseProject` reste null tant que le projet Firebase du client n'existe
- * pas. Le renseigner impose aussi de référencer le projet dans les garde-fous
- * des scripts admin (scripts/lib/assertFirebaseProject.mjs,
- * scripts/lib/assertResetProject.mjs) — sans quoi aucun script admin ne
- * fonctionnera dessus. Voir docs/adaptation-nouveau-client.md §5.4.
+ * `firebaseProject` = id réel du projet Firebase (tiret), distinct de `id` qui est
+ * l'identifiant client normalisé (souligné). Les deux diffèrent volontairement.
+ * Ce projet est aussi référencé dans les garde-fous des scripts admin
+ * (scripts/lib/assertFirebaseProject.mjs, scripts/lib/assertResetProject.mjs).
  */
 
 import { pilotProfile } from './_pilot.js'
@@ -22,7 +21,7 @@ export const c2egfProfile = Object.freeze({
   // firebaseProject = id réel du projet Firebase (tiret), à créer côté client.
   id: 'c2egf_burkina',
   label: 'C2EGF BURKINA',
-  firebaseProject: null,          // TODO client : id du projet Firebase C2EGF
+  firebaseProject: 'c2egf-b0b5a', // projet Firebase du client
 
   // ── Marque ─────────────────────────────────────────────────────────────────
   // appName  = wordmark dans l'UI ; pwaName = titre d'onglet + nom PWA installée.

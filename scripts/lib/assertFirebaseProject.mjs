@@ -7,7 +7,7 @@
  *
  * Règles :
  *   1. projectId doit exister et être une string non vide (après trim).
- *   2. taofic-ajagbe est bloqué absolument.
+ *   2. c2egf-b0b5a (production) est bloqué absolument.
  *   3. Le projectId doit commencer par "demo-" (casse sensible).
  */
 
@@ -39,10 +39,13 @@ export function assertFirebaseProject(rawProjectId) {
       'Le projectId est vide ou ne contient que des espaces.'
     )
   }
-  if (projectId === 'taofic-ajagbe') {
+  // Projet de production de CE dépôt (cf. config/clients/c2egf-burkina.js,
+  // champ firebaseProject). Nommé en dur volontairement : une garde de sécurité
+  // doit être lisible et greppable, jamais calculée.
+  if (projectId === 'c2egf-b0b5a') {
     throw new AssertFirebaseProjectError(
       'PRODUCTION_PROJECT_BLOCKED',
-      'Le projet de production taofic-ajagbe est bloqué. Utiliser --project demo-akayis-test.'
+      'Le projet de production c2egf-b0b5a est bloqué. Utiliser --project demo-akayis-test.'
     )
   }
   if (!projectId.startsWith('demo-')) {

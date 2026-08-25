@@ -349,12 +349,12 @@ describe('Remise à zéro — cycle complet sur émulateur', () => {
 // Scénario C — refus production non interactif
 // ─────────────────────────────────────────────
 describe('Remise à zéro — refus production sans terminal', () => {
-  it('C — GCLOUD_PROJECT=taofic-ajagbe + verrous, stdin non-TTY → exit 1 sans écriture', async () => {
+  it('C — GCLOUD_PROJECT=c2egf-b0b5a + verrous, stdin non-TTY → exit 1 sans écriture', async () => {
     const res = await runCLI(
       'resetDataToZero.mjs',
       ['--execute', '--allow-production'],
       {
-        GCLOUD_PROJECT: 'taofic-ajagbe',
+        GCLOUD_PROJECT: 'c2egf-b0b5a',
         AKAYIS_ALLOW_PRODUCTION_RESET: 'true',
         // Empêche tout contact accidentel avec la prod : l'hôte émulateur reste actif,
         // mais le script doit refuser AVANT toute initialisation Firebase.
@@ -371,7 +371,7 @@ describe('Remise à zéro — refus production sans terminal', () => {
     const res = await runCLI(
       'resetDataToZero.mjs',
       ['--execute'],
-      { GCLOUD_PROJECT: 'taofic-ajagbe' }
+      { GCLOUD_PROJECT: 'c2egf-b0b5a' }
     )
 
     expect(res.exitCode).not.toBe(0)

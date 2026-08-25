@@ -7,7 +7,7 @@
  *
  * Usage :
  *   node scripts/inspectPath.mjs <chemin/de/collection> [nbDocs=5]
- *   ex. node scripts/inspectPath.mjs clients/taofic_ajagbe/clients
+ *   ex. node scripts/inspectPath.mjs clients/c2egf_burkina/clients
  */
 
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app'

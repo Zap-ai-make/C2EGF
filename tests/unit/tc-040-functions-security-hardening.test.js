@@ -393,9 +393,9 @@ describe('TC-040 §GUARD assertFirebaseProject', () => {
     expect(assertFirebaseProject('demo-staging-v2')).toBe('demo-staging-v2')
   })
 
-  it('[GUARD-03] taofic-ajagbe → rejeté PRODUCTION_PROJECT_BLOCKED', () => {
+  it('[GUARD-03] c2egf-b0b5a → rejeté PRODUCTION_PROJECT_BLOCKED', () => {
     let thrown
-    try { assertFirebaseProject('taofic-ajagbe') } catch (e) { thrown = e }
+    try { assertFirebaseProject('c2egf-b0b5a') } catch (e) { thrown = e }
     expect(thrown).toBeInstanceOf(AssertFirebaseProjectError)
     expect(thrown.code).toBe('PRODUCTION_PROJECT_BLOCKED')
   })
@@ -442,9 +442,9 @@ describe('TC-040 §GUARD assertFirebaseProject', () => {
     expect(thrown.code).toBe('INVALID_PROJECT_ID_TYPE')
   })
 
-  it('[GUARD-10] taofic-ajagbe → rejet synchrone, aucun SDK initialisé', () => {
+  it('[GUARD-10] c2egf-b0b5a → rejet synchrone, aucun SDK initialisé', () => {
     let didThrow = false
-    try { assertFirebaseProject('taofic-ajagbe') } catch { didThrow = true }
+    try { assertFirebaseProject('c2egf-b0b5a') } catch { didThrow = true }
     expect(didThrow).toBe(true)
   })
 

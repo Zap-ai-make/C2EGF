@@ -5,7 +5,7 @@
  * Les scripts CLI importent ce module dynamiquement et interceptent l'erreur.
  *
  * Gardes (dans l'ordre, toutes actives sans exception) :
- *   1. taofic-ajagbe bloqué absolument
+ *   1. c2egf-b0b5a (production) bloqué absolument
  *   2. FIREBASE_AUTH_EMULATOR_HOST requis et non vide
  *   3. FIRESTORE_EMULATOR_HOST requis et non vide
  *   4. GCLOUD_PROJECT requis et non vide

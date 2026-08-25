@@ -19,7 +19,7 @@
  *   2. Cohérence GCLOUD_PROJECT / service account (aucun remplacement silencieux).
  *   3. DRY-RUN (execute=false)  → autorisé sur TOUT projet cohérent (lecture seule).
  *   4. EXECUTE sur demo-*       → autorisé.
- *   5. EXECUTE sur taofic-ajagbe → autorisé UNIQUEMENT avec les verrous 2 et 3.
+ *   5. EXECUTE sur c2egf-b0b5a  → autorisé UNIQUEMENT avec les verrous 2 et 3.
  *   6. EXECUTE sur tout autre projet non-demo → toujours bloqué (aucun opt-in).
  *
  * Aucune initialisation Firebase ici. Aucun message d'erreur n'expose de secret.
@@ -29,7 +29,12 @@ import { assertFirebaseProject, AssertFirebaseProjectError } from './assertFireb
 
 export { AssertFirebaseProjectError }
 
-export const PRODUCTION_PROJECT_ID = 'taofic-ajagbe'
+// Projet de production de CE dépôt (= firebaseProject du profil C2EGF). En dur :
+// une garde de sécurité se lit, elle ne se calcule pas. Conséquence voulue du
+// changement d'ancien client : taofic-ajagbe relève désormais de la règle 6
+// (tout autre projet non-demo → toujours bloqué), donc n'est plus effaçable
+// depuis ce dépôt, même avec les verrous.
+export const PRODUCTION_PROJECT_ID = 'c2egf-b0b5a'
 
 /**
  * @param {{

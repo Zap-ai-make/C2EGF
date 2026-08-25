@@ -33,7 +33,7 @@ if (!serviceAccountPath) {
 }
 
 // Garde projet : lire le service account et valider AVANT toute initialisation
-// Firebase (bloque taofic-ajagbe et tout projet non demo-*).
+// Firebase (bloque c2egf-b0b5a et tout projet non demo-*).
 const serviceAccount = JSON.parse(await readFile(serviceAccountPath, 'utf8'))
 try {
   resolveAndAssertAdminProject({ serviceAccount, envProjectId: process.env.GCLOUD_PROJECT })

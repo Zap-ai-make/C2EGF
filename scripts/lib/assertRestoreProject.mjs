@@ -11,7 +11,7 @@
  *   2. Cohérence GCLOUD_PROJECT / service account (aucun remplacement silencieux).
  *   3. DRY-RUN (execute=false)  → autorisé sur TOUT projet (lecture seule).
  *   4. EXECUTE (execute=true)   → autorisé UNIQUEMENT sur un projet demo-*.
- *      assertFirebaseProject() bloque taofic-ajagbe et tout projet non demo-.
+ *      assertFirebaseProject() bloque c2egf-b0b5a et tout projet non demo-.
  *
  * Aucune initialisation Firebase ici. Fonction pure et testable.
  * Aucun message d'erreur n'expose de secret (private_key, client_email).

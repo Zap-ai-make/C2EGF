@@ -7,20 +7,20 @@
  *
  * Cas A (service account fourni) :
  *   1.  SA=demo-akayis-test, env absent             → autorisé
- *   2.  SA=taofic-ajagbe, env=demo-akayis-test      → bloqué (production)
+ *   2.  SA=c2egf-b0b5a, env=demo-akayis-test      → bloqué (production)
  *   3.  SA project_id absent, env=demo-akayis-test  → bloqué
  *   4.  SA project_id vide, env=demo-akayis-test    → bloqué
  *   5.  SA project_id espaces, env=demo-akayis-test → bloqué
  *   6a. SA project_id nombre, env=demo              → bloqué
  *   6b. SA project_id boolean, env=demo             → bloqué
  *   6c. SA project_id null, env=demo                → bloqué
- *   7.  SA=demo-akayis-test, env=taofic-ajagbe      → bloqué (mismatch)
+ *   7.  SA=demo-akayis-test, env=c2egf-b0b5a      → bloqué (mismatch)
  *   8.  SA=demo-akayis-test, env=autre-demo         → bloqué (mismatch)
  *   13. SA=demo-akayis-test, env=demo-akayis-test   → autorisé
  *
  * Cas B (pas de service account) :
  *   9.  env=demo-akayis-test  → autorisé
- *   10. env=taofic-ajagbe     → bloqué
+ *   10. env=c2egf-b0b5a     → bloqué
  *   11. env absent            → bloqué
  *   12a. env vide             → bloqué
  *   12b. env espaces          → bloqué
@@ -33,7 +33,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { resolveAndAssertAdminProject, AssertFirebaseProjectError } from '../../scripts/lib/resolveAndAssertAdminProject.mjs'
 
 const DEMO = 'demo-akayis-test'
-const PROD = 'taofic-ajagbe'
+const PROD = 'c2egf-b0b5a'
 const OTHER_DEMO = 'demo-autre'
 
 function sa(projectId) {
@@ -50,7 +50,7 @@ describe('TC-042 — resolveAndAssertAdminProject', () => {
       expect(result).toBe(DEMO)
     })
 
-    it('Cas 2 : SA=taofic-ajagbe, env=demo-akayis-test → bloqué (production)', () => {
+    it('Cas 2 : SA=c2egf-b0b5a, env=demo-akayis-test → bloqué (production)', () => {
       expect(() =>
         resolveAndAssertAdminProject({ serviceAccount: sa(PROD), envProjectId: DEMO })
       ).toThrow(AssertFirebaseProjectError)
@@ -135,7 +135,7 @@ describe('TC-042 — resolveAndAssertAdminProject', () => {
       }
     })
 
-    it('Cas 7 : SA=demo-akayis-test, env=taofic-ajagbe → bloqué (mismatch)', () => {
+    it('Cas 7 : SA=demo-akayis-test, env=c2egf-b0b5a → bloqué (mismatch)', () => {
       expect(() =>
         resolveAndAssertAdminProject({ serviceAccount: sa(DEMO), envProjectId: PROD })
       ).toThrow(AssertFirebaseProjectError)
@@ -182,7 +182,7 @@ describe('TC-042 — resolveAndAssertAdminProject', () => {
       expect(result).toBe(DEMO)
     })
 
-    it('Cas 10 : env=taofic-ajagbe → bloqué', () => {
+    it('Cas 10 : env=c2egf-b0b5a → bloqué', () => {
       expect(() =>
         resolveAndAssertAdminProject({ serviceAccount: null, envProjectId: PROD })
       ).toThrow(AssertFirebaseProjectError)

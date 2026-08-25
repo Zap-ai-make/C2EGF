@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "demo-akayis-test"
+    "default": "demo-akayis-test",
+    "production": "c2egf-b0b5a"
   }
 }

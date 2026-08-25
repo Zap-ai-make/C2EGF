@@ -28,7 +28,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const scriptsDir = resolve(__dirname, '../../scripts')
 
 const DEMO = 'demo-akayis-test'
-const PROD = 'taofic-ajagbe'
+const PROD = 'c2egf-b0b5a'
 const OTHER = 'production-autre'
 const sa = (projectId) => ({ project_id: projectId })
 
@@ -41,7 +41,7 @@ describe('TC-043-A — resolveRestoreProject', () => {
     expect(resolveRestoreProject({ serviceAccount: sa(DEMO), envProjectId: undefined, execute: false })).toBe(DEMO)
   })
 
-  it('EXECUTE sur production (taofic-ajagbe) → REFUSÉ (PRODUCTION_PROJECT_BLOCKED)', () => {
+  it('EXECUTE sur production (c2egf-b0b5a) → REFUSÉ (PRODUCTION_PROJECT_BLOCKED)', () => {
     expect(() =>
       resolveRestoreProject({ serviceAccount: sa(PROD), envProjectId: undefined, execute: true })
     ).toThrow(AssertFirebaseProjectError)

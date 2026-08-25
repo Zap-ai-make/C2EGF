@@ -18,7 +18,7 @@
  *   - Le DRY-RUN (lecture seule) est autorisé sur tout projet, y compris la
  *     production, pour permettre le diagnostic.
  *   - L'ÉCRITURE (--execute) est cantonnée aux projets demo-* : toute tentative
- *     d'exécution sur taofic-ajagbe (ou tout projet non demo-) est REFUSÉE.
+ *     d'exécution sur c2egf-b0b5a (ou tout projet non demo-) est REFUSÉE.
  *     Le dépôt ne contient donc aucun chemin d'écriture production pendant l'audit.
  *   - Idempotent : ré-exécutable sans effet de bord destructeur.
  *   - Aucune suppression. Aucune donnée métier touchée.

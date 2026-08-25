@@ -3,8 +3,8 @@
  * generate-functions-config.mjs — régénère functions/src/config/dealerProfile.js
  * depuis le profil d'un client.
  *
- *   node scripts/generate-functions-config.mjs --client taofic_ajagbe          # régénère
- *   node scripts/generate-functions-config.mjs --client taofic_ajagbe --check  # échoue si dérive (CI)
+ *   node scripts/generate-functions-config.mjs --client c2egf_burkina          # régénère
+ *   node scripts/generate-functions-config.mjs --client c2egf_burkina --check  # échoue si dérive (CI)
  *
  * À lancer au déploiement, en tandem avec scripts/generate-rules.mjs, pour aligner
  * les 3 couches (front, règles, functions) sur le même profil client.

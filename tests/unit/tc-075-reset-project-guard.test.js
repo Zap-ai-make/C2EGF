@@ -12,7 +12,7 @@
  *   3. SA=demo-akayis-test            → autorisé
  *   4. env seul demo-akayis-test      → autorisé
  *
- * Execute production (taofic-ajagbe) :
+ * Execute production (c2egf-b0b5a) :
  *   5. sans flag ni env               → PRODUCTION_RESET_NOT_UNLOCKED
  *   6. flag seul                      → bloqué
  *   7. env 'true' seul                → bloqué
@@ -42,7 +42,7 @@ import {
 } from '../../scripts/lib/assertResetProject.mjs'
 
 const DEMO = 'demo-akayis-test'
-const PROD = 'taofic-ajagbe'
+const PROD = 'c2egf-b0b5a'
 const OTHER_DEMO = 'demo-autre'
 const OTHER_REAL = 'autre-projet-reel'
 
@@ -88,7 +88,7 @@ describe('TC-075 — resolveResetProject', () => {
     })
   })
 
-  describe('Execute sur production (taofic-ajagbe)', () => {
+  describe('Execute sur production (c2egf-b0b5a)', () => {
     it('Cas 5 : sans flag ni env → PRODUCTION_RESET_NOT_UNLOCKED', () => {
       expectCode(
         () => resolveResetProject({ serviceAccount: sa(PROD), envProjectId: undefined, execute: true }),

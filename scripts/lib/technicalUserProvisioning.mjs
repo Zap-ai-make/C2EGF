@@ -39,7 +39,11 @@ export class AdminEnvError extends Error {
 
 export const TECHNICAL_ROLES = Object.freeze(['system_manager', 'dealer'])
 export const STORE_ROLES = Object.freeze(['store_admin'])
-export const PRODUCTION_BLOCKED_PROJECTS = Object.freeze(['taofic-ajagbe'])
+// Liste de blocage : projets sur lesquels le provisioning est interdit en absolu,
+// emulateurs presents ou non. c2egf-b0b5a est la production de CE depot ;
+// taofic-ajagbe, celle du client dont le produit a ete copie, est conservee —
+// une entree superflue dans une liste de blocage ne coute rien, son absence si.
+export const PRODUCTION_BLOCKED_PROJECTS = Object.freeze(['taofic-ajagbe', 'c2egf-b0b5a'])
 export const FORBIDDEN_PROFILE_FIELDS = Object.freeze([
   'storeId', 'storeName', 'dealerId', 'adminUid', 'boutiqueId',
 ])
@@ -67,12 +71,13 @@ export function validateEmulatorEnv(env = {}) {
   const fsHost = (env.FIRESTORE_EMULATOR_HOST ?? '').trim()
   const projectId = (env.GCLOUD_PROJECT ?? '').trim()
 
-  // taofic-ajagbe bloqué en absolu, même si les emulateurs sont présents
-  if (projectId === 'taofic-ajagbe') {
+  // Projets de production bloqués en absolu, même si les émulateurs sont présents.
+  // Dérivé de la liste ci-dessus : un seul endroit à tenir à jour.
+  if (PRODUCTION_BLOCKED_PROJECTS.includes(projectId)) {
     return {
       ok: false,
       code: 'PRODUCTION_PROJECT_BLOCKED',
-      message: '[SÉCURITÉ] Le projet "taofic-ajagbe" est explicitement interdit dans ce lot.',
+      message: `[SÉCURITÉ] Le projet "${projectId}" est explicitement interdit dans ce lot.`,
     }
   }
 
