@@ -35,14 +35,43 @@ Contrôle mécanique par script, exécuté après application. Les huit contrôl
 | Tout fichier `.md` mentionné existe sur disque | OK |
 | Aucun emoji (catégories Unicode `So`/`Sk`) | OK |
 | Cases à cocher bien formées, aucune ligne à espace nue | OK |
-| Titre H1 et sections `##` présents dans chaque fichier | OK |
+| Titre H1 et sections `##` dans les contrats, le workflow et l'annexe — `CLAUDE.md` et les documents de procédure exclus ; `AGENTS.md` et `SPEC.template.md` sans sections numérotées, par conception | OK |
+| `CLAUDE.md` contient sa directive unique, sans titre ajouté | OK |
 | **Non-régression du contenu protégé** | OK |
 
 **Le contrôle de non-régression a lui-même été validé par test de mutation.** Sur une copie du pack, deux dégradations ont été injectées : suppression de la règle IDOR (`SECURITY.md` §4) et affaiblissement du point d'arrêt 1 (`WORKFLOW.md` §1). Le contrôle a détecté les deux. Un « tout passe » sur un contrôle incapable d'échouer n'aurait rien prouvé.
 
 Le contenu placé sous protection : `WORKFLOW.md` §1 (les trois points d'arrêt), `SECURITY.md` §1 à §11 (tous les non-négociables), `DESIGN.md` §5, §8, §10, §11 (contraste, emoji, états, accessibilité), `ARCHITECTURE.md` §1 (l'échelle en cinq points et les garde-fous absolus). La comparaison se fait phrase par phrase contre l'état d'origine, insensible au reformatage.
 
-**Vérification indépendante possible** — le script et la copie d'origine sont conservés hors du pack, dans le répertoire de travail temporaire de la session (`scratchpad/verif.py` et `scratchpad/avant/`). Ils ne font pas partie du pack et ne seront pas copiés dans les projets.
+**Vérification reproductible depuis le dossier seul.** Le dossier est désormais un dépôt git. L'état antérieur à l'harmonisation est le commit `b6c6251`, porté par le tag **`origine`** ; l'outil de contrôle est versionné dans `.harmonisation/verif.py` et lit sa référence depuis ce tag. N'importe quel relecteur rejoue donc l'ensemble sans artefact fourni de l'extérieur :
+
+```
+python .harmonisation/verif.py     # 9 contrôles, sortie 0 attendue
+git diff origine -- '*.md'         # le diff complet de l'harmonisation
+```
+
+Le dossier `.harmonisation/` ne fait pas partie de ce qui est copié à la racine des projets — la liste des fichiers à copier est fixée dans `AGENTS.md`, Note d'installation.
+
+**Historique :**
+
+| Commit | Contenu |
+|---|---|
+| `b6c6251` (tag `origine`) | État du pack avant audit |
+| `27e36e3` | Harmonisation (Prompt 1) |
+| `9c778c5` | Constats C1 à C4 de `REVIEW-CODEX.md` |
+
+**Empreintes SHA-256 (16 premiers caractères) :**
+
+| Fichier | `origine` | actuel |
+|---|---|---|
+| `AGENTS.md` | `4e391ba92847fd7b` | `e564c982a57bb716` |
+| `ARCHITECTURE.md` | `dd67ee7f20c53c0f` | `e5195a7571680517` |
+| `CLAUDE.md` | `b50aa2dfae18f84b` | `3ae0a11d20ba0afa` |
+| `DESIGN.md` | `fb4af4b19043a92a` | `686eff357d0c818e` |
+| `ECC.md` | `6174dab17408e016` | `b184fd9d9c09e296` |
+| `SECURITY.md` | `b4e48f41f28e102d` | `8c7becb0f884833d` |
+| `SPEC.template.md` | `d46ff4e8732f37a1` | `39573e311a0be60c` |
+| `WORKFLOW.md` | `93e1185b391fa86e` | `0397c97fbea9e3bd` |
 
 ---
 
@@ -183,3 +212,32 @@ Trois endroits où un relecteur devrait porter son regard en priorité :
 2. **Le placement du cloisonnement par environnement dans `SECURITY.md` §2** plutôt qu'en section autonome est un compromis assumé : il évite de renuméroter §3 à §14 et de casser les renvois d'`ECC.md`, d'`ARCHITECTURE.md` §9 et de `WORKFLOW.md` §6. Un relecteur pourrait juger qu'il mérite sa propre section.
 
 3. **La section §11 d'`ARCHITECTURE.md`** fixe des conventions git qui n'existaient nulle part. Le nommage de branche proposé (`feat/`, `fix/`, `chore/`) est une convention courante, pas une déduction du pack existant. À confirmer ou à remplacer par la vôtre.
+
+---
+
+## 7. Seconde passe — application de `REVIEW-CODEX.md`
+
+Revue indépendante reçue, verdict **VALIDÉ AVEC RÉSERVES** : six constats, aucune régression critique observée. Les six ont été vérifiés contre les fichiers ; **les six sont fondés**.
+
+**Constat sur la méthode d'audit.** Quatre des six constats — C1 à C4 — portent sur des défauts qui **préexistaient à l'harmonisation**, vérifié contre le tag `origine`. Le premier audit avait cherché les renvois cassés, les doublons et les contradictions de nomenclature ; il n'avait pas cherché les contradictions entre *règles*. C'est un angle mort de méthode, pas un accident : une grille de relecture qui cherche « ce fichier cite-t-il un §N qui existe » ne trouvera jamais « ces deux règles s'annulent ».
+
+| Constat | Décision | Application |
+|---|---|---|
+| **C1** — plan validé exigé partout vs « il enchaîne les specs seul » | Appliqué | `WORKFLOW.md` §5 et `ARCHITECTURE.md` §7 : le point d'arrêt 2 vaut validation des plans des specs qu'il couvre ; retour vers l'humain sur écart de périmètre, décision structurante nouvelle, ou opération sensible. Le §1 protégé n'est pas touché. |
+| **C2** — « tout vit dans un `.env` local » vs gestionnaires de secrets | Appliqué | `SECURITY.md` §2 et `AGENTS.md` règle 2 : `.env` gitignoré en dev, gestionnaire de secrets ou variables de l'hébergeur en environnement partagé. |
+| **C3** — outils imposés vs « l'outillage ne se force pas » | Appliqué | `SECURITY.md` §0 : une règle générale distingue l'exigence (obligatoire) du moyen (remplaçable). Répercutée sur les scans des §2 et §9. |
+| **C4** — `npx ecc install` hors liste blanche du §1 | Appliqué | `ECC.md` §4 : avertissement explicite avant exécution. **Aucune commande de remplacement n'a été écrite** : le registre npm n'est pas vérifiable depuis cet environnement, et inventer une commande non testée dans un fichier consacré au typosquatting aurait été pire que le défaut signalé. |
+| **C5** — preuves de vérification non reproductibles | Appliqué | Dépôt git initialisé, état d'origine committé et tagué, outil de contrôle versionné dans `.harmonisation/`, empreintes et commandes ajoutées au §2 de ce rapport. |
+| **C6** — sur-affirmation sur les titres H1 | Appliqué | §2 de ce rapport corrigé. Un contrôle a été ajouté pour garantir que `CLAUDE.md` conserve sa directive unique **sans** titre — le risque exact que la revue signalait. |
+
+### Modifications délibérées de contenu protégé
+
+C2 et C3 éditent `SECURITY.md` §2 et §9, que la première passe avait déclarés protégés. Ces modifications ont été autorisées explicitement. Elles ne retirent aucune exigence : elles corrigent une règle qui ne tenait pas en production (C2) et séparent l'obligation de l'outil (C3).
+
+Pour que le garde-fou ne devienne pas une formalité, ces trois dérogations sont **inscrites dans l'outil de contrôle**, avec pour chacune le texte de remplacement exigé. Une dérogation autorise donc un remplacement, **jamais une suppression** : si le texte d'origine disparaît et que son remplacement est absent, le contrôle échoue. Les dérogations sont affichées à chaque exécution plutôt que silencieusement ignorées.
+
+Ce mécanisme a été validé par test de mutation sur un clone : la suppression pure et simple de la règle des secrets — c'est-à-dire l'abus de la dérogation elle-même — est bien détectée, de même que la suppression de la règle IDOR (§4, non dérogée) et l'affaiblissement du point d'arrêt 1. Une première version de la dérogation, plus grossière, ne détectait pas ce cas ; elle a été corrigée.
+
+### Non appliqué
+
+Aucun constat de `REVIEW-CODEX.md` n'a été écarté. Restent non traités les deux points déjà listés au §5 (versioning/releases, six conventions ECC), écartés à l'arbitrage lors de la première passe.

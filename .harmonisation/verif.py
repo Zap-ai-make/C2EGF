@@ -168,17 +168,23 @@ PROTEGE = [
     ("ARCHITECTURE.md", [1], True),        # echelle + garde-fous absolus
 ]
 
-# Fragments de la reference deliberement remplaces, avec leur motif.
-# Toute autre disparition est un echec. Ces derogations sont affichees a
-# chaque execution : elles restent visibles, elles ne se taisent pas.
+# Fragments de la reference deliberement remplaces.
+# Une derogation autorise un REMPLACEMENT, jamais une suppression : le
+# texte de remplacement doit etre present, sinon c'est un echec. Sans
+# cette contrainte, une derogation deviendrait un trou par lequel on
+# pourrait retirer la regle entiere.
+# (cle a la reference, texte de remplacement exige, motif)
 DEROGATIONS = [
     ("tout vit dans un .env local",
+     "aucun de ces éléments n'entre dans le dépôt",
      "REVIEW-CODEX C2 : un .env n'est pas un mecanisme de production ; "
      "remplace par une regle par environnement (SECURITY.md §2)."),
     ("un scan de secrets tourne pendant le dev et bloque le commit",
+     "les secrets sont détectés avant d'entrer dans le dépôt",
      "REVIEW-CODEX C3 : exigence conservee, outil nomme rendu remplacable "
      "(SECURITY.md §2 et §0)."),
     ("un scan de composants (sca) tourne pendant le dev",
+     "les vulnérabilités connues des dépendances sont détectées avant merge",
      "REVIEW-CODEX C3 : idem pour les dependances (SECURITY.md §9 et §0)."),
 ]
 
@@ -198,11 +204,18 @@ for name, nums, md_ref in PROTEGE:
             f = norm(frag)
             if len(f) < 25 or f in courant:
                 continue
-            motif = next((m for cle, m in DEROGATIONS if cle in f), None)
-            if motif:
+            derog = next((d for d in DEROGATIONS if d[0] in f), None)
+            if derog is None:
+                problems.append("%s §%d PERDU: %s" % (name, num, f[:75]))
+                continue
+            _, remplacement, motif = derog
+            if norm(remplacement) in courant:
                 derogations_vues.append("%s §%d — %s" % (name, num, motif))
             else:
-                problems.append("%s §%d PERDU: %s" % (name, num, f[:75]))
+                problems.append(
+                    "%s §%d DEROGATION VIOLEE: l'ancien texte a disparu et son "
+                    "remplacement est absent (attendu: %s)"
+                    % (name, num, remplacement[:60]))
 check("non-regression du contenu protege (reference: %s)" % REF, problems)
 
 if derogations_vues:
