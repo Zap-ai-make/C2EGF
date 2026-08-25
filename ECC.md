@@ -64,6 +64,8 @@ Sur les 68 agents, voici le noyau pertinent pour du TypeScript/React/Next + base
 
 Alternative OSS (plus fiable si le marketplace auto-hébergé ne résout pas) : `npx ecc install --profile minimal --target claude`, puis ajouter des capacités à la carte.
 
+> **À vérifier avant d'exécuter cette commande.** `npx ecc` résout un paquet npm nommé `ecc`, qui ne figure pas dans la liste blanche du §1 (`ecc-universal`, `ecc-agentshield`). Confirmer le nom exact du paquet officiel auprès du dépôt avant de lancer la commande, ou passer par le paquet listé. Le §1 existe précisément parce que des paquets homonymes circulent : une commande d'installation qui sort de la liste blanche annule la protection qu'elle décrit.
+
 **2. Wizard sélectif** — lancer `configure ecc` et n'activer que les agents listés au §2, plus Workflow/Qualité et Research-first. Laisser le reste décoché.
 
 **3. Règles copiées à la main** (le plugin ne distribue pas les rules), uniquement pour la stack du projet :

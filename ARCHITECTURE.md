@@ -82,6 +82,7 @@ Le contexte est une ressource qui se dégrade quand on la sature. La règle est 
 - Les **décisions structurantes** (architecture, plan, arbitrages, revue finale) vont aux modèles les plus capables.
 - L'**implémentation cadrée** (le plan est clair, la tâche est bornée) peut aller à des modèles intermédiaires.
 - Le cycle : **plan → validation du plan → exécution → vérification.** Pour toute tâche non triviale, l'agent propose d'abord un plan court ; on n'exécute qu'un plan validé.
+- **Ce qu'une validation couvre.** Une validation vaut pour le périmètre qu'elle a explicitement couvert, et le travail à l'intérieur de ce périmètre n'en redemande pas. Dans un projet piloté par `WORKFLOW.md`, la validation du découpage et de la ligne MVP (point d'arrêt 2) vaut donc validation des plans des specs qu'elle couvre — cf. `WORKFLOW.md` §5. Une nouvelle validation redevient nécessaire dès qu'on sort de ce périmètre, qu'une décision structurante non prévue apparaît, ou qu'une opération sensible est en jeu.
 
 ---
 

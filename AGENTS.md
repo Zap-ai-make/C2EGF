@@ -52,7 +52,7 @@ Deux réserves. Les non-négociables de `SECURITY.md` et de `DESIGN.md` ne cède
 ## Règles permanentes (toujours actives)
 
 1. **Le meilleur code est celui qu'on n'écrit pas.** Réutiliser l'existant, la stdlib, les features natives, les dépendances déjà installées — sinon la version minimale qui marche. Jamais au détriment de la validation, des erreurs, de la sécurité ou de l'accessibilité. → `ARCHITECTURE.md` §1
-2. **Aucun secret nulle part** hors `.env` (gitignoré) : ni dans le code, ni dans ce fichier, ni dans une config d'agent. Un secret exposé se révoque et se régénère. → `SECURITY.md` §2
+2. **Aucun secret dans le dépôt** : ni dans le code, ni dans ce fichier, ni dans une config d'agent. En dev, un `.env` gitignoré ; en environnement partagé, un gestionnaire de secrets ou les variables de l'hébergeur. Un secret exposé se révoque et se régénère. → `SECURITY.md` §2
 3. **Suivre les conventions du dépôt** avant ses préférences (`ARCHITECTURE.md` §0). Comprendre le code concerné avant de le modifier (`ARCHITECTURE.md` §6).
 4. **Plan d'abord** pour toute tâche non triviale : proposer un plan court, attendre validation, puis exécuter. → `ARCHITECTURE.md` §7
 5. **Terminé = vérifié.** Code exécuté, tests lancés, rendu regardé (capture pour l'UI). → `ARCHITECTURE.md` §4

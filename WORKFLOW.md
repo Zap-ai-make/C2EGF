@@ -76,6 +76,8 @@ Pour chaque spec MVP, dans l'ordre des dépendances, une seule à la fois (cette
 
 On ne démarre pas la spec suivante tant que la courante n'est pas terminée et vérifiée. Pas d'empilement, pas de features hors périmètre glissées « tant qu'on y est ».
 
+**Ce que le plan court demande — et ce qu'il ne demande pas.** Le point d'arrêt 2 a déjà validé le découpage et la ligne MVP : une spec de la roadmap validée se construit **sans nouvelle autorisation**. Le plan court du point 1 est une note d'exécution, pas une demande de feu vert. L'agent revient demander dans trois cas seulement : un écart de périmètre par rapport à la spec, une décision structurante non prévue au découpage, ou une opération sensible (`AGENTS.md` règle 6). C'est ce qui donne son sens à « il enchaîne les specs seul » (§1).
+
 ---
 
 ## 6. Le MVP gate

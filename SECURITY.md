@@ -11,6 +11,8 @@ Deux choses seulement s'adaptent :
 - **La profondeur des contrôles est proportionnelle au risque.** Un site vitrine statique n'a pas la même surface qu'une app qui manipule des paiements ou des données personnelles. On calibre l'effort sur la sensibilité réelle des données et l'exposition — mais l'hygiène de base (secrets, validation, auth, HTTPS) ne se négocie jamais.
 - **L'outillage ne se force pas.** On installe un scanner ou un pentester si le projet en tire une vraie valeur, pas par réflexe (cf. §14). Lancer un pentest IA sur un CRUD de cinq routes est du gaspillage ; une bonne revue d'accès et un SAST suffisent.
 
+**Exigence et moyen ne se confondent pas.** Quand ce fichier impose un contrôle (« les secrets sont détectés avant d'entrer dans le dépôt »), c'est le **résultat** qui est obligatoire. Les outils nommés — GitGuardian, Snyk, Semgrep, ZAP… — sont des exemples, remplaçables par tout équivalent adapté à la stack et au risque. Aucun outil n'est imposé par ce pack ; aucun contrôle n'est optionnel.
+
 **Règle d'or : en cas de doute, on choisit l'option qui expose le moins.** Un agent qui n'est pas sûr d'une manipulation sensible s'arrête et demande, plutôt que de deviner.
 
 ---
@@ -28,12 +30,13 @@ Deux choses seulement s'adaptent :
 
 La fuite la plus courante et la plus grave, c'est un secret exposé. On l'empêche à la racine.
 
-- Aucun secret dans le code, un chat, un document partagé, une capture, ou l'historique git. Clés API, tokens, mots de passe, clés privées, secrets OAuth : tout vit dans un `.env` local.
+- Aucun secret dans le code, un chat, un document partagé, une capture, ou l'historique git. Clés API, tokens, mots de passe, clés privées, secrets OAuth : aucun de ces éléments n'entre dans le dépôt.
+- **Où vit un secret, selon l'environnement.** En développement local : un `.env` gitignoré. Pour tout environnement partagé (staging, production, CI) : le gestionnaire de secrets ou les variables sécurisées de l'hébergeur. Un fichier `.env` est un mécanisme de développement, jamais un mécanisme de production.
 - `.env` est dans `.gitignore`, sans exception. On versionne un `.env.example` sans valeurs.
 - Pour partager des secrets entre machines/équipe : un gestionnaire de secrets (1Password, Bitwarden, Doppler) ou les secrets de l'hébergeur/CI. Jamais un fichier partagé.
 - Séparation client/serveur : seule une clé publique peut atterrir côté client. Toute clé secrète reste côté serveur.
 - Un secret exposé est un secret compromis : on le révoque et régénère immédiatement dans la console concernée, on ne se contente pas de le retirer.
-- Un scan de secrets tourne pendant le dev et bloque le commit (cf. §14, GitGuardian).
+- **Exigence :** les secrets sont détectés avant d'entrer dans le dépôt — un scan tourne pendant le dev et bloque le commit. Le moyen est libre (GitGuardian au §14 n'est qu'un exemple ; cf. §0).
 
 **Cloisonnement par environnement.** Le pack suppose trois environnements distincts — `dev`, `staging`, `prod` :
 
@@ -102,7 +105,7 @@ Le contrôle d'accès cassé est la faille n°1. On le traite avec un soin parti
 ## 9. Dépendances et chaîne d'approvisionnement
 
 - Dépendances tenues à jour ; suivi des CVE sur les paquets utilisés.
-- Un scan de composants (SCA) tourne pendant le dev (cf. §14).
+- **Exigence :** les vulnérabilités connues des dépendances sont détectées avant merge — un scan de composants (SCA) tourne pendant le dev. Le moyen est libre (cf. §14 et §0).
 - On n'ajoute pas une dépendance lourde pour un besoin qu'une feature native couvre — chaque dépendance est une surface d'attaque de plus.
 
 ---
