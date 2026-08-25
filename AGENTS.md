@@ -19,11 +19,19 @@ PARTICULARITÉS : (contraintes, choix assumés, zones sensibles)
 
 ---
 
-## Nouveau projet
+## Nouveau projet — commencer ici
 
-Un produit à construire — à partir d'un cahier des charges, ou d'une idée encore floue : suivre **`WORKFLOW.md`**, phase par phase. Il ordonne dans le temps ce que les contrats définissent, et fixe les trois points d'arrêt où le travail s'interrompt pour validation humaine (`WORKFLOW.md` §1).
+Dans cet ordre, sans en sauter :
+
+1. **Remplir le bloc « Le projet » ci-dessus.** S'il manque une information — stack, commande de lancement, commande de test —, la demander maintenant, avant d'écrire une ligne de code.
+2. **Lire le cahier des charges en entier** (`cahier-des-charges.md` ou le document fourni à la racine). En entier, avant toute chose. S'il n'y en a pas, ou si le besoin est encore flou, le dire : la phase 0 de `WORKFLOW.md` existe pour poser les bonnes questions plutôt que pour deviner.
+3. **Exécuter `WORKFLOW.md` phase par phase.** Il ordonne dans le temps ce que les contrats définissent : comprendre, découper en specs, tracer la ligne MVP, construire une spec à la fois, vérifier, livrer.
+
+**Les trois points d'arrêt de `WORKFLOW.md` §1 ne se franchissent jamais sans un feu vert explicite** — questions sur les zones floues avant de découper, validation du découpage et de la ligne MVP avant de construire, démonstration au MVP avant toute feature post-MVP.
 
 Chaque spec suit le gabarit `SPEC.template.md`.
+
+Ne rien construire hors périmètre. Ne combler aucune ambiguïté par une supposition. En cas de doute sur une opération sensible, s'arrêter et demander (règle 6).
 
 ---
 
