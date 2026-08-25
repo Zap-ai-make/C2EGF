@@ -35,6 +35,14 @@ Ne rien construire hors périmètre. Ne combler aucune ambiguïté par une suppo
 
 ---
 
+## Projet existant
+
+**Si le projet contient déjà du code : suivre `ADOPTION.md`.** État des lieux, audit contre les trois contrats, bilan écrit (`audit/BILAN.md`), remédiation par lots validés, conformité au fil de l'eau.
+
+`ADOPTION.md` a ses propres points d'arrêt (`ADOPTION.md` §0) : rien n'est corrigé avant validation du bilan. Une exception, et une seule — un secret exposé découvert pendant l'audit se signale immédiatement, sans attendre le rapport (`SECURITY.md` §2).
+
+---
+
 ## Les trois contrats
 
 À charger dès que le travail touche leur domaine — pas besoin de les lire pour corriger une typo :
@@ -49,7 +57,9 @@ Ne rien construire hors périmètre. Ne combler aucune ambiguïté par une suppo
 
 En cas de conflit entre deux fichiers, le premier de cette liste l'emporte :
 
-**`AGENTS.md` > `WORKFLOW.md` > `DESIGN.md` · `SECURITY.md` · `ARCHITECTURE.md` > `SPEC.template.md`**
+**`AGENTS.md` > `WORKFLOW.md` · `ADOPTION.md` > `DESIGN.md` · `SECURITY.md` · `ARCHITECTURE.md` > `SPEC.template.md`**
+
+`WORKFLOW.md` et `ADOPTION.md` sont au même rang et ne s'appliquent jamais en même temps : le premier pour un produit à construire, le second pour un dépôt qui existe déjà.
 
 Deux réserves. Les non-négociables de `SECURITY.md` et de `DESIGN.md` ne cèdent devant aucun arbitrage de commodité : un fichier supérieur dans la liste ne les lève pas. Et entre les trois contrats, un conflit se tranche vers l'option qui expose le moins (`SECURITY.md` §0).
 
@@ -72,7 +82,7 @@ Deux réserves. Les non-négociables de `SECURITY.md` et de `DESIGN.md` ne cède
 
 ## Note d'installation
 
-- Placer à la racine de chaque projet : `AGENTS.md`, `WORKFLOW.md`, `DESIGN.md`, `SECURITY.md`, `ARCHITECTURE.md`, `SPEC.template.md`, `.gitignore`. `ECC.md` seulement si l'outillage ECC est envisagé.
+- Placer à la racine de chaque projet : `AGENTS.md`, `WORKFLOW.md`, `ADOPTION.md`, `DESIGN.md`, `SECURITY.md`, `ARCHITECTURE.md`, `SPEC.template.md`, `.gitignore`. `ECC.md` seulement si l'outillage ECC est envisagé.
 - **Le `.gitignore` se met en place avant le premier secret**, pas après : il couvre `.env` et ses variantes (exigence de `SECURITY.md` §2). Le compléter ensuite avec les artefacts de la stack. Si le projet en a déjà un, fusionner — ne jamais l'écraser.
 - Pour Claude Code, créer un `CLAUDE.md` d'une ligne — `Lis et applique AGENTS.md.` — ou un lien symbolique, afin de garder une source unique de vérité.
 - Ces fichiers sont vivants : après chaque chantier notable, y reporter les leçons généralisables (voir `ARCHITECTURE.md` §10).

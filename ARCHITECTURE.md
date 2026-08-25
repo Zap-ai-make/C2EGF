@@ -35,7 +35,7 @@ Le minimalisme porte sur la *quantité de construction*, jamais sur la *solidit�
 - **Prévisible.** Un nouveau venu (humain ou agent) doit deviner où vit chaque chose. Arborescence par domaine ou par couche — mais une seule logique, tenue partout.
 - **Séparation des responsabilités.** UI, logique métier, accès aux données ne se mélangent pas dans le même fichier. Un module fait une chose.
 - **Pas de duplication silencieuse.** Avant de créer un utilitaire, un composant, un helper : vérifier qu'il n'existe pas déjà. S'il existe presque, on l'étend, on ne le clone pas.
-- Les fichiers d'agents et de standards (`AGENTS.md`, `WORKFLOW.md`, `DESIGN.md`, `SECURITY.md`, `SPEC.template.md`, ce fichier) restent **à la racine** et à jour.
+- Les fichiers d'agents et de standards (`AGENTS.md`, `WORKFLOW.md`, `ADOPTION.md`, `DESIGN.md`, `SECURITY.md`, `SPEC.template.md`, ce fichier) restent **à la racine** et à jour.
 
 ---
 
