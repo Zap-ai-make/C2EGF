@@ -1,0 +1,10 @@
+{
+  "stores": [
+    { "id": "boutique-1", "name": "Boutique 1", "email": "boutique1@example.com" },
+    { "id": "boutique-2", "name": "Boutique 2", "email": "boutique2@example.com" },
+    { "id": "boutique-3", "name": "Boutique 3", "email": "boutique3@example.com" },
+    { "id": "boutique-4", "name": "Boutique 4", "email": "boutique4@example.com" },
+    { "id": "boutique-5", "name": "Boutique 5", "email": "boutique5@example.com" },
+    { "id": "boutique-6", "name": "Boutique 6", "email": "boutique6@example.com" }
+  ]
+}

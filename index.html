@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/pwa-192x192.png" />
+    <link rel="icon" type="image/png" href="/c2egf-mark.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AKAYIS CRM</title>
+
+    <!-- PWA Meta Tags -->
+    <meta name="description" content="Application CRM pour la gestion des clients et transactions de AKAYIS">
+    <meta name="theme-color" content="#173863">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="AKAYIS CRM">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" href="/pwa-192x192.png">
+    <link rel="apple-touch-icon" sizes="192x192" href="/pwa-192x192.png">
+    <link rel="apple-touch-icon" sizes="512x512" href="/pwa-512x512.png">
+
+    <!-- Capture beforeinstallprompt avant le montage React pour que le bouton soit toujours visible -->
+    <script>
+      window.__pwaInstallEvent = null;
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        window.__pwaInstallEvent = e;
+        window.dispatchEvent(new CustomEvent('pwa-install-available'));
+      });
+      window.addEventListener('appinstalled', function() {
+        window.__pwaInstallEvent = null;
+        window.dispatchEvent(new CustomEvent('pwa-installed'));
+      });
+    </script>
+
+    <!-- PWA sera configuré automatiquement par Vite PWA -->
+    <script>
+      (function () {
+        var recoveryKey = 'c2egf_asset_recovery_v1'
+
+        window.addEventListener('error', function (event) {
+          var target = event.target
+          var isStylesheet = target && target.tagName === 'LINK' && target.rel === 'stylesheet'
+          var isScript = target && target.tagName === 'SCRIPT' && target.src
+
+          if ((!isStylesheet && !isScript) || sessionStorage.getItem(recoveryKey)) {
+            return
+          }
+
+          sessionStorage.setItem(recoveryKey, '1')
+
+          var unregisterServiceWorkers = 'serviceWorker' in navigator
+            ? navigator.serviceWorker.getRegistrations().then(function (registrations) {
+              return Promise.all(registrations.map(function (registration) {
+                return registration.unregister()
+              }))
+            })
+            : Promise.resolve()
+
+          var clearCaches = 'caches' in window
+            ? caches.keys().then(function (keys) {
+              return Promise.all(keys.map(function (key) {
+                return caches.delete(key)
+              }))
+            })
+            : Promise.resolve()
+
+          Promise.all([unregisterServiceWorkers, clearCaches]).finally(function () {
+            var separator = window.location.search ? '&' : '?'
+            window.location.replace(
+              window.location.pathname +
+              window.location.search +
+              separator +
+              'cache_refresh=' +
+              Date.now() +
+              window.location.hash
+            )
+          })
+        }, true)
+
+        window.addEventListener('load', function () {
+          sessionStorage.removeItem(recoveryKey)
+        })
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

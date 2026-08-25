@@ -6,40 +6,51 @@
 
 ## Le projet
 
-> À remplir au démarrage de chaque projet. Tant que ce bloc est vide, demander avant de coder.
-
 ```
-NOM        :
-QUOI       : (une phrase — le produit et pour qui)
-STACK      : (ex. Next.js + TypeScript + Tailwind + Supabase)
-LANCER     : (ex. npm install && npm run dev)
-TESTER     : (ex. npm test)
-PARTICULARITÉS : (contraintes, choix assumés, zones sensibles)
+NOM        : C2EGF BURKINA
+QUOI       : CRM de gestion de boutiques mobile money (dépôts, retraits, crédits,
+             règlements, ravitaillement dealer) pour C2EGF, au Burkina Faso.
+STACK      : React 19 + Vite + Tailwind CSS v4 + Firebase (Auth, Firestore,
+             Cloud Functions Node 22) + PWA (vite-plugin-pwa) + xlsx
+LANCER     : npm install && npm run dev
+TESTER     : npm run test:unit && npm run test:components
+             (émulateurs : test:firestore, test:integration, test:functions)
+PARTICULARITÉS :
+  • Ce dépôt est une INSTANCE du produit standard « AKAYIS CRM ». Il en a été
+    copié sans historique git : aucun remote, aucun lien avec le dépôt d'origine.
+  • Toute la variation client passe par un PROFIL déclaratif — voir ci-dessous.
+  • Profil C2EGF : 1 réseau (Orange), dealer Orange, marque « C2EGF », thème bleu.
+  • Pas encore de projet Firebase ni de production. Les règles qui protègent une
+    prod vivante sont listées comme telles et s'activeront à la mise en ligne.
 ```
 
 ---
 
-## Nouveau projet — commencer ici
+## Ce dépôt : un produit standard, instancié par profil
 
-Dans cet ordre, sans en sauter :
+**Ne jamais adapter ce projet fichier par fichier.** La variation client est centralisée :
 
-1. **Remplir le bloc « Le projet » ci-dessus.** S'il manque une information — stack, commande de lancement, commande de test —, la demander maintenant, avant d'écrire une ligne de code.
-2. **Lire le cahier des charges en entier** (`cahier-des-charges.md` ou le document fourni à la racine). En entier, avant toute chose. S'il n'y en a pas, ou si le besoin est encore flou, le dire : la phase 0 de `WORKFLOW.md` existe pour poser les bonnes questions plutôt que pour deviner.
-3. **Exécuter `WORKFLOW.md` phase par phase.** Il ordonne dans le temps ce que les contrats définissent : comprendre, découper en specs, tracer la ligne MVP, construire une spec à la fois, vérifier, livrer.
+- `config/clients/_pilot.js` — le produit complet (politique **opt-out** : tout activé).
+- `config/clients/c2egf-burkina.js` — **le profil de ce client**. Il hérite du pilote et restreint.
+- `config/clients/index.js` — registre + `resolveProfile()`, qui **lève** sur un identifiant inconnu.
 
-**Les trois points d'arrêt de `WORKFLOW.md` §1 ne se franchissent jamais sans un feu vert explicite** — questions sur les zones floues avant de découper, validation du découpage et de la ligne MVP avant de construire, démonstration au MVP avant toute feature post-MVP.
+Trois couches en dérivent, source unique : le **front**, les **`firestore.rules`** (bloc généré par `scripts/generate-rules.mjs`), les **functions**. Le **branding** aussi — `branding.appName` / `pwaName` alimentent l'UI (`src/constants/branding.js`) et le build (titre `index.html`, manifest PWA, via `vite.config.js`).
 
-Chaque spec suit le gabarit `SPEC.template.md`.
+Ajouter un axe de variation = ajouter un champ **nommé et commenté dans `_pilot.js`**, jamais une lecture de variation ailleurs.
 
-Ne rien construire hors périmètre. Ne combler aucune ambiguïté par une supposition. En cas de doute sur une opération sensible, s'arrêter et demander (règle 6).
+Lectures obligatoires avant d'y toucher : `docs/client-profiles.md`, `docs/adaptation-nouveau-client.md`.
+
+> ⚠ `ADAPTATION_CLIENT.md` (racine) est **périmé** : il décrit l'ancienne méthode, fichier par fichier. `docs/adaptation-nouveau-client.md` §4 le remplace. Conservé pour trace historique uniquement.
 
 ---
 
-## Projet existant
+## Travailler sur ce projet
 
-**Si le projet contient déjà du code : suivre `ADOPTION.md`.** État des lieux, audit contre les trois contrats, bilan écrit (`audit/BILAN.md`), remédiation par lots validés, conformité au fil de l'eau.
+Le code existe et il est mûr (durci, une centaine de tests, audits croisés dans `docs/audit/`). On n'est donc ni dans un démarrage à blanc, ni dans une reprise de code inconnu :
 
-`ADOPTION.md` a ses propres points d'arrêt (`ADOPTION.md` §0) : rien n'est corrigé avant validation du bilan. Une exception, et une seule — un secret exposé découvert pendant l'audit se signale immédiatement, sans attendre le rapport (`SECURITY.md` §2).
+- **Adapter le client** (marque, réseaux, options) → passer par le profil. Rien d'autre.
+- **Chantier de fond** (nouvelle fonctionnalité, refonte) → `WORKFLOW.md`, une spec à la fois selon `SPEC.template.md`.
+- **Auditer l'existant avant de s'y fier** → `ADOPTION.md`, dont le bilan écrit précède toute correction.
 
 ---
 
@@ -80,9 +91,45 @@ Deux réserves. Les non-négociables de `SECURITY.md` et de `DESIGN.md` ne cède
 
 ---
 
+## Règles produit (héritées du standard, toujours actives)
+
+Ces règles viennent du durcissement du produit. Elles ne dépendent pas de l'existence d'une production.
+
+**Méthode de modification.** Explorer ; citer fichiers et lignes ; décrire le comportement actuel ; évaluer le risque ; écrire un test reproductible **avant** la correction ; appliquer une correction minimale ; lancer lint, tests et build ; examiner le diff.
+
+- **Jamais modifier une règle métier sans test de caractérisation** qui fige le comportement d'avant.
+- **Jamais refactoriser et changer le comportement métier dans le même lot.**
+- **Jamais mettre à jour toutes les dépendances en une seule opération.**
+- **Jamais supprimer un fichier au seul motif qu'un outil le signale inutilisé.** Toute suppression fournit : absence d'import statique, recherche des imports dynamiques, vérification des scripts et configurations, vérification de l'usage métier, test avant/après, et restauration possible par commit local.
+
+**Firebase.**
+
+- **Émulateurs uniquement** pour développer et tester. Toute commande force un projet `demo-*` — jamais le projet par défaut de `.firebaserc` de façon implicite.
+- Tester les règles avec **au moins deux boutiques** différentes.
+- **Moindre privilège** dans `firestore.rules`.
+- **Jamais autoriser une opération sur la seule foi des données envoyées par le client.**
+- **Toute opération financière préserve une piste d'audit.**
+
+**Invariants métier.** Un seul dealer actif dans tout le système (vérifié côté serveur, `resolveSingleDealer`). Les soldes réseau s'initialisent à 0 au premier login boutique (`ensureNetworkBalances`).
+
+**Scripts admin.** Ce sont des outils destructifs. Aucun `--execute` sans demande explicite et sans sauvegarde vérifiée. `resetDataToZero`, `deleteExistingAccounts` et `restoreFromBackup` ne s'exécutent jamais à l'initiative d'un agent.
+
+---
+
+## Règles de production (s'activent à la mise en ligne)
+
+C2EGF n'a **pas encore** de projet Firebase ni de production. Dès qu'il en existe une, ces règles deviennent des interdits absolus, et ce bloc fusionne avec celui du dessus.
+
+- **Jamais déployer** (Firebase, Vercel, Netlify) à l'initiative d'un agent. Un déploiement est une décision humaine, exécutée par un humain.
+- **Jamais utiliser les identifiants de production**, ni écrire dans le Firestore de production.
+- **Jamais déployer vers le projet Firebase d'un autre client.** L'alias `production` qui pointait vers la prod TAOFIC a été retiré de `.firebaserc` pour cette raison ; ne pas le réintroduire sans qu'il désigne C2EGF.
+- **Jamais `git push` ni pull request distante** sans demande explicite. Ce dépôt n'a volontairement aucun remote.
+
+---
+
 ## Note d'installation
 
-- Placer à la racine de chaque projet : `AGENTS.md`, `WORKFLOW.md`, `ADOPTION.md`, `DESIGN.md`, `SECURITY.md`, `ARCHITECTURE.md`, `SPEC.template.md`, `.gitignore`. `ECC.md` seulement si l'outillage ECC est envisagé.
-- **Le `.gitignore` se met en place avant le premier secret**, pas après : il couvre `.env` et ses variantes (exigence de `SECURITY.md` §2). Le compléter ensuite avec les artefacts de la stack. Si le projet en a déjà un, fusionner — ne jamais l'écraser.
-- Pour Claude Code, créer un `CLAUDE.md` d'une ligne — `Lis et applique AGENTS.md.` — ou un lien symbolique, afin de garder une source unique de vérité.
+- Fichiers de contrat à la racine : `AGENTS.md`, `WORKFLOW.md`, `ADOPTION.md`, `DESIGN.md`, `SECURITY.md`, `ARCHITECTURE.md`, `SPEC.template.md`, `.gitignore`. `ECC.md` seulement si l'outillage ECC est envisagé.
+- **Le `.gitignore` se met en place avant le premier secret**, pas après : il couvre `.env` et ses variantes (exigence de `SECURITY.md` §2), les comptes de service Firebase, et les backups de données client. Si le projet en a déjà un, fusionner — ne jamais l'écraser.
+- `CLAUDE.md` tient en une ligne — `Lis et applique AGENTS.md.` — pour garder une source unique de vérité. Les agents spécialisés vivent dans `.claude/agents/` et `.codex/agents/`.
 - Ces fichiers sont vivants : après chaque chantier notable, y reporter les leçons généralisables (voir `ARCHITECTURE.md` §10).

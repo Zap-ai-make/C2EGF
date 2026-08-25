@@ -1,0 +1,512 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // <<< PROFIL-GÉNÉRÉ — DÉBUT (généré par scripts/generate-rules.mjs, ne pas éditer à la main) >>>
+    // Réseaux du circuit dealer autorisés pour ce client (depuis profil.dealer.networks).
+    function profileDealerNetworks() { return ['Orange']; }
+    // <<< PROFIL-GÉNÉRÉ — FIN >>>
+
+    // ─────────────────────────────────────────────────────────────
+    // Helpers V1 — backward compat boutiques
+    // ─────────────────────────────────────────────────────────────
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // Réservé aux membres de boutique (store_admin, member).
+    // Exige role boutique explicite → dealer/system_manager refusés même avec storeId.
+    function hasProfile() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        profile().active == true &&
+        profile().role in ['store_admin', 'member'] &&
+        profile().storeId is string;
+    }
+
+    function isStoreMember(storeId) {
+      return hasProfile() && profile().storeId == storeId;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Helpers V2 — rôles globaux
+    // Source de vérité : users/{request.auth.uid}
+    // Jamais request.resource.data.role
+    // ─────────────────────────────────────────────────────────────
+
+    function isActiveUser() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        profile().active == true &&
+        profile().role in ['store_admin', 'system_manager', 'dealer'];
+    }
+
+    function isStoreAdmin(storeId) {
+      return isActiveUser() &&
+        profile().role == 'store_admin' &&
+        profile().storeId is string &&
+        profile().storeId == storeId;
+    }
+
+    function isSystemManager() {
+      return isActiveUser() && profile().role == 'system_manager';
+    }
+
+    function isDealer() {
+      return isActiveUser() && profile().role == 'dealer';
+    }
+
+    // Données brutes de la boutique pour validation dealerRequests
+    function storeDoc(storeId) {
+      return get(/databases/$(database)/documents/stores/$(storeId)).data;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Validation V1
+    // ─────────────────────────────────────────────────────────────
+
+    function validClient(data) {
+      return data.keys().hasAll(['nom', 'prenom', 'registeredStoreId', 'registeredStoreName']) &&
+             data.nom is string && data.nom.size() >= 2 && data.nom.size() <= 50 &&
+             data.prenom is string && data.prenom.size() >= 2 && data.prenom.size() <= 50 &&
+             data.registeredStoreId is string &&
+             data.registeredStoreName is string &&
+             (!data.keys().hasAny(['numeroPersonnel']) ||
+              data.numeroPersonnel == '' ||
+              data.numeroPersonnel.matches('^[0-9+\\-\\s()/]{8,120}$'));
+    }
+
+    function validTransaction(data) {
+      return data.keys().hasAll(['type', 'montant', 'clientId']) &&
+             data.type in ['Dépôt', 'Depot', 'Retrait', 'Crédit', 'Credit'] &&
+             data.montant is number && data.montant > 0 && data.montant == math.floor(data.montant) && data.montant <= 9007199254740991 &&
+             data.clientId is string && data.clientId.size() > 0;
+    }
+
+    function validStoreScopedTransaction(data, storeId) {
+      return validTransaction(data) &&
+        (!data.keys().hasAny(['storeId']) || data.storeId == storeId);
+    }
+
+    function validStatus(status) {
+      return status in [
+        'Non Terminées',
+        'Non Terminees',
+        'Validée',
+        'Validee',
+        'Remboursée',
+        'Remboursee',
+        'Annulée',
+        'Annulee'
+      ] ||
+             status.matches('^(Payé|Remboursé|Encaissé) par .+$');
+    }
+
+    function isPendingStatus(status) {
+      return status in ['Non Terminées', 'Non Terminees'];
+    }
+
+    // Cohérence des champs de règlement d'un doc `history` créé DIRECTEMENT par un membre
+    // boutique (flux paiement-unique legacy — src/services/draftService.js). Un history est
+    // terminal : il alimente les rapports et sert de base au renversement financier
+    // (reverseHistoryTransactionImpact lit settlementSummary.netByNetwork). Sans ce contrôle,
+    // un membre peut forger paidAmount/settlementStatus/settlementSummary/… et corrompre la
+    // piste d'audit, voire « blanchir » une altération de solde via une annulation.
+    // Forme légitime : settlementStatus='settled', remaining/refunded=0, originalAmount==montant,
+    // paidAmount==settlementAmount (entiers > 0, non bornés à montant car amountOverride ne l'est
+    // pas), et AUCUN settlementSummary (réservé au circuit serveur Admin SDK, qui contourne ces
+    // règles). Chaque champ est OPTIONNEL (les vieux `history` « Validée » n'en portent aucun).
+    function validClientHistorySettlement(data) {
+      return
+        !data.keys().hasAny(['settlementSummary']) &&
+        (!('settlementStatus' in data) || data.settlementStatus == 'settled') &&
+        (!('remainingAmount'  in data) || data.remainingAmount == 0) &&
+        (!('refundedAmount'   in data) || data.refundedAmount == 0) &&
+        (!('originalAmount'   in data) || data.originalAmount == data.montant) &&
+        (!('paidAmount'       in data) ||
+          (data.paidAmount is number && data.paidAmount > 0 && data.paidAmount == math.floor(data.paidAmount))) &&
+        (!('settlementAmount' in data) ||
+          (data.settlementAmount is number && data.settlementAmount > 0 && data.settlementAmount == math.floor(data.settlementAmount)));
+    }
+
+    // Champs de COMPTABILITÉ DE RÈGLEMENT d'un draft : écrits EXCLUSIVEMENT par les
+    // Cloud Functions (Admin SDK, qui contourne ces règles). Le client ne doit jamais
+    // les fixer ni les modifier — sinon les callables addTransactionPayment/Refund, qui
+    // lisent remainingAmount/paidAmount/… pour borner un règlement, feraient confiance à
+    // une donnée falsifiée par le membre boutique (contournement de l'autorité serveur).
+    function settlementManagedFields() {
+      return [
+        'originalAmount', 'paidAmount', 'refundedAmount', 'remainingAmount',
+        'settlementStatus', 'settlementSummary', 'settlementUpdatedAt', 'settlementAmount',
+        // settlementType : type métier ÉPINGLÉ par la Cloud Function à la 1re tranche.
+        // Les callables l'utilisent (au lieu de draft.type frais) pour figer le signe de
+        // l'impact réseau sur toute la durée du règlement — défense en profondeur. Le
+        // client ne doit jamais le fixer ni le modifier.
+        'settlementType'
+      ];
+    }
+
+    // Création client : aucun de ces champs ne doit être présent.
+    function draftHasNoSettlementFields(data) {
+      return !data.keys().hasAny(settlementManagedFields());
+    }
+
+    // Mise à jour client : aucun de ces champs ne doit être ajouté, modifié ou retiré.
+    function draftSettlementFieldsUnchanged(newData, oldData) {
+      return !newData.diff(oldData).affectedKeys().hasAny(settlementManagedFields());
+    }
+
+    // Un draft est « en cours de règlement » dès qu'une Cloud Function y a écrit un champ
+    // de règlement (règlement partiel). On teste le document EXISTANT (resource.data).
+    function draftIsSettling(oldData) {
+      return oldData.keys().hasAny(
+        ['settlementStatus', 'paidAmount', 'remainingAmount', 'settlementSummary']);
+    }
+
+    // Dès qu'un règlement est engagé, `type`, `montant` et `clientId` sont FIGÉS côté
+    // client : les callables lisent draft.type (signe de l'impact réseau) et draft.montant
+    // à chaque tranche ; clientId identifie le titulaire dans la piste d'audit (settlement +
+    // history). Sans ce gel, un membre pourrait inverser le signe (Retrait↔Dépôt), gonfler la
+    // borne, ou réattribuer un règlement à un autre client entre deux tranches. Avant tout
+    // règlement, l'édition reste libre (brouillon).
+    function draftCoreFieldsFrozenIfSettling(newData, oldData) {
+      return !draftIsSettling(oldData) ||
+        !newData.diff(oldData).affectedKeys().hasAny(['type', 'montant', 'clientId']);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Validation des soldes réseau (networkBalances/current)
+    //
+    // Donnée financière : schéma strict. On refuse toute structure
+    // arbitraire (réseau inconnu, champ parasite, valeur non numérique).
+    // Réseaux autorisés = ensemble figé côté application.
+    // Rappel : une écriture directe reste possible (l'UI en dépend), donc
+    // un montant bien formé n'est pas bloqué ici — mais aucune structure
+    // hors-schéma ne peut passer.
+    // ─────────────────────────────────────────────────────────────
+
+    // Donnée financière : entier sûr non-négatif obligatoire (pas de décimal,
+    // pas de dépassement de Number.MAX_SAFE_INTEGER).
+    function validBalanceValue(v) {
+      return v is number &&
+        v >= 0 &&
+        v == math.floor(v) &&
+        v <= 9007199254740991;
+    }
+
+    function validNetworkEntry(entry) {
+      return entry is map &&
+        entry.keys().hasOnly(['stock', 'liquidite']) &&
+        (!('stock' in entry) || validBalanceValue(entry.stock)) &&
+        (!('liquidite' in entry) || validBalanceValue(entry.liquidite));
+    }
+
+    function validNetworkBalancesMap(b) {
+      return b is map &&
+        b.keys().hasOnly(['Orange', 'Moov', 'Telecel', 'Coris', 'Sank']) &&
+        (!('Orange'  in b) || validNetworkEntry(b.Orange)) &&
+        (!('Moov'    in b) || validNetworkEntry(b.Moov)) &&
+        (!('Telecel' in b) || validNetworkEntry(b.Telecel)) &&
+        (!('Coris'   in b) || validNetworkEntry(b.Coris)) &&
+        (!('Sank'    in b) || validNetworkEntry(b.Sank));
+    }
+
+    function validNetworkBalancesDoc(data) {
+      return data.keys().hasOnly(['balances', 'updatedAt']) &&
+        data.balances is map &&
+        validNetworkBalancesMap(data.balances);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Validation V2 — dealerRequests
+    // ─────────────────────────────────────────────────────────────
+
+    function validDealerRequestKeys(data) {
+      // Clés requises communes à tous les types
+      let required = ['dealerUid', 'dealerEmail', 'dealerName',
+                      'targetStoreId', 'targetStoreName',
+                      'requestType', 'network', 'amount',
+                      'status', 'createdAt', 'updatedAt',
+                      'confirmedBy', 'confirmedAt',
+                      'rejectedBy', 'rejectedAt', 'rejectionReason',
+                      'previousBalance', 'newBalance',
+                      'liquidityAmount'];
+      return data.keys().hasAll(required) && data.keys().hasOnly(required);
+    }
+
+    function validDealerRequest(data) {
+      return validDealerRequestKeys(data) &&
+        data.dealerUid is string && data.dealerUid == request.auth.uid &&
+        profile().email is string && profile().email.size() > 0 &&
+        data.dealerEmail is string && data.dealerEmail.size() > 0 &&
+        data.dealerEmail == profile().email &&
+        profile().name is string && profile().name.size() > 0 &&
+        data.dealerName is string && data.dealerName.size() > 0 &&
+        data.dealerName == profile().name &&
+        data.status == 'pending' &&
+        data.requestType in ['stock_add', 'liquidity_add', 'open_day'] &&
+        data.network in profileDealerNetworks() &&
+        data.amount is int && data.amount > 0 &&
+        data.targetStoreId is string && data.targetStoreId.size() > 0 &&
+        data.createdAt == request.time &&
+        data.updatedAt == request.time &&
+        data.confirmedBy == null && data.confirmedAt == null &&
+        data.rejectedBy == null && data.rejectedAt == null &&
+        data.rejectionReason == null && data.previousBalance == null && data.newBalance == null &&
+        // liquidityAmount : requis pour open_day (int > 0), null pour les autres types
+        (data.requestType == 'open_day'
+          ? (data.liquidityAmount is int && data.liquidityAmount > 0)
+          : data.liquidityAmount == null) &&
+        exists(/databases/$(database)/documents/stores/$(data.targetStoreId)) &&
+        storeDoc(data.targetStoreId).active == true &&
+        storeDoc(data.targetStoreId).name is string &&
+        storeDoc(data.targetStoreId).name.size() > 0 &&
+        data.targetStoreName == storeDoc(data.targetStoreId).name;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Boutiques
+    // ─────────────────────────────────────────────────────────────
+
+    match /stores/{storeId} {
+      allow read: if isStoreMember(storeId) || isSystemManager() || isDealer();
+      // Création uniquement dans le writeBatch atomique boutique + store_admin
+      allow create: if signedIn() &&
+        request.resource.data.adminUid == request.auth.uid &&
+        request.resource.data.active == true &&
+        request.resource.data.name is string &&
+        request.resource.data.name.size() >= 2 &&
+        getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'store_admin' &&
+        getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.storeId == storeId &&
+        getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true;
+      allow update, delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Profils utilisateurs
+    // ─────────────────────────────────────────────────────────────
+
+    match /users/{userId} {
+      // Tout utilisateur connecté lit son propre profil
+      allow read: if signedIn() && request.auth.uid == userId;
+      // Membres de la même boutique (V1 compat) — dealer/system_manager bloqués via hasProfile()
+      allow read: if isStoreMember(resource.data.storeId);
+      // Supervision globale
+      allow read: if isSystemManager();
+
+      // lastLogin modifiable par toute identité active reconnue (boutique et globale)
+      allow update: if (hasProfile() || isActiveUser()) &&
+        request.auth.uid == userId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastLogin']);
+
+      // Création profil boutique uniquement (writeBatch atomique store + user)
+      allow create: if signedIn() &&
+        request.auth.uid == userId &&
+        request.resource.data.role == 'store_admin' &&
+        request.resource.data.active == true &&
+        request.resource.data.storeId is string &&
+        request.resource.data.storeName is string &&
+        getAfter(/databases/$(database)/documents/stores/$(request.resource.data.storeId)).data.adminUid == request.auth.uid;
+
+      allow delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Clients globaux
+    // ─────────────────────────────────────────────────────────────
+
+    match /globalClients/{clientId} {
+      allow read: if hasProfile() || isSystemManager();
+
+      allow create: if hasProfile() &&
+        validClient(request.resource.data) &&
+        request.resource.data.registeredStoreId == profile().storeId;
+
+      allow update: if hasProfile() &&
+        resource.data.registeredStoreId is string &&
+        resource.data.registeredStoreId == profile().storeId &&
+        request.resource.data.registeredStoreId == resource.data.registeredStoreId &&
+        validClient(request.resource.data);
+
+      allow delete: if hasProfile() &&
+        resource.data.registeredStoreId is string &&
+        resource.data.registeredStoreId == profile().storeId;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Demandes Dealer
+    // update/delete réservés aux Cloud Functions (Admin SDK)
+    //
+    // Politique d'accès Dealer (choix métier validé) :
+    //   Le rôle dealer est GLOBAL — il approvisionne toutes les boutiques.
+    //   Accès autorisé : stores (toutes actives), networkBalances, ses propres dealerRequests.
+    //   Accès refusé   : clients/{storeId}/history, drafts, globalClients, auditLogs,
+    //                    profils caissières, dealerRequests d'un autre Dealer.
+    // ─────────────────────────────────────────────────────────────
+
+    match /dealerRequests/{requestId} {
+      allow read: if isDealer() && resource.data.dealerUid == request.auth.uid;
+      allow read: if isStoreAdmin(resource.data.targetStoreId);
+      allow read: if isSystemManager();
+
+      allow create: if isDealer() && validDealerRequest(request.resource.data);
+
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Clôtures Dealer
+    // Toutes les écritures via Cloud Functions (Admin SDK).
+    // Dealer lit ses propres clôtures ; boutique lit celles qui la ciblent.
+    // ─────────────────────────────────────────────────────────────
+
+    match /dealerClosures/{closureId} {
+      allow read: if isDealer() && resource.data.dealerUid == request.auth.uid;
+      allow read: if isStoreAdmin(resource.data.targetStoreId);
+      allow read: if isSystemManager();
+      allow create, update, delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Transferts boutique → dealer (retours de stock/liquidité)
+    // Toutes les écritures via Cloud Functions (Admin SDK) — le débit/
+    // crédit/restauration des soldes est autoritatif côté serveur.
+    // Dealer lit les transferts qui lui sont destinés ; boutique lit les siens.
+    // ─────────────────────────────────────────────────────────────
+
+    match /storeDealerTransfers/{transferId} {
+      allow read: if isDealer() && resource.data.dealerUid == request.auth.uid;
+      allow read: if isStoreAdmin(resource.data.storeId);
+      allow read: if isSystemManager();
+      allow create, update, delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Inventaire dealer (soldes + audit) — écritures via Cloud Functions.
+    // Chaque dealer ne lit que son propre inventaire ; gérant lit tout.
+    // ─────────────────────────────────────────────────────────────
+
+    match /dealerBalances/{dealerUid} {
+      allow read: if (isDealer() && dealerUid == request.auth.uid) || isSystemManager();
+      allow create, update, delete: if false;
+
+      match /auditLogs/{logId} {
+        allow read: if (isDealer() && dealerUid == request.auth.uid) || isSystemManager();
+        allow write: if false;
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Dépôts partenaires (sous-dealers hors boîte) — écritures via CF.
+    // Immédiats, sans confirmation. Le dealer lit les siens ; gérant lit tout.
+    // ─────────────────────────────────────────────────────────────
+
+    match /dealerPartnerDeposits/{depositId} {
+      allow read: if (isDealer() && resource.data.dealerUid == request.auth.uid) || isSystemManager();
+      allow create, update, delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Données par boutique (V1)
+    // ─────────────────────────────────────────────────────────────
+
+    match /clients/{storeId} {
+      allow read: if isStoreMember(storeId);
+      allow write: if false;
+
+      match /drafts/{draftId} {
+        allow read: if isStoreMember(storeId);
+        allow create: if isStoreMember(storeId) &&
+          validStoreScopedTransaction(request.resource.data, storeId) &&
+          isPendingStatus(request.resource.data.statut) &&
+          draftHasNoSettlementFields(request.resource.data);
+        allow update: if isStoreMember(storeId) &&
+          validStoreScopedTransaction(request.resource.data, storeId) &&
+          draftSettlementFieldsUnchanged(request.resource.data, resource.data) &&
+          draftCoreFieldsFrozenIfSettling(request.resource.data, resource.data);
+        allow delete: if isStoreMember(storeId);
+
+        // Règlements (paiements et remboursements par tranche)
+        // Écriture exclusivement par les Cloud Functions (Admin SDK).
+        match /settlements/{settlementId} {
+          allow read: if isStoreMember(storeId) || isSystemManager();
+          allow write: if false;
+        }
+      }
+
+      match /history/{historyId} {
+        allow read: if isStoreMember(storeId) || isSystemManager();
+        allow create: if isStoreMember(storeId) &&
+          validStoreScopedTransaction(request.resource.data, storeId) &&
+          validStatus(request.resource.data.statut) &&
+          !isPendingStatus(request.resource.data.statut) &&
+          validClientHistorySettlement(request.resource.data);
+        allow update: if isStoreMember(storeId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statut', 'updatedAt', 'notes']) &&
+          validStatus(request.resource.data.statut);
+        allow delete: if false;
+
+        // Règlements archivés (copiés depuis drafts lors du paiement final)
+        // Écriture exclusivement par les Cloud Functions (Admin SDK).
+        match /settlements/{settlementId} {
+          allow read: if isStoreMember(storeId) || isSystemManager();
+          allow write: if false;
+        }
+      }
+
+      match /networkBalances/{balanceId} {
+        // EXCEPTION HÉRITÉE V1 (assumée) : les membres boutique écrivent DIRECTEMENT
+        // leurs soldes réseau (pas via Cloud Function), contrairement au circuit V2
+        // dealer/settlements qui est serveur-autoritatif et audité. La validation ci-
+        // dessous est STRUCTURELLE uniquement (entiers sûrs >= 0, réseaux figés) : un
+        // compte boutique compromis peut fixer un solde arbitraire SANS piste d'audit.
+        // Risque connu, documenté dans docs/audit/claude/AUDIT_ESPACES_DEALER_GERANT.md
+        // (§1.1). Migration éventuelle vers une Cloud Function auditée = chantier séparé.
+        allow read: if isStoreMember(storeId) || isDealer() || isSystemManager();
+        allow create, update: if isStoreMember(storeId) &&
+          balanceId == 'current' &&
+          validNetworkBalancesDoc(request.resource.data);
+        allow delete: if false;
+      }
+
+      match /sessions/{sessionId} {
+        allow read, write: if isStoreMember(storeId);
+      }
+
+      match /auditLogs/{logId} {
+        allow read: if isStoreMember(storeId);
+        allow write: if false;
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Collection group — lecture globale system_manager / dealer
+    // ─────────────────────────────────────────────────────────────
+
+    match /{path=**}/history/{docId} {
+      allow read: if isSystemManager();
+    }
+
+    match /{path=**}/drafts/{docId} {
+      allow read: if isSystemManager();
+    }
+
+    match /{path=**}/networkBalances/{docId} {
+      allow read: if isDealer() || isSystemManager();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Refus par défaut
+    // ─────────────────────────────────────────────────────────────
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
