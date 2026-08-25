@@ -2,10 +2,17 @@ import { APP_NAME } from '../../constants/branding'
 
 function AuthSidebar({ isSignUp, onToggle }) {
   return (
+    // Dégradé de marque. PROVISOIRE : ces hex sont ceux du produit d'origine —
+    // l'orange #f08a00 (marque AKAYIS) a été retiré, C2EGF étant bleu/blanc. Les
+    // valeurs exactes restent à caler sur le logo C2EGF quand il sera fourni.
+    // Ces couleurs sont le seul endroit du front où la marque n'est pas dérivée
+    // du profil : Tailwind extrait les classes littéralement, une valeur
+    // dynamique ne serait pas générée. Un passage par le profil imposerait des
+    // styles inline (voir branding.theme pour le reste).
     <div className={`h-full min-h-[220px] lg:min-h-[500px] flex flex-col items-center justify-center text-white p-6 sm:p-8 lg:p-12 relative overflow-hidden ${
       isSignUp
         ? 'bg-gradient-to-br from-[#2d5ea5] to-[#173e78]'
-        : 'bg-gradient-to-br from-[#f08a00] to-[#2d5ea5]'
+        : 'bg-gradient-to-br from-[#3a72c4] to-[#173e78]'
     }`}>
       <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full transform translate-x-16 -translate-y-16"></div>
       <div className="absolute bottom-0 left-0 w-24 h-24 bg-white opacity-10 rounded-full transform -translate-x-12 translate-y-12"></div>
