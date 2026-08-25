@@ -1,4 +1,5 @@
 import { getStorageKey } from '../config/clientIsolation'
+import { BRAND_THEME } from './branding.js'
 
 export const THEMES = {
   blue: {
@@ -81,6 +82,11 @@ export const THEMES = {
   }
 }
 
-export const DEFAULT_THEME = 'dark'
+// Thème d'ouverture, DÉRIVÉ du profil client (branding.theme) — même source de
+// vérité que le nom du produit. Repli sur 'dark' (défaut historique du produit) si
+// le profil ne déclare pas de thème ou en déclare un inconnu de THEMES.
+// Le choix explicite de l'utilisateur, persisté en localStorage, reste prioritaire
+// (voir ThemeContext) : ceci ne fixe que le thème au premier chargement.
+export const DEFAULT_THEME = THEMES[BRAND_THEME] ? BRAND_THEME : 'dark'
 
 export const STORAGE_KEY = getStorageKey('theme')

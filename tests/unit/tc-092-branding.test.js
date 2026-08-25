@@ -1,10 +1,10 @@
 /**
  * TC-092 — branding.js : le nom du produit dérive du profil client actif.
  *
- * Caractérisation : sous le profil réel des tests (TAOFIC, VITE_CLIENT_ID=taofic_ajagbe),
- * la marque reste « AKAYIS » / « AKAYIS CRM » — comportement identique à aujourd'hui.
+ * Caractérisation : sous le profil réel des tests (C2EGF, VITE_CLIENT_ID=c2egf_burkina),
+ * la marque est « C2EGF » et le thème de marque « blue ».
  * Puis on prouve la dérivation : un profil avec un autre `branding` change les constantes ;
- * un profil sans `branding` retombe sur les défauts historiques.
+ * un profil sans `branding` retombe sur les défauts historiques du produit (AKAYIS).
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest'
@@ -22,12 +22,12 @@ async function loadBrandingWith(profile) {
 }
 
 describe('TC-092 — branding dérivé du profil', () => {
-  it('caractérisation TAOFIC (profil réel) → AKAYIS / AKAYIS CRM / green', async () => {
+  it('caractérisation C2EGF (profil réel) → C2EGF / C2EGF / blue', async () => {
     vi.resetModules()
     const b = await import('../../src/constants/branding.js')
-    expect(b.APP_NAME).toBe('AKAYIS')
-    expect(b.APP_FULL_NAME).toBe('AKAYIS CRM')
-    expect(b.BRAND_THEME).toBe('green')
+    expect(b.APP_NAME).toBe('C2EGF')
+    expect(b.APP_FULL_NAME).toBe('C2EGF')
+    expect(b.BRAND_THEME).toBe('blue')
   })
 
   it('reflète le branding d’un autre client', async () => {

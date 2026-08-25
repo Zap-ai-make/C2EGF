@@ -15,6 +15,7 @@
 
 import { pilotProfile } from './_pilot.js'
 import taoficProfile from './taofic-ajagbe.js'
+import c2egfProfile from './c2egf-burkina.js'
 
 // ⚠ Doit rester identique à normalizeClientId de src/config/clientIsolation.js.
 function normalizeClientId(value) {
@@ -35,6 +36,7 @@ export const PROFILES = Object.freeze({
   pilot:           pilotProfile,
   nouveau_client:  pilotProfile,
   taofic_ajagbe:   taoficProfile,
+  c2egf_burkina:   c2egfProfile,
 })
 
 /**

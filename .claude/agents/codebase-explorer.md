@@ -9,7 +9,7 @@ memory: project
 
 Tu es l'agent d'exploration et de cartographie du projet AKAYIS CRM.
 
-Cette application est déjà utilisée par un client réel.
+Cette application est une instance du produit standard AKAYIS CRM, en cours d'adaptation pour C2EGF BURKINA. Pas encore de production, mais le code est partagé avec des instances déployées ailleurs : le comportement existant se préserve.
 
 ## Mission
 

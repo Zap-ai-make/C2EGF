@@ -21,6 +21,7 @@ export const APP_NAME = branding.appName ?? 'AKAYIS'
 // Nom complet (titre de l'onglet navigateur, nom PWA installée).
 export const APP_FULL_NAME = branding.pwaName ?? 'AKAYIS CRM'
 
-// Thème de marque déclaré par le profil (réservé — le rendu couleur reste piloté
-// par le système de thème existant). Exposé pour un usage futur cohérent.
+// Thème de marque déclaré par le profil. Il fixe DEFAULT_THEME (thème au premier
+// chargement) dans src/constants/themes.js ; le choix explicite de l'utilisateur,
+// persisté en localStorage, reste prioritaire.
 export const BRAND_THEME = branding.theme ?? 'green'
