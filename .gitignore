@@ -29,6 +29,9 @@ dev-dist
 dist-ssr
 .netlify
 
+# Cache local de Vite (cree par le serveur de dev)
+.vite
+
 # Logs
 logs
 *.log
