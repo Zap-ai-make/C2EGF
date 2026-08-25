@@ -32,7 +32,7 @@ La fuite la plus courante et la plus grave, c'est un secret exposé. On l'empêc
 
 - Aucun secret dans le code, un chat, un document partagé, une capture, ou l'historique git. Clés API, tokens, mots de passe, clés privées, secrets OAuth : aucun de ces éléments n'entre dans le dépôt.
 - **Où vit un secret, selon l'environnement.** En développement local : un `.env` gitignoré. Pour tout environnement partagé (staging, production, CI) : le gestionnaire de secrets ou les variables sécurisées de l'hébergeur. Un fichier `.env` est un mécanisme de développement, jamais un mécanisme de production.
-- `.env` est dans `.gitignore`, sans exception. On versionne un `.env.example` sans valeurs.
+- `.env` est dans `.gitignore`, sans exception. On versionne un `.env.example` sans valeurs. Le pack fournit un `.gitignore` minimal qui couvre déjà ces cas ; il se met en place **avant** le premier secret (`AGENTS.md`, Note d'installation).
 - Pour partager des secrets entre machines/équipe : un gestionnaire de secrets (1Password, Bitwarden, Doppler) ou les secrets de l'hébergeur/CI. Jamais un fichier partagé.
 - Séparation client/serveur : seule une clé publique peut atterrir côté client. Toute clé secrète reste côté serveur.
 - Un secret exposé est un secret compromis : on le révoque et régénère immédiatement dans la console concernée, on ne se contente pas de le retirer.

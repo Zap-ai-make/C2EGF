@@ -25,7 +25,7 @@ Aucun autre fichier, aucun sous-dossier. Le fichier annoncé sous le nom `ECC-IN
 
 ## 2. Ce qui a été vérifié
 
-Contrôle mécanique par script, exécuté après application. Les huit contrôles passent.
+Contrôle mécanique par script (`.harmonisation/verif.py`), rejouable à volonté. Les onze contrôles passent.
 
 | Contrôle | Résultat |
 |---|---|
@@ -37,16 +37,36 @@ Contrôle mécanique par script, exécuté après application. Les huit contrôl
 | Cases à cocher bien formées, aucune ligne à espace nue | OK |
 | Titre H1 et sections `##` dans les contrats, le workflow et l'annexe — `CLAUDE.md` et les documents de procédure exclus ; `AGENTS.md` et `SPEC.template.md` sans sections numérotées, par conception | OK |
 | `CLAUDE.md` contient sa directive unique, sans titre ajouté | OK |
+| `.gitignore` fourni, couvre `.env`, exempte `.env.example`, et `git check-ignore` le confirme | OK |
+| Empreintes publiées dans ce rapport conformes aux fichiers réels | OK |
 | **Non-régression du contenu protégé** | OK |
 
-**Le contrôle de non-régression a lui-même été validé par test de mutation.** Sur une copie du pack, deux dégradations ont été injectées : suppression de la règle IDOR (`SECURITY.md` §4) et affaiblissement du point d'arrêt 1 (`WORKFLOW.md` §1). Le contrôle a détecté les deux. Un « tout passe » sur un contrôle incapable d'échouer n'aurait rien prouvé.
+**Les contrôles ont eux-mêmes été validés par tests de mutation.** Un « tout passe » sur un contrôle incapable d'échouer ne prouve rien. Sur des copies du pack, cinq dégradations ont été injectées, une par une :
+
+| Dégradation injectée | Détectée |
+|---|---|
+| Suppression de la règle IDOR (`SECURITY.md` §4) | Oui |
+| Affaiblissement du point d'arrêt 1 (`WORKFLOW.md` §1) | Oui |
+| Suppression pure et simple d'une règle faisant l'objet d'une dérogation | Oui, après correction — voir §7 |
+| Fichier modifié sans republication de son empreinte | Oui |
+| `.env` retiré du `.gitignore` | Oui |
+
+La troisième n'était **pas** détectée par la première version du garde-fou : c'est le test qui l'a révélé.
 
 Le contenu placé sous protection : `WORKFLOW.md` §1 (les trois points d'arrêt), `SECURITY.md` §1 à §11 (tous les non-négociables), `DESIGN.md` §5, §8, §10, §11 (contraste, emoji, états, accessibilité), `ARCHITECTURE.md` §1 (l'échelle en cinq points et les garde-fous absolus). La comparaison se fait phrase par phrase contre l'état d'origine, insensible au reformatage.
 
-**Vérification reproductible depuis le dossier seul.** Le dossier est désormais un dépôt git. L'état antérieur à l'harmonisation est le commit `b6c6251`, porté par le tag **`origine`** ; l'outil de contrôle est versionné dans `.harmonisation/verif.py` et lit sa référence depuis ce tag. N'importe quel relecteur rejoue donc l'ensemble sans artefact fourni de l'extérieur :
+**Deux choses distinctes, à ne pas confondre.**
+
+*La traçabilité future est acquise.* Le dossier est un dépôt git ; l'outil de contrôle est versionné dans `.harmonisation/verif.py` et lit sa référence depuis le tag `origine`. Toute évolution ultérieure du pack est vérifiable et comparable par n'importe qui, sans artefact fourni de l'extérieur.
+
+*La fidélité historique de la première passe ne l'est pas.* Le tag `origine` (commit `b6c6251`) est une **reconstitution**, pas un instantané capturé sous contrôle de version avant modification : le dépôt git n'existait pas au moment de l'audit. Le contenu provient d'une copie faite au début de la session, avant toute écriture — elle est fidèle en fait, mais **rien dans le dépôt ne le prouve**. Le diff depuis `origine` démontre donc l'absence de régression par rapport à cette référence ; il ne démontre pas, de façon indépendante, que cette référence était bien l'état antérieur. Sur ce point précis, un relecteur doit s'en remettre à la parole de l'exécutant — ce qui est exactement ce qu'une boucle de revue est censée éviter.
+
+*Correctif de méthode pour les passes suivantes :* créer et protéger le tag de référence **avant** la première écriture. Le défaut ne se reproduira pas, mais il n'est pas rattrapable rétroactivement pour cette passe-ci.
+
+Commandes de contrôle :
 
 ```
-python .harmonisation/verif.py     # 9 contrôles, sortie 0 attendue
+python .harmonisation/verif.py     # 11 contrôles, sortie 0 attendue
 git diff origine -- '*.md'         # le diff complet de l'harmonisation
 ```
 
@@ -56,22 +76,27 @@ Le dossier `.harmonisation/` ne fait pas partie de ce qui est copié à la racin
 
 | Commit | Contenu |
 |---|---|
-| `b6c6251` (tag `origine`) | État du pack avant audit |
+| `b6c6251` (tag `origine`) | État du pack avant audit — reconstitué, cf. ci-dessus |
 | `27e36e3` | Harmonisation (Prompt 1) |
 | `9c778c5` | Constats C1 à C4 de `REVIEW-CODEX.md` |
+| `545cf4b` | Constats C5 et C6 ; durcissement du garde-fou |
+| branche `fix/review-codex-2` | Constats de `REVIEW-CODEX-2.md` (§8) |
+
+`git log --oneline` fait foi ; ce tableau est un repère de lecture, pas une source.
 
 **Empreintes SHA-256 (16 premiers caractères) :**
 
 | Fichier | `origine` | actuel |
 |---|---|---|
-| `AGENTS.md` | `4e391ba92847fd7b` | `e564c982a57bb716` |
-| `ARCHITECTURE.md` | `dd67ee7f20c53c0f` | `e5195a7571680517` |
+| `AGENTS.md` | `4e391ba92847fd7b` | `232b3b55ba32298c` |
+| `ARCHITECTURE.md` | `dd67ee7f20c53c0f` | `5b1ca6fbcdec45b7` |
 | `CLAUDE.md` | `b50aa2dfae18f84b` | `3ae0a11d20ba0afa` |
 | `DESIGN.md` | `fb4af4b19043a92a` | `686eff357d0c818e` |
-| `ECC.md` | `6174dab17408e016` | `b184fd9d9c09e296` |
-| `SECURITY.md` | `b4e48f41f28e102d` | `8c7becb0f884833d` |
+| `ECC.md` | `6174dab17408e016` | `6253925158f3b75b` |
+| `SECURITY.md` | `b4e48f41f28e102d` | `036a8852f3152260` |
 | `SPEC.template.md` | `d46ff4e8732f37a1` | `39573e311a0be60c` |
 | `WORKFLOW.md` | `93e1185b391fa86e` | `0397c97fbea9e3bd` |
+| `.gitignore` | — (absent) | `0165de2b9b3407e7` |
 
 ---
 
@@ -241,3 +266,26 @@ Ce mécanisme a été validé par test de mutation sur un clone : la suppression
 ### Non appliqué
 
 Aucun constat de `REVIEW-CODEX.md` n'a été écarté. Restent non traités les deux points déjà listés au §5 (versioning/releases, six conventions ECC), écartés à l'arbitrage lors de la première passe.
+
+---
+
+## 8. Troisième passe — application de `REVIEW-CODEX-2.md`
+
+Contre-revue reçue, verdict **VALIDÉ AVEC RÉSERVES**. Elle confirme mécaniquement l'état du dépôt (arbre propre, tag et commits présents, dix contrôles au vert, empreintes concordantes), valide quatre des six constats précédents et en classe deux comme partiellement traités, plus un constat neuf. Les quatre sont fondés et appliqués.
+
+| Constat | Décision | Application |
+|---|---|---|
+| **Commande ECC non vérifiée** — l'avertissement se détache du copier-coller | Appliqué | La recette `npx ecc install …` est **retirée** de `ECC.md` §4, pas seulement annotée. Le texte explique pourquoi aucune commande n'est donnée et ce qu'il faut vérifier avant d'en inscrire une. La voie plugin, qui passe par un slug de la liste blanche, reste la seule procédure disponible. |
+| **Référence `origine` reconstituée** | Appliqué | §2 de ce rapport réécrit pour séparer la traçabilité future (acquise) de la fidélité historique de la première passe (non attestable indépendamment). Voir ci-dessous. |
+| **Absence de `.gitignore`** | Appliqué | Un `.gitignore` minimal, centré sur les secrets, est ajouté au pack et à la liste des fichiers à copier (`AGENTS.md`, Note d'installation). `SECURITY.md` §2 et `ARCHITECTURE.md` §11 y renvoient. Un dixième contrôle vérifie que le fichier existe, couvre `.env`, exempte `.env.example`, et que `git check-ignore` le confirme réellement. |
+| **Commits directs sur la branche principale** (MINEUR) | Appliqué | `ARCHITECTURE.md` §11 précise que la règle vaut aussi pour le dépôt de standards lui-même, sans exception de maintenance. Cette passe-ci est faite sur une branche de correctif puis intégrée — la règle est appliquée, pas contournée. L'historique antérieur n'est pas réécrit. |
+
+### Sur la portée probatoire de `origine`
+
+C'est le constat le plus sérieux des trois passes, parce qu'il ne porte pas sur le pack mais sur **ce que ce rapport a le droit d'affirmer**. La formulation précédente laissait entendre qu'un relecteur pouvait vérifier l'absence de régression de bout en bout ; c'était trop fort. Le tag `origine` est une reconstitution : elle est fidèle, mais rien dans le dépôt ne l'atteste, et une boucle de revue dont une étape repose sur la parole de l'exécutant a un maillon faible à cet endroit précis.
+
+Ce qui reste vrai et vérifiable : le pack actuel ne contient aucune régression **par rapport au contenu de `origine`**, et toute évolution future est comparable sans reprendre cette hypothèse. Ce qui ne l'est pas : que `origine` soit l'état antérieur réel. La correction de méthode — taguer avant d'écrire — vaut pour les prochaines passes ; elle ne rattrape pas celle-ci.
+
+### État
+
+Les onze constats des deux revues ont été appliqués. Aucun n'a été écarté. Les deux points laissés de côté au §5 relèvent de vos arbitrages de la première passe, pas d'un désaccord avec les relecteurs.
