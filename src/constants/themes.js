@@ -2,6 +2,22 @@ import { getStorageKey } from '../config/clientIsolation'
 import { BRAND_THEME } from './branding.js'
 
 export const THEMES = {
+  // Palette de marque C2EGF : bleu marine #173863 relevé sur logo.jpeg, sur fond
+  // clair. Valeurs arbitraires Tailwind écrites en littéral — l'extracteur ne
+  // génère que les classes qu'il lit dans les sources, jamais une chaîne calculée.
+  c2egf: {
+    id: 'c2egf',
+    name: 'Thème C2EGF',
+    backgroundImage: '/bg-noir.png',
+    classes: {
+      background: 'bg-[#f2f5fa]',
+      text: 'text-gray-900',
+      accent: 'bg-[#173863]',
+      navbar: 'bg-[#173863]/95 backdrop-blur-sm',
+      tableHeader: 'bg-[#dde5f0]/80 border-[#c3d0e4]',
+      tableAccent: 'bg-[#f2f5fa]/60'
+    }
+  },
   blue: {
     id: 'blue',
     name: 'Thème Bleu',

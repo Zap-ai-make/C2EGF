@@ -12,7 +12,7 @@ Application CRM complète pour la gestion des clients et transactions de C2EGF (
 - **Gestion Clients** : Ajout, modification, recherche de clients
 - **Transactions** : Suivi des transactions avec historique complet
 - **Dashboard** : Statistiques et graphiques en temps réel
-- **Thème dérivé du profil client** : bleu pour C2EGF ; l'utilisateur peut en changer, son choix est conservé
+- **Thème dérivé du profil client** : bleu marine C2EGF (#173863) ; l'utilisateur peut en changer, son choix est conservé
 - **PWA** : Installation sur mobile et desktop + mode hors ligne
 - **Multi-réseaux** : Support Orange, Moov, MTN, Telecel
 - **Export Excel** : Export des données clients et transactions
@@ -99,11 +99,11 @@ npm run preview
 
 ```
 c2egf.log/
+├── logo.jpeg            # Logo source C2EGF (dont dérivent les icônes ci-dessous)
 ├── public/              # Assets statiques
-│   ├── pwa-*.png       # Icônes PWA — À REMPLACER par celles de C2EGF
-│   ├── akayis-mark.svg # Favicon + marque sidebar — À REMPLACER (seul asset actif)
-│   ├── akayis-logo.*   # Logo complet — hérité, référencé nulle part dans src/
-│   └── akayis-bg.*     # Image de fond — hérité, référencé nulle part dans src/
+│   ├── c2egf-mark.png  # Marque ronde : favicon + sidebar d'authentification
+│   ├── pwa-*.png       # Icônes PWA 192 et 512
+│   └── bg-noir.png     # Image de fond commune à tous les thèmes
 ├── src/
 │   ├── components/     # Composants React
 │   ├── config/         # Configuration (Firebase)

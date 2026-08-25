@@ -28,10 +28,16 @@ async function loadThemesWith(profile) {
 }
 
 describe('TC-093 — DEFAULT_THEME dérivé du profil', () => {
-  it('caractérisation C2EGF (profil réel) → thème bleu au premier chargement', async () => {
+  it('caractérisation C2EGF (profil réel) → palette de marque au premier chargement', async () => {
     vi.resetModules()
     const t = await import('../../src/constants/themes.js')
-    expect(t.DEFAULT_THEME).toBe('blue')
+    expect(t.DEFAULT_THEME).toBe('c2egf')
+  })
+
+  it('la palette C2EGF porte le bleu marine relevé sur le logo', async () => {
+    vi.resetModules()
+    const t = await import('../../src/constants/themes.js')
+    expect(t.THEMES.c2egf.classes.accent).toBe('bg-[#173863]')
   })
 
   it('un autre thème déclaré dans le profil est respecté', async () => {

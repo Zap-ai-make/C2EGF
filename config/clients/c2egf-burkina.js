@@ -31,7 +31,7 @@ export const c2egfProfile = Object.freeze({
   branding: Object.freeze({
     appName: 'C2EGF',
     pwaName: 'C2EGF',
-    theme: 'blue',
+    theme: 'c2egf',
   }),
 
   // ── Réseaux boutique : 1 seul (Orange) ─────────────────────────────────────
@@ -40,14 +40,16 @@ export const c2egfProfile = Object.freeze({
   }),
 
   // ── Transactions ───────────────────────────────────────────────────────────
-  // types : Crédit CONSERVÉ (défaut pilote) — le cycle complet existe et est testé
-  //   (statut « Remboursé par X », paiements partiels, remboursements, annulations).
-  // paymentMethods : restreint aux méthodes cohérentes avec un unique réseau actif.
-  //   Un règlement impacte le réseau de SA méthode de paiement
+  // types : PAS de Crédit (décision client). La logique de crédit reste dans le
+  //   produit — statut « Remboursé par X », paiements partiels, remboursements,
+  //   annulations — mais n'est pas proposée à C2EGF. La réactiver = ajouter
+  //   'Crédit' ici, rien d'autre.
+  // paymentMethods : les 2 méthodes du client. Cohérent avec un unique réseau
+  //   actif — un règlement impacte le réseau de SA méthode de paiement
   //   (applySettlementImpact) : autoriser « Moov Money » alors que Moov n'est pas
   //   dans networks.enabled créditerait un solde sans carte réseau correspondante.
   transactions: Object.freeze({
-    types: ['Dépôt', 'Retrait', 'Crédit'],
+    types: ['Dépôt', 'Retrait'],
     paymentMethods: ['Orange Money', 'Cash'],
   }),
 

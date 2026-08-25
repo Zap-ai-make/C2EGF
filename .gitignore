@@ -62,14 +62,20 @@ Thumbs.db
 .claude/agent-memory/
 
 # ── Fichiers de test et captures ──────────────────────────────────────────
-# ⚠ Ces motifs ignorent aussi les images de marque en .jpg/.jpeg. Les actifs
-# de branding du client sont en .svg/.png (public/), donc non concernés.
+# ⚠ Ces motifs ignorent TOUTES les images .jpg/.jpeg, y compris les actifs de
+# marque. D'où l'exception explicite ci-dessous : sans elle, le logo source du
+# client n'entrerait jamais dans le dépôt, et les icônes générées seraient
+# irreproductibles.
 pwa-test.html
 *test*.html
 Capture*
 *.jpeg
 *.jpg
 screenshot*
+
+# Exception : logo source de la marque C2EGF. Versionné délibérément — c'est
+# l'original dont dérivent public/c2egf-mark.png et les icônes PWA.
+!logo.jpeg
 
 # Documentation de développement (le README.md principal reste suivi)
 PWA-Guide.md

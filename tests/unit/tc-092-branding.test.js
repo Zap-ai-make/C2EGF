@@ -2,7 +2,7 @@
  * TC-092 — branding.js : le nom du produit dérive du profil client actif.
  *
  * Caractérisation : sous le profil réel des tests (C2EGF, VITE_CLIENT_ID=c2egf_burkina),
- * la marque est « C2EGF » et le thème de marque « blue ».
+ * la marque est « C2EGF » et le thème de marque « c2egf » (bleu marine #173863).
  * Puis on prouve la dérivation : un profil avec un autre `branding` change les constantes ;
  * un profil sans `branding` retombe sur les défauts historiques du produit (AKAYIS).
  */
@@ -22,12 +22,12 @@ async function loadBrandingWith(profile) {
 }
 
 describe('TC-092 — branding dérivé du profil', () => {
-  it('caractérisation C2EGF (profil réel) → C2EGF / C2EGF / blue', async () => {
+  it('caractérisation C2EGF (profil réel) → C2EGF / C2EGF / c2egf', async () => {
     vi.resetModules()
     const b = await import('../../src/constants/branding.js')
     expect(b.APP_NAME).toBe('C2EGF')
     expect(b.APP_FULL_NAME).toBe('C2EGF')
-    expect(b.BRAND_THEME).toBe('blue')
+    expect(b.BRAND_THEME).toBe('c2egf')
   })
 
   it('reflète le branding d’un autre client', async () => {

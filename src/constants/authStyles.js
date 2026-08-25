@@ -1,20 +1,23 @@
 // Styles Tailwind CSS réutilisables pour l'authentification
+// Bleu marine #173863 = couleur de marque C2EGF, relevée sur logo.jpeg.
+// #2760a5 en est la version éclaircie, #0f2745 la version assombrie (survol).
+// Valeurs littérales : Tailwind ne génère que les classes qu'il lit en clair.
 export const AUTH_STYLES = {
   // Inputs
   input: {
     base: "w-full px-4 py-3 bg-gray-100 border-0 rounded-md focus:bg-white focus:ring-2 focus:outline-none transition-all",
-    primary: "focus:ring-blue-500",
+    primary: "focus:ring-[#2760a5]",
     secondary: "focus:ring-purple-500",
     error: "bg-red-50 border border-red-300 focus:ring-red-500"
   },
 
   // Boutons
   button: {
-    primary: "w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+    primary: "w-full bg-[#173863] hover:bg-[#0f2745] text-white font-semibold py-3 px-6 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
     secondary: "w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
     tertiary: "bg-gray-300 hover:bg-gray-400 text-gray-800 py-3 px-4 rounded-md transition-colors",
     danger: "bg-red-600 hover:bg-red-700 text-white py-3 px-4 rounded-md transition-colors disabled:opacity-50",
-    link: "text-blue-600 hover:text-blue-700 font-semibold transition-colors",
+    link: "text-[#173863] hover:text-[#2760a5] font-semibold transition-colors",
     linkSecondary: "text-purple-600 hover:text-purple-700 font-semibold transition-colors"
   },
 
@@ -60,7 +63,7 @@ export const AUTH_STYLES = {
 
   // États de chargement
   loading: {
-    spinner: "animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto",
+    spinner: "animate-spin rounded-full h-16 w-16 border-b-2 border-[#173863] mx-auto",
     container: "min-h-screen flex items-center justify-center bg-gray-100",
     text: "text-gray-600 mt-4"
   },
@@ -72,7 +75,7 @@ export const AUTH_STYLES = {
     heading: "text-xl font-bold text-gray-800",
     body: "text-gray-600",
     small: "text-sm text-gray-500",
-    link: "text-blue-600 hover:text-blue-700 transition-colors"
+    link: "text-[#173863] hover:text-[#2760a5] transition-colors"
   },
 
   // Espacements

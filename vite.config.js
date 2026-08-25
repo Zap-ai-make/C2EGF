@@ -135,14 +135,14 @@ export default defineConfig(({ mode }) => {
         ]
       },
       // Assets à inclure dans le cache
-      includeAssets: ['*.ico', '*.svg', '*.png', '*.jpg', 'akayis-*.png', 'akayis-*.svg'],
+      includeAssets: ['*.ico', '*.svg', '*.png', '*.jpg', 'c2egf-*.png'],
 
       // Manifest PWA - métadonnées de l'application
       manifest: {
         name: appFullName,
         short_name: appFullName,
         description,
-        theme_color: '#3b82f6', // Couleur de la barre d'adresse mobile
+        theme_color: '#173863', // Barre d'adresse mobile — bleu marine C2EGF (logo.jpeg)
         background_color: '#ffffff',
         display: 'standalone', // Affichage en plein écran (comme une app native)
         orientation: 'portrait-primary',

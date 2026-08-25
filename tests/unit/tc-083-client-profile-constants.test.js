@@ -10,9 +10,9 @@
  * l'environnement de test ne charge pas VITE_CLIENT_ID=c2egf_burkina : le fichier
  * .env local est absent ou incomplet (il est gitignoré — voir .env.example).
  *
- * Écart assumé vs. TAOFIC (client d'origine du produit) : C2EGF conserve le type
- * « Crédit » du profil pilote. Les autres axes sont identiques (1 réseau Orange,
- * 2 méthodes de règlement, dealer mono-réseau).
+ * C2EGF est configuré comme TAOFIC sur les 4 axes : 1 réseau (Orange), pas de
+ * Crédit, 2 méthodes de règlement, dealer mono-réseau. Ce qui les distingue est
+ * la marque, pas les options.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -29,11 +29,10 @@ describe('TC-083 — Constantes dérivées du profil client actif', () => {
     expect(NETWORK_OPTIONS).toEqual(['Orange'])
   })
 
-  it('TRANSACTION_TYPES = profil C2EGF (Dépôt/Retrait/Crédit)', () => {
+  it('TRANSACTION_TYPES = profil C2EGF (Dépôt/Retrait, sans Crédit)', () => {
     expect(TRANSACTION_TYPES).toEqual([
       { value: 'Dépôt', label: 'Dépôt' },
       { value: 'Retrait', label: 'Retrait' },
-      { value: 'Crédit', label: 'Crédit' },
     ])
   })
 
