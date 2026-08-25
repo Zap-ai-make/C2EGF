@@ -1,0 +1,117 @@
+# ARCHITECTURE.md — Contrat d'organisation et de qualité
+
+ **Objectif : un code minimal, lisible, organisé et vérifié — pensé comme le ferait un senior expérimenté qui n'écrit que ce qui est nécessaire, et qui le fait bien.**
+
+---
+
+## 0. Comment lire ce fichier
+
+Comme les deux autres contrats (`DESIGN.md`, `SECURITY.md`) : des principes appliqués avec jugement, pas une liturgie. La cohérence avec l'existant prime sur la préférence personnelle — **on suit d'abord les conventions déjà en place dans le projet**, on ne les remplace que si elles posent un vrai problème, et on le dit.
+
+---
+
+## 1. Le principe directeur : le meilleur code est celui qu'on n'écrit pas
+
+Le piège n°1 des agents est la sur-construction : abstractions prématurées, couches inutiles, dépendances superflues, code « au cas où ». On l'attaque à la racine avec cette échelle, appliquée **avant d'écrire quoi que ce soit** :
+
+1. **Est-ce que ça doit exister ?** Si le besoin n'est pas réel et actuel, on ne le construit pas (YAGNI).
+2. **Est-ce déjà dans le code ?** On réutilise l'existant avant d'écrire du neuf.
+3. **La bibliothèque standard ou une feature native le fait ?** (`<input type="date">` avant un date-picker, `Intl` avant une lib de formatage…)
+4. **Une dépendance déjà installée le fait ?** On exploite ce qu'on paie déjà.
+5. **Sinon : la version minimale qui marche.** Pas la version extensible, configurable, générique — la version juste.
+
+**Garde-fous absolus — jamais sacrifiés au nom du minimalisme :**
+- validation aux frontières de confiance (toute entrée externe),
+- gestion des erreurs sur les chemins qui peuvent échouer,
+- les règles de `SECURITY.md`,
+- l'accessibilité et les états de `DESIGN.md`.
+
+Le minimalisme porte sur la *quantité de construction*, jamais sur la *solidité de ce qui est construit*.
+
+---
+
+## 2. Structure du projet
+
+- **Prévisible.** Un nouveau venu (humain ou agent) doit deviner où vit chaque chose. Arborescence par domaine ou par couche — mais une seule logique, tenue partout.
+- **Séparation des responsabilités.** UI, logique métier, accès aux données ne se mélangent pas dans le même fichier. Un module fait une chose.
+- **Pas de duplication silencieuse.** Avant de créer un utilitaire, un composant, un helper : vérifier qu'il n'existe pas déjà. S'il existe presque, on l'étend, on ne le clone pas.
+- Les fichiers d'agents et de standards (`AGENTS.md`, `DESIGN.md`, `SECURITY.md`, ce fichier) restent **à la racine** et à jour.
+
+---
+
+## 3. Qualité du code
+
+- **Lisible avant malin.** Un code qu'on comprend en une lecture bat un code compact qu'il faut décoder.
+- **Nommage qui dit la vérité** : une fonction fait ce que son nom annonce, rien de plus.
+- Fonctions courtes, à une responsabilité. Pas de code mort, pas de blocs commentés laissés « au cas où », pas de `TODO` fantômes.
+- **Typé** là où la stack le permet (TypeScript strict plutôt que `any` de confort).
+- **Lint + format automatisés** et non discutés : la machine tranche les débats de style, les humains gardent leur attention pour le fond.
+- Les commentaires expliquent le **pourquoi** (décision, contrainte, piège), jamais le *quoi* que le code dit déjà.
+
+---
+
+## 4. Tests : vérifier ce qui compte
+
+- On teste **les frontières de confiance et la logique métier** — là où un bug coûte cher — pas les getters pour gonfler un pourcentage de couverture.
+- Un bug corrigé gagne un test qui l'empêche de revenir.
+- Les tests passent **avant** de merger. Un agent ne déclare jamais une tâche terminée sans avoir exécuté le code, lancé les tests, et pour l'UI, regardé le rendu (capture Playwright).
+- « Ça compile » n'est pas « ça marche ».
+
+---
+
+## 5. Documentation minimale mais réelle
+
+- Un `README` qui permet de lancer le projet en partant de zéro (installation, variables d'env via `.env.example`, commandes).
+- Les **décisions structurantes** notées en quelques lignes quand elles sont prises (pourquoi cette base, pourquoi ce pattern) — un mini registre de décisions suffit, pas de bureaucratie.
+
+---
+
+## 6. Context engineering — la discipline de l'agent
+
+Le contexte est une ressource qui se dégrade quand on la sature. La règle est la **soustraction, pas l'addition**.
+
+- **Charger seulement ce qui sert la tâche.** On lit les fichiers pertinents, pas le dépôt entier. Les contrats (`DESIGN.md`, `SECURITY.md`, ce fichier) se chargent quand leur domaine est touché.
+- **Discipline MCP : moins de 10 serveurs actifs par projet**, choisis pour la tâche ; on peut en avoir vingt de configurés, pas vingt d'activés. Trop d'outils actifs dégradent les décisions.
+- **Comprendre avant d'écrire** (research-first) : sur une base existante, on lit le code concerné, on identifie les conventions et les composants réutilisables, *puis* on code. Jamais l'inverse.
+- Les connaissances réutilisables (procédures, gabarits, règles métier) vivent dans des **skills chargées à la demande**, pas copiées dans chaque prompt.
+
+---
+
+## 7. Routing de modèles : décider haut, exécuter juste
+
+- Les **décisions structurantes** (architecture, plan, arbitrages, revue finale) vont aux modèles les plus capables.
+- L'**implémentation cadrée** (le plan est clair, la tâche est bornée) peut aller à des modèles intermédiaires.
+- Le cycle : **plan → validation du plan → exécution → vérification.** Pour toute tâche non triviale, l'agent propose d'abord un plan court ; on n'exécute qu'un plan validé.
+
+---
+
+## 8. Façon de travailler
+
+- **Une chose à la fois.** Petites étapes, petits commits, messages qui disent le pourquoi.
+- Pas de refonte opportuniste : on ne « nettoie » pas la moitié du dépôt en corrigeant un bug. Si un refactor s'impose, il devient une tâche à part, annoncée.
+- **En cas d'incertitude sur une opération sensible** (suppression de données, migration, paiement, envoi massif), l'agent s'arrête et demande. Deviner coûte plus cher que demander.
+- Terminé = exécuté, testé, vérifié, conforme aux trois contrats.
+
+---
+
+## 9. L'audit cinq piliers
+
+Avant une release majeure — ou périodiquement sur un projet qui vit — on lance un audit selon cinq piliers, chacun confié à une passe (ou un sous-agent) dédiée :
+
+1. **Architecture** — la structure sert-elle encore le produit ? Couplages, frontières, dette structurelle.
+2. **Qualité du code** — lisibilité, duplication, code mort, typage, conventions.
+3. **Sécurité** — passage complet de la checklist de `SECURITY.md` §13.
+4. **Performance** — requêtes N+1, poids du bundle, chemins critiques, temps de réponse.
+5. **Scalabilité** — ce qui casse à 10× l'usage : données, files, limites, coûts.
+
+Chaque passe produit des constats **actionnables et priorisés** (critique / important / mineur). Les correctifs repassent en revue jusqu'à épuisement des critiques — une boucle relecteur/testeur, pas un rapport qu'on classe.
+
+---
+
+## 10. Amélioration continue : des standards vivants
+
+À la fin d'un chantier notable (ou après un raté), on prend cinq minutes :
+- qu'est-ce qui a bien marché, qu'est-ce qui a frotté, qu'est-ce que l'agent a mal compris ?
+- la leçon est-elle **généralisable** ? Si oui, elle est ajoutée au contrat concerné (`DESIGN.md`, `SECURITY.md`, ce fichier ou `AGENTS.md`).
+
+C'est ainsi que le système apprend tes conventions au lieu de répéter les mêmes erreurs. Ces fichiers ne sont pas des monuments : ce sont des outils qu'on affûte.
