@@ -7,7 +7,7 @@ eux-mêmes — tu ne construis aucun produit ici.
 
 1. INVENTAIRE
 Lis intégralement chaque fichier du dossier : AGENTS.md, CLAUDE.md, WORKFLOW.md,
-SPEC.template.md, DESIGN.md, SECURITY.md, ARCHITECTURE.md, ECC-INTEGRATION.md,
+SPEC.template.md, DESIGN.md, SECURITY.md, ARCHITECTURE.md, ECC.md,
 et tout autre fichier présent. Donne la liste exacte de ce que tu as lu.
 
 2. BRANCHEMENT ET HIÉRARCHIE

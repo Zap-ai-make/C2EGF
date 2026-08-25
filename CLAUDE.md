@@ -1,1 +1,1 @@
-« Lis et applique AGENTS.md. »
+Lis et applique AGENTS.md.

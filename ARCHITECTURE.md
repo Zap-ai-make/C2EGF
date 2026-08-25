@@ -35,7 +35,7 @@ Le minimalisme porte sur la *quantité de construction*, jamais sur la *solidit�
 - **Prévisible.** Un nouveau venu (humain ou agent) doit deviner où vit chaque chose. Arborescence par domaine ou par couche — mais une seule logique, tenue partout.
 - **Séparation des responsabilités.** UI, logique métier, accès aux données ne se mélangent pas dans le même fichier. Un module fait une chose.
 - **Pas de duplication silencieuse.** Avant de créer un utilitaire, un composant, un helper : vérifier qu'il n'existe pas déjà. S'il existe presque, on l'étend, on ne le clone pas.
-- Les fichiers d'agents et de standards (`AGENTS.md`, `DESIGN.md`, `SECURITY.md`, ce fichier) restent **à la racine** et à jour.
+- Les fichiers d'agents et de standards (`AGENTS.md`, `WORKFLOW.md`, `DESIGN.md`, `SECURITY.md`, `SPEC.template.md`, ce fichier) restent **à la racine** et à jour.
 
 ---
 
@@ -89,8 +89,8 @@ Le contexte est une ressource qui se dégrade quand on la sature. La règle est 
 
 - **Une chose à la fois.** Petites étapes, petits commits, messages qui disent le pourquoi.
 - Pas de refonte opportuniste : on ne « nettoie » pas la moitié du dépôt en corrigeant un bug. Si un refactor s'impose, il devient une tâche à part, annoncée.
-- **En cas d'incertitude sur une opération sensible** (suppression de données, migration, paiement, envoi massif), l'agent s'arrête et demande. Deviner coûte plus cher que demander.
-- Terminé = exécuté, testé, vérifié, conforme aux trois contrats.
+- **En cas d'incertitude sur une opération sensible** (suppression de données, migration, paiement, envoi massif), l'agent s'arrête et demande. Deviner coûte plus cher que demander (`AGENTS.md` règle 6).
+- Une tâche n'est terminée que vérifiée, et conforme aux trois contrats — au sens du §4.
 
 ---
 
@@ -115,3 +115,20 @@ Chaque passe produit des constats **actionnables et priorisés** (critique / imp
 - la leçon est-elle **généralisable** ? Si oui, elle est ajoutée au contrat concerné (`DESIGN.md`, `SECURITY.md`, ce fichier ou `AGENTS.md`).
 
 C'est ainsi que le système apprend tes conventions au lieu de répéter les mêmes erreurs. Ces fichiers ne sont pas des monuments : ce sont des outils qu'on affûte.
+
+---
+
+## 11. Git, environnements et livraison
+
+**Git**
+
+- Une branche par spec ou par correctif ; pas de travail direct sur la branche principale. Nommage lisible : `feat/S3-export-csv`, `fix/login-rate-limit`, `chore/bump-deps`.
+- Un commit par unité cohérente, et au minimum un commit par spec (`WORKFLOW.md` §5). Le message dit **le pourquoi**, pas le *quoi* que le diff montre déjà : première ligne courte, un paragraphe en dessous si la décision mérite d'être expliquée.
+- La branche principale reste déployable en permanence. Une branche part en revue quand la spec est terminée et vérifiée (§4) — pas avant : on ne fait pas relire du travail en cours.
+- Aucun secret, aucun fichier généré, aucun `.env` dans un commit (`SECURITY.md` §2).
+
+**Environnements**
+
+- Trois environnements distincts — `dev`, `staging`, `prod` — cloisonnés comme l'exige `SECURITY.md` §2 : secrets, bases et comptes séparés.
+- **Parité raisonnable** : staging tourne les mêmes versions de runtime, de base de données et de dépendances que la production. Un bug qui n'apparaît qu'en prod est d'abord un défaut de parité.
+- **Migrations versionnées et rejouables**, appliquées dans l'ordre `dev → staging → prod`, jamais à la main sur la base de production. Une migration destructive se sauvegarde avant et s'annonce (`AGENTS.md` règle 6).
