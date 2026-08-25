@@ -89,7 +89,7 @@ Le dossier `.harmonisation/` ne fait pas partie de ce qui est copié à la racin
 | Fichier | `origine` | actuel |
 |---|---|---|
 | `AGENTS.md` | `4e391ba92847fd7b` | `232b3b55ba32298c` |
-| `ARCHITECTURE.md` | `dd67ee7f20c53c0f` | `5b1ca6fbcdec45b7` |
+| `ARCHITECTURE.md` | `dd67ee7f20c53c0f` | `48e141baab0c1c04` |
 | `CLAUDE.md` | `b50aa2dfae18f84b` | `3ae0a11d20ba0afa` |
 | `DESIGN.md` | `fb4af4b19043a92a` | `686eff357d0c818e` |
 | `ECC.md` | `6174dab17408e016` | `6253925158f3b75b` |
@@ -285,6 +285,14 @@ Contre-revue reçue, verdict **VALIDÉ AVEC RÉSERVES**. Elle confirme mécaniqu
 C'est le constat le plus sérieux des trois passes, parce qu'il ne porte pas sur le pack mais sur **ce que ce rapport a le droit d'affirmer**. La formulation précédente laissait entendre qu'un relecteur pouvait vérifier l'absence de régression de bout en bout ; c'était trop fort. Le tag `origine` est une reconstitution : elle est fidèle, mais rien dans le dépôt ne l'atteste, et une boucle de revue dont une étape repose sur la parole de l'exécutant a un maillon faible à cet endroit précis.
 
 Ce qui reste vrai et vérifiable : le pack actuel ne contient aucune régression **par rapport au contenu de `origine`**, et toute évolution future est comparable sans reprendre cette hypothèse. Ce qui ne l'est pas : que `origine` soit l'état antérieur réel. La correction de méthode — taguer avant d'écrire — vaut pour les prochaines passes ; elle ne rattrape pas celle-ci.
+
+### Un défaut trouvé par les nouveaux contrôles
+
+Le contrôle d'empreintes, ajouté à cette passe, a échoué immédiatement après l'intégration de la branche — et il avait raison. `core.autocrlf` étant actif, git convertissait les fichiers en CRLF à chaque checkout : les empreintes publiées, calculées sur des fichiers en LF, ne correspondaient plus. Des empreintes qui basculent selon la plateforme ne prouvent rien.
+
+Corrigé par un `.gitattributes` (`* text=auto eol=lf`) qui normalise les fins de ligne dans le dépôt comme dans la copie de travail. `ARCHITECTURE.md`, qui n'avait pas de saut de ligne final — hérité de l'original —, en a reçu un ; son empreinte a été republiée en conséquence.
+
+Ce défaut n'a été signalé par aucun relecteur : il a été trouvé par un contrôle mis en place pour répondre à leurs constats. C'est l'effet recherché — déplacer la détection de la relecture humaine vers la machine.
 
 ### État
 

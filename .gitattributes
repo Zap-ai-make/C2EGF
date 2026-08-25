@@ -1,0 +1,5 @@
+# Fins de ligne normalisées en LF, dans le dépôt comme dans la copie de
+# travail. Sans cette règle, git convertit en CRLF sous Windows : les
+# empreintes SHA-256 publiées dans RAPPORT-HARMONISATION.md changeraient
+# d'une plateforme à l'autre et ne prouveraient plus rien.
+* text=auto eol=lf
