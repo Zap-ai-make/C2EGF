@@ -1,13 +1,18 @@
-# AKAYIS CRM
+# C2EGF
 
-Application CRM complète pour la gestion des clients et transactions de AKAYIS.
+Application CRM complète pour la gestion des clients et transactions de C2EGF (Burkina Faso).
+
+> Instance du produit standard « AKAYIS CRM ». Toute la variation client (marque,
+> réseaux, types de transaction, dealer) passe par le profil déclaratif
+> `config/clients/c2egf-burkina.js` — jamais par une édition fichier par fichier.
+> Voir `AGENTS.md` et `docs/client-profiles.md`.
 
 ## 🚀 Fonctionnalités
 
 - **Gestion Clients** : Ajout, modification, recherche de clients
 - **Transactions** : Suivi des transactions avec historique complet
 - **Dashboard** : Statistiques et graphiques en temps réel
-- **Thème sombre par défaut** : interface sobre et stable
+- **Thème dérivé du profil client** : bleu pour C2EGF ; l'utilisateur peut en changer, son choix est conservé
 - **PWA** : Installation sur mobile et desktop + mode hors ligne
 - **Multi-réseaux** : Support Orange, Moov, MTN, Telecel
 - **Export Excel** : Export des données clients et transactions
@@ -40,7 +45,7 @@ L'application peut être installée sur n'importe quel appareil :
 1. **Cloner le projet**
 ```bash
 git clone <votre-repo>
-cd akayis-crm
+cd c2egf.log
 ```
 
 2. **Installer les dépendances**
@@ -93,12 +98,12 @@ npm run preview
 ## 📂 Structure du projet
 
 ```
-akayis-crm/
+c2egf.log/
 ├── public/              # Assets statiques
-│   ├── pwa-*.png       # Icônes PWA AKAYIS
-│   ├── akayis-logo.*   # Logo complet AKAYIS
-│   ├── akayis-mark.svg # Marque/icône AKAYIS
-│   └── akayis-bg.*     # Image de fond thème AKAYIS
+│   ├── pwa-*.png       # Icônes PWA — À REMPLACER par celles de C2EGF
+│   ├── akayis-mark.svg # Favicon + marque sidebar — À REMPLACER (seul asset actif)
+│   ├── akayis-logo.*   # Logo complet — hérité, référencé nulle part dans src/
+│   └── akayis-bg.*     # Image de fond — hérité, référencé nulle part dans src/
 ├── src/
 │   ├── components/     # Composants React
 │   ├── config/         # Configuration (Firebase)
@@ -142,4 +147,4 @@ akayis-crm/
 
 ## 📄 Licence
 
-Propriété de AKAYIS
+Propriété de C2EGF

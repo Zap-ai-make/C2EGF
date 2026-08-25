@@ -1,5 +1,18 @@
 # Adaptation nouveau client
 
+> ## ⚠ DOCUMENT PÉRIMÉ — ne pas suivre
+>
+> Ce fichier décrit l'ancienne méthode d'adaptation, **fichier par fichier**.
+> Elle n'a plus cours : la marque et les options client dérivent désormais d'un
+> **profil déclaratif** (`config/clients/<id>.js`), et un nouveau client ne
+> modifie **aucun fichier front**.
+>
+> Références à jour : `docs/adaptation-nouveau-client.md` §4 et
+> `docs/client-profiles.md`. Point d'entrée : `AGENTS.md`.
+>
+> Conservé pour trace historique, et parce que ses sections « Isolation client »,
+> « Points sensibles » et « Nouveau projet Firebase » restent instructives.
+
 Cette copie vient du depot GitHub source `Web-Lab-Dev/AKAYIS`.
 
 ## Stack du projet
