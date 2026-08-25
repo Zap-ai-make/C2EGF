@@ -11,7 +11,7 @@ peut donc rejouer ce script depuis le depot seul.
 
 Sortie 0 = tout passe. Sortie 1 = au moins un controle en echec.
 """
-import re, os, sys, glob, subprocess, unicodedata
+import re, os, sys, glob, hashlib, subprocess, unicodedata
 
 PACK = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REF = sys.argv[1] if len(sys.argv) > 1 else "origine"
@@ -139,6 +139,59 @@ if lignes != ["Lis et applique AGENTS.md."]:
     problems.append("CLAUDE.md doit contenir cette seule ligne, sans titre : %r"
                     % lignes)
 check("CLAUDE.md : directive unique", problems)
+
+# --- 8 bis. le pack fournit de quoi satisfaire sa propre exigence -------
+# SECURITY.md §2 impose que .env soit ignore : le pack doit livrer le
+# .gitignore qui le fait, sinon l'exigence n'a aucun mecanisme.
+problems = []
+gi_path = os.path.join(PACK, ".gitignore")
+if not os.path.exists(gi_path):
+    problems.append(".gitignore absent alors que SECURITY.md §2 l'exige")
+else:
+    gi = open(gi_path, encoding="utf-8").read()
+    motifs = [l.strip() for l in gi.splitlines()
+              if l.strip() and not l.strip().startswith("#")]
+    if ".env" not in motifs:
+        problems.append(".gitignore ne couvre pas `.env`")
+    if "!.env.example" not in motifs:
+        problems.append(".gitignore n'exempte pas `.env.example` "
+                        "(SECURITY.md §2 demande de le versionner)")
+    ignore = subprocess.run(["git", "-C", PACK, "check-ignore", "-q", ".env"])
+    if ignore.returncode != 0:
+        problems.append("git n'ignore pas reellement .env")
+check(".gitignore fourni et effectif (SECURITY.md §2)", problems)
+
+# --- 8 ter. les empreintes publiees correspondent aux fichiers reels ----
+# Un rapport qui publie des empreintes perimees induit le relecteur en
+# erreur. Le controle rend la peremption impossible a manquer.
+problems = []
+rapport = os.path.join(PACK, "RAPPORT-HARMONISATION.md")
+if os.path.exists(rapport):
+    txt = open(rapport, encoding="utf-8").read()
+    lignes = re.findall(
+        r"^\|\s*`([^`]+\.md|\.gitignore)`\s*\|\s*(?:`([0-9a-f]{16})`|[^|]*)\s*"
+        r"\|\s*`([0-9a-f]{16})`\s*\|",
+        txt, re.M)
+    if not lignes:
+        problems.append("aucune empreinte publiee trouvee dans le rapport")
+    for nom, sha_ref, sha_actuel in lignes:
+        chemin = os.path.join(PACK, nom)
+        if not os.path.exists(chemin):
+            problems.append("%s: empreinte publiee mais fichier absent" % nom)
+            continue
+        reel = hashlib.sha256(open(chemin, "rb").read()).hexdigest()[:16]
+        if reel != sha_actuel:
+            problems.append("%s: empreinte publiee %s, reelle %s (perimee)"
+                            % (nom, sha_actuel, reel))
+        if sha_ref:
+            ref_txt = au_depart(nom)
+            if ref_txt is not None:
+                reel_ref = hashlib.sha256(
+                    ref_txt.encode("utf-8")).hexdigest()[:16]
+                if reel_ref != sha_ref:
+                    problems.append("%s: empreinte `origine` publiee %s, "
+                                    "reelle %s" % (nom, sha_ref, reel_ref))
+check("empreintes publiees conformes aux fichiers reels", problems)
 
 
 # --- 9. NON-REGRESSION du contenu protege --------------------------------

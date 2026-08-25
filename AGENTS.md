@@ -64,6 +64,7 @@ Deux réserves. Les non-négociables de `SECURITY.md` et de `DESIGN.md` ne cède
 
 ## Note d'installation
 
-- Placer à la racine de chaque projet : `AGENTS.md`, `WORKFLOW.md`, `DESIGN.md`, `SECURITY.md`, `ARCHITECTURE.md`, `SPEC.template.md`. `ECC.md` seulement si l'outillage ECC est envisagé.
+- Placer à la racine de chaque projet : `AGENTS.md`, `WORKFLOW.md`, `DESIGN.md`, `SECURITY.md`, `ARCHITECTURE.md`, `SPEC.template.md`, `.gitignore`. `ECC.md` seulement si l'outillage ECC est envisagé.
+- **Le `.gitignore` se met en place avant le premier secret**, pas après : il couvre `.env` et ses variantes (exigence de `SECURITY.md` §2). Le compléter ensuite avec les artefacts de la stack. Si le projet en a déjà un, fusionner — ne jamais l'écraser.
 - Pour Claude Code, créer un `CLAUDE.md` d'une ligne — `Lis et applique AGENTS.md.` — ou un lien symbolique, afin de garder une source unique de vérité.
 - Ces fichiers sont vivants : après chaque chantier notable, y reporter les leçons généralisables (voir `ARCHITECTURE.md` §10).

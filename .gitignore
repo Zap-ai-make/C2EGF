@@ -1,0 +1,18 @@
+# Secrets — exigence de SECURITY.md §2. Ces lignes ne se retirent pas.
+.env
+.env.*
+!.env.example
+
+# Variantes courantes de fichiers d'environnement locaux.
+*.local
+.envrc
+
+# Clés et certificats.
+*.pem
+*.key
+*.p12
+*.pfx
+
+# À compléter selon la stack du projet (node_modules/, dist/, .next/,
+# target/, __pycache__/…). Ce fichier couvre les secrets ; il ne prétend
+# pas couvrir les artefacts de build.

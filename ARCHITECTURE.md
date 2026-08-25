@@ -126,7 +126,8 @@ C'est ainsi que le système apprend tes conventions au lieu de répéter les mê
 - Une branche par spec ou par correctif ; pas de travail direct sur la branche principale. Nommage lisible : `feat/S3-export-csv`, `fix/login-rate-limit`, `chore/bump-deps`.
 - Un commit par unité cohérente, et au minimum un commit par spec (`WORKFLOW.md` §5). Le message dit **le pourquoi**, pas le *quoi* que le diff montre déjà : première ligne courte, un paragraphe en dessous si la décision mérite d'être expliquée.
 - La branche principale reste déployable en permanence. Une branche part en revue quand la spec est terminée et vérifiée (§4) — pas avant : on ne fait pas relire du travail en cours.
-- Aucun secret, aucun fichier généré, aucun `.env` dans un commit (`SECURITY.md` §2).
+- Aucun secret, aucun fichier généré, aucun `.env` dans un commit (`SECURITY.md` §2). Un `.gitignore` couvrant `.env` existe **avant** le premier commit.
+- **Cette règle vaut aussi pour le dépôt de standards lui-même.** Toute évolution du pack passe par une branche de correctif et une revue avant intégration ; il n'y a pas d'exception de maintenance. Un contrat qu'on enfreint en le maintenant n'engage plus personne.
 
 **Environnements**
 

@@ -62,9 +62,9 @@ Sur les 68 agents, voici le noyau pertinent pour du TypeScript/React/Next + base
 /plugin install ecc@ecc
 ```
 
-Alternative OSS (plus fiable si le marketplace auto-hébergé ne résout pas) : `npx ecc install --profile minimal --target claude`, puis ajouter des capacités à la carte.
+**Alternative OSS** — utile si le marketplace auto-hébergé ne résout pas. Elle passe par le paquet `ecc-universal` du §1, puis on ajoute des capacités à la carte.
 
-> **À vérifier avant d'exécuter cette commande.** `npx ecc` résout un paquet npm nommé `ecc`, qui ne figure pas dans la liste blanche du §1 (`ecc-universal`, `ecc-agentshield`). Confirmer le nom exact du paquet officiel auprès du dépôt avant de lancer la commande, ou passer par le paquet listé. Le §1 existe précisément parce que des paquets homonymes circulent : une commande d'installation qui sort de la liste blanche annule la protection qu'elle décrit.
+> **Aucune ligne de commande n'est donnée ici volontairement.** La recette qui circulait dans ce fichier (`npx ecc install …`) résolvait un paquet nommé `ecc`, absent de la liste blanche du §1. Une commande d'installation qui sort de la liste blanche annule la protection que le §1 décrit — et un avertissement se détache du copier-coller qu'il accompagne. Relever la commande exacte dans le dépôt officiel au moment de l'installation, vérifier qu'elle porte bien sur un paquet du §1, et n'inscrire ici une commande qu'une fois vérifiée, avec sa source et sa date.
 
 **2. Wizard sélectif** — lancer `configure ecc` et n'activer que les agents listés au §2, plus Workflow/Qualité et Research-first. Laisser le reste décoché.
 
