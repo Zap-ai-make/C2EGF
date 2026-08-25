@@ -1,0 +1,64 @@
+Cahier des Charges : Transformation de l'Application CRM en PWA
+1. Introduction
+Contexte
+L'application CRM actuelle, développée en React et Tailwind, doit être transformée en une Progressive Web App (PWA) afin d'offrir une meilleure expérience utilisateur, notamment en permettant l'installation sur ordinateur et en assurant des fonctionnalités hors ligne.
+Objectifs
+
+Rendre l'application installable sur ordinateur.
+Assurer une expérience utilisateur fluide, y compris hors ligne.
+Héberger l'application sur Netlify.
+
+2. Exigences Fonctionnelles
+Fonctionnalités Principales
+
+Installation : L'application doit pouvoir être installée sur les ordinateurs des utilisateurs via les navigateurs web.
+Fonctionnalité Hors Ligne : L'application doit être capable de fonctionner hors ligne et de synchroniser les données une fois la connexion rétablie.
+Notifications : Implémenter des notifications push pour informer les utilisateurs des mises à jour ou des nouvelles données.
+
+Comportement Hors Ligne
+
+L'application doit mettre en cache les données essentielles pour permettre une utilisation hors ligne.
+Les modifications effectuées hors ligne doivent être synchronisées dès que la connexion est rétablie.
+
+Installation sur Ordinateur
+
+L'application doit être installable via les navigateurs web (Chrome, Firefox, Edge, etc.).
+L'icône de l'application doit être visible sur le bureau ou dans le menu des applications.
+
+3. Exigences Techniques
+Technologies à Utiliser
+
+React : Utiliser les bibliothèques et outils compatibles avec React pour la création de PWA.
+Tailwind CSS : Maintenir l'utilisation de Tailwind pour le style.
+Service Workers : Implémenter un service worker pour gérer le cache et les fonctionnalités hors ligne.
+Manifest.json : Configurer un fichier manifest pour l'installation et l'identification de l'application.
+
+Configuration Requise
+
+Le fichier manifest.json doit inclure les icônes, le nom de l'application, et les paramètres de démarrage.
+Le service worker doit être enregistré dans l'application et configurer pour mettre en cache les ressources nécessaires.
+
+Compatibilité Navigateur
+
+L'application doit être compatible avec les dernières versions des navigateurs principaux : Chrome, Firefox, Edge, et Safari.
+
+4. Livrables
+Fichiers à Produire
+
+Fichier manifest.json configuré.
+Fichier service-worker.js pour gérer les fonctionnalités hors ligne.
+Documentation sur la configuration et le déploiement.
+
+
+
+Points de Contrôle
+
+Vérification de l'installation sur différents navigateurs.
+Tests des fonctionnalités hors ligne.
+Validation de la synchronisation des données.
+
+6. Annexes
+Ressources Utiles
+
+Documentation sur les PWA avec React.
+Guides pour la configuration de manifest.json et des service workers.

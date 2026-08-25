@@ -13,6 +13,65 @@
 *.p12
 *.pfx
 
-# À compléter selon la stack du projet (node_modules/, dist/, .next/,
-# target/, __pycache__/…). Ce fichier couvre les secrets ; il ne prétend
-# pas couvrir les artefacts de build.
+# Comptes de service Firebase — privilèges administrateur complets sur le
+# projet. Jamais dans le dépôt (SECURITY.md §2).
+*firebase-adminsdk*.json
+service-account*.json
+
+# ── Artefacts de la stack (React + Vite + Firebase) ───────────────────────
+
+# Dépendances
+node_modules
+
+# Sortie de build
+dist
+dev-dist
+dist-ssr
+.netlify
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ── Données client — ne jamais committer ──────────────────────────────────
+
+# Sauvegardes locales de règles Firestore prod (snapshots ponctuels).
+firestore.rules.prod-*.txt
+
+# Backups locaux de remise à zéro (données financières client).
+backups/
+
+# ── Éditeurs et systèmes ──────────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Mémoire locale des agents Claude
+.claude/agent-memory/
+
+# ── Fichiers de test et captures ──────────────────────────────────────────
+# ⚠ Ces motifs ignorent aussi les images de marque en .jpg/.jpeg. Les actifs
+# de branding du client sont en .svg/.png (public/), donc non concernés.
+pwa-test.html
+*test*.html
+Capture*
+*.jpeg
+*.jpg
+screenshot*
+
+# Documentation de développement (le README.md principal reste suivi)
+PWA-Guide.md
+PRODUCTION-READY.md
+DEV-NOTES.md

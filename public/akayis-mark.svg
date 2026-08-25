@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">AKAYIS</title>
+  <desc id="desc">Monogramme AKAYIS bleu et orange.</desc>
+  <defs>
+    <linearGradient id="blue" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#3567b1"/>
+      <stop offset="1" stop-color="#2d5ea5"/>
+    </linearGradient>
+    <linearGradient id="orange" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#f8a40a"/>
+      <stop offset="1" stop-color="#f08a00"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#ffffff"/>
+  <g transform="translate(256 252) scale(1.02)">
+    <circle r="188" fill="url(#orange)"/>
+    <path d="M-146 128V-108c22-24 47-42 74-55v304c-28-14-53-33-74-57z" fill="#fff"/>
+    <path d="M-60-177c28-9 56-13 86-13v380c-30 0-58-4-86-13zM42-190c46 3 89 20 123 46v288c-34 27-77 43-123 46z" fill="url(#blue)"/>
+    <path d="M88-112h44v106L88 21zM88 51l55-31 34 31v90H88z" fill="#fff"/>
+    <path d="M187-116c35 34 56 82 56 137s-21 103-56 137zM-184-60c-24 27-38 63-38 101s14 74 38 101z" fill="#fff"/>
+    <path d="M-114-78h-36v232h36V61h40V13h-40z" fill="#fff"/>
+  </g>
+</svg>

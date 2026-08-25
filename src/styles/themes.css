@@ -1,0 +1,94 @@
+/* Thème Clair (par défaut) */
+.theme-light {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f9fafb;
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --accent-primary: #2563eb;
+  --accent-secondary: #3b82f6;
+  --border-color: #d1d5db;
+}
+
+/* Thème Sombre */
+.theme-dark {
+  --bg-primary: #111827;
+  --bg-secondary: #1f2937;
+  --text-primary: #f9fafb;
+  --text-secondary: #d1d5db;
+  --accent-primary: #60a5fa;
+  --accent-secondary: #2563eb;
+  --border-color: #4b5563;
+}
+
+/* Thème Bleu Professionnel */
+.theme-blue {
+  --bg-primary: #eff6ff;
+  --bg-secondary: #dbeafe;
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --accent-primary: #2563eb;
+  --accent-secondary: #1d4ed8;
+  --border-color: #93c5fd;
+}
+
+/* Thème Vert Économique */
+.theme-green {
+  --bg-primary: #f0fdf4;
+  --bg-secondary: #dcfce7;
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --accent-primary: #16a34a;
+  --accent-secondary: #15803d;
+  --border-color: #86efac;
+}
+
+/* Thème Violet Élégant */
+.theme-purple {
+  --bg-primary: #faf5ff;
+  --bg-secondary: #f3e8ff;
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --accent-primary: #9333ea;
+  --accent-secondary: #7c3aed;
+  --border-color: #c4b5fd;
+}
+
+/* Classes utilitaires pour les thèmes */
+.bg-theme-primary {
+  background-color: var(--bg-primary);
+}
+
+.bg-theme-secondary {
+  background-color: var(--bg-secondary);
+}
+
+.text-theme-primary {
+  color: var(--text-primary);
+}
+
+.text-theme-secondary {
+  color: var(--text-secondary);
+}
+
+.bg-theme-accent {
+  background-color: var(--accent-primary);
+}
+
+.text-theme-accent {
+  color: var(--accent-primary);
+}
+
+.border-theme {
+  border-color: var(--border-color);
+}
+
+/* Couleur personnalisée */
+.theme-custom {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f9fafb;
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --accent-primary: var(--color-primary, #2563eb);
+  --accent-secondary: var(--color-primary, #3b82f6);
+  --border-color: #d1d5db;
+}

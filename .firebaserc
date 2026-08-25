@@ -1,0 +1,6 @@
+{
+  "projects": {
+    "default": "demo-akayis-test",
+    "production": "taofic-ajagbe"
+  }
+}
