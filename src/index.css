@@ -1,6 +1,84 @@
 @import "tailwindcss";
 
-/* Reset basique pour assurer la compatibilité */
+/* ═══════════════════════════════════════════════════════════════════════════
+   Jetons C2EGF BURKINA — source unique de vérité des couleurs.
+
+   Le bleu #173863 est relevé sur logo.jpeg. C'est la MÊME valeur que le
+   theme_color du manifeste PWA (vite.config.js) : les deux ne doivent jamais
+   diverger.
+
+   Quatre familles, qui ne se mélangent pas :
+
+     brand-*      le chrome — navigation, bouton primaire, lien, focus
+     canvas / surface / line / ink / ink-muted
+                  la structure et le texte
+     inflow / outflow / warn / danger / pending
+                  le sens sémantique, et uniquement lui
+     net-*        l'identité de l'opérateur, RÉSERVÉE AUX DONNÉES
+
+   Deux règles qui expliquent la forme de ce bloc :
+
+   1. « inflow / outflow » ne veut pas dire « bien / mal ». Un retrait n'est
+      pas une erreur : c'est un mouvement d'argent dans l'autre sens. C'est
+      pourquoi outflow (terre brûlée) est distinct de danger (rouge d'échec).
+      L'application confondait les deux jusqu'ici.
+
+   2. net-orange ne sert JAMAIS de couleur de chrome ni de couleur de texte.
+      Raison mesurée, pas préférence : #FF6B35 sur blanc plafonne à 2,84:1 —
+      sous le 4,5:1 exigé pour du texte, et même sous le 3:1 des composants
+      d'interface (DESIGN.md §5). Il n'a droit qu'aux pastilles et aux séries
+      de graphique, toujours doublées du nom de l'opérateur en toutes lettres.
+
+   Contrastes calculés sur la surface indiquée, tous ≥ AA texte normal :
+     brand-500 11,78:1 · brand-400 6,36:1 · brand-600 15,04:1
+     ink 15,55:1 · ink-muted 5,63:1
+     inflow 5,35:1 · outflow 8,14:1 · warn 5,93:1 · danger 7,87:1
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ── Marque : rampe dérivée de #173863 ─────────────────────────────────── */
+  --color-brand-50:  #f2f5fa;  /* fond d'application */
+  --color-brand-100: #dde5f0;  /* surface teintée, en-tête de tableau */
+  --color-brand-200: #c3d0e4;  /* filets, bordures */
+  --color-brand-400: #2760a5;  /* éclairci — lien, anneau de focus, état actif */
+  --color-brand-500: #173863;  /* base — navigation, bouton primaire */
+  --color-brand-600: #0f2745;  /* assombri — survol, état pressé */
+
+  /* ── Structure ─────────────────────────────────────────────────────────── */
+  --color-canvas:    #f2f5fa;
+  --color-surface:   #ffffff;
+  --color-line:      #c3d0e4;
+  --color-ink:       #0f1d2e;
+  --color-ink-muted: #51637a;
+
+  /* ── Sens du mouvement d'argent ────────────────────────────────────────── */
+  /* Dépôt : l'agent apporte des espèces, la liquidité entre. */
+  --color-inflow:       #0f7a52;
+  --color-inflow-soft:  #e6f4ee;
+  /* Retrait : l'agent repart avec des espèces, la liquidité sort. */
+  --color-outflow:      #8a3324;
+  --color-outflow-soft: #fbecea;
+
+  /* ── Signaux ───────────────────────────────────────────────────────────── */
+  --color-warn:         #8a5a00;  /* seuil bas, ravitaillement à demander */
+  --color-warn-soft:    #fdf3e0;
+  --color-danger:       #a01b1b;  /* échec, rejet, suppression */
+  --color-danger-soft:  #fdeaea;
+  --color-pending:      #51637a;  /* brouillon, en attente de règlement */
+  --color-pending-soft: #eef1f6;
+}
+
+/* Identité opérateur. Ce jeton est lu depuis JavaScript (attribut `fill` des
+   graphiques Recharts), donc jamais référencé par un utilitaire Tailwind —
+   un `@theme` ordinaire l'élaguerait du CSS produit, puisque Tailwind v4
+   n'émet que les variables réellement utilisées. `static` force son émission. */
+@theme static {
+  --color-net-orange: #ff6b35;
+}
+
+/* ── Reset ─────────────────────────────────────────────────────────────────
+   Conservé tel quel : le lot des jetons n'introduit aucun changement visuel.
+   La typographie (échelle, chiffres tabulaires) relève des lots d'écran. */
 * {
   box-sizing: border-box;
 }
