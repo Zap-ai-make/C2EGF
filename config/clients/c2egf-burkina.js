@@ -25,10 +25,10 @@ export const c2egfProfile = Object.freeze({
 
   // ── Marque ─────────────────────────────────────────────────────────────────
   // appName  = wordmark dans l'UI ; pwaName = titre d'onglet + nom PWA installée.
-  // theme    = thème de marque (bleu/blanc), voir THEMES.blue dans
+  // theme    = thème de marque (bleu/blanc), voir THEMES.c2egf dans
   //            src/constants/themes.js.
   branding: Object.freeze({
-    appName: 'C2EGF',
+    appName: 'C2EGF BURKINA',
     pwaName: 'C2EGF',
     theme: 'c2egf',
   }),
