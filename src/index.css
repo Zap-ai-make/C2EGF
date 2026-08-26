@@ -68,6 +68,40 @@
   --color-pending-soft: #eef1f6;
 }
 
+/* ── Neutres ────────────────────────────────────────────────────────────────
+   Redéfinition de la rampe `gray` de Tailwind, et non ajout d'une rampe de
+   plus. C'est délibéré : 871 utilitaires gris sont déjà répartis dans 84
+   fichiers, et les réécrire un par un coûterait des jours pour un résultat
+   identique. Onze déclarations les retintent toutes d'un coup.
+
+   Les valeurs sont décalées vers la teinte du bleu de marque (214°) pour que
+   les gris s'accordent au marine au lieu de tirer vers le vert-de-gris de
+   Tailwind. La saturation reste très basse : ce sont des neutres, pas une
+   seconde couleur.
+
+   Contrainte tenue : AUCUN niveau ne perd en contraste par rapport au défaut
+   Tailwind. Vérifié sur fond blanc — 500 passe de 4,84:1 à 5,03:1 (c'est le
+   niveau des textes secondaires, 117 usages), 600 de 7,56 à 7,81, 700 de
+   10,30 à 10,64. Le niveau 400 reste sous AA (2,65:1) comme dans Tailwind :
+   il ne sert qu'aux états désactivés, que WCAG exempte.
+
+   Ce qu'on ne fait PAS ici : le même coup sur `green`. Retinter les 306
+   occurrences vertes d'un trait toucherait aussi les badges de succès, qui
+   deviendraient marine. Ce serait détruire le sens pour gagner du temps. Le
+   vert se traite à la main, fichier par fichier. */
+@theme {
+  --color-gray-50:  #f7f9fc;
+  --color-gray-100: #eff2f7;
+  --color-gray-200: #e1e6ef;
+  --color-gray-300: #ccd4e1;
+  --color-gray-400: #93a0b5;
+  --color-gray-500: #646f88;
+  --color-gray-600: #455368;
+  --color-gray-700: #333f52;
+  --color-gray-800: #1d2736;
+  --color-gray-900: #0f1725;
+}
+
 /* Identité opérateur. Ce jeton est lu depuis JavaScript (attribut `fill` des
    graphiques Recharts), donc jamais référencé par un utilitaire Tailwind —
    un `@theme` ordinaire l'élaguerait du CSS produit, puisque Tailwind v4
