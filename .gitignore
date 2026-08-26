@@ -84,3 +84,7 @@ screenshot*
 PWA-Guide.md
 PRODUCTION-READY.md
 DEV-NOTES.md
+
+# Vercel : jeton de liaison au projet et dump des variables d'environnement
+# tirees de production (.vercel/.env.production.local). Ajoute par `vercel link`.
+.vercel
