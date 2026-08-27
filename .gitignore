@@ -80,6 +80,16 @@ screenshot*
 # l'original dont dérivent public/c2egf-mark.png et les icônes PWA.
 !logo.jpeg
 
+# Exception : le fond du bandeau de marque. Même raison, et un défaut réel qu'il
+# corrige — `*.jpg` l'avalait, il n'a donc JAMAIS été versionné, alors que
+# src/index.css le référence depuis le commit qui l'a introduit. Sur cette
+# machine le bandeau s'affichait ; sur une installation propre — un clone, une
+# CI, un déploiement — il retombait silencieusement sur ses dégradés.
+#
+# La règle à retenir : `public/` contient des ACTIFS DE PRODUIT, pas des
+# captures. Un motif qui ignore un format entier doit épargner ce dossier.
+!public/bandeau-reseau.jpg
+
 # Documentation de développement (le README.md principal reste suivi)
 PWA-Guide.md
 PRODUCTION-READY.md
