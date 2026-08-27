@@ -68,7 +68,7 @@ const PWAInstallButton = () => {
     <div className="relative">
       <button
         onClick={handleInstall}
-        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors duration-200 flex items-center gap-2"
+        className="flex items-center gap-2 rounded-lg bg-white/15 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
         title="Installer l'application"
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -78,7 +78,7 @@ const PWAInstallButton = () => {
         Installer l'app
       </button>
       {hintVisible && browserHint && (
-        <div className="absolute top-full right-0 mt-2 w-72 bg-gray-900 text-white text-sm rounded-xl p-4 shadow-2xl z-50 leading-relaxed border border-gray-700">
+        <div className="absolute top-full right-0 mt-2 w-72 rounded-xl border border-brand-500 bg-brand-600 p-4 text-sm leading-relaxed text-white shadow-2xl z-50">
           {browserHint}
         </div>
       )}

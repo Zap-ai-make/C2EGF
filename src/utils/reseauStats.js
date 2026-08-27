@@ -249,6 +249,66 @@ export function calculerBalance(networkData = {}, transactions = [], options = {
 }
 
 /**
+ * Performance des commerciaux.
+ *
+ * `client.agentCommercial` est le commercial C2EGF qui détient la relation avec
+ * l'agent. L'ancien graphe « Top agents » n'en comptait que les enrôlements —
+ * un classement de recrutement, aveugle à ce que ces comptes produisent ensuite.
+ *
+ * On y ajoute donc ce qui manquait : combien de leurs agents travaillent
+ * réellement, et quel volume ils apportent. Un commercial avec 300 comptes dont
+ * 20 actifs ne vaut pas celui qui en a 150 dont 120 actifs.
+ */
+export function calculerCommerciaux(clients = [], transactions = [], options = {}) {
+  const {
+    fenetreActivite = FENETRE_COUVERTURE_JOURS,
+    fenetreVolume = 30,
+    maintenant = new Date(),
+  } = options
+
+  const depuisActivite = new Date(maintenant.getTime() - fenetreActivite * JOUR_MS)
+  const depuisVolume = new Date(maintenant.getTime() - fenetreVolume * JOUR_MS)
+
+  const commercialParAgent = new Map()
+  const parCommercial = new Map()
+
+  for (const agent of clients) {
+    if (!agent?.id) continue
+    const nom = String(agent.agentCommercial || '').trim() || 'Non attribué'
+    commercialParAgent.set(agent.id, nom)
+    if (!parCommercial.has(nom)) {
+      parCommercial.set(nom, { nom, portefeuille: 0, actifs: new Set(), volume: 0 })
+    }
+    parCommercial.get(nom).portefeuille++
+  }
+
+  for (const tx of transactions) {
+    if (!compteCommeVisite(tx)) continue
+    const cle = cleAgent(tx)
+    const nom = commercialParAgent.get(cle)
+    if (!nom) continue
+    const date = dateOperation(tx)
+    if (!date) continue
+
+    const entree = parCommercial.get(nom)
+    if (date >= depuisActivite) entree.actifs.add(cle)
+    if (date >= depuisVolume && compteCommeVolume(tx)) {
+      entree.volume += Number(tx.montant) || 0
+    }
+  }
+
+  return [...parCommercial.values()]
+    .map(({ nom, portefeuille, actifs, volume }) => ({
+      nom,
+      portefeuille,
+      actifs: actifs.size,
+      tauxActivation: portefeuille > 0 ? actifs.size / portefeuille : 0,
+      volume,
+    }))
+    .sort((a, b) => b.volume - a.volume || b.portefeuille - a.portefeuille)
+}
+
+/**
  * Projection de rupture : à la cadence observée depuis ce matin, dans combien
  * de temps le vase qui se vide sera-t-il à sec ?
  *

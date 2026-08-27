@@ -25,6 +25,7 @@ import {
   calculerBalance,
   calculerFlux,
   projeterRupture,
+  calculerCommerciaux,
 } from '../../src/utils/reseauStats.js'
 
 const MAINTENANT = new Date('2026-08-27T10:00:00')
@@ -270,6 +271,63 @@ describe('TC-105 — la balance', () => {
     const b = calculerBalance({}, [], { maintenant: MAINTENANT })
     expect(b.fondsRoulement).toBe(0)
     expect(b.partStock).toBe(0)
+  })
+})
+
+describe('TC-105 — performance des commerciaux', () => {
+  const clients = [
+    agent('a-1', { agentCommercial: 'OUEDRAOGO S.' }),
+    agent('a-2', { agentCommercial: 'OUEDRAOGO S.' }),
+    agent('a-3', { agentCommercial: 'KABORE J.' }),
+    agent('a-4', { agentCommercial: '   ' }),
+  ]
+
+  it('regroupe le portefeuille par commercial', () => {
+    const r = calculerCommerciaux(clients, [], { maintenant: MAINTENANT })
+    const parNom = Object.fromEntries(r.map((c) => [c.nom, c]))
+    expect(parNom['OUEDRAOGO S.'].portefeuille).toBe(2)
+    expect(parNom['KABORE J.'].portefeuille).toBe(1)
+  })
+
+  it('un agent sans commercial est rattaché à « Non attribué », pas ignoré', () => {
+    const r = calculerCommerciaux(clients, [], { maintenant: MAINTENANT })
+    expect(r.find((c) => c.nom === 'Non attribué').portefeuille).toBe(1)
+  })
+
+  it('mesure les agents ACTIFS, pas seulement les enrôlements', () => {
+    // C'est tout ce que l'ancien graphe « Top agents » ne disait pas.
+    const transactions = [tx({ clientId: 'a-1', date: ilYA(2) })]
+    const r = calculerCommerciaux(clients, transactions, { maintenant: MAINTENANT })
+    const ouedraogo = r.find((c) => c.nom === 'OUEDRAOGO S.')
+    expect(ouedraogo.actifs).toBe(1)
+    expect(ouedraogo.tauxActivation).toBeCloseTo(0.5)
+  })
+
+  it('additionne le volume des agents du commercial', () => {
+    const transactions = [
+      tx({ clientId: 'a-1', montant: 300000, date: ilYA(2) }),
+      tx({ clientId: 'a-2', montant: 200000, date: ilYA(2) }),
+      tx({ clientId: 'a-3', montant: 50000, date: ilYA(2) }),
+    ]
+    const r = calculerCommerciaux(clients, transactions, { maintenant: MAINTENANT })
+    expect(r[0].nom).toBe('OUEDRAOGO S.')
+    expect(r[0].volume).toBe(500000)
+  })
+
+  it('classe par volume décroissant — c’est ce qui compte, pas le nombre de comptes', () => {
+    const transactions = [tx({ clientId: 'a-3', montant: 900000, date: ilYA(1) })]
+    const r = calculerCommerciaux(clients, transactions, { maintenant: MAINTENANT })
+    expect(r[0].nom).toBe('KABORE J.')
+  })
+
+  it('une opération en attente prouve l’activité mais n’ajoute pas de volume', () => {
+    const transactions = [
+      tx({ clientId: 'a-1', montant: 400000, date: ilYA(1), statut: 'Non Terminées' }),
+    ]
+    const ouedraogo = calculerCommerciaux(clients, transactions, { maintenant: MAINTENANT })
+      .find((c) => c.nom === 'OUEDRAOGO S.')
+    expect(ouedraogo.actifs).toBe(1)
+    expect(ouedraogo.volume).toBe(0)
   })
 })
 

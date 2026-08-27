@@ -1,100 +1,86 @@
+import { UserPlus } from 'lucide-react'
 import { parsefrenchDate } from '../../utils/helpers.js'
+import { CARTE } from '../../constants/dashboardTheme.js'
+
+/**
+ * Les derniers agents enrôlés.
+ *
+ * Le bloc portait deux dégradés, un carré bleu décoratif et un code agent en
+ * orange vif — une pastille de couleur par colonne, dont aucune ne signifiait
+ * quoi que ce soit. Tout passe aux jetons ; le seul accent conservé est la
+ * graisse sur le code agent, qui est bien la clé d'identification d'un point de
+ * vente.
+ */
+
+const CELLULE = 'px-4 py-3 text-sm text-ink-muted'
 
 function LastClientsTable({ clients = [] }) {
-  // Prendre les 5 derniers clients
-  const lastClients = clients.slice(-5).reverse()
+  const derniers = clients.slice(-5).reverse()
 
-  const headers = [
-    'Nom',
-    'Prénom',
-    'Numéro personnel',
-    'Code agent',
-    'Localité',
-    'Commercial',
-    'Date d\'ajout'
-  ]
+  // Résumé de cinq lignes, pas le fichier complet : le numéro personnel et le
+  // prénom en colonne propre appartiennent à l'écran « Clients ». Sept colonnes
+  // dans une demi-largeur se tronquaient à droite.
+  const colonnes = ['Agent', 'Code agent', 'Localité', 'Commercial', 'Ajouté le']
 
-  const formatDate = (client) => {
-    // Si le client a une date d'ajout, l'utiliser avec le bon parseur, sinon date actuelle
-    if (client.dateAjout) {
-      const date = parsefrenchDate(client.dateAjout)
-      if (!date) return '-'
-      return date.toLocaleDateString('fr-FR')
-    }
-    return new Date().toLocaleDateString('fr-FR')
+  const dateAffichee = (client) => {
+    if (!client.dateAjout) return '—'
+    const date = parsefrenchDate(client.dateAjout)
+    return date ? date.toLocaleDateString('fr-FR') : '—'
   }
 
   return (
-    <div className="bg-gradient-to-br from-gray-50 to-white rounded-xl shadow-sm border border-gray-100">
-      {/* En-tête avec design moderne */}
-      <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white rounded-t-xl">
-        <div className="flex items-center space-x-3">
-          <div className="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">
-            <div className="h-4 w-4 bg-blue-500 rounded-sm"></div>
-          </div>
-          <h2 className="text-xl font-bold text-gray-800">Derniers clients enregistrés</h2>
-        </div>
-      </div>
+    <section aria-labelledby="titre-derniers-agents" className={`${CARTE} p-0`}>
+      <h2
+        id="titre-derniers-agents"
+        className="flex items-center gap-2 border-b border-line px-6 py-5 text-lg font-bold text-ink"
+      >
+        <UserPlus aria-hidden="true" className="h-5 w-5 text-brand-500" />
+        Derniers agents enrôlés
+      </h2>
 
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse min-w-max">
+        <table className="w-full border-collapse">
           <thead>
-            <tr className="bg-gradient-to-r from-blue-50 to-white border-b border-blue-100">
-              {headers.map((header, index) => (
+            <tr className="border-b border-line bg-brand-50">
+              {colonnes.map((colonne) => (
                 <th
-                  key={index}
-                  className="px-4 py-4 text-left text-sm font-semibold text-blue-900 whitespace-nowrap"
+                  key={colonne}
+                  scope="col"
+                  className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted"
                 >
-                  {header}
+                  {colonne}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="bg-white">
-            {lastClients.length === 0 ? (
+          <tbody>
+            {derniers.length === 0 ? (
               <tr>
-                <td
-                  colSpan={headers.length}
-                  className="px-4 py-12 text-center"
-                >
-                  <div className="flex flex-col items-center justify-center space-y-3">
-                    <div className="h-12 w-12 bg-gray-100 rounded-full flex items-center justify-center">
-                      <div className="h-6 w-6 bg-gray-400 rounded-full"></div>
-                    </div>
-                    <p className="text-gray-500 text-sm">Aucun client enregistré</p>
-                  </div>
+                <td colSpan={colonnes.length} className="px-4 py-12 text-center">
+                  <p className="text-sm text-ink-muted">
+                    Aucun agent enrôlé pour le moment.
+                  </p>
+                  <p className="mt-1 text-sm text-ink-muted">
+                    Les nouveaux comptes apparaîtront ici dès leur enregistrement.
+                  </p>
                 </td>
               </tr>
             ) : (
-              lastClients.map((client, index) => (
+              derniers.map((client, index) => (
                 <tr
-                  key={client.id || `${client.nom || 'client'}-${client.prenom || ''}-${index}`}
-                  className={`border-b border-gray-50 hover:bg-blue-50 transition-colors duration-150 ${
-                    index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                  }`}
+                  key={client.id || `${client.nom || 'agent'}-${client.prenom || ''}-${index}`}
+                  className="border-b border-line/60 transition-colors last:border-0 hover:bg-brand-50"
                 >
-                  <td className="px-4 py-4 text-sm font-medium text-gray-900">
-                    {client.nom || '-'}
+                  <td className="px-4 py-3 text-sm font-medium text-ink">
+                    {`${client.nom || ''} ${client.prenom || ''}`.trim() || '—'}
                   </td>
-                  <td className="px-4 py-4 text-sm text-gray-700">
-                    {client.prenom || '-'}
+                  <td className="px-4 py-3 text-sm font-semibold tabular-nums text-ink">
+                    {client.orange || '—'}
                   </td>
-                  <td className="px-4 py-4 text-sm text-gray-700 font-mono">
-                    {client.numeroPersonnel || '-'}
-                  </td>
-                  <td className="px-4 py-4 text-sm text-orange-600 font-medium">
-                    {client.orange || '-'}
-                  </td>
-                  <td className="px-4 py-4 text-sm text-gray-700">
-                    {client.localite || '-'}
-                  </td>
-                  <td className="px-4 py-4 text-sm text-gray-700">
-                    {client.agentCommercial || '-'}
-                  </td>
-                  <td className="px-4 py-4 text-sm text-gray-600">
-                    <span className="bg-gray-100 px-2 py-1 rounded-md text-xs">
-                      {formatDate(client)}
-                    </span>
+                  <td className={CELLULE}>{client.localite || '—'}</td>
+                  <td className={CELLULE}>{client.agentCommercial || '—'}</td>
+                  <td className={`${CELLULE} whitespace-nowrap tabular-nums`}>
+                    {dateAffichee(client)}
                   </td>
                 </tr>
               ))
@@ -102,7 +88,7 @@ function LastClientsTable({ clients = [] }) {
           </tbody>
         </table>
       </div>
-    </div>
+    </section>
   )
 }
 

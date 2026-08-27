@@ -8,7 +8,7 @@ import { CARTE } from '../constants/dashboardTheme.js'
 import Balance from '../components/dashboard/Balance'
 import ReseauCards from '../components/dashboard/ReseauCards'
 import FluxChart from '../components/dashboard/FluxChart'
-import AgentsChart from '../components/dashboard/Charts/AgentsChart'
+import Commerciaux from '../components/dashboard/Commerciaux'
 import LastClientsTable from '../components/dashboard/LastClientsTable'
 
 /**
@@ -110,7 +110,7 @@ function Dashboard() {
       />
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <AgentsChart />
+        <Commerciaux />
         <LastClientsTable clients={clients} />
       </div>
     </div>

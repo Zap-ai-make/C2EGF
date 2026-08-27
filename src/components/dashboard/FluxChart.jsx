@@ -26,6 +26,11 @@ import { CARTE, DASHBOARD_COLORS } from '../../constants/dashboardTheme.js'
  *    espèces ou vers le stock ? Les dépôts montent, les retraits descendent, et
  *    l'écart au zéro se lit d'un coup d'œil.
  *
+ * L'animation d'entrée est DÉSACTIVÉE. Ce tableau de bord est abonné au flux
+ * Firestore : chaque instantané reçu provoque un rendu, et donc rejouait toute
+ * l'animation des barres. Un graphe qui se redessine en boucle pendant qu'on le
+ * lit ne sert pas le sujet (DESIGN.md §9).
+ *
  * Les couleurs viennent des jetons sémantiques `inflow` / `outflow`, jamais
  * d'une palette décorative — et elles sont doublées par la légende écrite et
  * par la position au-dessus ou au-dessous de l'axe (DESIGN.md §5).
@@ -109,6 +114,7 @@ function FluxChart({ flux }) {
                   dataKey="depots"
                   name="Dépôts"
                   stackId="flux"
+                  isAnimationActive={false}
                   fill={DASHBOARD_COLORS.inflow.chart}
                   radius={[3, 3, 0, 0]}
                 />
@@ -116,6 +122,7 @@ function FluxChart({ flux }) {
                   dataKey="retraitsNegatifs"
                   name="Retraits"
                   stackId="flux"
+                  isAnimationActive={false}
                   fill={DASHBOARD_COLORS.outflow.chart}
                   radius={[0, 0, 3, 3]}
                 />

@@ -5,7 +5,9 @@ import { firestoreService } from '../services/firestore'
 import { addTransactionPayment, addTransactionRefund } from '../services/settlementService'
 import { AuthContext } from './AuthContext'
 
-const TransactionsContext = createContext()
+// Exporté comme ClientsContext : permet de fournir une valeur sans monter le
+// provider réel (bancs d'essai, tests de rendu) — cf. src/preview.jsx.
+export const TransactionsContext = createContext()
 
 /**
  * Horodatage (ms) d'un élément d'historique pour le tri décroissant.
