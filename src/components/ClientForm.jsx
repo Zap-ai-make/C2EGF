@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import PageHeader from './ui/PageHeader'
 import { useToast } from '../hooks/useToast'
 import { getStorageKey } from '../config/clientIsolation'
 import Toast from './Toast'
@@ -125,9 +126,7 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client' 
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6 w-full">
-      <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b-2 border-green-500 pb-2">
-        {title}
-      </h2>
+      <PageHeader title={title} />
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>

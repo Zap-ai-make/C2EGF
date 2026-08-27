@@ -5,6 +5,7 @@ import { useAllTransactions } from '../hooks/useAllTransactions.js'
 import { useReseauStats } from '../hooks/useReseauStats.js'
 import { SEUIL_DECROCHAGE_JOURS } from '../utils/reseauStats.js'
 import { CARTE } from '../constants/dashboardTheme.js'
+import PageHeader from '../components/ui/PageHeader'
 import Balance from '../components/dashboard/Balance'
 import ReseauCards from '../components/dashboard/ReseauCards'
 import FluxChart from '../components/dashboard/FluxChart'
@@ -68,11 +69,7 @@ function Dashboard() {
   const [seuilDecrochage, setSeuilDecrochage] = useState(SEUIL_DECROCHAGE_JOURS)
   const reseau = useReseauStats(clients, { seuilDecrochage })
 
-  const titre = (
-    <div className="border-b-2 border-line pb-4">
-      <h1 className="text-3xl font-bold text-ink">Tableau de bord</h1>
-    </div>
-  )
+  const titre = <PageHeader title="Tableau de bord" />
 
   if (loading) {
     return (

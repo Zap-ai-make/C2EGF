@@ -9,6 +9,7 @@ import { MONTH_OPTIONS, TABLE_HEADERS } from '../constants'
 import TableRow from './TableRow'
 import Pagination from './Pagination'
 import Toast from './Toast'
+import PageHeader from './ui/PageHeader'
 
 function ClientsTable({ clients, onDelete, onEdit, onImportClients }) {
   const { toasts, showToast, removeToast } = useToast()
@@ -32,9 +33,7 @@ function ClientsTable({ clients, onDelete, onEdit, onImportClients }) {
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
-      <h2 className={`text-2xl font-bold ${themeClasses.text} mb-6 border-b-2 border-current pb-2`}>
-        Liste des clients
-      </h2>
+      <PageHeader title="Liste des clients" />
 
       {/* Input caché pour l'import */}
       <input

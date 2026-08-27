@@ -4,6 +4,7 @@ import TransactionForm from '../components/transactions/TransactionForm'
 import TransactionTable from '../components/transactions/TransactionTable'
 import DealerTransferForm from '../components/transactions/DealerTransferForm'
 import ErrorBoundary from '../components/ui/ErrorBoundary'
+import PageHeader from '../components/ui/PageHeader'
 
 function Transactions() {
   const { clients } = useClients()
@@ -15,37 +16,33 @@ function Transactions() {
     }`
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        <h1 className="text-3xl font-bold text-gray-800 mb-6 border-b-2 border-green-500 pb-2">
-          Transactions
-        </h1>
+    <div>
+      <PageHeader title="Transactions" />
 
-        {/* Basculeur de mode */}
-        <div className="mb-6 flex flex-wrap gap-2">
-          <button type="button" className={tabClass(mode === 'client')} onClick={() => setMode('client')}>
-            Transaction client
-          </button>
-          <button type="button" className={tabClass(mode === 'dealer')} onClick={() => setMode('dealer')}>
-            Opération dealer
-          </button>
-        </div>
-
-        {mode === 'client' ? (
-          <div className="space-y-8">
-            <ErrorBoundary>
-              <TransactionForm clients={clients} />
-            </ErrorBoundary>
-            <ErrorBoundary>
-              <TransactionTable />
-            </ErrorBoundary>
-          </div>
-        ) : (
-          <ErrorBoundary>
-            <DealerTransferForm />
-          </ErrorBoundary>
-        )}
+      {/* Basculeur de mode */}
+      <div className="mb-6 flex flex-wrap gap-2">
+        <button type="button" className={tabClass(mode === 'client')} onClick={() => setMode('client')}>
+          Transaction client
+        </button>
+        <button type="button" className={tabClass(mode === 'dealer')} onClick={() => setMode('dealer')}>
+          Opération dealer
+        </button>
       </div>
+
+      {mode === 'client' ? (
+        <div className="space-y-8">
+          <ErrorBoundary>
+            <TransactionForm clients={clients} />
+          </ErrorBoundary>
+          <ErrorBoundary>
+            <TransactionTable />
+          </ErrorBoundary>
+        </div>
+      ) : (
+        <ErrorBoundary>
+          <DealerTransferForm />
+        </ErrorBoundary>
+      )}
     </div>
   )
 }

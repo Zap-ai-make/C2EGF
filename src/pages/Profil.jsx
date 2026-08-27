@@ -7,6 +7,7 @@ import { formatDate, getAvatarInitial } from '../utils/authHelpers'
 import { AUTH_LABELS, AUTH_ROLE_LABELS } from '../constants/authMessages'
 import { AUTH_STYLES } from '../constants/authStyles'
 import { useUserActivity } from '../hooks/useUserActivity'
+import PageHeader from '../components/ui/PageHeader'
 
 function Profil() {
   const { currentUser, userProfile, activeStore, logout } = useAuth()
@@ -43,29 +44,14 @@ function Profil() {
   const getRoleLabel = useCallback((role) => AUTH_ROLE_LABELS[role] || 'Utilisateur', [])
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* En-tête du profil */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className={`w-16 h-16 ${themeClasses.accent} rounded-full flex items-center justify-center text-white text-2xl font-bold`}>
-              {getAvatarInitial(displayName, displayEmail)}
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-800">
-                {displayName}
-              </h1>
-              <p className="text-gray-600">{displayEmail}</p>
-              <p className="text-sm text-gray-500">
-                Boutique: {activeStore?.name || userProfile?.storeName || 'Non rattachée'}
-              </p>
-              <p className="text-sm text-gray-500">
-                Rôle: {getRoleLabel(userProfile?.role)}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex space-x-4">
+    <div className="max-w-4xl mx-auto">
+      {/* Le titre de l'écran porte le mot de la navigation — « Profil » — et les
+          deux actions de compte. Elles étaient serrées contre l'identité, dans
+          une rangée qui se disputait la largeur avec l'avatar et le nom. */}
+      <PageHeader
+        title="Profil"
+        actions={
+          <>
             <button
               onClick={() => setShowChangePassword(true)}
               className={AUTH_STYLES.button.primary}
@@ -78,136 +64,159 @@ function Profil() {
             >
               {AUTH_LABELS.SIGN_OUT}
             </button>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
-      {/* Informations du compte */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className={`text-xl font-bold ${themeClasses.text} mb-6`}>
-          Informations du compte
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Nom de la boutique
-            </label>
-            <div className="p-3 bg-gray-50 rounded-md border">
-              {displayName}
+      <div className="space-y-6">
+        {/* Identité du compte */}
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="flex items-center space-x-4">
+            <div className={`w-16 h-16 ${themeClasses.accent} rounded-full flex items-center justify-center text-white text-2xl font-bold`}>
+              {getAvatarInitial(displayName, displayEmail)}
             </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Adresse email
-            </label>
-            <div className="p-3 bg-gray-50 rounded-md border">
-              {displayEmail}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              ID Utilisateur
-            </label>
-            <div className="p-3 bg-gray-50 rounded-md border font-mono text-sm">
-              {userId}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Statut du compte
-            </label>
-            <div className="p-3 bg-gray-50 rounded-md border">
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                isEmailVerified ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-              }`}>
-                {isEmailVerified ? 'Email vérifié' : 'Email non vérifié'}
-              </span>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Date de création
-            </label>
-            <div className="p-3 bg-gray-50 rounded-md border">
-              {formatDate(creationTime)}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Dernière connexion
-            </label>
-            <div className="p-3 bg-gray-50 rounded-md border">
-              {formatDate(lastSignInTime)}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Statistiques rapides */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className={`text-xl font-bold ${themeClasses.text} mb-6`}>
-          Activité
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className={`${themeClasses.tableHeader} p-4 rounded-lg`}>
-            <div className="text-center">
-              <div className={`text-2xl font-bold ${themeClasses.text}`}>
-                {userActivity.monthlyLogins}
-              </div>
-              <div className="text-sm text-gray-600">Connexions ce mois</div>
-            </div>
-          </div>
-
-          <div className={`${themeClasses.tableHeader} p-4 rounded-lg`}>
-            <div className="text-center">
-              <div className={`text-2xl font-bold ${themeClasses.text}`}>
-                {userActivity.daysSinceRegistration}
-              </div>
-              <div className="text-sm text-gray-600">Jours depuis l'inscription</div>
-            </div>
-          </div>
-
-          <div className={`${themeClasses.tableHeader} p-4 rounded-lg`}>
-            <div className="text-center">
-              <div className={`text-2xl font-bold ${themeClasses.text}`}>
-                {userActivity.accountStatus}
-              </div>
-              <div className="text-sm text-gray-600">Statut du compte</div>
+            <div>
+              <h2 className="text-2xl font-bold text-ink">
+                {displayName}
+              </h2>
+              <p className="text-gray-600">{displayEmail}</p>
+              <p className="text-sm text-gray-500">
+                Boutique: {activeStore?.name || userProfile?.storeName || 'Non rattachée'}
+              </p>
+              <p className="text-sm text-gray-500">
+                Rôle: {getRoleLabel(userProfile?.role)}
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Statistiques supplémentaires */}
-        {userActivity.totalTransactions > 0 && (
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className={`${themeClasses.tableAccent} p-4 rounded-lg`}>
-                <div className="text-center">
-                  <div className={`text-xl font-bold ${themeClasses.text}`}>
-                    {userActivity.totalTransactions}
+        {/* Informations du compte */}
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className={`text-xl font-bold ${themeClasses.text} mb-6`}>
+            Informations du compte
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Nom de la boutique
+              </label>
+              <div className="p-3 bg-gray-50 rounded-md border">
+                {displayName}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Adresse email
+              </label>
+              <div className="p-3 bg-gray-50 rounded-md border">
+                {displayEmail}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                ID Utilisateur
+              </label>
+              <div className="p-3 bg-gray-50 rounded-md border font-mono text-sm">
+                {userId}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Statut du compte
+              </label>
+              <div className="p-3 bg-gray-50 rounded-md border">
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                  isEmailVerified ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                }`}>
+                  {isEmailVerified ? 'Email vérifié' : 'Email non vérifié'}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Date de création
+              </label>
+              <div className="p-3 bg-gray-50 rounded-md border">
+                {formatDate(creationTime)}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Dernière connexion
+              </label>
+              <div className="p-3 bg-gray-50 rounded-md border">
+                {formatDate(lastSignInTime)}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Statistiques rapides */}
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className={`text-xl font-bold ${themeClasses.text} mb-6`}>
+            Activité
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className={`${themeClasses.tableHeader} p-4 rounded-lg`}>
+              <div className="text-center">
+                <div className={`text-2xl font-bold ${themeClasses.text}`}>
+                  {userActivity.monthlyLogins}
+                </div>
+                <div className="text-sm text-gray-600">Connexions ce mois</div>
+              </div>
+            </div>
+
+            <div className={`${themeClasses.tableHeader} p-4 rounded-lg`}>
+              <div className="text-center">
+                <div className={`text-2xl font-bold ${themeClasses.text}`}>
+                  {userActivity.daysSinceRegistration}
+                </div>
+                <div className="text-sm text-gray-600">Jours depuis l'inscription</div>
+              </div>
+            </div>
+
+            <div className={`${themeClasses.tableHeader} p-4 rounded-lg`}>
+              <div className="text-center">
+                <div className={`text-2xl font-bold ${themeClasses.text}`}>
+                  {userActivity.accountStatus}
+                </div>
+                <div className="text-sm text-gray-600">Statut du compte</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Statistiques supplémentaires */}
+          {userActivity.totalTransactions > 0 && (
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className={`${themeClasses.tableAccent} p-4 rounded-lg`}>
+                  <div className="text-center">
+                    <div className={`text-xl font-bold ${themeClasses.text}`}>
+                      {userActivity.totalTransactions}
+                    </div>
+                    <div className="text-sm text-gray-600">Transactions effectuées</div>
                   </div>
-                  <div className="text-sm text-gray-600">Transactions effectuées</div>
+                </div>
+
+                <div className={`${themeClasses.tableAccent} p-4 rounded-lg`}>
+                  <div className="text-center">
+                    <div className={`text-xl font-bold ${themeClasses.text}`}>
+                      {userActivity.hasTransactions ? 'Oui' : 'Non'}
+                    </div>
+                    <div className="text-sm text-gray-600">Activité récente</div>
+                  </div>
                 </div>
               </div>
-
-              <div className={`${themeClasses.tableAccent} p-4 rounded-lg`}>
-                <div className="text-center">
-                  <div className={`text-xl font-bold ${themeClasses.text}`}>
-                    {userActivity.hasTransactions ? 'Oui' : 'Non'}
-                  </div>
-                  <div className="text-sm text-gray-600">Activité récente</div>
-                </div>
-              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Modal de confirmation de déconnexion */}
