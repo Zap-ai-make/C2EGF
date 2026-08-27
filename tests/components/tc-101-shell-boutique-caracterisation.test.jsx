@@ -25,7 +25,6 @@ let pendingCount = 0
 vi.mock('../../src/context/ThemeContext.jsx', () => ({
   useTheme: () => ({
     themeClasses: { navbar: 'navbar-stub', background: 'bg-stub', text: 'text-stub' },
-    backgroundImage: '/bg-noir.png',
   }),
 }))
 vi.mock('../../src/context/AuthContext.jsx', () => ({
@@ -64,14 +63,27 @@ beforeEach(() => {
 })
 
 describe('TC-101 — repères de structure du shell', () => {
-  it('affiche le wordmark du client en titre de niveau 1', () => {
+  it('affiche le wordmark du client dans la bannière', () => {
     renderShell()
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(APP_NAME)
+    expect(within(screen.getByRole('banner')).getByText(APP_NAME)).toBeInTheDocument()
   })
 
   it('le wordmark vaut « C2EGF BURKINA » sous le profil réel', () => {
     renderShell()
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('C2EGF BURKINA')
+    expect(
+      within(screen.getByRole('banner')).getByText('C2EGF BURKINA'),
+    ).toBeInTheDocument()
+  })
+
+  it('la page ne porte qu’un seul titre de niveau 1 : le sien', () => {
+    // Le shell affichait le nom du produit en <h1>, alors que chaque page porte
+    // déjà le sien (« Tableau de bord », « Liste des clients »…). Cela faisait
+    // deux titres de niveau 1 par page, dont un identique partout. La marque est
+    // une bannière, pas le titre du document.
+    renderShell(<h1>Tableau de bord</h1>)
+    const titres = screen.getAllByRole('heading', { level: 1 })
+    expect(titres).toHaveLength(1)
+    expect(titres[0]).toHaveTextContent('Tableau de bord')
   })
 
   it('expose un repère de navigation et un repère de contenu principal', () => {

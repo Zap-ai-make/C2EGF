@@ -16,6 +16,9 @@ import { THEMES, DEFAULT_THEME, STORAGE_KEY } from '../constants/themes.js'
  * dans le CSS produit. Le thème « custom » qu'elle pilotait est retiré avec
  * elle.
  *
+ * Le champ `backgroundImage` disparaît avec le héros de 200 px que Layout
+ * affichait : il n'avait plus aucun consommateur.
+ *
  * Ce qui reste : le thème d'ouverture dérive du profil client, et un choix
  * explicite persisté en localStorage garde la priorité.
  */
@@ -45,15 +48,7 @@ export const ThemeProvider = ({ children }) => {
     [currentTheme],
   )
 
-  const backgroundImage = useMemo(
-    () => THEMES[currentTheme]?.backgroundImage ?? THEMES[DEFAULT_THEME].backgroundImage,
-    [currentTheme],
-  )
-
-  const value = useMemo(
-    () => ({ themeClasses, backgroundImage }),
-    [themeClasses, backgroundImage],
-  )
+  const value = useMemo(() => ({ themeClasses }), [themeClasses])
 
   return (
     <ThemeContext.Provider value={value}>

@@ -13,7 +13,6 @@ export const THEMES = {
   c2egf: {
     id: 'c2egf',
     name: 'Thème C2EGF',
-    backgroundImage: '/bg-noir.png',
     classes: {
       background: 'bg-canvas',
       text: 'text-ink',
@@ -27,7 +26,6 @@ export const THEMES = {
   blue: {
     id: 'blue',
     name: 'Thème Bleu',
-    backgroundImage: '/bg-noir.png',
     classes: {
       background: 'bg-blue-50',
       text: 'text-gray-900',
@@ -41,7 +39,6 @@ export const THEMES = {
   light: {
     id: 'light',
     name: 'Thème Clair',
-    backgroundImage: '/bg-noir.png',
     classes: {
       background: 'bg-white',
       text: 'text-gray-900',
@@ -55,7 +52,6 @@ export const THEMES = {
   dark: {
     id: 'dark',
     name: 'Thème Sombre',
-    backgroundImage: '/bg-noir.png',
     classes: {
       background: 'bg-slate-100',
       text: 'text-gray-900',
@@ -69,7 +65,6 @@ export const THEMES = {
   green: {
     id: 'green',
     name: 'Thème Vert',
-    backgroundImage: '/bg-noir.png',
     classes: {
       background: 'bg-green-50',
       text: 'text-gray-900',
@@ -83,7 +78,6 @@ export const THEMES = {
   purple: {
     id: 'purple',
     name: 'Thème Violet',
-    backgroundImage: '/bg-noir.png',
     classes: {
       background: 'bg-purple-50',
       text: 'text-gray-900',
