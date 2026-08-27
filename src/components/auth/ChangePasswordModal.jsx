@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { X } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useFormValidation } from '../../hooks/useFormValidation'
 import { AUTH_LABELS, AUTH_PLACEHOLDERS, AUTH_SUCCESS, AUTH_CONFIG } from '../../constants/authMessages'
@@ -97,9 +98,9 @@ function ChangePasswordModal({ isOpen, onClose }) {
           <button
             onClick={handleClose}
             className={AUTH_STYLES.modal.closeButton}
-            aria-label="Fermer la modal"
+            aria-label="Fermer"
           >
-            ×
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 

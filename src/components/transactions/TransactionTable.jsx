@@ -6,6 +6,7 @@ import { PAYMENT_METHODS } from '../../utils/constants.js'
 import { getClientName, formatTransactionDateTime } from '../../utils/helpers.js'
 import { SkeletonRow } from '../ui/SkeletonList.jsx'
 import EmptyState from '../ui/EmptyState.jsx'
+import { ChevronLeft } from 'lucide-react'
 import { ClipboardCheck } from 'lucide-react'
 import OptimisticToast from '../ui/OptimisticToast.jsx'
 import logger from '../../utils/logger.js'
@@ -384,10 +385,10 @@ const TransactionTable = memo(function TransactionTable() {
                     <div className="bg-gray-100 px-4 py-2 rounded-t-lg border-b border-gray-200 flex items-center gap-2">
                       <button
                         onClick={() => { setDropdownStep(1); setAmountError('') }}
-                        className="text-gray-500 hover:text-gray-800 text-base leading-none"
+                        className="rounded text-ink-muted transition-colors hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
                         aria-label="Retour"
                       >
-                        ←
+                        <ChevronLeft className="h-4 w-4" aria-hidden="true" />
                       </button>
                       <p className="text-sm font-medium text-gray-700">{selectedMethod}</p>
                     </div>

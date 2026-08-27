@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 function DailyPagination({ transactions, onDateSelect }) {
   const [currentPage, setCurrentPage] = useState(0)
@@ -86,9 +87,10 @@ function DailyPagination({ transactions, onDateSelect }) {
           <button
             onClick={handlePreviousPage}
             disabled={currentPage === 0}
-            className="px-3 py-1 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:cursor-not-allowed rounded text-sm transition-colors"
+            className="inline-flex items-center gap-1.5 rounded border border-line bg-surface px-3 py-1 text-sm font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
-            ← Précédent
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            Précédent
           </button>
           <span className="px-3 py-1 text-sm text-gray-600">
             Page {currentPage + 1} sur {totalPages}
@@ -96,9 +98,10 @@ function DailyPagination({ transactions, onDateSelect }) {
           <button
             onClick={handleNextPage}
             disabled={currentPage >= totalPages - 1}
-            className="px-3 py-1 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:cursor-not-allowed rounded text-sm transition-colors"
+            className="inline-flex items-center gap-1.5 rounded border border-line bg-surface px-3 py-1 text-sm font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
-            Suivant →
+            Suivant
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       </div>
