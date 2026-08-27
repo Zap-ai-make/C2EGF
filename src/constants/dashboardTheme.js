@@ -96,6 +96,12 @@ const LEGACY_ALIASES = {
   gray: 'neutral',
 }
 
+/**
+ * Surface commune des cartes du tableau de bord. Une seule définition, pour que
+ * les blocs ne dérivent pas les uns des autres au fil des retouches.
+ */
+export const CARTE = 'rounded-xl border border-line bg-surface p-6 shadow-sm'
+
 export const CHART_TEXT_COLORS = {
   primary: 'text-gray-700',
   secondary: 'text-gray-600',
