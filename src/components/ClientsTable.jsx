@@ -10,8 +10,10 @@ import TableRow from './TableRow'
 import Pagination from './Pagination'
 import Toast from './Toast'
 import PageHeader from './ui/PageHeader'
+import EmptyState from './ui/EmptyState'
+import { Users, SearchX } from 'lucide-react'
 
-function ClientsTable({ clients, onDelete, onEdit, onImportClients }) {
+function ClientsTable({ clients, onDelete, onEdit, onImportClients, emptyAction }) {
   const { toasts, showToast, removeToast } = useToast()
   const { activeStore } = useContext(AuthContext)
   const { searchTerm, setSearchTerm, selectedMonth, setSelectedMonth, filteredClients } = useClientsFilter(clients)
@@ -81,7 +83,35 @@ function ClientsTable({ clients, onDelete, onEdit, onImportClients }) {
         </select>
       </div>
 
-      {/* Tableau */}
+      {/* Le tableau, ou l'état vide — jamais un tableau vide surmonté d'une
+          pagination qui compte zéro page. Deux vides distincts : « rien » et
+          « rien qui corresponde » n'appellent pas la même issue. */}
+      {filteredClients.length === 0 ? (
+        clients.length === 0 ? (
+          <EmptyState
+            icon={Users}
+            title="Aucun client enregistré"
+            message="Enregistrez un premier client pour commencer à saisir ses opérations."
+            action={emptyAction}
+          />
+        ) : (
+          <EmptyState
+            icon={SearchX}
+            title="Aucun client trouvé."
+            message="Aucun client ne correspond à cette recherche ou à ce mois."
+            action={
+              <button
+                type="button"
+                onClick={() => { setSearchTerm(''); setSelectedMonth(MONTH_OPTIONS[0]) }}
+                className="rounded border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+              >
+                Effacer les filtres
+              </button>
+            }
+          />
+        )
+      ) : (
+        <>
       <div className={`overflow-x-auto rounded-lg border ${themeClasses.tableBorder}`}>
         <table className="w-full border-collapse min-w-max">
           <thead>
@@ -109,9 +139,7 @@ function ClientsTable({ clients, onDelete, onEdit, onImportClients }) {
       </div>
 
       <Pagination {...paginationProps} />
-
-      {filteredClients.length === 0 && (
-        <p className="mt-4 text-center text-ink-muted">Aucun client trouvé.</p>
+        </>
       )}
 
       {/* Toasts */}

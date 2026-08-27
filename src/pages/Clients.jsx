@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useClients } from '../hooks/useClients'
 import ClientsTable from '../components/ClientsTable'
 import ClientForm from '../components/ClientForm'
@@ -61,11 +62,21 @@ function Clients() {
   }
 
   return (
-    <ClientsTable 
+    <ClientsTable
       clients={clients}
       onDelete={handleDelete}
       onEdit={handleEdit}
       onImportClients={handleImportClients}
+      emptyAction={
+        // L'issue proposée par l'état vide. Elle vit ICI et non dans le tableau :
+        // seule la page connaît le routeur, et le tableau reste testable seul.
+        <Link
+          to="/formulaire"
+          className="rounded bg-brand-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+        >
+          Enregistrer un client
+        </Link>
+      }
     />
   )
 }

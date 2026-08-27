@@ -2,6 +2,8 @@ import { useTransactions } from '../../context/transactions.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
 import { getClientName, formatTransactionDateTime } from '../../utils/helpers.js'
 import { useWindowedRows } from '../../hooks/useWindowedRows.js'
+import EmptyState from '../ui/EmptyState.jsx'
+import { History } from 'lucide-react'
 
 // Au-delà de ce nombre de lignes, on active le fenêtrage (virtualisation).
 // En dessous, le rendu est strictement identique à l'historique (aucune régression).
@@ -80,6 +82,18 @@ function HistoriqueTable({ transactions = [] }) {
     ? allTransactions.slice(startIndex, endIndex)
     : allTransactions
 
+  if (allTransactions.length === 0) {
+    return (
+      <div className="mt-6">
+        <EmptyState
+          icon={History}
+          title="Aucune transaction dans l'historique"
+          message="Aucune opération ne correspond à la période et aux filtres choisis."
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="mt-6">
       <div
@@ -101,16 +115,7 @@ function HistoriqueTable({ transactions = [] }) {
             </tr>
           </thead>
           <tbody>
-            {allTransactions.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={headers.length}
-                  className="px-4 py-8 text-center text-ink-muted"
-                >
-                  Aucune transaction dans l'historique
-                </td>
-              </tr>
-            ) : (
+            {(
               <>
                 {isVirtualized && topPad > 0 && (
                   <tr aria-hidden="true">

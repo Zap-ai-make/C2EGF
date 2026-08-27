@@ -14,6 +14,8 @@ import {
   IS_DEALER_MULTI_NETWORK,
 } from '../../constants/dealerConstants'
 import { NETWORK_CONFIG } from '../../constants/networkConfig'
+import EmptyState from '../ui/EmptyState.jsx'
+import { Send } from 'lucide-react'
 import { parseFcfaAmount } from '../../utils/fcfaAmount.js'
 import { formatCurrency } from '../../utils/formatCurrency'
 import StatusBadge from '../ui/StatusBadge'
@@ -175,7 +177,7 @@ function DealerTransferForm() {
       <div className="mt-8">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400 mb-3">Mes envois au dealer</h3>
         {transfers.length === 0 ? (
-          <p className="text-sm text-ink-muted">Aucun envoi pour le moment.</p>
+          <EmptyState icon={Send} title="Aucun envoi pour le moment." message="Vos retours de stock et de liquidité vers le dealer s'afficheront ici." />
         ) : (
           <div className="overflow-x-auto rounded-xl border border-gray-200">
             <table className="min-w-full divide-y divide-gray-100 text-sm">

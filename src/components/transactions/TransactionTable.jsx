@@ -5,6 +5,8 @@ import { useTheme } from '../../context/ThemeContext.jsx'
 import { PAYMENT_METHODS } from '../../utils/constants.js'
 import { getClientName, formatTransactionDateTime } from '../../utils/helpers.js'
 import { SkeletonRow } from '../ui/SkeletonList.jsx'
+import EmptyState from '../ui/EmptyState.jsx'
+import { ClipboardCheck } from 'lucide-react'
 import OptimisticToast from '../ui/OptimisticToast.jsx'
 import logger from '../../utils/logger.js'
 import { generateIdempotencyKey } from '../../services/settlementService.js'
@@ -250,8 +252,12 @@ const TransactionTable = memo(function TransactionTable() {
                 ))
               ) : uniquePendingTransactions.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-4 py-8 text-center text-ink-muted">
-                    Aucune transaction en attente
+                  <td colSpan="6" className="p-4">
+                    <EmptyState
+                      icon={ClipboardCheck}
+                      title="Aucune transaction en attente"
+                      message="Les opérations enregistrées comme non terminées apparaîtront ici."
+                    />
                   </td>
                 </tr>
               ) : (

@@ -131,10 +131,36 @@ describe('TC-102 — filtres', () => {
 })
 
 describe('TC-102 — états et actions', () => {
-  it('liste vide → message dédié, et aucune ligne', () => {
+  it('liste vide → invitation à enregistrer, et aucune ligne', () => {
+    // MISE À JOUR (lot des états) : « rien » et « rien qui corresponde » ne sont
+    // plus le même écran. Une base vide invite à enregistrer un premier client ;
+    // une recherche infructueuse propose d'effacer les filtres (cas ci-dessus).
+    // Un seul message servait les deux, et le tableau restait affiché, vide,
+    // surmonté d'une pagination qui comptait zéro page.
     renderTable([])
-    expect(screen.getByText('Aucun client trouvé.')).toBeInTheDocument()
+    expect(screen.getByText('Aucun client enregistré')).toBeInTheDocument()
     expect(dataRows()).toHaveLength(0)
+  })
+
+  it('liste vide → l’issue proposée par la page est rendue', () => {
+    render(
+      <ClientsTable
+        clients={[]}
+        onDelete={vi.fn()}
+        onEdit={vi.fn()}
+        onImportClients={vi.fn()}
+        emptyAction={<button type="button">Enregistrer un client</button>}
+      />
+    )
+    expect(screen.getByRole('button', { name: 'Enregistrer un client' })).toBeInTheDocument()
+  })
+
+  it('recherche infructueuse → l’issue est d’effacer les filtres', () => {
+    renderTable(makeClients(10))
+    fireEvent.change(screen.getByPlaceholderText(/Rechercher nom, prénom/), {
+      target: { value: 'INTROUVABLE' },
+    })
+    expect(screen.getByRole('button', { name: 'Effacer les filtres' })).toBeInTheDocument()
   })
 
   it('le bouton d’export annonce le nombre d’éléments concernés', () => {
