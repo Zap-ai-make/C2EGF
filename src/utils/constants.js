@@ -34,6 +34,13 @@ export const PAYMENT_METHODS = [...activeProfile.transactions.paymentMethods]
 //   Credit  avance non reglee, en attente — ni entree, ni echec -> pending
 //
 // `outflow` n'est PAS `danger` : un retrait est un mouvement normal.
+//
+// `bgColor` teintait la LIGNE entiere, sur toute sa largeur. A quarante lignes,
+// le tableau devenait un aplat rose et vert ou la couleur ne distinguait plus
+// rien : elle tapissait. Vu a la capture, corrige aussitot. La teinte ne porte
+// plus que les deux cellules qui disent le sens -- le type et le montant. Le
+// fond reste disponible pour les listes courtes ou une ligne doit ressortir en
+// bloc (le formulaire de nature d'operation s'en sert).
 export const TRANSACTION_STYLES = {
   'Retrait': {
     textColor: 'text-outflow',

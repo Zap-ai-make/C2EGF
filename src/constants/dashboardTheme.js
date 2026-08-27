@@ -100,7 +100,12 @@ const LEGACY_ALIASES = {
  * Surface commune des cartes du tableau de bord. Une seule définition, pour que
  * les blocs ne dérivent pas les uns des autres au fil des retouches.
  */
-export const CARTE = 'rounded-xl border border-line bg-surface p-6 shadow-sm'
+// `min-w-0` n'est pas decoratif : sans lui, un enfant de grille garde
+// `min-width: auto` et s'elargit jusqu'a tenir son contenu. Le conteneur
+// `overflow-x-auto` place a l'interieur ne se declenche alors JAMAIS, et c'est
+// la PAGE qui defile horizontalement. Mesure a 390 px : 634 px de contenu, dont
+// 618 pour ces deux cartes. Une ligne, et le debordement disparait.
+export const CARTE = 'min-w-0 rounded-xl border border-line bg-surface p-6 shadow-sm'
 
 export const CHART_TEXT_COLORS = {
   primary: 'text-gray-700',

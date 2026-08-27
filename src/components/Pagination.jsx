@@ -41,16 +41,16 @@ function Pagination({
   if (totalPages <= 1) return null
 
   return (
-    <div className="flex items-center justify-between bg-white px-4 py-3 border-t border-line">
-      <div className="flex items-center gap-4">
-        <p className="text-sm text-gray-700">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line bg-surface px-4 py-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <p className="text-sm text-ink-muted">
           Affichage de <span className="font-medium">{startIndex}</span> à{' '}
           <span className="font-medium">{endIndex}</span> sur{' '}
           <span className="font-medium">{totalItems}</span> résultats
         </p>
         
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-700">Éléments par page:</label>
+          <label className="text-sm text-ink-muted">Éléments par page:</label>
           <select
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
@@ -63,11 +63,11 @@ function Pagination({
         </div>
       </div>
 
-      <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1">
         <button
           onClick={() => onPageChange(currentPage - 1)}
           disabled={!hasPrevPage}
-          className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+          className="rounded border border-line px-3 py-1 text-sm transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         >
           Précédent
         </button>
@@ -77,12 +77,12 @@ function Pagination({
             key={index}
             onClick={() => typeof page === 'number' ? onPageChange(page) : null}
             disabled={page === '...'}
-            className={`px-3 py-1 text-sm border border-gray-300 rounded ${
-              page === currentPage 
-                ? 'bg-brand-500 text-white border-brand-500' 
-                : page === '...' 
-                  ? 'cursor-default' 
-                  : 'hover:bg-gray-50'
+            className={`rounded border px-3 py-1 text-sm tabular-nums transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${
+              page === currentPage
+                ? 'border-brand-500 bg-brand-500 text-white'
+                : page === '...'
+                  ? 'cursor-default border-transparent'
+                  : 'border-line hover:bg-brand-50'
             }`}
           >
             {page}
@@ -92,7 +92,7 @@ function Pagination({
         <button
           onClick={() => onPageChange(currentPage + 1)}
           disabled={!hasNextPage}
-          className="px-3 py-1 text-sm border border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+          className="rounded border border-line px-3 py-1 text-sm transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         >
           Suivant
         </button>

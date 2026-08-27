@@ -237,7 +237,7 @@ const TransactionTable = memo(function TransactionTable() {
                 <th className={`px-4 py-3 text-left text-base font-medium ${themeClasses.text}`}>
                   Réseau
                 </th>
-                <th className={`px-4 py-3 text-left text-base font-medium ${themeClasses.text}`}>
+                <th className={`px-4 py-3 text-right text-base font-medium ${themeClasses.text}`}>
                   Montant
                 </th>
                 <th className={`px-4 py-3 text-center text-base font-medium ${themeClasses.text}`}>
@@ -270,21 +270,21 @@ const TransactionTable = memo(function TransactionTable() {
                   return (
                     <tr 
                       key={transaction.id}
-                      className={`${styles.bgColor}`}
+                      className="border-b border-line/60 transition-colors hover:bg-brand-50/60"
                     >
-                      <td className={`px-4 py-3 text-base ${styles.textColor}`}>
+                      <td className="px-4 py-3 text-base">
                         {formatTransactionDateTime(transaction)}
                       </td>
-                      <td className={`px-4 py-3 text-base font-medium ${styles.textColor}`}>
+                      <td className="px-4 py-3 text-base font-medium">
                         {getClientName(transaction.client)}
                       </td>
                       <td className={`px-4 py-3 text-base font-medium ${styles.textColor}`}>
                         {transaction.type}
                       </td>
-                      <td className={`px-4 py-3 text-base ${styles.textColor}`}>
+                      <td className="px-4 py-3 text-base">
                         {transaction.reseau} ({transaction.code})
                       </td>
-                      <td className={`px-4 py-3 text-base font-medium ${styles.textColor}`}>
+                      <td className={`px-4 py-3 text-right text-base font-medium tabular-nums ${styles.textColor}`}>
                         <span>{(Number(transaction.montant) || 0).toLocaleString('fr-FR')} FCFA</span>
                         {transaction.settlementStatus === 'partial' && transaction.remainingAmount != null && (
                           <div className="mt-0.5 text-xs font-normal tabular-nums text-warn">

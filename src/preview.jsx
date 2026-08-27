@@ -14,11 +14,19 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 
+import { MemoryRouter } from 'react-router-dom'
+
 import { ClientsContext } from './context/ClientsContext.jsx'
 import { TransactionsContext } from './context/transactions.jsx'
+import { AuthContext } from './context/AuthContext.jsx'
+import { ThemeProvider } from './context/ThemeContext.jsx'
 import { BandeauMarque } from './components/Layout.jsx'
 import { THEMES } from './constants/themes.js'
 import { STORE_NAV_ITEMS } from './constants/navigation.js'
+import { getTransactionStyles } from './utils/helpers.js'
+import PageHeader from './components/ui/PageHeader.jsx'
+import ClientsTable from './components/ClientsTable.jsx'
+import HistoriqueTable from './components/historique/HistoriqueTable.jsx'
 import Balance from './components/dashboard/Balance.jsx'
 import ReseauCards from './components/dashboard/ReseauCards.jsx'
 import FluxChart from './components/dashboard/FluxChart.jsx'
@@ -140,10 +148,10 @@ for (let jourEcoule = 0; jourEcoule < 30; jourEcoule++) {
       id: 'op-' + compteur++,
       clientId: agent.id,
       client: agent,
-      type: rang % 3 === 0 ? 'Retrait' : 'Depot',
+      type: rang % 3 === 0 ? 'Retrait' : 'Dépôt',
       reseau: 'Orange',
       montant: 25000 + ((rang * 8117) % 900000),
-      statut: 'Validee',
+      statut: 'Validée',
       date: dateFr(jourEcoule, heure),
     })
   }
@@ -219,9 +227,16 @@ function SoldesDoublure() {
 
 function Preview() {
   return (
+    <MemoryRouter>
+    <ThemeProvider>
+    <AuthContext.Provider value={{ activeStore: { id: 'store-ouaga', name: 'C2EGF OUAGA' } }}>
     <ClientsContext.Provider value={{ clients: agents, loading: false }}>
       <TransactionsContext.Provider
-        value={{ pendingTransactions: [], completedTransactions: operations }}
+        value={{
+          pendingTransactions: [],
+          completedTransactions: operations,
+          getTransactionStyles,
+        }}
       >
       <div className="min-h-screen bg-canvas">
         <BandeauMarque />
@@ -232,9 +247,7 @@ function Preview() {
         </div>
 
         <div className="w-full space-y-6 px-4 py-6">
-          <div className="border-b-2 border-line pb-4">
-            <h1 className="text-3xl font-bold text-ink">Tableau de bord</h1>
-          </div>
+          <PageHeader title="Tableau de bord" />
 
           <Balance balance={balance} projection={projection} />
 
@@ -251,10 +264,45 @@ function Preview() {
             <Commerciaux />
             <LastClientsTable clients={agents} />
           </div>
+
+          {/* ── Les écrans de travail ──────────────────────────────────────
+              Vrais composants, pas des doublures : ClientsTable et
+              HistoriqueTable se montent hors application dès qu'on leur donne
+              un thème, une boutique active et un routeur. C'est là que se
+              regarde le travail du lot — le damier vert remplacé par des
+              filets, les montants alignés, et le comportement à 390 px. */}
+
+          <PageHeader title="Liste des clients" />
+          <ClientsTable clients={agents} onEdit={() => {}} onImportClients={() => {}} />
+
+          <PageHeader title="Liste des clients — aucun enregistré" />
+          <ClientsTable
+            clients={[]}
+            onEdit={() => {}}
+            onImportClients={() => {}}
+            emptyAction={
+              <span className="rounded bg-brand-500 px-4 py-2 text-sm font-medium text-white">
+                Enregistrer un client
+              </span>
+            }
+          />
+
+          <PageHeader title="Historique" />
+          <div className="rounded-lg bg-surface p-6 shadow-md">
+            <HistoriqueTable transactions={operations.slice(0, 40)} />
+          </div>
+
+          <PageHeader title="Historique — aucune opération" />
+          <div className="rounded-lg bg-surface p-6 shadow-md">
+            <HistoriqueTable transactions={[]} />
+          </div>
         </div>
       </div>
       </TransactionsContext.Provider>
     </ClientsContext.Provider>
+    </AuthContext.Provider>
+    </ThemeProvider>
+    </MemoryRouter>
   )
 }
 
