@@ -2,16 +2,12 @@ import { APP_NAME } from '../../constants/branding'
 
 function AuthSidebar({ isSignUp, onToggle }) {
   return (
-    // Dégradé de marque C2EGF. #173863 est relevé sur logo.jpeg ; #2760a5 en est
-    // la version éclaircie (même teinte, luminosité portée à 40 %). Les deux états
-    // se distinguent par le sens du dégradé, pas par la teinte.
-    // Seul endroit du front où la couleur de marque n'est pas dérivée du profil,
-    // et ce n'est pas un oubli : Tailwind extrait les classes littéralement, une
-    // valeur calculée ne serait pas générée. Y passer imposerait des styles inline.
+    // Dégradé de marque C2EGF. Les deux états se distinguent par le SENS du
+    // dégradé, pas par la teinte : même palette, lecture inversée.
     <div className={`h-full min-h-[220px] lg:min-h-[500px] flex flex-col items-center justify-center text-white p-6 sm:p-8 lg:p-12 relative overflow-hidden ${
       isSignUp
-        ? 'bg-gradient-to-br from-[#173863] to-[#2760a5]'
-        : 'bg-gradient-to-br from-[#2760a5] to-[#173863]'
+        ? 'bg-gradient-to-br from-brand-500 to-brand-400'
+        : 'bg-gradient-to-br from-brand-400 to-brand-500'
     }`}>
       <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full transform translate-x-16 -translate-y-16"></div>
       <div className="absolute bottom-0 left-0 w-24 h-24 bg-white opacity-10 rounded-full transform -translate-x-12 translate-y-12"></div>
