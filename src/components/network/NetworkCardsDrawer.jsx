@@ -31,12 +31,15 @@ function NetworkCardsDrawer() {
       className="border-b border-brand-400/30 bg-brand-600"
       aria-label="Soldes opérationnels"
     >
-      <div className="flex w-full flex-col gap-3 px-4 py-3 md:flex-row md:items-center">
-        <span className="shrink-0 text-center text-xs font-semibold uppercase tracking-[0.2em] text-brand-200 md:text-left">
+      {/* Troisième bande, même axe que les deux autres : le groupe « Soldes +
+          cartes » est centré. Il s'ouvrait auparavant contre le bord gauche
+          pendant que la marque, elle, occupait le milieu. */}
+      <div className="flex w-full flex-col items-center gap-3 px-4 py-3.5 md:flex-row md:justify-center md:gap-5">
+        <span className="shrink-0 text-center text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-200">
           Soldes
         </span>
 
-        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:max-w-3xl">
+        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:w-auto md:min-w-[42rem] md:max-w-4xl">
           {visibleCards.map(([network, data]) => (
             <NetworkCard
               key={network}

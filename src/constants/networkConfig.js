@@ -73,8 +73,16 @@ export const formatAmount = (amount) => {
   return amount < 0 ? `-${formatted}` : formatted
 }
 
+/**
+ * Le montant et la ligne qui le qualifie, pour une carte de solde.
+ *
+ * Le libellé portait l'unité : « Liquidité FCFA », « Stock FCFA ». Sur la carte
+ * de liquidité, dont le titre est déjà « Liquidité », la ligne répétait donc le
+ * nom puis l'unité — et l'unité figure désormais en exposant à côté du montant,
+ * là où on la lit une fois. La ligne dit maintenant ce que le solde EST.
+ */
 export const formatAmountWithCurrency = (amount, isLiquidityCard = false) => {
   const formattedAmount = formatAmount(amount)
-  const label = isLiquidityCard ? 'Liquidité FCFA' : 'Stock FCFA'
+  const label = isLiquidityCard ? 'Espèces' : 'Stock'
   return { amount: formattedAmount, label }
 }

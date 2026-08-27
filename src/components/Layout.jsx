@@ -40,10 +40,12 @@ import NetworkCardsDrawer from './network/NetworkCardsDrawer'
 export function BandeauMarque() {
   return (
     <header className="bandeau-marque">
-      {/* Plus haut au-delà de 768 px : c'est là que la photographie du réseau
-          s'affiche, et il lui faut de la hauteur pour se lire. Le bandeau sort
-          de l'écran au défilement — cette hauteur ne se paie qu'à l'arrivée. */}
-      <div className="flex items-center gap-4 px-4 py-7 md:gap-6 md:px-8 md:py-12">
+      {/* Composition CENTRÉE, comme avant la refonte. L'alignement à gauche
+          poussait la marque dans un coin de la photographie et laissait les
+          deux tiers droits vides ; sur un bandeau qui n'existe qu'à l'arrivée,
+          l'axe central est le seul endroit que le regard cherche. La marque, le
+          nom et la ligne de métier s'empilent sur cet axe. */}
+      <div className="flex flex-col items-center gap-3 px-4 py-8 text-center md:gap-4 md:py-12">
         {/* La marque dit déjà « C2EGF » : la répéter à voix haute encombrerait
             le lecteur d'écran, qui a le nom en toutes lettres juste après. */}
         <img
@@ -52,13 +54,13 @@ export function BandeauMarque() {
           aria-hidden="true"
           width="56"
           height="56"
-          className="h-12 w-12 shrink-0 rounded-full ring-1 ring-white/20 md:h-14 md:w-14"
+          className="h-12 w-12 rounded-full ring-1 ring-white/25 md:h-14 md:w-14"
         />
         <div className="min-w-0">
-          <p className="truncate text-2xl font-bold leading-tight tracking-tight text-white md:text-3xl">
+          <p className="truncate text-2xl font-bold leading-tight tracking-tight text-white md:text-4xl">
             {APP_NAME}
           </p>
-          <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-200 md:text-[11px] md:tracking-[0.2em]">
+          <p className="mt-1.5 truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-200 md:text-[11px] md:tracking-[0.28em]">
             Distribution mobile money · Burkina Faso
           </p>
         </div>

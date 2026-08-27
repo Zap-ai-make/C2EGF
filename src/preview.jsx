@@ -15,6 +15,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 
 import { MemoryRouter } from 'react-router-dom'
+import { Signal, Wallet } from 'lucide-react'
 
 import { ClientsContext } from './context/ClientsContext.jsx'
 import { TransactionsContext } from './context/transactions.jsx'
@@ -171,7 +172,7 @@ function NavDoublure() {
   return (
     <nav className={`${NAVBAR} w-full`}>
       <div className="flex w-full items-center gap-4 px-4">
-        <div className="hidden flex-1 md:flex">
+        <div className="hidden flex-1 justify-center md:flex">
           {STORE_NAV_ITEMS.map((item, i) => (
             <span
               key={item.path}
@@ -188,21 +189,35 @@ function NavDoublure() {
   )
 }
 
-function CarteSolde({ nom, libelle, montant, teinte }) {
+function CarteSolde({ nom, libelle, montant, teinte, icone }) {
+  // Le lint de ce dépôt ne suit pas les usages en JSX (pas d'eslint-plugin-react) :
+  // il se repose sur `varsIgnorePattern: '^[A-Z_]'`, qui ne couvre que les
+  // VARIABLES. Un composant reçu en prop et rendu uniquement en JSX doit donc
+  // passer par une variable capitalisée, sinon il est signalé comme inutilisé.
+  const Icone = icone
+
   return (
-    <div className="flex min-h-[68px] items-center justify-between gap-4 rounded-lg bg-white/95 px-4 py-3 shadow-sm ring-1 ring-white/10">
-      <div className="flex min-w-0 items-center gap-3">
-        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: teinte }} />
-        <div className="min-w-0">
-          <h3 className="truncate text-sm font-bold text-ink">{nom}</h3>
-          <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
-            {libelle}
-          </p>
-        </div>
+    <div className="relative flex min-h-[76px] items-center gap-3.5 overflow-hidden rounded-xl bg-surface py-3 pl-5 pr-4 shadow-lg shadow-brand-600/25 ring-1 ring-white/10">
+      <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1.5" style={{ backgroundColor: teinte }} />
+      <span
+        aria-hidden="true"
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-lg"
+        style={{ backgroundColor: `${teinte}1f` }}
+      >
+        <Icone className="h-5 w-5" strokeWidth={2} style={{ color: teinte }} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <h3 className="truncate text-sm font-bold leading-tight text-ink">{nom}</h3>
+        <p className="mt-0.5 truncate text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
+          {libelle}
+        </p>
       </div>
-      <p className="shrink-0 text-2xl font-black leading-none tabular-nums text-ink">
-        {new Intl.NumberFormat('fr-FR').format(montant)}
-      </p>
+      <div className="flex shrink-0 items-baseline gap-2">
+        <p className="text-[1.75rem] font-black leading-none tabular-nums text-ink">
+          {new Intl.NumberFormat('fr-FR').format(montant)}
+        </p>
+        <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">FCFA</span>
+      </div>
     </div>
   )
 }
@@ -210,13 +225,13 @@ function CarteSolde({ nom, libelle, montant, teinte }) {
 function SoldesDoublure() {
   return (
     <section aria-label="Soldes opérationnels" className="border-b border-brand-400/30 bg-brand-600">
-      <div className="flex w-full flex-col gap-3 px-4 py-3 md:flex-row md:items-center">
-        <span className="shrink-0 text-center text-xs font-semibold uppercase tracking-[0.2em] text-brand-200 md:text-left">
+      <div className="flex w-full flex-col items-center gap-3 px-4 py-3.5 md:flex-row md:justify-center md:gap-5">
+        <span className="shrink-0 text-center text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-200">
           Soldes
         </span>
-        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:max-w-3xl">
-          <CarteSolde nom="Orange" libelle="Stock" montant={balance.stock} teinte="#ff6b35" />
-          <CarteSolde nom="Liquidité" libelle="Espèces" montant={balance.liquidite} teinte="#173863" />
+        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:w-auto md:min-w-[42rem] md:max-w-4xl">
+          <CarteSolde nom="Orange" libelle="Stock" montant={balance.stock} teinte="#ff6b35" icone={Signal} />
+          <CarteSolde nom="Liquidité" libelle="Espèces" montant={balance.liquidite} teinte="#38a169" icone={Wallet} />
         </div>
       </div>
     </section>

@@ -131,54 +131,80 @@ body {
 
 
 /* ── Bandeau de marque ─────────────────────────────────────────────────────
-   Le bandeau porte deux fonds selon la place disponible.
+   La photographie d'origine est de retour : la constellation de nœuds orange
+   sur fond noir, relevée du produit avant refonte. Elle avait été remplacée
+   par un visuel bleuté — plus sage, mais étranger à l'identité que le client
+   reconnaît. Retour à l'image d'origine, avec sa discipline de poids :
 
-   PARTOUT — des dégradés radiaux. Nets à toute densité d'écran, zéro octet
-   transféré. Les halos sont brand-400 (#2760a5) en transparence : rgba() ne
-   sait pas décomposer une variable de couleur, donc toute retouche de
-   brand-400 doit être reportée ici à la main.
+     PNG 1280 × 800, 1 805 921 o   →   JPEG 1920 × 560, 90 930 o   (−95,0 %)
 
-   À PARTIR DE 768 px — la photographie du réseau reprend sa place. Le
-   navigateur ne télécharge PAS l'image d'une règle dont la media query ne
-   s'applique pas : un téléphone ne paie rien pour ce décor. C'est la
-   traduction exacte de la consigne « sur ordinateur ; sur téléphone pas
-   obligé ».
+   Le ré-encodage passe par le chromium déjà installé pour la QA visuelle
+   (canvas.toDataURL) — aucun encodeur ajouté au projet. Le PNG d'origine reste
+   récupérable : `git show 73fc788:public/bg-noir.png`.
 
-   Le voile marine par-dessus est dégradé : opaque à gauche, où se trouvent la
-   marque et le sous-titre — le blanc y garde son contraste sur #0f2745, soit
-   15:1 — et il s'éclaircit vers la droite pour laisser voir les lignes et les
-   nœuds. L'image est ainsi visible sans jamais disputer sa lisibilité au
-   texte.
+   Le cadrage vise le HAUT de la photographie (focus 0,22), pas son centre : les
+   nœuds lumineux et les grandes taches de bokeh y sont ; le milieu de l'image
+   est le continent sombre. Un bandeau de 220 px ne montre qu'une tranche — le
+   choix de la tranche fait toute la différence entre l'image d'origine et une
+   bande noire.
 
-   Poids : l'original était un PNG de 1 280 × 800 pour 1 805 921 octets —
-   format sans perte pour une photographie, embarqué dans le précache PWA.
-   Ré-encodé en JPEG 1 920 × 480, il pèse 88 808 octets : plus large, et 95 %
-   de moins. Il est de surcroît exclu du précache (vite.config.js) — une
-   décoration de bureau n'a pas à être téléchargée à l'installation. Hors
-   ligne, le bandeau retombe sur ses dégradés. Le PNG d'origine reste
-   récupérable dans l'historique : `git show 73fc788:public/bg-noir.png`. */
+   LE VOILE EST SYMÉTRIQUE, et c'est la raison d'être de ce bloc. Le précédent
+   était un dégradé latéral — opaque à gauche où se tenait la marque, clair à
+   droite. Il supposait une composition alignée à gauche. La marque est
+   maintenant CENTRÉE : un voile qui s'éclaircit d'un seul côté déséquilibrerait
+   l'image sous un texte, lui, centré.
+
+   D'où deux couches :
+     • un halo sombre au centre, sous le texte, qui garantit le contraste ;
+     • un voile de fond léger, égal partout, qui calme sans éteindre.
+
+   Contraste MESURÉ sur les pixels réellement rendus, pas calculé. Le fond est
+   une photographie sous deux voiles dégradés : le contraste dépend du pixel,
+   pas d'une couleur qu'on pourrait poser dans une formule. `npm run contraste`
+   masque le texte, capture le fond, et cherche le pixel le plus clair sous son
+   emprise — le seul cas qui compte pour WCAG :
+
+     « C2EGF BURKINA »            rgb(58, 50, 52)   12,46:1
+     la ligne de métier           rgb(76, 81, 76)    8,11:1
+
+   Les deux très au-delà du 4,5:1 d'AA (DESIGN.md §5). À relancer dès que
+   change l'image, son cadrage ou l'opacité d'un voile : les trois entrent dans
+   ce chiffre.
+
+   PARTOUT — des dégradés radiaux, nets à toute densité, zéro octet transféré.
+   Les halos sont brand-400 (#2760a5) en transparence : rgba() ne sait pas
+   décomposer une variable de couleur, donc toute retouche de brand-400 doit
+   être reportée ici à la main.
+
+   À PARTIR DE 768 px — la photographie reprend sa place. Un navigateur ne
+   télécharge PAS l'image d'une règle dont la media query ne s'applique pas :
+   un téléphone ne paie rien pour ce décor. Elle est de plus exclue du précache
+   PWA (vite.config.js) — une décoration de bureau n'a pas à être téléchargée à
+   l'installation. Hors ligne, le bandeau retombe sur ses dégradés. */
 .bandeau-marque {
-  background-color: var(--color-brand-600);
+  background-color: #07111f;
   background-image:
-    radial-gradient(40rem 22rem at 6% -70%, rgba(39, 96, 165, 0.75), rgba(39, 96, 165, 0) 70%),
-    radial-gradient(28rem 16rem at 52% 175%, rgba(39, 96, 165, 0.42), rgba(39, 96, 165, 0) 72%),
-    radial-gradient(16rem 10rem at 88% -30%, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0) 70%);
+    radial-gradient(38rem 15rem at 50% 46%, rgba(39, 96, 165, 0.55), rgba(39, 96, 165, 0) 72%),
+    radial-gradient(22rem 12rem at 12% 120%, rgba(255, 107, 53, 0.18), rgba(255, 107, 53, 0) 70%),
+    radial-gradient(22rem 12rem at 88% -20%, rgba(255, 107, 53, 0.16), rgba(255, 107, 53, 0) 70%);
 }
 
 @media (min-width: 768px) {
   .bandeau-marque {
     background-image:
-      linear-gradient(
-        95deg,
-        rgba(15, 39, 69, 0.97) 0%,
-        rgba(15, 39, 69, 0.92) 34%,
-        rgba(15, 39, 69, 0.68) 68%,
-        rgba(15, 39, 69, 0.48) 100%
+      radial-gradient(
+        60rem 20rem at 50% 50%,
+        rgba(7, 17, 31, 0.72),
+        rgba(7, 17, 31, 0.18) 78%
       ),
-      radial-gradient(34rem 20rem at 4% -60%, rgba(39, 96, 165, 0.55), rgba(39, 96, 165, 0) 70%),
+      linear-gradient(
+        180deg,
+        rgba(7, 17, 31, 0.20) 0%,
+        rgba(7, 17, 31, 0.40) 100%
+      ),
       url("/bandeau-reseau.jpg");
-    background-size: cover, auto, cover;
-    background-position: center, center, center 48%;
+    background-size: auto, auto, cover;
+    background-position: center, center, center;
     background-repeat: no-repeat;
   }
 }

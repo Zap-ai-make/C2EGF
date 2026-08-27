@@ -58,10 +58,16 @@ function NavBar() {
 
   return (
     <nav className={`${themeClasses.navbar} w-full`}>
-      <div className="flex w-full items-center gap-4 px-4">
-        {/* Bureau : les destinations en clair, alignées à gauche — le point
-            d'ancrage du regard est le bandeau de marque, juste au-dessus. */}
-        <div className="hidden flex-1 md:flex">
+      {/* Les destinations sont CENTRÉES, sur le même axe que la marque juste
+          au-dessus et que les soldes juste en dessous. Elles étaient alignées à
+          gauche : trois bandes, trois points d'ancrage différents.
+
+          Le bouton d'installation sort du flux (`absolute`) au lieu d'être un
+          troisième élément de la rangée. Sinon les liens ne seraient centrés
+          que dans l'espace qu'il leur laisse — décalés vers la gauche d'une
+          demi-largeur de bouton, ce qui se voit. */}
+      <div className="relative flex w-full items-center gap-4 px-4">
+        <div className="hidden flex-1 justify-center md:flex">
           {STORE_NAV_ITEMS.map((item) => (
             <NavLink
               key={item.path}
@@ -95,7 +101,7 @@ function NavBar() {
           ))}
         </select>
 
-        <div className="shrink-0">
+        <div className="shrink-0 md:absolute md:right-4 md:top-1/2 md:-translate-y-1/2">
           <PWAInstallButton />
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { useState, useCallback, memo } from 'react'
+import { Signal, Wallet } from 'lucide-react'
 import { NETWORK_CONFIG, formatAmountWithCurrency } from '../../constants/networkConfig'
 import { useNetworkCards } from '../../hooks/useNetworkCards'
 import { useAuth } from '../../context/AuthContext'
@@ -104,33 +105,59 @@ function NetworkCard({ network, stockAmount, liquiditeAmount }) {
 
   const status = statusConfig[stockStatus]
 
+  const Icone = isLiquiditeCard ? Wallet : Signal
+  const teinte = config.color
+
   return (
+    /* Une carte de solde est ce que le gérant regarde en premier, toute la
+       journée, sur les sept écrans. Elle était plate : une pastille, deux
+       lignes de texte, un nombre. Quatre choses lui manquaient.
+
+       1. UN POINT D'ENTRÉE. Le rail vertical et la vignette portent la couleur
+          de l'opérateur — c'est une donnée d'identité, le seul usage auquel le
+          jeton `net-*` a droit (DESIGN.md §5). L'icône double le sens sans le
+          porter seule : le nom reste écrit en toutes lettres.
+       2. UNE HIÉRARCHIE. Le montant est la seule chose vraiment grande, en
+          chiffres tabulaires — ces deux nombres se comparent l'un à l'autre et
+          changent toute la journée : ils doivent occuper la même largeur d'un
+          instant au suivant. « FCFA » descend en exposant discret : l'unité ne
+          se relit pas à chaque coup d'œil.
+       3. UNE ÉLÉVATION. Ces cartes flottent sur la bande marine ; une ombre
+          portée colorée les décolle au lieu de les poser à plat dessus.
+       4. UN SEUIL VISIBLE. L'anneau prend la couleur de l'alerte quand le stock
+          descend, et le badge « Bas » l'écrit. */
     <div
-      className={`
-        flex min-h-[68px] items-center justify-between gap-4 rounded-lg
-        bg-white/95 px-4 py-3 shadow-sm ${status.ring}
-      `}
+      data-testid={`carte-${network}`}
+      className={`relative flex min-h-[76px] items-center gap-3.5 overflow-hidden rounded-xl bg-surface py-3 pl-5 pr-4 shadow-lg shadow-brand-600/25 transition-shadow ${status.ring}`}
     >
-      <div className="flex min-w-0 items-center gap-3">
-        <span
-          className="h-2.5 w-2.5 shrink-0 rounded-full"
-          style={{ backgroundColor: config.color }}
-        />
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className="truncate text-sm font-bold text-ink">
-              {config.name}
-            </h3>
-            {status.warning && (
-              <span className="rounded bg-danger-soft px-1.5 py-0.5 text-[10px] font-bold text-danger">
-                Bas
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
-            {label}
-          </p>
+      <span
+        aria-hidden="true"
+        className="absolute inset-y-0 left-0 w-1.5"
+        style={{ backgroundColor: teinte }}
+      />
+
+      <span
+        aria-hidden="true"
+        className="grid h-10 w-10 shrink-0 place-items-center rounded-lg"
+        style={{ backgroundColor: `${teinte}1f` }}
+      >
+        <Icone className="h-5 w-5" strokeWidth={2} style={{ color: teinte }} />
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <h3 className="truncate text-sm font-bold leading-tight text-ink">
+            {config.name}
+          </h3>
+          {status.warning && (
+            <span className="shrink-0 rounded bg-danger-soft px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-danger">
+              Bas
+            </span>
+          )}
         </div>
+        <p className="mt-0.5 truncate text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-muted">
+          {label}
+        </p>
       </div>
 
       <div className="shrink-0 text-right">
@@ -142,7 +169,7 @@ function NetworkCard({ network, stockAmount, liquiditeAmount }) {
               onChange={handleInputChange}
               onKeyDown={handleInputKeyDown}
               onBlur={handleInputBlur}
-              className={`w-28 border-b-2 bg-transparent text-right text-xl font-black text-ink outline-none ${
+              className={`w-28 border-b-2 bg-transparent text-right text-xl font-black tabular-nums text-ink outline-none ${
                 isValidAmount(editValue) ? 'border-line' : 'border-danger'
               }`}
               autoFocus
@@ -154,21 +181,24 @@ function NetworkCard({ network, stockAmount, liquiditeAmount }) {
               type="button"
               onMouseDown={(event) => event.preventDefault()}
               onClick={saveAmount}
-              className="rounded bg-brand-500 px-2.5 py-1 text-xs font-bold text-white hover:bg-brand-600"
+              className="rounded bg-brand-500 px-2.5 py-1 text-xs font-bold text-white transition-colors hover:bg-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             >
               OK
             </button>
           </div>
         ) : (
-          <div className="flex items-center justify-end gap-3">
-            <p className="text-2xl font-black leading-none text-ink">
+          <div className="flex items-baseline justify-end gap-2">
+            <p className="text-[1.75rem] font-black leading-none tabular-nums text-ink">
               {amount}
             </p>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">
+              FCFA
+            </span>
             {canEdit && (
               <button
                 type="button"
                 onClick={startEditing}
-                className="rounded border border-line px-2.5 py-1 text-xs font-bold text-ink-muted hover:border-brand-400 hover:text-brand-500"
+                className="ml-1 self-center rounded border border-line px-2.5 py-1 text-xs font-bold text-ink-muted transition-colors hover:border-brand-400 hover:text-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
                 aria-label={`Modifier ${config.name}`}
               >
                 Modifier
@@ -176,10 +206,8 @@ function NetworkCard({ network, stockAmount, liquiditeAmount }) {
             )}
           </div>
         )}
-        {(errorMessage || canEdit) && (
-          <p className={`mt-1 text-[10px] font-medium ${errorMessage ? 'text-danger' : 'text-ink-muted'}`}>
-            {errorMessage || 'Solde modifiable'}
-          </p>
+        {errorMessage && (
+          <p className="mt-1 text-[10px] font-medium text-danger">{errorMessage}</p>
         )}
       </div>
     </div>
