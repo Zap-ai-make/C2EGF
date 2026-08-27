@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { Lightbulb, AlertTriangle } from 'lucide-react'
 import ClientSearch from './ClientSearch'
 import ClientInfoDisplay from './ClientInfoDisplay'
 import { useToast } from '../../hooks/useToast'
@@ -60,7 +61,7 @@ function TransactionForm({ clients }) {
           // Aucun réseau disponible pour ce client - fallback gracieux
           console.warn('Aucun réseau disponible pour le client:', selectedClient)
           showToast(
-            `⚠️ Attention: ${selectedClient.nom} ${selectedClient.prenom} n'a aucun code réseau configuré. Veuillez configurer au moins un réseau pour ce client.`,
+            `Attention : ${selectedClient.nom} ${selectedClient.prenom} n'a aucun code réseau configuré. Veuillez configurer au moins un réseau pour ce client.`,
             'warning'
           )
           // Garder le réseau par défaut pour permettre la saisie mais désactiver la validation
@@ -454,17 +455,21 @@ function TransactionForm({ clients }) {
 
               {/* Suggestion de réseaux disponibles */}
               {getClientAvailableNetworks(selectedClient).length > 0 && (
-                <div className="text-sm text-blue-600">
-                  💡 Réseaux disponibles pour ce client : {getClientAvailableNetworks(selectedClient).join(', ')}
+                <div className="flex items-start gap-2 text-sm text-brand-400">
+                  <Lightbulb aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>Réseaux disponibles pour ce client : {getClientAvailableNetworks(selectedClient).join(', ')}</span>
                 </div>
               )}
 
               {/* Message d'aide si aucun réseau disponible */}
               {selectedClient && getClientAvailableNetworks(selectedClient).length === 0 && (
-                <div className="text-sm text-orange-600 bg-orange-50 p-2 rounded border border-orange-200">
-                  ⚠️ Ce client n'a aucun code réseau configuré.
+                <div className="flex items-start gap-2 rounded border border-warn/30 bg-warn-soft p-2 text-sm text-warn">
+                  <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>
+                  Ce client n'a aucun code réseau configuré.
                   <br />
                   Rendez-vous dans la section "Clients" pour ajouter au moins un code réseau à ce client.
+                  </span>
                 </div>
               )}
             </div>

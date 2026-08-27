@@ -60,6 +60,12 @@
   --color-outflow-soft: #fbecea;
 
   /* ── Signaux ───────────────────────────────────────────────────────────── */
+  /* `success` partage aujourd'hui la teinte de `inflow`, et ce n'est pas un
+     doublon : une opération réussie n'est pas une entrée d'argent. Deux sens
+     distincts méritent deux noms, quitte à ce qu'ils rendent la même couleur —
+     c'est ce qui leur permettra de diverger sans réécrire les appelants. */
+  --color-success:      #0f7a52;
+  --color-success-soft: #e6f4ee;
   --color-warn:         #8a5a00;  /* seuil bas, ravitaillement à demander */
   --color-warn-soft:    #fdf3e0;
   --color-danger:       #a01b1b;  /* échec, rejet, suppression */

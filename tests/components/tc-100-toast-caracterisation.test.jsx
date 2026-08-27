@@ -84,3 +84,32 @@ describe('TC-100 — Toast, comportement figé', () => {
     },
   )
 })
+
+describe('TC-100 — accessibilité, corrigée au lot des icônes', () => {
+  it('le bouton de fermeture porte un nom accessible', () => {
+    render(<Toast message="X" onClose={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Fermer la notification' })).toBeInTheDocument()
+  })
+
+  it('le type est annoncé en toutes lettres, pas seulement par la couleur', () => {
+    // DESIGN.md §5 : une information ne passe jamais par la seule couleur.
+    render(<Toast message="Solde insuffisant" type="warning" onClose={vi.fn()} />)
+    expect(screen.getByText('Avertissement :')).toBeInTheDocument()
+  })
+
+  it('une erreur interrompt le lecteur d’écran, les autres types non', () => {
+    const { unmount } = render(<Toast message="Échec" type="error" onClose={vi.fn()} />)
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+    unmount()
+
+    render(<Toast message="Enregistré" type="success" onClose={vi.fn()} />)
+    expect(screen.getByRole('status')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('un type inconnu retombe sur « Information » sans casser', () => {
+    render(<Toast message="Neutre" type="chartreuse" onClose={vi.fn()} />)
+    expect(screen.getByText('Information :')).toBeInTheDocument()
+    expect(screen.getByText('Neutre')).toBeInTheDocument()
+  })
+})
