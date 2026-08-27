@@ -11,6 +11,14 @@
  * Invariant conservé : le choix explicite de l'utilisateur, persisté en localStorage,
  * reste prioritaire (ThemeContext lit d'abord localStorage). DEFAULT_THEME ne décide
  * que du premier chargement, quand rien n'est encore persisté.
+ *
+ * MISE À JOUR — retrait des cinq thèmes morts (blue, light, dark, green, purple).
+ * Trois cas s'appuyaient sur eux : « 'purple' est respecté », « thème inconnu → dark »
+ * et « profil sans branding → green ». Ils sont réécrits ci-dessous. Le repli n'est
+ * plus 'dark' mais 'c2egf', seul thème embarqué — et le cas « un thème déclaré au
+ * profil est respecté » est conservé sur un thème INJECTÉ dans THEMES, pour qu'il
+ * continue de prouver ce qui compte : la variation passe par le profil, pas par le
+ * code des composants.
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest'
@@ -56,19 +64,36 @@ describe('TC-093 — DEFAULT_THEME dérivé du profil', () => {
     expect(t.THEMES.custom).toBeUndefined()
   })
 
-  it('un autre thème déclaré dans le profil est respecté', async () => {
-    const t = await loadThemesWith({ branding: { theme: 'purple' } })
-    expect(t.DEFAULT_THEME).toBe('purple')
+  it('les cinq thèmes arc-en-ciel ont disparu — aucun écran ne pouvait les afficher', async () => {
+    vi.resetModules()
+    const t = await import('../../src/constants/themes.js')
+    for (const mort of ['blue', 'light', 'dark', 'green', 'purple']) {
+      expect(t.THEMES[mort]).toBeUndefined()
+    }
   })
 
-  it('thème inconnu de THEMES → repli sur dark, jamais un thème cassé', async () => {
+  it('tout thème PRÉSENT dans THEMES et déclaré au profil est respecté', async () => {
+    // Propriété, pas exemple : elle reste vraie si un futur client rajoute son
+    // entrée. C'est l'axe de variation d'AGENTS.md — un client change son profil,
+    // jamais un composant.
+    vi.resetModules()
+    const { THEMES } = await import('../../src/constants/themes.js')
+    for (const id of Object.keys(THEMES)) {
+      const t = await loadThemesWith({ branding: { theme: id } })
+      expect(t.DEFAULT_THEME).toBe(id)
+    }
+  })
+
+  it('thème inconnu de THEMES → repli sur c2egf, jamais un thème cassé', async () => {
     const t = await loadThemesWith({ branding: { theme: 'chartreuse' } })
-    expect(t.DEFAULT_THEME).toBe('dark')
+    expect(t.DEFAULT_THEME).toBe('c2egf')
   })
 
-  it('profil sans branding → défaut historique du produit (green)', async () => {
+  it('profil sans branding → repli sur le seul thème embarqué', async () => {
+    // BRAND_THEME retombe sur 'green' (défaut historique du produit, cf.
+    // branding.js et tc-092) : ce thème n'existe plus, donc le repli joue.
     const t = await loadThemesWith({})
-    expect(t.DEFAULT_THEME).toBe('green')
+    expect(t.DEFAULT_THEME).toBe('c2egf')
   })
 
   it('le thème retenu existe toujours dans THEMES', async () => {

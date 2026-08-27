@@ -1,6 +1,36 @@
 import { getStorageKey } from '../config/clientIsolation'
 import { BRAND_THEME } from './branding.js'
 
+/**
+ * THEMES — les palettes que CETTE instance embarque.
+ *
+ * Il y en avait sept, puis six : `custom` est parti au lot des jetons (il
+ * fabriquait `bg-[${couleur}]` à l'exécution, chaîne que l'extracteur Tailwind
+ * ne peut par nature jamais lire), et `blue`, `light`, `dark`, `green`,
+ * `purple` partent ici.
+ *
+ * Pourquoi maintenant, alors qu'ils étaient conservés au lot précédent : il
+ * n'existe aucun sélecteur de thème dans l'application. Ces cinq entrées
+ * n'étaient atteignables qu'en éditant `localStorage` à la main. Elles
+ * portaient du vert, du violet et du bleu qui échapperaient à la règle ESLint
+ * anti-arc-en-ciel prévue en fin de campagne — cinq palettes hors marque
+ * qu'aucun écran ne pouvait afficher, mais que tout audit de couleur aurait
+ * continué de compter.
+ *
+ * Ce qui NE change pas : `branding.theme` reste l'axe de variation client
+ * d'AGENTS.md, et `ThemeContext` reste la seule façon de lire ces classes. Un
+ * futur client n'édite aucun composant — il ajoute SON entrée ici et la nomme
+ * dans son profil.
+ *
+ * Conséquence assumée : `config/clients/_pilot.js` et
+ * `config/clients/taofic-ajagbe.js` déclarent encore `theme: 'green'`, thème
+ * qui n'existe plus. Ces deux profils ne se construisent pas dans ce dépôt —
+ * il est l'INSTANCE C2EGF, bâtie sur `c2egf_burkina` (VITE_CLIENT_ID). S'ils
+ * étaient construits ici, ils ouvriraient sur la palette C2EGF au lieu de
+ * planter : c'est le repli de DEFAULT_THEME ci-dessous, et il est délibéré —
+ * une marque au mauvais bleu se voit et se corrige, une application sans
+ * classes ne s'affiche pas.
+ */
 export const THEMES = {
   // Palette de marque C2EGF, tirée des jetons de src/index.css.
   //
@@ -22,79 +52,14 @@ export const THEMES = {
       tableBorder: 'border-brand-200',
       tableAccent: 'bg-brand-50/60'
     }
-  },
-  blue: {
-    id: 'blue',
-    name: 'Thème Bleu',
-    classes: {
-      background: 'bg-blue-50',
-      text: 'text-gray-900',
-      accent: 'bg-blue-600',
-      navbar: 'bg-blue-600/95 backdrop-blur-sm',
-      tableHeader: 'bg-blue-100/80 border-blue-300',
-      tableBorder: 'border-blue-300',
-      tableAccent: 'bg-blue-50/60'
-    }
-  },
-  light: {
-    id: 'light',
-    name: 'Thème Clair',
-    classes: {
-      background: 'bg-white',
-      text: 'text-gray-900',
-      accent: 'bg-gray-600',
-      navbar: 'bg-gray-600/95 backdrop-blur-sm text-white',
-      tableHeader: 'bg-gray-100/80 border-gray-300',
-      tableBorder: 'border-gray-300',
-      tableAccent: 'bg-gray-50/60'
-    }
-  },
-  dark: {
-    id: 'dark',
-    name: 'Thème Sombre',
-    classes: {
-      background: 'bg-slate-100',
-      text: 'text-gray-900',
-      accent: 'bg-slate-900',
-      navbar: 'bg-slate-950/95 backdrop-blur-sm text-white',
-      tableHeader: 'bg-slate-100/80 border-slate-300',
-      tableBorder: 'border-slate-300',
-      tableAccent: 'bg-slate-50/60'
-    }
-  },
-  green: {
-    id: 'green',
-    name: 'Thème Vert',
-    classes: {
-      background: 'bg-green-50',
-      text: 'text-gray-900',
-      accent: 'bg-green-600',
-      navbar: 'bg-green-600/95 backdrop-blur-sm',
-      tableHeader: 'bg-green-100/80 border-green-300',
-      tableBorder: 'border-green-300',
-      tableAccent: 'bg-green-50/60'
-    }
-  },
-  purple: {
-    id: 'purple',
-    name: 'Thème Violet',
-    classes: {
-      background: 'bg-purple-50',
-      text: 'text-gray-900',
-      accent: 'bg-purple-600',
-      navbar: 'bg-purple-600/95 backdrop-blur-sm',
-      tableHeader: 'bg-purple-100/80 border-purple-300',
-      tableBorder: 'border-purple-300',
-      tableAccent: 'bg-purple-50/60'
-    }
   }
 }
 
 // Thème d'ouverture, DÉRIVÉ du profil client (branding.theme) — même source de
-// vérité que le nom du produit. Repli sur 'dark' (défaut historique du produit) si
-// le profil ne déclare pas de thème ou en déclare un inconnu de THEMES.
-// Le choix explicite de l'utilisateur, persisté en localStorage, reste prioritaire
-// (voir ThemeContext) : ceci ne fixe que le thème au premier chargement.
-export const DEFAULT_THEME = THEMES[BRAND_THEME] ? BRAND_THEME : 'dark'
+// vérité que le nom du produit. Le repli était 'dark', défaut historique du
+// produit ; ce thème n'existe plus, et le repli devient le seul thème embarqué.
+// Le choix explicite de l'utilisateur, persisté en localStorage, reste
+// prioritaire (voir ThemeContext) : ceci ne fixe que le premier chargement.
+export const DEFAULT_THEME = THEMES[BRAND_THEME] ? BRAND_THEME : 'c2egf'
 
 export const STORAGE_KEY = getStorageKey('theme')
