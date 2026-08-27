@@ -163,7 +163,7 @@ function NavDoublure() {
   return (
     <nav className={`${NAVBAR} w-full`}>
       <div className="flex w-full items-center gap-4 px-4">
-        <div className="flex flex-1">
+        <div className="hidden flex-1 md:flex">
           {STORE_NAV_ITEMS.map((item, i) => (
             <span
               key={item.path}

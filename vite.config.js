@@ -68,6 +68,12 @@ export default defineConfig(({ mode }) => {
       workbox: {
         // Fichiers à mettre en cache automatiquement
         globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg,webp}'],
+
+        // Le fond du bandeau ne s'affiche qu'au-dela de 768 px (src/index.css).
+        // Le precacher le ferait telecharger a l'installation y compris sur
+        // telephone, ou il ne sera jamais peint. Hors ligne, le bandeau retombe
+        // sur ses degrades : la degradation est invisible.
+        globIgnores: ['**/bandeau-reseau.jpg'],
         navigateFallback: '/index.html',
         navigateFallbackAllowlist: [/^\/(?!__).*/],
 
@@ -135,7 +141,7 @@ export default defineConfig(({ mode }) => {
         ]
       },
       // Assets à inclure dans le cache
-      includeAssets: ['*.ico', '*.svg', '*.png', '*.jpg', 'c2egf-*.png'],
+      includeAssets: ['*.ico', '*.svg', '*.png', 'c2egf-*.png'],
 
       // Manifest PWA - métadonnées de l'application
       manifest: {

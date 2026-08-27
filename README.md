@@ -103,7 +103,7 @@ c2egf.log/
 ├── public/              # Assets statiques
 │   ├── c2egf-mark.png  # Marque ronde : favicon + sidebar d'authentification
 │   ├── pwa-*.png       # Icônes PWA 192 et 512
-│   └── bg-noir.png     # Image de fond commune à tous les thèmes
+│   └── bandeau-reseau.jpg # Fond du bandeau de marque (bureau uniquement)
 ├── src/
 │   ├── components/     # Composants React
 │   ├── config/         # Configuration (Firebase)

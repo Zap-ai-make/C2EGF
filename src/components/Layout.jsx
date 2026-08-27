@@ -40,7 +40,10 @@ import NetworkCardsDrawer from './network/NetworkCardsDrawer'
 export function BandeauMarque() {
   return (
     <header className="bandeau-marque">
-      <div className="flex items-center gap-4 px-4 py-7">
+      {/* Plus haut au-delà de 768 px : c'est là que la photographie du réseau
+          s'affiche, et il lui faut de la hauteur pour se lire. Le bandeau sort
+          de l'écran au défilement — cette hauteur ne se paie qu'à l'arrivée. */}
+      <div className="flex items-center gap-4 px-4 py-7 md:gap-6 md:px-8 md:py-12">
         {/* La marque dit déjà « C2EGF » : la répéter à voix haute encombrerait
             le lecteur d'écran, qui a le nom en toutes lettres juste après. */}
         <img
@@ -55,7 +58,7 @@ export function BandeauMarque() {
           <p className="truncate text-2xl font-bold leading-tight tracking-tight text-white md:text-3xl">
             {APP_NAME}
           </p>
-          <p className="mt-1 truncate text-[11px] font-semibold uppercase tracking-[0.2em] text-brand-200">
+          <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-brand-200 md:text-[11px] md:tracking-[0.2em]">
             Distribution mobile money · Burkina Faso
           </p>
         </div>
