@@ -34,10 +34,26 @@ describe('TC-093 — DEFAULT_THEME dérivé du profil', () => {
     expect(t.DEFAULT_THEME).toBe('c2egf')
   })
 
-  it('la palette C2EGF porte le bleu marine relevé sur le logo', async () => {
+  it('la palette C2EGF passe par le jeton de marque, non par une valeur littérale', async () => {
     vi.resetModules()
     const t = await import('../../src/constants/themes.js')
-    expect(t.THEMES.c2egf.classes.accent).toBe('bg-[#173863]')
+    expect(t.THEMES.c2egf.classes.accent).toBe('bg-brand-500')
+  })
+
+  it('le jeton de marque vaut bien le bleu relevé sur le logo', async () => {
+    // Le lien entre la classe et sa couleur vit désormais dans le CSS. Ce test le
+    // garde explicite : changer --color-brand-500 reteinte toute l'application,
+    // et doit donc se faire en connaissance de cause.
+    const { readFileSync } = await import('node:fs')
+    const path = await import('node:path')
+    const css = readFileSync(path.resolve(process.cwd(), 'src/index.css'), 'utf8')
+    expect(css).toMatch(/--color-brand-500:\s*#173863/)
+  })
+
+  it('le thème « custom » a disparu — il était inapplicable par construction', async () => {
+    vi.resetModules()
+    const t = await import('../../src/constants/themes.js')
+    expect(t.THEMES.custom).toBeUndefined()
   })
 
   it('un autre thème déclaré dans le profil est respecté', async () => {

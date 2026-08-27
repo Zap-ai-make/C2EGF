@@ -2,20 +2,25 @@ import { getStorageKey } from '../config/clientIsolation'
 import { BRAND_THEME } from './branding.js'
 
 export const THEMES = {
-  // Palette de marque C2EGF : bleu marine #173863 relevé sur logo.jpeg, sur fond
-  // clair. Valeurs arbitraires Tailwind écrites en littéral — l'extracteur ne
-  // génère que les classes qu'il lit dans les sources, jamais une chaîne calculée.
+  // Palette de marque C2EGF, tirée des jetons de src/index.css.
+  //
+  // Ces classes étaient écrites en valeurs arbitraires — bg-[#173863] et
+  // consorts — avec un commentaire expliquant qu'on ne pouvait pas faire
+  // autrement, l'extracteur Tailwind ne lisant jamais une chaîne calculée.
+  // C'était vrai sans jetons. Avec le bloc @theme, `bg-brand-500` produit
+  // exactement la même couleur, et le bleu de marque n'a plus qu'un seul
+  // endroit où être défini.
   c2egf: {
     id: 'c2egf',
     name: 'Thème C2EGF',
     backgroundImage: '/bg-noir.png',
     classes: {
-      background: 'bg-[#f2f5fa]',
-      text: 'text-gray-900',
-      accent: 'bg-[#173863]',
-      navbar: 'bg-[#173863]/95 backdrop-blur-sm',
-      tableHeader: 'bg-[#dde5f0]/80 border-[#c3d0e4]',
-      tableAccent: 'bg-[#f2f5fa]/60'
+      background: 'bg-canvas',
+      text: 'text-ink',
+      accent: 'bg-brand-500',
+      navbar: 'bg-brand-500/95 backdrop-blur-sm',
+      tableHeader: 'bg-brand-100/80 border-brand-200',
+      tableAccent: 'bg-brand-50/60'
     }
   },
   blue: {
@@ -81,19 +86,6 @@ export const THEMES = {
       navbar: 'bg-purple-600/95 backdrop-blur-sm',
       tableHeader: 'bg-purple-100/80 border-purple-300',
       tableAccent: 'bg-purple-50/60'
-    }
-  },
-  custom: {
-    id: 'custom',
-    name: 'Couleur personnalisée',
-    backgroundImage: '/bg-noir.png',
-    classes: {
-      background: 'bg-white',
-      text: 'text-gray-900',
-      accent: 'bg-blue-500',
-      navbar: 'bg-blue-500/95 backdrop-blur-sm',
-      tableHeader: 'bg-gray-100/80 border-gray-300',
-      tableAccent: 'bg-gray-50/60'
     }
   }
 }

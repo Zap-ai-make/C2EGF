@@ -1,6 +1,25 @@
 import { createContext, useContext, useState, useMemo } from 'react'
 import { THEMES, DEFAULT_THEME, STORAGE_KEY } from '../constants/themes.js'
 
+/**
+ * ThemeContext — expose les classes du thème actif.
+ *
+ * Le contexte n'exposait pas seulement ces classes : il portait aussi
+ * `currentTheme`, `themes`, `customColor`, `changeTheme` et
+ * `setCustomThemeColor`. Aucun de ces cinq symboles n'avait le moindre
+ * consommateur dans src/ ni dans tests/ — il n'existe pas de sélecteur de
+ * thème dans l'application. C'était une API publique sans public.
+ *
+ * `setCustomThemeColor` était en outre inapplicable par construction : elle
+ * fabriquait `bg-[${couleur}]` à l'exécution, or l'extracteur Tailwind ne lit
+ * que les chaînes présentes dans les sources. La classe n'a jamais pu exister
+ * dans le CSS produit. Le thème « custom » qu'elle pilotait est retiré avec
+ * elle.
+ *
+ * Ce qui reste : le thème d'ouverture dérive du profil client, et un choix
+ * explicite persisté en localStorage garde la priorité.
+ */
+
 const ThemeContext = createContext()
 
 export const useTheme = () => {
@@ -12,7 +31,7 @@ export const useTheme = () => {
 }
 
 export const ThemeProvider = ({ children }) => {
-  const [currentTheme, setCurrentTheme] = useState(() => {
+  const [currentTheme] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY)
       return saved && THEMES[saved] ? saved : DEFAULT_THEME
@@ -21,65 +40,20 @@ export const ThemeProvider = ({ children }) => {
     }
   })
 
-  const [customColor, setCustomColor] = useState(() => {
-    try {
-      return localStorage.getItem(`${STORAGE_KEY}_custom_color`) || '#3b82f6'
-    } catch {
-      return '#3b82f6'
-    }
-  })
+  const themeClasses = useMemo(
+    () => THEMES[currentTheme]?.classes ?? THEMES[DEFAULT_THEME].classes,
+    [currentTheme],
+  )
 
-  const changeTheme = (themeId) => {
-    if (THEMES[themeId]) {
-      setCurrentTheme(themeId)
-      try {
-        localStorage.setItem(STORAGE_KEY, themeId)
-      } catch (error) {
-        console.error('Theme save failed:', error.message)
-      }
-    }
-  }
+  const backgroundImage = useMemo(
+    () => THEMES[currentTheme]?.backgroundImage ?? THEMES[DEFAULT_THEME].backgroundImage,
+    [currentTheme],
+  )
 
-  const setCustomThemeColor = (color) => {
-    setCustomColor(color)
-    setCurrentTheme('custom')
-    try {
-      localStorage.setItem(`${STORAGE_KEY}_custom_color`, color)
-      localStorage.setItem(STORAGE_KEY, 'custom')
-    } catch (error) {
-      console.error('Custom color save failed:', error.message)
-    }
-  }
-
-  const themeClasses = useMemo(() => {
-    const theme = THEMES[currentTheme]
-    if (!theme) return THEMES[DEFAULT_THEME].classes
-
-    if (currentTheme === 'custom') {
-      return {
-        ...theme.classes,
-        accent: `bg-[${customColor}] text-white`,
-        navbar: `bg-[${customColor}]/95 backdrop-blur-sm`
-      }
-    }
-
-    return theme.classes
-  }, [currentTheme, customColor])
-
-  const currentBackgroundImage = useMemo(() => {
-    const theme = THEMES[currentTheme]
-    return theme?.backgroundImage || THEMES[DEFAULT_THEME].backgroundImage
-  }, [currentTheme])
-
-  const value = useMemo(() => ({
-    currentTheme,
-    customColor,
-    themes: THEMES,
-    themeClasses,
-    backgroundImage: currentBackgroundImage,
-    changeTheme,
-    setCustomThemeColor
-  }), [currentTheme, customColor, themeClasses, currentBackgroundImage])
+  const value = useMemo(
+    () => ({ themeClasses, backgroundImage }),
+    [themeClasses, backgroundImage],
+  )
 
   return (
     <ThemeContext.Provider value={value}>
