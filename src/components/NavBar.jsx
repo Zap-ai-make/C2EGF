@@ -4,7 +4,7 @@ import { STORE_NAV_ITEMS } from '../constants/navigation'
 import { useTheme } from '../context/ThemeContext.jsx'
 import { useAuth } from '../context/AuthContext'
 import { subscribeStorePendingCount } from '../services/storeAdminDealerService'
-import { APP_NAME } from '../constants/branding'
+
 import PWAInstallButton from './PWAInstallButton'
 
 const DEALER_REQUESTS_PATH = '/dealer-requests'
@@ -29,12 +29,15 @@ function PendingBadge({ count }) {
  * la barre en `fixed` au-delà de 200 px — le même écouteur, avec le même seuil
  * codé en dur, que celui de Layout. Deux abonnements pour un seul booléen, et
  * la barre des soldes qui disparaissait dessous puisqu'elle restait dans le
- * flux. Le collage est désormais assuré par `position: sticky` sur l'en-tête
- * complet, dans Layout : plus d'écouteur, plus de mesure de hauteur.
+ * flux. Le collage est désormais assuré par `position: sticky` dans Layout :
+ * plus d'écouteur, plus de mesure de hauteur.
  *
- * La marque et le bouton d'installation sont rendus UNE fois, en dehors des
- * deux variantes responsives : seul le milieu bascule entre les liens du
- * bureau et le sélecteur du mobile.
+ * Le wordmark a quitté cette barre pour le bandeau de marque, au-dessus : il y
+ * a la place d'être lisible, et le répéter ici l'aurait affiché deux fois sur
+ * la même vue. La barre ne porte plus que ce qui doit rester à portée pendant
+ * le travail — les destinations et l'installation. Le bouton d'installation
+ * est rendu UNE fois, en dehors des deux variantes responsives : seul le
+ * milieu bascule entre les liens du bureau et le sélecteur du mobile.
  */
 function NavBar() {
   const navigate = useNavigate()
@@ -56,12 +59,9 @@ function NavBar() {
   return (
     <nav className={`${themeClasses.navbar} w-full`}>
       <div className="flex w-full items-center gap-4 px-4">
-        <span className="shrink-0 py-3 text-base font-bold tracking-tight text-white md:text-lg">
-          {APP_NAME}
-        </span>
-
-        {/* Bureau : les destinations en clair */}
-        <div className="hidden flex-1 justify-center md:flex">
+        {/* Bureau : les destinations en clair, alignées à gauche — le point
+            d'ancrage du regard est le bandeau de marque, juste au-dessus. */}
+        <div className="hidden flex-1 md:flex">
           {STORE_NAV_ITEMS.map((item) => (
             <NavLink
               key={item.path}

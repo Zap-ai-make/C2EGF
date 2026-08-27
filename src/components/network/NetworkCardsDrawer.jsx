@@ -6,6 +6,19 @@ import NetworkCard from './NetworkCard'
 // (toujours présente). Ex. TAOFIC → ['Orange', 'Liquidite'] (identique à avant).
 const VISIBLE_NETWORK_CARDS = [...activeProfile.networks.enabled, 'Liquidite']
 
+/**
+ * La barre des soldes — la seule chose qui ne quitte jamais l'écran avec la
+ * navigation.
+ *
+ * Elle était en `slate-950`, un noir neutre froid sans rapport avec le marine
+ * de la marque, et portait une pastille verte émeraude — dernier reste du vert
+ * AKAYIS, qui ne signalait rien : ni un état, ni un seuil, juste une diode
+ * décorative. Elle est retirée ; « Soldes » suffit à nommer la bande.
+ *
+ * Le contenu était centré dans un `max-w-6xl` alors que le contenu de la page,
+ * lui, occupe toute la largeur : les deux bords gauches ne tombaient pas au
+ * même endroit. Les cartes s'alignent désormais sur la navigation au-dessus.
+ */
 function NetworkCardsDrawer() {
   const { networkData } = useSimpleNetworkData()
   const visibleCards = VISIBLE_NETWORK_CARDS
@@ -15,16 +28,13 @@ function NetworkCardsDrawer() {
   return (
     <section
       data-network-cards
-      className="border-b border-slate-800 bg-slate-950 shadow-md"
+      className="border-b border-brand-400/30 bg-brand-600"
       aria-label="Soldes opérationnels"
     >
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-center">
-        <div className="flex shrink-0 items-center justify-center gap-2 text-slate-300 md:justify-start">
-          <span className="h-2 w-2 rounded-full bg-emerald-400" />
-          <span className="text-xs font-semibold uppercase tracking-wide">
-            Soldes
-          </span>
-        </div>
+      <div className="flex w-full flex-col gap-3 px-4 py-3 md:flex-row md:items-center">
+        <span className="shrink-0 text-center text-xs font-semibold uppercase tracking-[0.2em] text-brand-200 md:text-left">
+          Soldes
+        </span>
 
         <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:max-w-3xl">
           {visibleCards.map(([network, data]) => (

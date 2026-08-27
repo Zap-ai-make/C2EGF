@@ -31,23 +31,23 @@ function NetworkCard({ network, stockAmount, liquiditeAmount }) {
   const stockStatus = getStockStatus()
   const statusConfig = {
     critical: {
-      ring: 'ring-1 ring-red-300/60',
-      dot: 'bg-red-400',
+      ring: 'ring-1 ring-danger/50',
+      dot: 'bg-danger',
       warning: true
     },
     low: {
-      ring: 'ring-1 ring-orange-300/60',
-      dot: 'bg-orange-400',
+      ring: 'ring-1 ring-warn/50',
+      dot: 'bg-warn',
       warning: false
     },
     warning: {
-      ring: 'ring-1 ring-yellow-300/60',
-      dot: 'bg-yellow-400',
+      ring: 'ring-1 ring-warn/30',
+      dot: 'bg-warn/70',
       warning: false
     },
     normal: {
       ring: 'ring-1 ring-white/10',
-      dot: 'bg-emerald-400',
+      dot: 'bg-success',
       warning: false
     }
   }
@@ -118,16 +118,16 @@ function NetworkCard({ network, stockAmount, liquiditeAmount }) {
         />
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="truncate text-sm font-bold text-slate-900">
+            <h3 className="truncate text-sm font-bold text-ink">
               {config.name}
             </h3>
             {status.warning && (
-              <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-600">
+              <span className="rounded bg-danger-soft px-1.5 py-0.5 text-[10px] font-bold text-danger">
                 Bas
               </span>
             )}
           </div>
-          <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
             {label}
           </p>
         </div>
@@ -142,8 +142,8 @@ function NetworkCard({ network, stockAmount, liquiditeAmount }) {
               onChange={handleInputChange}
               onKeyDown={handleInputKeyDown}
               onBlur={handleInputBlur}
-              className={`w-28 border-b-2 bg-transparent text-right text-xl font-black text-slate-950 outline-none ${
-                isValidAmount(editValue) ? 'border-slate-400' : 'border-red-500'
+              className={`w-28 border-b-2 bg-transparent text-right text-xl font-black text-ink outline-none ${
+                isValidAmount(editValue) ? 'border-line' : 'border-danger'
               }`}
               autoFocus
               min="0"
@@ -154,21 +154,21 @@ function NetworkCard({ network, stockAmount, liquiditeAmount }) {
               type="button"
               onMouseDown={(event) => event.preventDefault()}
               onClick={saveAmount}
-              className="rounded bg-blue-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-blue-700"
+              className="rounded bg-brand-500 px-2.5 py-1 text-xs font-bold text-white hover:bg-brand-600"
             >
               OK
             </button>
           </div>
         ) : (
           <div className="flex items-center justify-end gap-3">
-            <p className="text-2xl font-black leading-none text-slate-950">
+            <p className="text-2xl font-black leading-none text-ink">
               {amount}
             </p>
             {canEdit && (
               <button
                 type="button"
                 onClick={startEditing}
-                className="rounded border border-slate-300 px-2.5 py-1 text-xs font-bold text-slate-700 hover:border-blue-400 hover:text-blue-700"
+                className="rounded border border-line px-2.5 py-1 text-xs font-bold text-ink-muted hover:border-brand-400 hover:text-brand-500"
                 aria-label={`Modifier ${config.name}`}
               >
                 Modifier
@@ -177,7 +177,7 @@ function NetworkCard({ network, stockAmount, liquiditeAmount }) {
           </div>
         )}
         {(errorMessage || canEdit) && (
-          <p className={`mt-1 text-[10px] font-medium ${errorMessage ? 'text-red-500' : 'text-slate-400'}`}>
+          <p className={`mt-1 text-[10px] font-medium ${errorMessage ? 'text-danger' : 'text-ink-muted'}`}>
             {errorMessage || 'Solde modifiable'}
           </p>
         )}
