@@ -21,7 +21,7 @@ let contextValue
 
 vi.mock('../../src/context/ThemeContext.jsx', () => ({
   useTheme: () => ({
-    themeClasses: { tableHeader: 'bg-gray-100 border-gray-300', text: 'text-gray-900' },
+    themeClasses: { tableHeader: 'bg-gray-100 border-gray-300', tableBorder: 'border-gray-300', text: 'text-gray-900' },
   }),
 }))
 vi.mock('../../src/context/transactions.jsx', () => ({

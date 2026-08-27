@@ -20,6 +20,7 @@ export const THEMES = {
       accent: 'bg-brand-500',
       navbar: 'bg-brand-500/95 backdrop-blur-sm',
       tableHeader: 'bg-brand-100/80 border-brand-200',
+      tableBorder: 'border-brand-200',
       tableAccent: 'bg-brand-50/60'
     }
   },
@@ -33,6 +34,7 @@ export const THEMES = {
       accent: 'bg-blue-600',
       navbar: 'bg-blue-600/95 backdrop-blur-sm',
       tableHeader: 'bg-blue-100/80 border-blue-300',
+      tableBorder: 'border-blue-300',
       tableAccent: 'bg-blue-50/60'
     }
   },
@@ -46,6 +48,7 @@ export const THEMES = {
       accent: 'bg-gray-600',
       navbar: 'bg-gray-600/95 backdrop-blur-sm text-white',
       tableHeader: 'bg-gray-100/80 border-gray-300',
+      tableBorder: 'border-gray-300',
       tableAccent: 'bg-gray-50/60'
     }
   },
@@ -59,6 +62,7 @@ export const THEMES = {
       accent: 'bg-slate-900',
       navbar: 'bg-slate-950/95 backdrop-blur-sm text-white',
       tableHeader: 'bg-slate-100/80 border-slate-300',
+      tableBorder: 'border-slate-300',
       tableAccent: 'bg-slate-50/60'
     }
   },
@@ -72,6 +76,7 @@ export const THEMES = {
       accent: 'bg-green-600',
       navbar: 'bg-green-600/95 backdrop-blur-sm',
       tableHeader: 'bg-green-100/80 border-green-300',
+      tableBorder: 'border-green-300',
       tableAccent: 'bg-green-50/60'
     }
   },
@@ -85,6 +90,7 @@ export const THEMES = {
       accent: 'bg-purple-600',
       navbar: 'bg-purple-600/95 backdrop-blur-sm',
       tableHeader: 'bg-purple-100/80 border-purple-300',
+      tableBorder: 'border-purple-300',
       tableAccent: 'bg-purple-50/60'
     }
   }

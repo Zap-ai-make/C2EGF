@@ -26,7 +26,7 @@ function HistoriqueTable({ transactions = [] }) {
     'Email utilisateur'
   ]
 
-  const borderClass = themeClasses.tableHeader.split(' ')[1]
+  const borderClass = themeClasses.tableBorder
   const isVirtualized = allTransactions.length > VIRTUALIZE_THRESHOLD
 
   const { containerRef, rowRef, onScroll, startIndex, endIndex, topPad, bottomPad } =

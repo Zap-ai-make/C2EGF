@@ -217,27 +217,27 @@ const TransactionTable = memo(function TransactionTable() {
         Non Terminées
       </h2>
 
-      <div className={`bg-white rounded-lg border ${themeClasses.tableHeader.split(' ')[1]}`}>
+      <div className={`bg-white rounded-lg border ${themeClasses.tableBorder}`}>
         <div className="overflow-x-auto overflow-y-visible">
           <table className="w-full border-collapse">
             <thead>
               <tr className={themeClasses.tableHeader}>
-                <th className={`border ${themeClasses.tableHeader.split(' ')[1]} px-4 py-3 text-left text-base font-medium ${themeClasses.text}`}>
+                <th className={`border ${themeClasses.tableBorder} px-4 py-3 text-left text-base font-medium ${themeClasses.text}`}>
                   Date & heure
                 </th>
-                <th className={`border ${themeClasses.tableHeader.split(' ')[1]} px-4 py-3 text-left text-base font-medium ${themeClasses.text}`}>
+                <th className={`border ${themeClasses.tableBorder} px-4 py-3 text-left text-base font-medium ${themeClasses.text}`}>
                   Client
                 </th>
-                <th className={`border ${themeClasses.tableHeader.split(' ')[1]} px-4 py-3 text-left text-base font-medium ${themeClasses.text}`}>
+                <th className={`border ${themeClasses.tableBorder} px-4 py-3 text-left text-base font-medium ${themeClasses.text}`}>
                   Type
                 </th>
-                <th className={`border ${themeClasses.tableHeader.split(' ')[1]} px-4 py-3 text-left text-base font-medium ${themeClasses.text}`}>
+                <th className={`border ${themeClasses.tableBorder} px-4 py-3 text-left text-base font-medium ${themeClasses.text}`}>
                   Réseau
                 </th>
-                <th className={`border ${themeClasses.tableHeader.split(' ')[1]} px-4 py-3 text-left text-base font-medium ${themeClasses.text}`}>
+                <th className={`border ${themeClasses.tableBorder} px-4 py-3 text-left text-base font-medium ${themeClasses.text}`}>
                   Montant
                 </th>
-                <th className={`border ${themeClasses.tableHeader.split(' ')[1]} px-4 py-3 text-center text-base font-medium ${themeClasses.text}`}>
+                <th className={`border ${themeClasses.tableBorder} px-4 py-3 text-center text-base font-medium ${themeClasses.text}`}>
                   Actions
                 </th>
               </tr>

@@ -83,16 +83,16 @@ function ClientsTable({ clients, onDelete, onEdit, onImportClients }) {
       </div>
 
       {/* Tableau */}
-      <div className={`overflow-x-auto border ${themeClasses.tableHeader.split(' ')[1]} rounded`}>
+      <div className={`overflow-x-auto border ${themeClasses.tableBorder} rounded`}>
         <table className="w-full border-collapse min-w-max">
           <thead>
             <tr className={themeClasses.tableHeader}>
               {TABLE_HEADERS.map(header => (
-                <th key={header.key} className={`border ${themeClasses.tableHeader.split(' ')[1]} px-4 py-3 text-left text-base font-medium ${themeClasses.text} whitespace-nowrap ${header.width}`}>
+                <th key={header.key} className={`border ${themeClasses.tableBorder} px-4 py-3 text-left text-base font-medium ${themeClasses.text} whitespace-nowrap ${header.width}`}>
                   {header.label}
                 </th>
               ))}
-              <th className={`border ${themeClasses.tableHeader.split(' ')[1]} px-4 py-3 text-center text-base font-medium ${themeClasses.text} whitespace-nowrap min-w-48`}>Actions</th>
+              <th className={`border ${themeClasses.tableBorder} px-4 py-3 text-center text-base font-medium ${themeClasses.text} whitespace-nowrap min-w-48`}>Actions</th>
             </tr>
           </thead>
           <tbody>

@@ -14,7 +14,7 @@ vi.mock('../../src/context/transactions.jsx', () => ({
   useTransactions: () => ({ getTransactionStyles: () => ({ bgColor: '', textColor: '' }) }),
 }))
 vi.mock('../../src/context/ThemeContext.jsx', () => ({
-  useTheme: () => ({ themeClasses: { tableHeader: 'bg-gray-100 border-gray-300', text: 'text-gray-800' } }),
+  useTheme: () => ({ themeClasses: { tableHeader: 'bg-gray-100 border-gray-300', tableBorder: 'border-gray-300', text: 'text-gray-800' } }),
 }))
 
 import HistoriqueTable from '../../src/components/historique/HistoriqueTable.jsx'
