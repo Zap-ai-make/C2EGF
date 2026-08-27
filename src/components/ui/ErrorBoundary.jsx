@@ -33,12 +33,13 @@ class ErrorBoundary extends Component {
     if (this.state.hasError) {
       return this.props.fallback || (
         <div className="min-h-[400px] flex items-center justify-center">
-          <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full mx-4">
+          <div className="mx-4 w-full max-w-md rounded-lg bg-surface p-8 shadow-lg">
             <div className="text-center">
               {/* Icône d'erreur */}
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-danger-soft">
                 <svg
-                  className="h-6 w-6 text-red-600"
+                  className="h-6 w-6 text-danger"
+                  aria-hidden="true"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -53,12 +54,12 @@ class ErrorBoundary extends Component {
               </div>
 
               {/* Titre */}
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
+              <h3 className="mb-2 text-lg font-medium text-ink">
                 Oups ! Quelque chose s'est mal passé
               </h3>
 
               {/* Message */}
-              <p className="text-sm text-gray-500 mb-6">
+              <p className="mb-6 text-sm text-ink-muted">
                 Une erreur inattendue s'est produite. Vous pouvez essayer de recharger la page ou contacter le support.
               </p>
 
@@ -66,13 +67,13 @@ class ErrorBoundary extends Component {
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <button
                   onClick={this.handleRetry}
-                  className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  className="rounded-md bg-brand-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
                 >
                   Réessayer
                 </button>
                 <button
                   onClick={() => window.location.reload()}
-                  className="px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                  className="rounded-md border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2"
                 >
                   Recharger la page
                 </button>

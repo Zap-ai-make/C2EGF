@@ -4,7 +4,7 @@ import { useTransactions } from '../../context/transactions.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
 import { PAYMENT_METHODS } from '../../utils/constants.js'
 import { getClientName, formatTransactionDateTime } from '../../utils/helpers.js'
-import { TransactionRowSkeleton } from '../ui/LoadingSkeleton.jsx'
+import { SkeletonRow } from '../ui/SkeletonList.jsx'
 import OptimisticToast from '../ui/OptimisticToast.jsx'
 import logger from '../../utils/logger.js'
 import { generateIdempotencyKey } from '../../services/settlementService.js'
@@ -246,7 +246,7 @@ const TransactionTable = memo(function TransactionTable() {
               {loading ? (
                 // Afficher des squelettes pendant le chargement
                 Array.from({ length: 3 }).map((_, index) => (
-                  <TransactionRowSkeleton key={`skeleton-${index}`} />
+                  <SkeletonRow key={`skeleton-${index}`} cols={6} />
                 ))
               ) : uniquePendingTransactions.length === 0 ? (
                 <tr>
