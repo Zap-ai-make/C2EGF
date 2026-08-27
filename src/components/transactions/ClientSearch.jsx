@@ -72,7 +72,7 @@ function ClientSearch({ clients, onClientSelect, selectedClient, onManualCodeCha
         onChange={handleInputChange}
         onFocus={() => searchTerm && setIsDropdownOpen(true)}
         onBlur={() => setTimeout(() => setIsDropdownOpen(false), 300)}
-        className="w-full px-3 py-2 border-2 border-gray-300 rounded focus:outline-none focus:border-green-500 bg-white transition-colors"
+        className="w-full rounded border border-line bg-surface px-3 py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
       />
       
       {isDropdownOpen && filteredClients.length > 0 && (

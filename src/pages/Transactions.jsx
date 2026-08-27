@@ -11,8 +11,8 @@ function Transactions() {
   const [mode, setMode] = useState('client') // 'client' | 'dealer'
 
   const tabClass = (active) =>
-    `px-4 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500 ${
-      active ? 'bg-green-600 text-white' : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+    `rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${
+      active ? 'bg-brand-500 text-white' : 'border border-line bg-surface text-ink hover:bg-brand-50'
     }`
 
   return (

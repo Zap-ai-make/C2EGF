@@ -103,8 +103,8 @@ function ActionButtons({ filteredTransactions = [], resetFilters }) {
       {message && (
         <div className={`rounded border px-3 py-2 text-sm ${
           message.type === 'error'
-            ? 'border-red-200 bg-red-50 text-red-700'
-            : 'border-green-200 bg-green-50 text-green-700'
+            ? 'border-danger/30 bg-danger-soft text-danger'
+            : 'border-inflow/30 bg-inflow-soft text-inflow'
         }`}>
           {message.text}
         </div>
@@ -113,14 +113,14 @@ function ActionButtons({ filteredTransactions = [], resetFilters }) {
       <div className="flex flex-wrap gap-4">
         <button
           onClick={handleExport}
-          className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded font-medium transition-colors"
+          className="rounded border border-line bg-surface px-6 py-2 font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         >
           Exporter XLSM
         </button>
 
         <button
           onClick={handleImport}
-          className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded font-medium transition-colors"
+          className="rounded border border-line bg-surface px-6 py-2 font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         >
           Importer (XLSM)
         </button>

@@ -108,7 +108,7 @@ function DailyPagination({ transactions, onDateSelect }) {
           <button
             key={date}
             onClick={() => handleDayClick(date)}
-            className="p-3 border-2 border-gray-200 hover:border-green-500 hover:bg-green-50 rounded-lg text-center transition-colors"
+            className="rounded-lg border border-line p-3 text-center transition-colors hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
             <div className="text-sm font-medium text-gray-700">
               {displayDate}

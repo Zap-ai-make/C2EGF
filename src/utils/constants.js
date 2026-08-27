@@ -22,23 +22,34 @@ export const TRANSACTION_TYPES = activeProfile.transactions.types.map(
 // Méthodes de paiement — dérivées du profil (transactions.paymentMethods).
 export const PAYMENT_METHODS = [...activeProfile.transactions.paymentMethods]
 
-// Styles pour les types de transactions
+// Styles pour les types de transactions — le SENS du mouvement d'argent.
+//
+// C'etait un code couleur decoratif : depot vert, retrait bleu, credit rouge.
+// Le rouge disait « erreur » d'un credit qui est une operation normale, et le
+// bleu du retrait ne se rattachait a rien. Les jetons de src/index.css portent
+// la distinction que l'application confondait (DESIGN.md §5) :
+//
+//   Depot   l'agent apporte des especes, la liquidite ENTRE   -> inflow
+//   Retrait l'agent repart avec des especes, la liquidite SORT -> outflow
+//   Credit  avance non reglee, en attente — ni entree, ni echec -> pending
+//
+// `outflow` n'est PAS `danger` : un retrait est un mouvement normal.
 export const TRANSACTION_STYLES = {
   'Retrait': {
-    textColor: 'text-blue-600',
-    bgColor: 'bg-blue-50'
+    textColor: 'text-outflow',
+    bgColor: 'bg-outflow-soft'
   },
   'Dépôt': {
-    textColor: 'text-green-600', 
-    bgColor: 'bg-green-50'
+    textColor: 'text-inflow',
+    bgColor: 'bg-inflow-soft'
   },
   'Crédit': {
-    textColor: 'text-red-600',
-    bgColor: 'bg-red-50'
+    textColor: 'text-pending',
+    bgColor: 'bg-pending-soft'
   },
   default: {
-    textColor: 'text-gray-600',
-    bgColor: 'bg-gray-50'
+    textColor: 'text-ink-muted',
+    bgColor: 'bg-canvas'
   }
 }
 

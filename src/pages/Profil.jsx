@@ -60,7 +60,7 @@ function Profil() {
             </button>
             <button
               onClick={() => setShowLogoutConfirm(true)}
-              className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-md transition-colors"
+              className="rounded-md bg-danger px-6 py-2 font-medium text-white transition-colors hover:bg-danger/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             >
               {AUTH_LABELS.SIGN_OUT}
             </button>
@@ -130,7 +130,7 @@ function Profil() {
               </label>
               <div className="p-3 bg-gray-50 rounded-md border">
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  isEmailVerified ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                  isEmailVerified ? 'bg-success-soft text-success' : 'bg-warn-soft text-warn'
                 }`}>
                   {isEmailVerified ? 'Email vérifié' : 'Email non vérifié'}
                 </span>
@@ -239,7 +239,7 @@ function Profil() {
               <button
                 onClick={handleLogout}
                 disabled={loading}
-                className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-md transition-colors disabled:opacity-50"
+                className="flex-1 rounded-md bg-danger px-4 py-2 font-medium text-white transition-colors hover:bg-danger/90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
               >
                 {loading ? AUTH_LABELS.LOADING_LOGOUT : AUTH_LABELS.SIGN_OUT}
               </button>

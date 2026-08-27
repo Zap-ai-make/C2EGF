@@ -42,7 +42,7 @@ function DateFilter({ onDateChange, onResetToToday }) {
           type="date"
           value={dateFrom}
           onChange={handleDateFromChange}
-          className="w-full px-3 py-2 border-2 border-gray-300 rounded focus:outline-none focus:border-green-500 bg-white transition-colors"
+          className="w-full rounded border border-line bg-surface px-3 py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         />
       </div>
 
@@ -55,13 +55,13 @@ function DateFilter({ onDateChange, onResetToToday }) {
           type="date"
           value={dateTo}
           onChange={handleDateToChange}
-          className="w-full px-3 py-2 border-2 border-gray-300 rounded focus:outline-none focus:border-green-500 bg-white transition-colors"
+          className="w-full rounded border border-line bg-surface px-3 py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         />
       </div>
 
       {/* Validation et actions */}
       {!isValidDateRange() && (
-        <div className="text-red-600 text-sm">
+        <div className="text-sm text-danger">
           La date de fin doit être postérieure à la date de début
         </div>
       )}
@@ -71,14 +71,14 @@ function DateFilter({ onDateChange, onResetToToday }) {
         <button
           onClick={handleFilter}
           disabled={!isValidDateRange() || (!dateFrom && !dateTo)}
-          className="bg-green-500 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-6 py-2 rounded font-medium transition-colors"
+          className="rounded bg-brand-500 px-6 py-2 font-medium text-white transition-colors hover:bg-brand-600 disabled:bg-gray-300 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         >
           Filtrer
         </button>
         
         <button
           onClick={handleResetToToday}
-          className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded font-medium transition-colors"
+          className="rounded border border-line bg-surface px-6 py-2 font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         >
           Aujourd'hui
         </button>

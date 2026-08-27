@@ -122,7 +122,7 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client' 
     }
   }
 
-  const inputClasses = "w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-green-500"
+  const inputClasses = "w-full rounded border border-line px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6 w-full">
@@ -225,7 +225,7 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client' 
         <button
           type="submit"
           disabled={isSubmitting}
-          className="bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-medium py-2 px-6 rounded mt-6"
+          className="mt-6 rounded bg-brand-500 px-6 py-2 font-medium text-white transition-colors hover:bg-brand-600 disabled:bg-gray-300 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         >
           {isSubmitting ? 'Enregistrement...' : initialData ? 'Modifier' : 'Enregistrer'}
         </button>

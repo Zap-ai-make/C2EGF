@@ -41,7 +41,7 @@ function Pagination({
   if (totalPages <= 1) return null
 
   return (
-    <div className="flex items-center justify-between bg-white px-4 py-3 border-t border-green-300">
+    <div className="flex items-center justify-between bg-white px-4 py-3 border-t border-line">
       <div className="flex items-center gap-4">
         <p className="text-sm text-gray-700">
           Affichage de <span className="font-medium">{startIndex}</span> à{' '}
@@ -54,7 +54,7 @@ function Pagination({
           <select
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
-            className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:border-green-500"
+            className="rounded border border-line px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
             {PAGINATION.PAGE_SIZE_OPTIONS.map(size => (
               <option key={size} value={size}>{size}</option>
@@ -79,7 +79,7 @@ function Pagination({
             disabled={page === '...'}
             className={`px-3 py-1 text-sm border border-gray-300 rounded ${
               page === currentPage 
-                ? 'bg-green-500 text-white border-green-500' 
+                ? 'bg-brand-500 text-white border-brand-500' 
                 : page === '...' 
                   ? 'cursor-default' 
                   : 'hover:bg-gray-50'

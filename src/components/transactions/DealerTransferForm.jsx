@@ -107,7 +107,7 @@ function DealerTransferForm() {
               id="transfer-network"
               value={network}
               onChange={(e) => { setNetwork(e.target.value); setAmount('') }}
-              className="w-full rounded border-2 border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-green-500"
+              className="w-full rounded border border-line px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
               data-testid="transfer-select-network"
             >
               {DEALER_NETWORKS.map(n => (<option key={n} value={n}>{NETWORK_CONFIG[n]?.name ?? n}</option>))}
@@ -122,7 +122,7 @@ function DealerTransferForm() {
               <label
                 key={t}
                 className={`flex-1 min-w-48 cursor-pointer rounded-xl border-2 px-4 py-3 transition-colors ${
-                  transferType === t ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-gray-300'
+                  transferType === t ? 'border-brand-400 bg-brand-50' : 'border-line hover:border-brand-200'
                 }`}
               >
                 <input
@@ -151,11 +151,11 @@ function DealerTransferForm() {
             onChange={(e) => setAmount(e.target.value)}
             placeholder="Saisir le montant"
             className={`w-full px-3 py-2 border-2 rounded focus:outline-none transition-colors ${
-              validation.ok || !amount ? 'border-gray-300 focus:border-green-500' : 'border-red-300 focus:border-red-500'
+              validation.ok || !amount ? 'border-line' : 'border-danger'
             }`}
           />
           {!validation.ok && amount && (
-            <p className="mt-1 text-sm text-red-600">{validation.reason}</p>
+            <p className="mt-1 text-sm text-danger">{validation.reason}</p>
           )}
         </div>
 
@@ -164,7 +164,7 @@ function DealerTransferForm() {
           onClick={openConfirm}
           disabled={!validation.ok || isSubmitting}
           className={`px-6 py-2 rounded font-medium transition-colors ${
-            !validation.ok || isSubmitting ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 text-white'
+            !validation.ok || isSubmitting ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-brand-500 hover:bg-brand-600 text-white'
           }`}
         >
           {isSubmitting ? 'Envoi…' : 'Envoyer au dealer'}
@@ -175,11 +175,11 @@ function DealerTransferForm() {
       <div className="mt-8">
         <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400 mb-3">Mes envois au dealer</h3>
         {transfers.length === 0 ? (
-          <p className="text-sm text-gray-400">Aucun envoi pour le moment.</p>
+          <p className="text-sm text-ink-muted">Aucun envoi pour le moment.</p>
         ) : (
           <div className="overflow-x-auto rounded-xl border border-gray-200">
             <table className="min-w-full divide-y divide-gray-100 text-sm">
-              <thead className="bg-green-50/70">
+              <thead className="bg-brand-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                   <th className="px-4 py-3">Type</th>
                   <th className="px-4 py-3">Montant</th>
@@ -236,7 +236,7 @@ function DealerTransferForm() {
                 type="button"
                 onClick={confirmSubmit}
                 disabled={isSubmitting}
-                className="rounded bg-green-600 px-4 py-2 font-medium text-white hover:bg-green-700 disabled:bg-gray-400"
+                className="rounded bg-brand-500 px-4 py-2 font-medium text-white transition-colors hover:bg-brand-600 disabled:bg-gray-400"
               >
                 {isSubmitting ? 'Envoi…' : 'Confirmer'}
               </button>

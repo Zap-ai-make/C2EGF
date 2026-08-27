@@ -39,36 +39,36 @@ function HistoriqueTable({ transactions = [] }) {
       <tr
         ref={ref}
         key={transaction.id || `${transaction.clientId || 'transaction'}-${transaction.date || index}-${index}`}
-        className={`border-b border-gray-100 ${styles.bgColor} ${styles.textColor}`}
+        className={`border-b border-line/60 ${styles.bgColor} ${styles.textColor}`}
       >
-        <td className="border border-green-300 px-4 py-3 text-base whitespace-nowrap">
+        <td className="whitespace-nowrap px-4 py-3 text-base">
           {formatTransactionDateTime(transaction)}
         </td>
-        <td className="border border-green-300 px-4 py-3 text-base whitespace-nowrap">
+        <td className="whitespace-nowrap px-4 py-3 text-base">
           {getClientName(transaction.client)}
         </td>
-        <td className="border border-green-300 px-4 py-3 text-base font-medium whitespace-nowrap">
+        <td className="whitespace-nowrap px-4 py-3 text-base font-medium tabular-nums">
           {transaction.type || '-'}
         </td>
-        <td className="border border-green-300 px-4 py-3 text-base whitespace-nowrap">
+        <td className="whitespace-nowrap px-4 py-3 text-base">
           {transaction.reseau || transaction.network || '-'}
         </td>
-        <td className="border border-green-300 px-4 py-3 text-base whitespace-nowrap">
+        <td className="whitespace-nowrap px-4 py-3 text-base">
           {transaction.code || '-'}
         </td>
-        <td className="border border-green-300 px-4 py-3 text-base font-medium whitespace-nowrap">
+        <td className="whitespace-nowrap px-4 py-3 text-base font-medium tabular-nums">
           {transaction.montant ? `${(Number(transaction.montant) || 0).toLocaleString('fr-FR')} FCFA` :
            transaction.amount ? `${transaction.amount} FCFA` : '-'}
         </td>
-        <td className="border border-green-300 px-4 py-3 text-base whitespace-nowrap">
-          <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-sm">
+        <td className="whitespace-nowrap px-4 py-3 text-base">
+          <span className="rounded bg-success-soft px-2 py-1 text-sm text-success">
             {transaction.statut || 'Validée'}
           </span>
         </td>
-        <td className="border border-green-300 px-4 py-3 text-base whitespace-nowrap">
+        <td className="whitespace-nowrap px-4 py-3 text-base">
           {transaction.operatorName || transaction.userName || '-'}
         </td>
-        <td className="border border-green-300 px-4 py-3 text-base whitespace-nowrap">
+        <td className="whitespace-nowrap px-4 py-3 text-base">
           {transaction.operatorEmail || transaction.userEmail || '-'}
         </td>
       </tr>
@@ -85,7 +85,7 @@ function HistoriqueTable({ transactions = [] }) {
       <div
         ref={containerRef}
         onScroll={isVirtualized ? onScroll : undefined}
-        className={`overflow-x-auto ${isVirtualized ? 'overflow-y-auto max-h-[70vh]' : ''} border ${borderClass} rounded`}
+        className={`overflow-x-auto ${isVirtualized ? 'overflow-y-auto max-h-[70vh]' : ''} rounded-lg border ${borderClass}`}
       >
         <table className="w-full border-collapse min-w-max">
           <thead className={isVirtualized ? 'sticky top-0 z-10' : ''}>
@@ -93,7 +93,7 @@ function HistoriqueTable({ transactions = [] }) {
               {headers.map((header, index) => (
                 <th
                   key={index}
-                  className={`border ${borderClass} px-4 py-3 text-left text-base font-medium ${themeClasses.text} whitespace-nowrap`}
+                  className={`whitespace-nowrap px-4 py-3 text-left text-base font-medium ${themeClasses.text}`}
                 >
                   {header}
                 </th>
@@ -105,7 +105,7 @@ function HistoriqueTable({ transactions = [] }) {
               <tr>
                 <td
                   colSpan={headers.length}
-                  className="border border-green-300 px-4 py-8 text-center text-gray-500"
+                  className="px-4 py-8 text-center text-ink-muted"
                 >
                   Aucune transaction dans l'historique
                 </td>

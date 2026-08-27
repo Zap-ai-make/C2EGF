@@ -49,13 +49,13 @@ function ClientsTable({ clients, onDelete, onEdit, onImportClients }) {
         <button 
           onClick={handleImportClick}
           disabled={isImporting}
-          className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 text-white px-6 py-2 rounded transition-colors"
+          className="rounded border border-line bg-surface px-6 py-2 font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         >
           {isImporting ? 'Import en cours...' : 'Importer (XLSM)'}
         </button>
         <button 
           onClick={() => handleExport(filteredClients)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded transition-colors"
+          className="rounded border border-line bg-surface px-6 py-2 font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         >
           Exporter (XLSM) {filteredClients.length > 0 && `(${filteredClients.length})`}
         </button>
@@ -68,12 +68,12 @@ function ClientsTable({ clients, onDelete, onEdit, onImportClients }) {
           placeholder="Rechercher nom, prénom, numéro/code agent, numéro personnel..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="flex-1 min-w-64 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-green-500"
+          className="min-w-64 flex-1 rounded border border-line px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         />
         <select
           value={selectedMonth}
           onChange={(e) => setSelectedMonth(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-green-500"
+          className="rounded border border-line px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         >
           {MONTH_OPTIONS.map(month => (
             <option key={month} value={month}>{month}</option>
@@ -82,16 +82,16 @@ function ClientsTable({ clients, onDelete, onEdit, onImportClients }) {
       </div>
 
       {/* Tableau */}
-      <div className={`overflow-x-auto border ${themeClasses.tableBorder} rounded`}>
+      <div className={`overflow-x-auto rounded-lg border ${themeClasses.tableBorder}`}>
         <table className="w-full border-collapse min-w-max">
           <thead>
-            <tr className={themeClasses.tableHeader}>
+            <tr className={`${themeClasses.tableHeader} border-b`}>
               {TABLE_HEADERS.map(header => (
-                <th key={header.key} className={`border ${themeClasses.tableBorder} px-4 py-3 text-left text-base font-medium ${themeClasses.text} whitespace-nowrap ${header.width}`}>
+                <th key={header.key} className={`whitespace-nowrap px-4 py-3 text-left text-base font-medium ${themeClasses.text} ${header.width}`}>
                   {header.label}
                 </th>
               ))}
-              <th className={`border ${themeClasses.tableBorder} px-4 py-3 text-center text-base font-medium ${themeClasses.text} whitespace-nowrap min-w-48`}>Actions</th>
+              <th className={`min-w-48 whitespace-nowrap px-4 py-3 text-center text-base font-medium ${themeClasses.text}`}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -111,7 +111,7 @@ function ClientsTable({ clients, onDelete, onEdit, onImportClients }) {
       <Pagination {...paginationProps} />
 
       {filteredClients.length === 0 && (
-        <p className="text-center text-gray-500 mt-4">Aucun client trouvé.</p>
+        <p className="mt-4 text-center text-ink-muted">Aucun client trouvé.</p>
       )}
 
       {/* Toasts */}

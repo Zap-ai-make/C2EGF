@@ -48,7 +48,7 @@ function HistoriqueFilters({ onFiltersChange, activeFilters }) {
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-md border border-line px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           />
         </div>
 
@@ -61,7 +61,7 @@ function HistoriqueFilters({ onFiltersChange, activeFilters }) {
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-md border border-line px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           />
         </div>
 
@@ -73,7 +73,7 @@ function HistoriqueFilters({ onFiltersChange, activeFilters }) {
           <select
             value={selectedClient}
             onChange={(e) => setSelectedClient(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full rounded-md border border-line px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
             <option value="">Tous les clients</option>
             {clients.map(client => (
@@ -88,7 +88,7 @@ function HistoriqueFilters({ onFiltersChange, activeFilters }) {
         <div className="flex flex-col justify-end space-y-2">
           <button
             onClick={handleFilterChange}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md transition-colors text-sm"
+            className="rounded-md bg-brand-500 px-4 py-2 text-sm text-white transition-colors hover:bg-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
             Appliquer les filtres
           </button>
@@ -106,8 +106,8 @@ function HistoriqueFilters({ onFiltersChange, activeFilters }) {
 
       {/* Indicateur de filtres actifs */}
       {hasActiveFilters && (
-        <div className="mt-4 p-3 bg-blue-50 border-l-4 border-blue-400">
-          <div className="text-sm text-blue-700">
+        <div className="mt-4 border-l-4 border-brand-400 bg-brand-50 p-3">
+          <div className="text-sm text-brand-600">
             <strong>Filtres actifs :</strong>
             {startDate && <span className="ml-2">Date début: {new Date(startDate).toLocaleDateString('fr-FR')}</span>}
             {endDate && <span className="ml-2">Date fin: {new Date(endDate).toLocaleDateString('fr-FR')}</span>}

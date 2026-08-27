@@ -36,13 +36,13 @@ function ClientSearch({ onSearch, onSearchChange }) {
           value={searchTerm}
           onChange={handleInputChange}
           onKeyPress={handleKeyPress}
-          className="w-full px-3 py-2 border-2 border-gray-300 rounded focus:outline-none focus:border-green-500 bg-white transition-colors"
+          className="w-full rounded border border-line bg-surface px-3 py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         />
       </div>
       
       <button
         onClick={handleSearch}
-        className="bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded font-medium transition-colors"
+        className="rounded bg-brand-500 px-6 py-2 font-medium text-white transition-colors hover:bg-brand-600 disabled:bg-gray-300 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
       >
         Rechercher
       </button>

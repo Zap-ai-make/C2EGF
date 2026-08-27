@@ -327,8 +327,8 @@ function TransactionForm({ clients }) {
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       {editingTransaction && (
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
-          <h3 className="text-lg font-medium text-blue-800">
+        <div className="mb-4 rounded border border-brand-200 bg-brand-50 p-3">
+          <h3 className="text-lg font-medium text-brand-600">
             Modification de la transaction
           </h3>
         </div>
@@ -365,8 +365,8 @@ function TransactionForm({ clients }) {
             placeholder="Saisir le montant"
             className={`w-full px-3 py-2 border-2 rounded focus:outline-none transition-colors ${
               formValidation.stockValidation.isValid
-                ? 'border-gray-300 focus:border-green-500'
-                : 'border-red-300 focus:border-red-500'
+                ? 'border-line focus-visible:ring-2 focus-visible:ring-brand-400'
+                : 'border-danger focus-visible:ring-2 focus-visible:ring-danger'
             }`}
           />
 
@@ -382,23 +382,23 @@ function TransactionForm({ clients }) {
                 const currentStock = getStock(network)
                 if (currentStock <= 0) {
                   return (
-                    <div className="flex items-center gap-2 p-2 bg-red-50 border border-red-200 rounded text-sm">
-                      <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                      <span className="text-red-700 font-medium">Stock épuisé</span>
+                    <div className="flex items-center gap-2 rounded border border-danger/30 bg-danger-soft p-2 text-sm">
+                      <div className="h-2 w-2 rounded-full bg-danger motion-safe:animate-pulse" />
+                      <span className="font-medium text-danger">Stock épuisé</span>
                     </div>
                   )
                 } else if (currentStock < 10000) {
                   return (
-                    <div className="flex items-center gap-2 p-2 bg-orange-50 border border-orange-200 rounded text-sm">
-                      <div className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
-                      <span className="text-orange-700 font-medium">Stock très faible</span>
+                    <div className="flex items-center gap-2 rounded border border-warn/30 bg-warn-soft p-2 text-sm">
+                      <div className="h-2 w-2 rounded-full bg-warn motion-safe:animate-pulse" />
+                      <span className="font-medium text-warn">Stock très faible</span>
                     </div>
                   )
                 } else if (currentStock < 25000) {
                   return (
-                    <div className="flex items-center gap-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm">
-                      <div className="w-2 h-2 bg-yellow-500 rounded-full" />
-                      <span className="text-yellow-700 font-medium">Stock faible</span>
+                    <div className="flex items-center gap-2 rounded border border-warn/30 bg-warn-soft p-2 text-sm">
+                      <div className="h-2 w-2 rounded-full bg-warn" />
+                      <span className="font-medium text-warn">Stock faible</span>
                     </div>
                   )
                 }
@@ -409,7 +409,7 @@ function TransactionForm({ clients }) {
 
           {/* Message d'erreur de validation */}
           {!formValidation.stockValidation.isValid && (
-            <div className="mt-1 text-sm text-red-600">
+            <div className="mt-1 text-sm text-danger">
               {formValidation.stockValidation.message}
             </div>
           )}
@@ -425,8 +425,8 @@ function TransactionForm({ clients }) {
             onChange={(e) => setNetwork(e.target.value)}
             className={`w-full px-3 py-2 border-2 rounded focus:outline-none bg-white transition-colors ${
               formValidation.networkValidation.isValid
-                ? 'border-gray-300 focus:border-green-500'
-                : 'border-red-300 focus:border-red-500'
+                ? 'border-line focus-visible:ring-2 focus-visible:ring-brand-400'
+                : 'border-danger focus-visible:ring-2 focus-visible:ring-danger'
             }`}
           >
             {NETWORK_OPTIONS.map(option => {
@@ -449,7 +449,7 @@ function TransactionForm({ clients }) {
           {/* Message d'erreur de validation réseau */}
           {!formValidation.networkValidation.isValid && (selectedClient || manualAgentCode.trim()) && (
             <div className="mt-2 space-y-2">
-              <div className="text-sm text-red-600">
+              <div className="text-sm text-danger">
                 {formValidation.networkValidation.message}
               </div>
 
@@ -481,11 +481,11 @@ function TransactionForm({ clients }) {
           <label className="block text-lg font-semibold text-gray-700 mb-1">
             Nature :
           </label>
-          <div className={`border-4 border-gray-300 rounded p-4 transition-colors ${
-            normalizeLabel(transactionType) === 'depot' ? 'bg-green-50' :
-            normalizeLabel(transactionType) === 'retrait' ? 'bg-blue-50' :
-            normalizeLabel(transactionType) === 'credit' ? 'bg-red-50' :
-            'bg-white'
+          <div className={`rounded border border-line p-4 transition-colors ${
+            normalizeLabel(transactionType) === 'depot' ? 'bg-inflow-soft' :
+            normalizeLabel(transactionType) === 'retrait' ? 'bg-outflow-soft' :
+            normalizeLabel(transactionType) === 'credit' ? 'bg-pending-soft' :
+            'bg-surface'
           }`}>
           <div className="flex flex-wrap gap-8 md:flex-row flex-col">
             {TRANSACTION_TYPES.map((type, index) => (
@@ -497,7 +497,7 @@ function TransactionForm({ clients }) {
                     value={type.value}
                     checked={transactionType === type.value}
                     onChange={(e) => setTransactionType(e.target.value)}
-                    className="w-4 h-4 text-green-600 border-gray-300 focus:ring-green-500"
+                    className="h-4 w-4 accent-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
                   />
                   <span className="text-gray-700">{type.label}</span>
                 </label>
@@ -512,7 +512,7 @@ function TransactionForm({ clients }) {
 
         {/* Boutons d'action */}
         {(nonTermineeDisabledReason || validateDisabledReason) && (
-          <div className="rounded border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-800">
+          <div className="rounded border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">
             {validateDisabledReason || nonTermineeDisabledReason}
           </div>
         )}
@@ -525,15 +525,15 @@ function TransactionForm({ clients }) {
                 disabled={!formValidation.isFormValid || isSubmitting}
                 className={`px-6 py-2 rounded font-medium transition-colors ${
                   !formValidation.isFormValid || isSubmitting
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-blue-500 hover:bg-blue-600 text-white'
+                    ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                    : 'bg-brand-500 hover:bg-brand-600 text-white'
                 }`}
               >
                 {isSubmitting ? 'Sauvegarde...' : 'Sauvegarder'}
               </button>
               <button
                 onClick={handleCancel}
-                className="px-6 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded font-medium transition-colors"
+                className="rounded border border-line bg-surface px-6 py-2 font-medium text-ink transition-colors hover:bg-brand-50"
               >
                 Annuler
               </button>
@@ -545,8 +545,8 @@ function TransactionForm({ clients }) {
                 disabled={!formValidation.actionStates.canMarkAsNonTermine || !formValidation.isFormValid || isSubmitting}
                 className={`px-6 py-2 rounded font-medium transition-colors ${
                   !formValidation.actionStates.canMarkAsNonTermine || !formValidation.isFormValid || isSubmitting
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-orange-500 hover:bg-orange-600 text-white'
+                    ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                    : 'border border-line bg-surface text-ink hover:bg-brand-50'
                 }`}
                 title={
                   isSubmitting
@@ -566,8 +566,8 @@ function TransactionForm({ clients }) {
                 disabled={!formValidation.actionStates.canValidate || !formValidation.isFormValid || isSubmitting}
                 className={`px-6 py-2 rounded font-medium transition-colors ${
                   !formValidation.actionStates.canValidate || !formValidation.isFormValid || isSubmitting
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-green-500 hover:bg-green-600 text-white'
+                    ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                    : 'bg-brand-500 hover:bg-brand-600 text-white'
                 }`}
                 title={
                   isSubmitting
@@ -589,7 +589,7 @@ function TransactionForm({ clients }) {
       {pendingConfirmation && (
         <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-2xl">
-            <h3 className="text-xl font-bold text-gray-900">Confirmer la transaction</h3>
+            <h3 className="text-xl font-bold text-ink">Confirmer la transaction</h3>
             <div className="mt-4 space-y-2 text-sm text-gray-700">
               <p><span className="font-semibold">Client:</span> {pendingConfirmation.details.clientName}</p>
               <p><span className="font-semibold">Nature:</span> {pendingConfirmation.details.type}</p>
@@ -602,7 +602,7 @@ function TransactionForm({ clients }) {
                 type="button"
                 onClick={cancelPendingSubmit}
                 disabled={isSubmitting}
-                className="rounded border border-gray-300 px-4 py-2 font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                className="rounded border border-line px-4 py-2 font-medium text-ink transition-colors hover:bg-brand-50 disabled:opacity-60"
               >
                 Annuler
               </button>
@@ -610,7 +610,7 @@ function TransactionForm({ clients }) {
                 type="button"
                 onClick={confirmPendingSubmit}
                 disabled={isSubmitting}
-                className="rounded bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:bg-gray-400"
+                className="rounded bg-brand-500 px-4 py-2 font-medium text-white transition-colors hover:bg-brand-600 disabled:bg-gray-400"
               >
                 {isSubmitting ? 'Sauvegarde...' : 'Confirmer'}
               </button>

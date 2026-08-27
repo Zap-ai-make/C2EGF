@@ -32,8 +32,17 @@ const makeTxns = (n) =>
   }))
 
 const dataRows = () =>
-  // Lignes de données = <tr> qui contiennent une cellule de bordure (exclut espaceurs & en-tête).
-  Array.from(document.querySelectorAll('tbody tr')).filter((tr) => tr.querySelector('td.border'))
+  // Lignes de données = <tr> du corps qui ne sont pas des espaceurs de fenêtrage.
+  //
+  // Ce sélecteur cherchait une cellule portant la classe `border` — donc une
+  // ligne de données reconnue à sa BORDURE. Le damier vert de bordures a
+  // disparu au lot de restyle, et le test tombait sans qu'aucun comportement
+  // n'ait bougé. Les espaceurs sont marqués `aria-hidden` : c'est une propriété
+  // du DOM, pas une décision d'apparence, et elle ne dépend d'aucune feuille de
+  // style.
+  Array.from(document.querySelectorAll('tbody tr')).filter(
+    (tr) => tr.getAttribute('aria-hidden') !== 'true'
+  )
 
 describe('TC-091 — HistoriqueTable virtualisation', () => {
   it('liste vide → message dédié', () => {
