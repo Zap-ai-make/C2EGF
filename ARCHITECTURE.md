@@ -117,6 +117,16 @@ Chaque passe produit des constats **actionnables et priorisés** (critique / imp
 
 C'est ainsi que le système apprend tes conventions au lieu de répéter les mêmes erreurs. Ces fichiers ne sont pas des monuments : ce sont des outils qu'on affûte.
 
+### Leçons acquises
+
+**Un bilan se vérifie contre le code, jamais contre ses propres messages de commit.** Le bilan d'un chantier de refonte affirmait trois choses fausses : un fichier « corrigé » qui n'avait jamais été modifié depuis l'import du produit, un inventaire « 7 entrées → 1 » quand il en restait six — le message du commit cité disait pourtant le contraire — et un décompte de couleurs restantes divisé par dix, parce qu'il ne comptait que les fichiers de *page* et pas les composants qui font ces écrans. Un bilan faux est plus coûteux qu'un bilan absent : on planifie le lot suivant dessus. Avant d'écrire « fait », on relance la mesure. Un chiffre dans un bilan porte la commande qui l'a produit, ou il n'y figure pas.
+
+**Un test qui sélectionne par une classe de style est une bombe à retardement.** Un test de virtualisation identifiait les lignes de données par `td.border` — donc par leur *bordure*. Le premier restyle l'a fait tomber sans qu'aucun comportement n'ait bougé. Les sélecteurs se prennent sur ce que la page *est* (rôle, nom accessible, `aria-hidden`, texte), jamais sur ce à quoi elle *ressemble*.
+
+**Il faut regarder l'écran, pas seulement les tests.** Trois défauts de ce même chantier — une couleur sémantique qui, répétée sur quarante lignes, tapissait au lieu d'informer ; une pastille de statut verte pour une opération annulée ; un débordement horizontal de 244 px sur mobile — étaient invisibles pour 2 000 tests au vert et n'ont été trouvés qu'à la capture. Le banc de QA visuelle doit couvrir les écrans qu'on modifie, et une doublure qui a divergé du vrai composant est pire qu'une doublure absente : elle donne confiance dans un rendu qui n'existe pas.
+
+**Avant de dessiner une porte, vérifier qu'elle ouvre sur quelque chose.** Un dialogue de confirmation de suppression était prévu, spécifié, prêt à écrire — pour une action dont le bouton était `disabled` en dur et dont le composant de ligne ne lisait même pas la fonction de rappel. Une prop passée n'est pas une prop consommée : on suit la chaîne jusqu'au bout avant de construire par-dessus.
+
 ---
 
 ## 11. Git, environnements et livraison
