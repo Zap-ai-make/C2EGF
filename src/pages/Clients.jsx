@@ -6,15 +6,18 @@ import ClientsTable from '../components/ClientsTable'
 import ClientForm from '../components/ClientForm'
 
 function Clients() {
-  const { clients, deleteClient, editClient, addClient } = useClients()
+  const { clients, editClient, addClient } = useClients()
   const [editingClient, setEditingClient] = useState(null)
 
-  const handleDelete = (clientId) => {
-    const client = clients.find(c => c.id === clientId)
-    if (window.confirm(`Êtes-vous sûr de vouloir supprimer définitivement le client ${client?.nom} ${client?.prenom} ?`)) {
-      deleteClient(clientId)
-    }
-  }
+  // Pas de suppression ici, et ce n'est pas un oubli. Le bouton « Supprimer »
+  // de TableRow est désactivé en dur — « pour protéger la base clients
+  // commune » — et TableRow ne lit même pas la prop `onDelete` qu'on lui
+  // passait. La confirmation par window.confirm qui vivait à cet endroit était
+  // donc inatteignable : personne ne pouvait la déclencher.
+  //
+  // La capacité reste dans ClientsContext (`deleteClient`), testée, à une prop
+  // de distance. Rouvrir la suppression est une décision métier — elle rouvre
+  // la question que le libellé du bouton désactivé pose déjà.
 
   const handleEdit = (client) => {
     setEditingClient(client)
@@ -66,7 +69,6 @@ function Clients() {
   return (
     <ClientsTable
       clients={clients}
-      onDelete={handleDelete}
       onEdit={handleEdit}
       onImportClients={handleImportClients}
       emptyAction={

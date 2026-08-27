@@ -57,7 +57,7 @@ const makeClients = (n) =>
   }))
 
 const renderTable = (clients) =>
-  render(<ClientsTable clients={clients} onDelete={vi.fn()} onEdit={vi.fn()} onImportClients={vi.fn()} />)
+  render(<ClientsTable clients={clients} onEdit={vi.fn()} onImportClients={vi.fn()} />)
 
 const dataRows = () => Array.from(document.querySelectorAll('tbody tr'))
 
@@ -146,7 +146,6 @@ describe('TC-102 — états et actions', () => {
     render(
       <ClientsTable
         clients={[]}
-        onDelete={vi.fn()}
         onEdit={vi.fn()}
         onImportClients={vi.fn()}
         emptyAction={<button type="button">Enregistrer un client</button>}

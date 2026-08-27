@@ -13,7 +13,7 @@ import PageHeader from './ui/PageHeader'
 import EmptyState from './ui/EmptyState'
 import { Users, SearchX } from 'lucide-react'
 
-function ClientsTable({ clients, onDelete, onEdit, onImportClients, emptyAction }) {
+function ClientsTable({ clients, onEdit, onImportClients, emptyAction }) {
   const { toasts, showToast, removeToast } = useToast()
   const { activeStore } = useContext(AuthContext)
   const { searchTerm, setSearchTerm, selectedMonth, setSelectedMonth, filteredClients } = useClientsFilter(clients)
@@ -131,7 +131,6 @@ function ClientsTable({ clients, onDelete, onEdit, onImportClients, emptyAction 
                 client={client}
                 index={index}
                 onEdit={onEdit}
-                onDelete={onDelete}
               />
             ))}
           </tbody>
