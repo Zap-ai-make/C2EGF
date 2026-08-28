@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { useFormValidation } from '../../hooks/useFormValidation'
 import { AUTH_LABELS, AUTH_PLACEHOLDERS } from '../../constants/authMessages'
-import { AUTH_STYLES, THEME_VARIANTS } from '../../constants/authStyles'
+import { AUTH_STYLES } from '../../constants/authStyles'
 import { getDefaultRouteForRole } from '../../utils/roleRouting'
 import ForgotPasswordModal from './ForgotPasswordModal'
 
@@ -50,7 +50,9 @@ function SignInForm({ onToggle }) {
     <div className="w-full">
       <div className="mb-8">
         <h2 className={AUTH_STYLES.text.title}>{AUTH_LABELS.SIGN_IN}</h2>
-        <p className={AUTH_STYLES.text.subtitle}>ou utilisez votre email et mot de passe</p>
+        <p className={`${AUTH_STYLES.text.subtitle} mt-1`}>
+          Entrez les accès de votre boutique.
+        </p>
       </div>
 
       {(shouldShowErrors || authError) && (errors.submit || errors.email || errors.password || authError) && (
@@ -61,33 +63,44 @@ function SignInForm({ onToggle }) {
 
       <form onSubmit={handleSubmit} className={AUTH_STYLES.spacing.form}>
         <div>
+          {/* Une étiquette VISIBLE, pas un placeholder. Le placeholder
+              disparaît dès la première frappe : le champ rempli ne dit plus ce
+              qu'il contient, et à la saisie automatique il n'a jamais rien dit.
+              Il sert ici d'exemple de format, ce qu'il fait bien. */}
+          <label htmlFor="signin-email" className={AUTH_STYLES.input.label}>
+            {AUTH_PLACEHOLDERS.EMAIL}
+          </label>
           <input
             type="email"
-            placeholder={AUTH_PLACEHOLDERS.EMAIL}
+            autoComplete="email"
+            placeholder="vous@exemple.bf"
             {...emailProps}
-            className={`${THEME_VARIANTS.primary.input} ${hasFieldError('email') ? 'border border-red-300' : ''}`}
+            id="signin-email"
+            className={`${AUTH_STYLES.input.field} ${hasFieldError('email') ? AUTH_STYLES.input.error : ''}`}
             required
-            aria-label={AUTH_PLACEHOLDERS.EMAIL}
           />
           {hasFieldError('email') && (
-            <p className="mt-1 text-sm text-red-600">{getFieldError('email')}</p>
+            <p className={AUTH_STYLES.input.fieldError}>{getFieldError('email')}</p>
           )}
         </div>
 
         <div>
+          <label htmlFor="signin-password" className={AUTH_STYLES.input.label}>
+            {AUTH_PLACEHOLDERS.PASSWORD}
+          </label>
           <div className="relative">
             <input
               type={showPassword ? 'text' : 'password'}
-              placeholder={AUTH_PLACEHOLDERS.PASSWORD}
+              autoComplete="current-password"
               {...passwordProps}
-              className={`${THEME_VARIANTS.primary.input} pr-12 ${hasFieldError('password') ? 'border border-red-300' : ''}`}
+              id="signin-password"
+              className={`${AUTH_STYLES.input.field} pr-12 ${hasFieldError('password') ? AUTH_STYLES.input.error : ''}`}
               required
-              aria-label={AUTH_PLACEHOLDERS.PASSWORD}
             />
             <button
               type="button"
               onClick={() => setShowPassword(current => !current)}
-              className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-gray-500 transition-colors hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-md text-ink-muted transition-colors hover:text-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
               aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
               aria-pressed={showPassword}
             >
@@ -125,7 +138,7 @@ function SignInForm({ onToggle }) {
             </button>
           </div>
           {hasFieldError('password') && (
-            <p className="mt-1 text-sm text-red-600">{getFieldError('password')}</p>
+            <p className={AUTH_STYLES.input.fieldError}>{getFieldError('password')}</p>
           )}
         </div>
 
@@ -143,7 +156,7 @@ function SignInForm({ onToggle }) {
         <button
           type="submit"
           disabled={isSubmitting}
-          className={THEME_VARIANTS.primary.button}
+          className={AUTH_STYLES.button.primary}
           aria-label={isSubmitting ? AUTH_LABELS.LOADING_SIGNIN : AUTH_LABELS.SUBMIT_SIGNIN}
         >
           {isSubmitting ? AUTH_LABELS.LOADING_SIGNIN : AUTH_LABELS.SUBMIT_SIGNIN}
@@ -155,7 +168,7 @@ function SignInForm({ onToggle }) {
           Nouvelle boutique ?{' '}
           <button
             onClick={onToggle}
-            className={THEME_VARIANTS.primary.link}
+            className={AUTH_STYLES.button.link}
             aria-label="Créer un compte boutique"
           >
             Créer un compte boutique

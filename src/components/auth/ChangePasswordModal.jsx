@@ -3,7 +3,7 @@ import { X } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useFormValidation } from '../../hooks/useFormValidation'
 import { AUTH_LABELS, AUTH_PLACEHOLDERS, AUTH_SUCCESS, AUTH_CONFIG } from '../../constants/authMessages'
-import { AUTH_STYLES, THEME_VARIANTS } from '../../constants/authStyles'
+import { AUTH_STYLES } from '../../constants/authStyles'
 import { createTimeoutWithCleanup } from '../../utils/authHelpers'
 
 function ChangePasswordModal({ isOpen, onClose }) {
@@ -125,12 +125,12 @@ function ChangePasswordModal({ isOpen, onClose }) {
               type="password"
               placeholder={AUTH_PLACEHOLDERS.CURRENT_PASSWORD}
               {...currentPasswordProps}
-              className={`${THEME_VARIANTS.primary.input} ${hasFieldError('currentPassword') ? AUTH_STYLES.input.error : ''}`}
+              className={`${AUTH_STYLES.input.field} ${hasFieldError('currentPassword') ? AUTH_STYLES.input.error : ''}`}
               required
               aria-label={AUTH_PLACEHOLDERS.CURRENT_PASSWORD}
             />
             {hasFieldError('currentPassword') && (
-              <p className="mt-1 text-sm text-red-600">{getFieldError('currentPassword')}</p>
+              <p className={AUTH_STYLES.input.fieldError}>{getFieldError('currentPassword')}</p>
             )}
           </div>
 
@@ -142,12 +142,12 @@ function ChangePasswordModal({ isOpen, onClose }) {
               type="password"
               placeholder={AUTH_PLACEHOLDERS.NEW_PASSWORD}
               {...newPasswordProps}
-              className={`${THEME_VARIANTS.primary.input} ${hasFieldError('newPassword') ? AUTH_STYLES.input.error : ''}`}
+              className={`${AUTH_STYLES.input.field} ${hasFieldError('newPassword') ? AUTH_STYLES.input.error : ''}`}
               required
               aria-label={AUTH_PLACEHOLDERS.NEW_PASSWORD}
             />
             {hasFieldError('newPassword') && (
-              <p className="mt-1 text-sm text-red-600">{getFieldError('newPassword')}</p>
+              <p className={AUTH_STYLES.input.fieldError}>{getFieldError('newPassword')}</p>
             )}
           </div>
 
@@ -159,12 +159,12 @@ function ChangePasswordModal({ isOpen, onClose }) {
               type="password"
               placeholder={AUTH_PLACEHOLDERS.CONFIRM_PASSWORD}
               {...confirmPasswordProps}
-              className={`${THEME_VARIANTS.primary.input} ${hasFieldError('confirmPassword') ? AUTH_STYLES.input.error : ''}`}
+              className={`${AUTH_STYLES.input.field} ${hasFieldError('confirmPassword') ? AUTH_STYLES.input.error : ''}`}
               required
               aria-label={AUTH_PLACEHOLDERS.CONFIRM_PASSWORD}
             />
             {hasFieldError('confirmPassword') && (
-              <p className="mt-1 text-sm text-red-600">{getFieldError('confirmPassword')}</p>
+              <p className={AUTH_STYLES.input.fieldError}>{getFieldError('confirmPassword')}</p>
             )}
           </div>
 

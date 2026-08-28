@@ -34,7 +34,7 @@
     "v2:user:verify": "node scripts/verifyTechnicalUser.mjs",
     "v2:user:delete": "node scripts/deleteTechnicalUser.mjs",
     "capture": "node scripts/qa-visuelle.mjs",
-    "contraste": "node scripts/contraste-bandeau.mjs",
+    "contraste": "node scripts/contraste.mjs",
     "deborde": "node scripts/deborde.mjs"
   },
   "dependencies": {

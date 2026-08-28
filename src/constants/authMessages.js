@@ -61,8 +61,11 @@ export const AUTH_LABELS = {
   CONFIRM_LOGOUT: 'Confirmer la déconnexion',
 
   // Boutons
-  SUBMIT_SIGNIN: 'SE CONNECTER',
-  SUBMIT_SIGNUP: 'S\'INSCRIRE',
+  // Sentence case, pas de capitales : un bouton dit ce qui se passe, il ne le
+  // crie pas. Les capitales ralentissent aussi la lecture — le mot perd sa
+  // silhouette.
+  SUBMIT_SIGNIN: 'Se connecter',
+  SUBMIT_SIGNUP: 'S\'inscrire',
   SUBMIT_SEND: 'Envoyer',
   SUBMIT_RESET: 'Envoyer',
   SUBMIT_CHANGE: 'Modifier',

@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { useFormValidation } from '../../hooks/useFormValidation'
 import { AUTH_LABELS, AUTH_PLACEHOLDERS, AUTH_SUCCESS, AUTH_CONFIG } from '../../constants/authMessages'
-import { AUTH_STYLES, THEME_VARIANTS } from '../../constants/authStyles'
+import { AUTH_STYLES } from '../../constants/authStyles'
 import { createTimeoutWithCleanup } from '../../utils/authHelpers'
 
 function ForgotPasswordModal({ isOpen, onClose }) {
@@ -111,12 +111,12 @@ function ForgotPasswordModal({ isOpen, onClose }) {
               type="email"
               placeholder={AUTH_PLACEHOLDERS.EMAIL}
               {...emailProps}
-              className={`${THEME_VARIANTS.primary.input} ${hasFieldError('email') ? AUTH_STYLES.input.error : ''}`}
+              className={`${AUTH_STYLES.input.field} ${hasFieldError('email') ? AUTH_STYLES.input.error : ''}`}
               required
               aria-label={AUTH_PLACEHOLDERS.EMAIL}
             />
             {hasFieldError('email') && (
-              <p className="mt-1 text-sm text-red-600">{getFieldError('email')}</p>
+              <p className={AUTH_STYLES.input.fieldError}>{getFieldError('email')}</p>
             )}
           </div>
 

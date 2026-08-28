@@ -20,12 +20,21 @@ const sortie = process.argv[2]
 const selecteur = process.argv[3]
 const largeur = Number(process.argv[4] || 1440)
 const requete = process.argv[5] ? '?' + process.argv[5] : ''
+// --clic=<sélecteur> : cliquer avant de capturer. Certains états ne sont
+// atteignables que par une interaction — la bascule connexion/inscription, par
+// exemple, vit dans l'état interne du composant.
+const clic = (process.argv.find((a) => a.startsWith('--clic=')) || '').slice(7)
 
 const { serveur, url } = await ouvrirBanc()
 const navigateur = await chromium.launch()
 const page = await navigateur.newPage({ viewport: { width: largeur, height: 900 } })
 await page.goto(url + requete, { waitUntil: 'networkidle' })
 await page.waitForTimeout(2500)
+
+if (clic) {
+  await page.locator(clic).first().click()
+  await page.waitForTimeout(600)
+}
 
 const el = page.locator(selecteur).first()
 await el.scrollIntoViewIfNeeded()

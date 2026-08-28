@@ -208,3 +208,45 @@ body {
     background-repeat: no-repeat;
   }
 }
+
+/* ── Panneau d'accueil de l'authentification ───────────────────────────────
+   La même photographie que le bandeau, sous un voile plus dense : le texte y
+   est plus long et plus petit que le wordmark, et un bouton bordé de blanc doit
+   s'en détacher. L'image est déjà téléchargée par le bandeau sur ce format ;
+   elle ne coûte donc rien de plus ici.
+
+   Le dégradé de marque reste la couche du dessous : il porte le panneau sur
+   mobile, où l'image n'est pas chargée, et hors ligne. La composition ne dépend
+   jamais de la photographie — elle en profite quand elle est là.
+
+   Contraste : `npm run contraste` mesure ce panneau ET le bandeau, sur les
+   pixels réellement rendus. Les deux voiles diffèrent — le texte est ici plus
+   petit et plus long —, donc les deux se mesurent séparément. */
+.panneau-auth {
+  background-color: var(--color-brand-500);
+  background-image: linear-gradient(
+    135deg,
+    var(--color-brand-500) 0%,
+    var(--color-brand-400) 100%
+  );
+}
+
+@media (min-width: 1024px) {
+  .panneau-auth {
+    background-image:
+      radial-gradient(
+        42rem 28rem at 50% 45%,
+        rgba(7, 17, 31, 0.74),
+        rgba(7, 17, 31, 0.38) 80%
+      ),
+      linear-gradient(
+        135deg,
+        rgba(23, 56, 99, 0.52) 0%,
+        rgba(39, 96, 165, 0.44) 100%
+      ),
+      url("/bandeau-reseau.jpg");
+    background-size: auto, auto, cover;
+    background-position: center, center, center;
+    background-repeat: no-repeat;
+  }
+}

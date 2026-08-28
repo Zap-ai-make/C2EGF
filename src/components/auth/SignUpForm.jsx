@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useFormValidation } from '../../hooks/useFormValidation'
 import { isValidNewPassword } from '../../utils/authHelpers'
 import { AUTH_LABELS, AUTH_PLACEHOLDERS, AUTH_ERRORS } from '../../constants/authMessages'
-import { AUTH_STYLES, THEME_VARIANTS } from '../../constants/authStyles'
+import { AUTH_STYLES } from '../../constants/authStyles'
 
 function SignUpForm({ onToggle }) {
   const { signup } = useAuth()
@@ -50,7 +50,9 @@ function SignUpForm({ onToggle }) {
     <div className="w-full">
       <div className="mb-8">
         <h2 className={AUTH_STYLES.text.title}>{AUTH_LABELS.SIGN_UP}</h2>
-        <p className={AUTH_STYLES.text.subtitle}>ou utilisez votre email pour l'inscription</p>
+        <p className={`${AUTH_STYLES.text.subtitle} mt-1`}>
+          Créez l'accès de votre boutique.
+        </p>
       </div>
 
       {shouldShowErrors && (errors.submit || Object.values(errors).some(error => error)) && (
@@ -61,51 +63,69 @@ function SignUpForm({ onToggle }) {
 
       <form onSubmit={handleSubmit} className={AUTH_STYLES.spacing.formTight}>
         <div>
+          <label htmlFor="signup-store" className={AUTH_STYLES.input.label}>
+            {AUTH_PLACEHOLDERS.STORE_NAME}
+          </label>
           <input
             type="text"
-            placeholder={AUTH_PLACEHOLDERS.STORE_NAME}
+            autoComplete="organization"
+            placeholder="C2EGF OUAGA"
             {...storeNameProps}
-            className={`${THEME_VARIANTS.secondary.input} ${hasFieldError('storeName') ? 'border border-red-300' : ''}`}
+            id="signup-store"
+            className={`${AUTH_STYLES.input.field} ${hasFieldError('storeName') ? AUTH_STYLES.input.error : ''}`}
             required
-            aria-label={AUTH_PLACEHOLDERS.STORE_NAME}
           />
           {hasFieldError('storeName') && (
-            <p className="mt-1 text-sm text-red-600">{getFieldError('storeName')}</p>
+            <p className={AUTH_STYLES.input.fieldError}>{getFieldError('storeName')}</p>
           )}
         </div>
 
         <div>
+          <label htmlFor="signup-email" className={AUTH_STYLES.input.label}>
+            {AUTH_PLACEHOLDERS.EMAIL}
+          </label>
           <input
             type="email"
-            placeholder={AUTH_PLACEHOLDERS.EMAIL}
+            autoComplete="email"
+            placeholder="vous@exemple.bf"
             {...emailProps}
-            className={`${THEME_VARIANTS.secondary.input} ${hasFieldError('email') ? 'border border-red-300' : ''}`}
+            id="signup-email"
+            className={`${AUTH_STYLES.input.field} ${hasFieldError('email') ? AUTH_STYLES.input.error : ''}`}
             required
-            aria-label={AUTH_PLACEHOLDERS.EMAIL}
           />
           {hasFieldError('email') && (
-            <p className="mt-1 text-sm text-red-600">{getFieldError('email')}</p>
+            <p className={AUTH_STYLES.input.fieldError}>{getFieldError('email')}</p>
           )}
         </div>
 
         <div>
+          <label htmlFor="signup-password" className={AUTH_STYLES.input.label}>
+            {AUTH_PLACEHOLDERS.PASSWORD}
+          </label>
           <input
             type="password"
-            placeholder={AUTH_PLACEHOLDERS.PASSWORD}
+            autoComplete="new-password"
             {...passwordProps}
-            className={`${THEME_VARIANTS.secondary.input} ${hasFieldError('password') ? 'border border-red-300' : ''}`}
+            id="signup-password"
+            className={`${AUTH_STYLES.input.field} ${hasFieldError('password') ? AUTH_STYLES.input.error : ''}`}
             required
-            aria-label={AUTH_PLACEHOLDERS.PASSWORD}
+            aria-describedby="signup-password-regle"
           />
+          {/* La règle est annoncée AVANT la saisie, pas après l'échec.
+              L'exigence de 8 caractères vit dans isValidNewPassword ; elle
+              n'était visible nulle part tant qu'on ne s'était pas trompé. */}
+          <p id="signup-password-regle" className={AUTH_STYLES.input.hint}>
+            8 caractères au minimum.
+          </p>
           {hasFieldError('password') && (
-            <p className="mt-1 text-sm text-red-600">{getFieldError('password')}</p>
+            <p className={AUTH_STYLES.input.fieldError}>{getFieldError('password')}</p>
           )}
         </div>
 
         <button
           type="submit"
           disabled={isSubmitting}
-          className={`${THEME_VARIANTS.secondary.button} mt-6`}
+          className={`${AUTH_STYLES.button.primary} mt-6`}
           aria-label={isSubmitting ? AUTH_LABELS.LOADING_SIGNUP : AUTH_LABELS.SUBMIT_SIGNUP}
         >
           {isSubmitting ? AUTH_LABELS.LOADING_SIGNUP : AUTH_LABELS.SUBMIT_SIGNUP}
@@ -117,7 +137,7 @@ function SignUpForm({ onToggle }) {
           Vous avez déjà un compte ?{' '}
           <button
             onClick={onToggle}
-            className={THEME_VARIANTS.secondary.link}
+            className={AUTH_STYLES.button.link}
             aria-label="Aller au formulaire de connexion"
           >
             Se connecter

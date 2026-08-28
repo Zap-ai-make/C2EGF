@@ -29,6 +29,7 @@ import PageHeader from './components/ui/PageHeader.jsx'
 import ClientsTable from './components/ClientsTable.jsx'
 import HistoriqueTable from './components/historique/HistoriqueTable.jsx'
 import StoreAdminDealerRequests from './pages/store/StoreAdminDealerRequests.jsx'
+import AuthPage from './components/auth/AuthPage.jsx'
 import Balance from './components/dashboard/Balance.jsx'
 import ReseauCards from './components/dashboard/ReseauCards.jsx'
 import FluxChart from './components/dashboard/FluxChart.jsx'
@@ -323,6 +324,15 @@ function Preview() {
               maquette : le banc substitue seulement son accès aux données
               (scripts/lib/banc.mjs). */}
           <StoreAdminDealerRequests />
+
+          {/* L'écran d'authentification — le premier que voit un utilisateur,
+              et le dernier qu'on regardait. Son `min-h-screen` est neutralisé
+              ici pour qu'il tienne dans la colonne du banc ; c'est la seule
+              chose que le banc lui impose. */}
+          <PageHeader title="Authentification" />
+          <div data-testid="apercu-auth" className="overflow-hidden rounded-lg border border-line [&_.min-h-screen]:min-h-0">
+            <AuthPage />
+          </div>
         </div>
       </div>
       </TransactionsContext.Provider>
