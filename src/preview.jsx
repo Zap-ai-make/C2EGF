@@ -22,6 +22,8 @@ import { TransactionsContext } from './context/transactions.jsx'
 import { AuthContext } from './context/AuthContext.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
 import BandeauMarque from './components/BandeauMarque.jsx'
+import { useArrivee } from './hooks/useArrivee.js'
+import { useMontantAnime } from './hooks/useMontantAnime.js'
 import { THEMES } from './constants/themes.js'
 import { STORE_NAV_ITEMS } from './constants/navigation.js'
 import { getTransactionStyles } from './utils/helpers.js'
@@ -192,6 +194,11 @@ function NavDoublure() {
 }
 
 function CarteSolde({ nom, libelle, montant, teinte, icone }) {
+  // La doublure emploie le VRAI compteur : sans lui, le banc montrerait un
+  // montant figé là où l'application en montre un qui se résout, et la sonde
+  // `npm run mouvement` validerait un comportement qui n'existe pas.
+  const montantAffiche = useMontantAnime(montant)
+
   // Le lint de ce dépôt ne suit pas les usages en JSX (pas d'eslint-plugin-react) :
   // il se repose sur `varsIgnorePattern: '^[A-Z_]'`, qui ne couvre que les
   // VARIABLES. Un composant reçu en prop et rendu uniquement en JSX doit donc
@@ -199,7 +206,10 @@ function CarteSolde({ nom, libelle, montant, teinte, icone }) {
   const Icone = icone
 
   return (
-    <div className="relative flex min-h-[76px] items-center gap-3.5 overflow-hidden rounded-xl bg-surface py-3 pl-5 pr-4 shadow-lg shadow-brand-600/25 ring-1 ring-white/10">
+    <div
+      data-motion="carte-solde"
+      className="relative flex min-h-[76px] items-center gap-3.5 overflow-hidden rounded-xl bg-surface py-3 pl-5 pr-4 shadow-lg shadow-brand-600/25 ring-1 ring-white/10"
+    >
       <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1.5" style={{ backgroundColor: teinte }} />
       <span
         aria-hidden="true"
@@ -216,7 +226,7 @@ function CarteSolde({ nom, libelle, montant, teinte, icone }) {
       </div>
       <div className="flex shrink-0 items-baseline gap-2">
         <p className="text-[1.75rem] font-black leading-none tabular-nums text-ink">
-          {new Intl.NumberFormat('fr-FR').format(montant)}
+          {montantAffiche}
         </p>
         <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">FCFA</span>
       </div>
@@ -243,6 +253,11 @@ function SoldesDoublure() {
 // ── Rendu ───────────────────────────────────────────────────────────────────
 
 function Preview() {
+  /* Le banc joue la MÊME arrivée que l'application, par le même hook. Sans
+     cela, `npm run mouvement` comparerait deux états statiques et passerait à
+     vide — une sonde qui ne peut plus échouer ne prouve rien. */
+  const arrivee = useArrivee()
+
   return (
     <MemoryRouter>
     <ThemeProvider>
@@ -261,10 +276,10 @@ function Preview() {
           getTransactionStyles,
         }}
       >
-      <div className="min-h-screen bg-canvas">
+      <div ref={arrivee} className="min-h-screen bg-canvas">
         <BandeauMarque />
 
-        <div className="sticky top-0 z-50 shadow-lg shadow-brand-600/20">
+        <div data-motion="navigation" className="sticky top-0 z-50 shadow-lg shadow-brand-600/20">
           <NavDoublure />
           <SoldesDoublure />
         </div>

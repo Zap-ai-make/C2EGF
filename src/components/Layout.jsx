@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import { useTheme } from '../context/ThemeContext'
+import { useArrivee } from '../hooks/useArrivee'
 import BandeauMarque from './BandeauMarque'
 import NavBar from './NavBar'
 import NetworkCardsDrawer from './network/NetworkCardsDrawer'
@@ -48,11 +49,17 @@ export { BandeauMarque }
 function Layout({ children }) {
   const { themeClasses } = useTheme()
 
+  /* L'arrivée traverse les trois bandes : elle est donc conduite d'ici, la
+     seule chose qui les contient toutes. La référence se pose sur une racine
+     QUI EXISTE DÉJÀ — un composant enveloppe aurait inséré un `<div>` au-dessus
+     d'une bande `sticky`, pour rien. */
+  const arrivee = useArrivee()
+
   return (
-    <div className={`min-h-screen ${themeClasses.background}`}>
+    <div ref={arrivee} className={`min-h-screen ${themeClasses.background}`}>
       <BandeauMarque />
 
-      <div className="sticky top-0 z-50 shadow-lg shadow-brand-600/20">
+      <div data-motion="navigation" className="sticky top-0 z-50 shadow-lg shadow-brand-600/20">
         <NavBar />
         <NetworkCardsDrawer />
       </div>

@@ -1,7 +1,4 @@
-import { useLayoutEffect, useRef } from 'react'
 import { APP_NAME } from '../constants/branding'
-import { useReducedMotion } from '../hooks/useReducedMotion'
-import { construireTimelineBandeau } from '../motion/bandeau'
 
 /**
  * Le bandeau de marque — la première bande du shell, et le seul moment
@@ -19,53 +16,23 @@ import { construireTimelineBandeau } from '../motion/bandeau'
  * endroit que le regard cherche. La marque, le nom et la ligne de métier
  * s'empilent sur cet axe.
  *
- * Les attributs `data-motion` ne sont pas des crochets de test : ils sont le
- * repérage que la séquence utilise, et le SEUL. L'application et le banc
- * désignent les mêmes nœuds de la même façon — c'est ce qui garantit qu'ils
- * animent bien la même chose (voir `src/motion/bandeau.js`).
+ * IL NE PILOTE PLUS SA PROPRE ANIMATION, et c'est le changement important.
+ * L'arrivée ne s'arrête plus à cette bande : elle traverse la navigation et va
+ * jusqu'aux cartes de solde, qui sont ses FRÈRES dans le shell. Une séquence qui
+ * dépasse un composant ne peut pas être conduite depuis l'intérieur de ce
+ * composant — elle appartient à ce qui les contient (`useArrivee`).
  *
- * @param {boolean} anime — `false` rend le bandeau inerte : le composant ne
- *   construit ni ne joue rien. C'est ce que fait le banc Remotion, qui pilote
- *   lui-même la séquence par numéro d'image et ne veut surtout pas d'une
- *   animation qui avancerait en parallèle, sur l'horloge du navigateur.
+ * Le bandeau redevient donc ce qu'il aurait toujours dû être : du balisage. Il
+ * s'affiche pareil sans une ligne de JavaScript.
+ *
+ * Les attributs `data-motion` ne sont pas des crochets de test : ils sont le
+ * repérage que la séquence utilise, et le SEUL. L'application, le banc d'essai
+ * et le banc Remotion désignent les mêmes nœuds de la même façon — c'est ce qui
+ * garantit qu'ils animent bien la même chose (voir `src/motion/arrivee.js`).
  */
-function BandeauMarque({ anime = true }) {
-  const racine = useRef(null)
-  const mouvementReduit = useReducedMotion()
-
-  /**
-   * SOUS MOUVEMENT RÉDUIT, ON NE CONSTRUIT RIEN. Pas de version dégradée, pas
-   * de découpage du wordmark, pas une ligne de DOM touchée : la séquence est
-   * écrite en `.from()`, donc l'état statique EST déjà son état d'arrivée. Ne
-   * rien faire est la bonne réponse, et c'est aussi la plus sûre.
-   *
-   * `useLayoutEffect` et non `useEffect` : la timeline pose son état de départ
-   * (lettres sous leur masque, marque à 92 %) au moment où elle est construite.
-   * Avec `useEffect`, ce réglage tomberait APRÈS la peinture — le bandeau
-   * s'afficherait complet une image, puis sauterait à son début pour s'animer.
-   *
-   * Le nettoyage n'est pas facultatif, et il fait plus qu'arrêter : il REND aux
-   * nœuds leurs styles d'avant. Voir `nettoyer()` — la nuance entre `kill()` et
-   * `revert()` a coûté le logo du bandeau.
-   */
-  useLayoutEffect(() => {
-    if (!anime || mouvementReduit) return undefined
-
-    const { timeline, restaurerTexte, nettoyer } = construireTimelineBandeau({
-      racine: racine.current,
-    })
-
-    // Dès que les lettres sont posées, le wordmark redevient un texte d'un seul
-    // tenant : le découpage ne servait qu'à la séquence, et la bande passera le
-    // reste de sa vie immobile avant de quitter l'écran.
-    timeline.eventCallback('onComplete', restaurerTexte)
-    timeline.play()
-
-    return nettoyer
-  }, [anime, mouvementReduit])
-
+function BandeauMarque() {
   return (
-    <header ref={racine} className="bandeau-marque">
+    <header data-motion="bandeau" className="bandeau-marque">
       <div className="flex flex-col items-center gap-3 px-4 py-8 text-center md:gap-4 md:py-12">
         {/* La marque dit déjà « C2EGF » : la répéter à voix haute encombrerait
             le lecteur d'écran, qui a le nom en toutes lettres juste après.

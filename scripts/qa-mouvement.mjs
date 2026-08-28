@@ -36,6 +36,17 @@ import { ouvrirBanc } from './lib/banc.mjs'
 const LARGEUR = Number(process.argv[2]) || 1440
 const empreinte = (tampon) => createHash('sha256').update(tampon).digest('hex').slice(0, 16)
 
+/**
+ * La zone d'arrivée ENTIÈRE — bandeau, navigation, cartes de solde.
+ *
+ * Elle ne se limitait qu'au bandeau tant que la séquence s'y limitait. Depuis
+ * qu'elle traverse les trois bandes, une capture du seul bandeau ne verrait pas
+ * une carte restée invisible ni une navigation laissée décalée — précisément la
+ * classe de défaut qui a coûté le logo.
+ */
+const capturerBarre = (page) =>
+  page.screenshot({ clip: { x: 0, y: 0, width: LARGEUR, height: 420 } })
+
 const { serveur, url } = await ouvrirBanc()
 const navigateur = await chromium.launch()
 
@@ -50,7 +61,7 @@ try {
   })
   await calme.goto(url, { waitUntil: 'networkidle' })
   await calme.waitForTimeout(800)
-  const reference = await calme.locator('.bandeau-marque').screenshot()
+  const reference = await capturerBarre(calme)
 
   /** Le cas réel : la séquence se joue entièrement, puis on regarde. */
   const anime = await navigateur.newPage({ viewport: { width: LARGEUR, height: 700 } })
@@ -58,9 +69,9 @@ try {
   // Confortablement au-delà du budget de la séquence (`DUREE_BANDEAU`, 1,6 s),
   // pour que le résultat ne dépende jamais de la charge de la machine.
   await anime.waitForTimeout(2500)
-  const apres = await anime.locator('.bandeau-marque').screenshot()
+  const apres = await capturerBarre(anime)
 
-  console.log(`\nbandeau de marque — fenêtre de ${LARGEUR} px`)
+  console.log(`\nbarre d'arrivée — fenêtre de ${LARGEUR} px`)
   console.log(`  mouvement réduit : ${empreinte(reference)}`)
   console.log(`  après séquence   : ${empreinte(apres)}`)
 
@@ -75,9 +86,12 @@ try {
 
   const dom = await anime.evaluate(() => {
     const wordmark = document.querySelector('.bandeau-marque p')
+    const montants = [...document.querySelectorAll('[data-motion="carte-solde"]')]
+      .map((carte) => carte.querySelector('.tabular-nums')?.textContent?.trim() ?? '')
     return {
       enfants: wordmark?.children.length ?? -1,
       texte: wordmark?.textContent?.trim() ?? '',
+      montants,
     }
   })
 
@@ -88,6 +102,24 @@ try {
       `le découpage en caractères a survécu à la séquence (${dom.enfants} nœuds) : ` +
       'chaque montage en empilera un de plus'
     )
+  }
+  // LES MONTANTS SE SONT-ILS RÉSOLUS ?
+  // Le décompte ne se joue qu'à la première donnée : s'il s'interrompt ou se
+  // trompe de cible, la carte reste bloquée sur « 0 » — un solde faux, affiché
+  // avec l'aplomb d'un solde vrai. C'est le pire défaut possible sur cet écran,
+  // et il est invisible à la comparaison de captures, puisque les deux pages
+  // s'arrêteraient sur le même chiffre faux.
+  const bloques = dom.montants.filter((m) => m === '' || m === '0')
+
+  if (dom.montants.length === 0) {
+    echoue('aucune carte de solde trouvée — la sonde ne mesure plus rien')
+  } else if (bloques.length > 0) {
+    echoue(
+      `${bloques.length} montant(s) restés à zéro sur ${dom.montants.length} : ` +
+      'le décompte ne s’est pas résolu'
+    )
+  } else {
+    console.log(`  ✓ les montants se sont résolus — ${dom.montants.join(' · ')}`)
   }
 } finally {
   await navigateur.close()
