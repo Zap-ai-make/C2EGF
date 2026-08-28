@@ -1,6 +1,9 @@
+import { useLayoutEffect, useRef } from 'react'
 import { Outlet } from 'react-router-dom'
 import { useTheme } from '../context/ThemeContext'
 import { APP_NAME } from '../constants/branding'
+import { useReducedMotion } from '../hooks/useReducedMotion'
+import { construireTimelineBandeau } from '../motion/bandeau'
 import NavBar from './NavBar'
 import NetworkCardsDrawer from './network/NetworkCardsDrawer'
 
@@ -38,6 +41,48 @@ import NetworkCardsDrawer from './network/NetworkCardsDrawer'
  */
 
 export function BandeauMarque() {
+  const pastille = useRef(null)
+  const wordmark = useRef(null)
+  const metier = useRef(null)
+  const mouvementReduit = useReducedMotion()
+
+  /**
+   * L'arrivée — la signature de l'application. Le mouvement lui-même est décrit
+   * dans `src/motion/bandeau.js` ; ici on ne fait que décider s'il a lieu.
+   *
+   * SOUS MOUVEMENT RÉDUIT, ON NE CONSTRUIT RIEN. Pas de version dégradée, pas
+   * de découpage du wordmark, pas une ligne de DOM touchée : la séquence est
+   * écrite en `.from()`, donc l'état statique EST déjà son état d'arrivée. Ne
+   * rien faire est la bonne réponse, et c'est aussi la plus sûre.
+   *
+   * `useLayoutEffect` et non `useEffect` : la timeline pose son état de départ
+   * (lettres sous leur masque, marque à 92 %) au moment où elle est construite.
+   * Avec `useEffect`, ce réglage tomberait APRÈS la peinture — le bandeau
+   * s'afficherait complet une image, puis sauterait à son début pour s'animer.
+   *
+   * Le nettoyage n'est pas facultatif : `SplitText` remplace le contenu du
+   * wordmark par un balisage de caractères, et seul `revert()` rend le DOM
+   * d'origine. En développement, React monte deux fois — sans ce retour, le
+   * second montage découperait un texte déjà découpé.
+   */
+  useLayoutEffect(() => {
+    if (mouvementReduit) return undefined
+
+    const { timeline, restaurerTexte, nettoyer } = construireTimelineBandeau({
+      pastille: pastille.current,
+      wordmark: wordmark.current,
+      metier: metier.current,
+    })
+
+    // Dès que les lettres sont posées, le wordmark redevient un texte d'un seul
+    // tenant : le découpage ne servait qu'à la séquence, et la bande passera le
+    // reste de sa vie immobile avant de quitter l'écran.
+    timeline.eventCallback('onComplete', restaurerTexte)
+    timeline.play()
+
+    return nettoyer
+  }, [mouvementReduit])
+
   return (
     <header className="bandeau-marque">
       {/* Composition CENTRÉE, comme avant la refonte. L'alignement à gauche
@@ -49,6 +94,7 @@ export function BandeauMarque() {
         {/* La marque dit déjà « C2EGF » : la répéter à voix haute encombrerait
             le lecteur d'écran, qui a le nom en toutes lettres juste après. */}
         <img
+          ref={pastille}
           src="/c2egf-mark.png"
           alt=""
           aria-hidden="true"
@@ -57,10 +103,16 @@ export function BandeauMarque() {
           className="h-12 w-12 rounded-full ring-1 ring-white/25 md:h-14 md:w-14"
         />
         <div className="min-w-0">
-          <p className="truncate text-2xl font-bold leading-tight tracking-tight text-white md:text-4xl">
+          <p
+            ref={wordmark}
+            className="truncate text-2xl font-bold leading-tight tracking-tight text-white md:text-4xl"
+          >
             {APP_NAME}
           </p>
-          <p className="mt-1.5 truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-200 md:text-[11px] md:tracking-[0.28em]">
+          <p
+            ref={metier}
+            className="mt-1.5 truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-200 md:text-[11px] md:tracking-[0.28em]"
+          >
             Distribution mobile money · Burkina Faso
           </p>
         </div>

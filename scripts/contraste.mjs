@@ -32,7 +32,25 @@ const SURFACES = [
 
 const { serveur, url } = await ouvrirBanc()
 const navigateur = await chromium.launch()
-const page = await navigateur.newPage({ viewport: { width: largeur, height: 900 } })
+// MOUVEMENT RÉDUIT — et ce n'est pas un détail de confort, c'est ce qui rend la
+// mesure reproductible.
+//
+// Le contraste se mesure sur l'ÉTAT FINAL : celui que la personne lit pendant
+// les heures qui suivent, pas celui que le bandeau traverse pendant une
+// seconde. Or la séquence d'arrivée décale la ligne de métier de 8 px avant de
+// la poser, et la sonde cherche « le pixel le plus clair sous le texte » : huit
+// pixels plus haut sur une PHOTOGRAPHIE, ce ne sont pas les mêmes pixels. La
+// mesure se mettait donc à dépendre de l'instant où elle tombait — 8,11:1 ou
+// 7,99:1 selon la course du navigateur.
+//
+// Sous `reducedMotion: 'reduce'`, l'application ne construit aucune animation
+// (`Layout.jsx`) : le bandeau est d'emblée dans son état d'arrivée. La mesure
+// redevient déterministe, et elle vérifie au passage que le mouvement réduit
+// rend bien l'état final — pas une version dégradée.
+const page = await navigateur.newPage({
+  viewport: { width: largeur, height: 900 },
+  reducedMotion: 'reduce',
+})
 await page.goto(url, { waitUntil: 'networkidle' })
 await page.waitForTimeout(1500)
 

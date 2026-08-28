@@ -63,16 +63,27 @@ beforeEach(() => {
 })
 
 describe('TC-101 — repères de structure du shell', () => {
+  // Ces deux repères s'assèrent sur le TEXTE DE LA BANNIÈRE, et non plus sur un
+  // nœud dont le nom serait l'unique enfant texte.
+  //
+  // La séquence d'arrivée découpe le wordmark en caractères le temps de son
+  // exécution (`src/motion/bandeau.js`). Le texte reste intact — `textContent`
+  // vaut toujours « C2EGF BURKINA », et la recherche dans la page comme la
+  // sélection continuent de fonctionner — mais il ne vit plus dans un nœud
+  // texte DIRECT, et c'est là-dessus, et là-dessus seulement, que se fonde le
+  // matcher par défaut de Testing Library.
+  //
+  // `toHaveTextContent` dit ce que ces tests ont toujours voulu dire : la
+  // bannière affiche le nom de la marque. L'assertion n'est pas affaiblie, elle
+  // cesse de dépendre d'un détail d'implémentation du DOM.
   it('affiche le wordmark du client dans la bannière', () => {
     renderShell()
-    expect(within(screen.getByRole('banner')).getByText(APP_NAME)).toBeInTheDocument()
+    expect(screen.getByRole('banner')).toHaveTextContent(APP_NAME)
   })
 
   it('le wordmark vaut « C2EGF BURKINA » sous le profil réel', () => {
     renderShell()
-    expect(
-      within(screen.getByRole('banner')).getByText('C2EGF BURKINA'),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('banner')).toHaveTextContent('C2EGF BURKINA')
   })
 
   it('la page ne porte qu’un seul titre de niveau 1 : le sien', () => {
