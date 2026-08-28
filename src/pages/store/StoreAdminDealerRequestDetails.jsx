@@ -443,7 +443,7 @@ function StoreAdminDealerRequestDetails() {
   if (loading) {
     return (
       <div className="max-w-2xl mx-auto" data-testid="store-dealer-request-details">
-        <div className="bg-white rounded-lg shadow p-8 animate-pulse">
+        <div className="bg-white rounded-lg shadow p-8 motion-safe:animate-pulse" aria-busy="true" aria-label="Chargement…">
           <div className="h-6 w-48 bg-gray-200 rounded mb-6" />
           {[1, 2, 3, 4, 5, 6].map(n => (
             <div key={n} className="flex py-3 border-b border-line/60">

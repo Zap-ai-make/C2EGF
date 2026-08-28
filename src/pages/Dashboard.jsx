@@ -77,7 +77,7 @@ function Dashboard() {
         {titre}
         <div className="flex items-center justify-center py-12" role="status">
           <div className="text-center">
-            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-brand-500 border-r-transparent" />
+            <div className="inline-block h-8 w-8 motion-safe:animate-spin rounded-full border-4 border-solid border-brand-500 border-r-transparent" />
             <p className="mt-4 text-ink-muted">Chargement des données…</p>
           </div>
         </div>

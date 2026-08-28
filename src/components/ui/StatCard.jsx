@@ -33,7 +33,7 @@ function StatCard({ label, value, sub, color = 'blue', icon, loading = false, on
         <div className="min-w-0">
           <p className={`text-xs font-medium uppercase tracking-wide ${c.accent} truncate`}>{label}</p>
           {loading ? (
-            <div className="mt-2 h-7 w-24 animate-pulse rounded bg-gray-200" />
+            <div className="mt-2 h-7 w-24 motion-safe:animate-pulse rounded bg-gray-200" />
           ) : (
             <p className="mt-1 text-2xl font-bold text-gray-900 truncate">{value ?? '—'}</p>
           )}

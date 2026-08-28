@@ -270,7 +270,7 @@ function DealerRequests() {
       {loading && (
         <div className="space-y-3" aria-busy="true" aria-label="Chargement des demandes">
           {[1, 2, 3].map(n => (
-            <div key={n} className="bg-white rounded-lg shadow p-4 animate-pulse">
+            <div key={n} className="bg-white rounded-lg shadow p-4 motion-safe:animate-pulse">
               <div className="flex justify-between items-center">
                 <div className="h-4 w-32 bg-gray-200 rounded" />
                 <div className="h-5 w-20 bg-gray-200 rounded-full" />

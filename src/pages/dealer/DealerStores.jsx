@@ -129,7 +129,7 @@ function DealerStores() {
           aria-label="Chargement des boutiques"
         >
           {[1, 2, 3].map(n => (
-            <div key={n} className="bg-white rounded-lg shadow p-5 animate-pulse">
+            <div key={n} className="bg-white rounded-lg shadow p-5 motion-safe:animate-pulse">
               <div className="h-5 w-32 bg-gray-200 rounded mb-3" />
               <div className="flex gap-3 mb-4">
                 <div className="flex-1 h-14 bg-orange-100 rounded" />

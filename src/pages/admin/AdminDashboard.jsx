@@ -79,7 +79,7 @@ function RequestFeed({ requests, loading, error }) {
   if (loading) return (
     <div className="space-y-3">
       {[1, 2, 3, 4, 5].map(n => (
-        <div key={n} className="flex items-center gap-4 animate-pulse">
+        <div key={n} className="flex items-center gap-4 motion-safe:animate-pulse">
           <div className="h-8 w-8 rounded-full bg-gray-100 shrink-0" />
           <div className="flex-1 space-y-1.5">
             <div className="h-3 w-1/3 rounded bg-gray-100" />

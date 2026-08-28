@@ -192,7 +192,7 @@ function StoreAdminClosures() {
 
       {loading && closures.length === 0 && (
         <div className="space-y-3">
-          {[1,2,3].map(n => <div key={n} className="h-24 animate-pulse rounded-xl bg-gray-100" />)}
+          {[1,2,3].map(n => <div key={n} className="h-24 motion-safe:animate-pulse rounded-xl bg-gray-100" />)}
         </div>
       )}
 

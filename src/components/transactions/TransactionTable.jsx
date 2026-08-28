@@ -11,6 +11,7 @@ import { ClipboardCheck } from 'lucide-react'
 import OptimisticToast from '../ui/OptimisticToast.jsx'
 import logger from '../../utils/logger.js'
 import { generateIdempotencyKey } from '../../services/settlementService.js'
+import { prefereMouvementReduit } from '../../hooks/useReducedMotion.js'
 
 const TransactionTable = memo(function TransactionTable() {
   const { pendingTransactions, getActionButtons, getTransactionStyles, addPaymentTranche, addRefundTranche, startEditTransaction, loading } = useTransactions()
@@ -53,8 +54,17 @@ const TransactionTable = memo(function TransactionTable() {
       const transaction = pendingTransactions.find(t => t.id === transactionId)
       if (transaction) {
         startEditTransaction(transaction)
-        // Scroll vers le haut du formulaire
-        window.scrollTo({ top: 0, behavior: 'smooth' })
+        // Remonte au formulaire, que l'on vient de garnir.
+        //
+        // C'est le SEUL mouvement de l'application qui échappe à `motion-safe:`
+        // — il est déclenché en JavaScript, aucune media query ne l'atteint —
+        // et c'est aussi le plus ample : la page entière défile. Exactement le
+        // cas que `prefers-reduced-motion` existe pour arrêter (DESIGN.md §9).
+        // Sans mouvement, on arrive au même endroit, tout de suite.
+        window.scrollTo({
+          top: 0,
+          behavior: prefereMouvementReduit() ? 'auto' : 'smooth',
+        })
       }
     } else if (actionType === 'payerPar' || actionType === 'rembourser' || actionType === 'encaisser') {
       if (activeDropdown === transactionId) {

@@ -89,7 +89,7 @@ export const AUTH_STYLES = {
 
   // États de chargement
   loading: {
-    spinner: 'animate-spin rounded-full h-16 w-16 border-b-2 border-brand-500 mx-auto',
+    spinner: 'motion-safe:animate-spin rounded-full h-16 w-16 border-b-2 border-brand-500 mx-auto',
     container: 'min-h-screen flex items-center justify-center bg-canvas',
     text: 'text-ink-muted mt-4',
   },

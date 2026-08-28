@@ -11,8 +11,14 @@
  * lire. C'est le conteneur qui porte `aria-busy` et le nom accessible ; les
  * lignes sont masquées de l'arbre d'accessibilité (DESIGN.md §8).
  *
- * `animate-pulse` passe sous `motion-safe:` — une animation ne s'impose jamais
- * à qui a demandé moins de mouvement (DESIGN.md §9).
+ * La pulsation passe sous `motion-safe:` — une animation ne s'impose jamais à
+ * qui a demandé moins de mouvement (DESIGN.md §9).
+ *
+ * Le nom nu de l'utilitaire n'est PAS écrit ici, et ce n'est pas un caprice de
+ * rédaction : Tailwind v4 extrait ses classes du texte brut des fichiers,
+ * commentaires compris. Le mentionner suffisait à faire naître la règle
+ * inconditionnelle dans le CSS livré — hors media query, donc active pour qui
+ * avait demandé le calme. Vérifié par tc-094.
  */
 
 const BLOC = 'rounded bg-gray-200 motion-safe:animate-pulse'

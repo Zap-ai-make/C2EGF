@@ -133,7 +133,7 @@ function NewDealerRequest() {
   if (storesLoading) {
     return (
       <div className="max-w-xl mx-auto" data-testid="new-dealer-request">
-        <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500 animate-pulse">Chargement…</div>
+        <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500 motion-safe:animate-pulse">Chargement…</div>
       </div>
     )
   }

@@ -144,7 +144,7 @@ function DealerDashboard() {
         {reqsError && <ErrorState message={reqsError} onRetry={loadRecentReqs} />}
         {reqsLoading && !reqsError && (
           <div className={`${CARD} space-y-2 p-5`}>
-            {[1, 2, 3].map(n => <div key={n} className="h-10 animate-pulse rounded bg-gray-100" />)}
+            {[1, 2, 3].map(n => <div key={n} className="h-10 motion-safe:animate-pulse rounded bg-gray-100" />)}
           </div>
         )}
         {!reqsLoading && !reqsError && recentReqs.length === 0 && (

@@ -36,7 +36,7 @@ function DealerStoreCard({ store, balances, balanceError, isLoading }) {
         <div className="flex-1 rounded bg-orange-50 p-3">
           <p className="text-xs text-orange-600 font-medium mb-1">Stock Orange</p>
           {isLoading ? (
-            <div className="h-5 w-24 animate-pulse rounded bg-orange-200" aria-busy="true" />
+            <div className="h-5 w-24 motion-safe:animate-pulse rounded bg-orange-200" aria-busy="true" />
           ) : (
             <p className="text-sm font-semibold text-orange-800" data-testid={`stock-${store.id}`}>
               {balanceError ? 'Solde indisponible' : formatCurrency(stock)}
@@ -46,7 +46,7 @@ function DealerStoreCard({ store, balances, balanceError, isLoading }) {
         <div className="flex-1 rounded bg-blue-50 p-3">
           <p className="text-xs text-blue-600 font-medium mb-1">Liquidité Orange</p>
           {isLoading ? (
-            <div className="h-5 w-24 animate-pulse rounded bg-blue-200" aria-busy="true" />
+            <div className="h-5 w-24 motion-safe:animate-pulse rounded bg-blue-200" aria-busy="true" />
           ) : (
             <p className="text-sm font-semibold text-blue-800" data-testid={`liquidite-${store.id}`}>
               {balanceError ? 'Solde indisponible' : formatCurrency(liquidite)}

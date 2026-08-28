@@ -69,8 +69,8 @@ function StoreDetail({ store, onClose }) {
         <h3 className="text-sm font-semibold text-gray-700 mb-3">Soldes Orange</h3>
         {balLoading ? (
           <div className="space-y-2">
-            <div className="h-10 animate-pulse rounded bg-gray-100" />
-            <div className="h-10 animate-pulse rounded bg-gray-100" />
+            <div className="h-10 motion-safe:animate-pulse rounded bg-gray-100" />
+            <div className="h-10 motion-safe:animate-pulse rounded bg-gray-100" />
           </div>
         ) : orange ? (
           <div className="grid grid-cols-2 gap-3">

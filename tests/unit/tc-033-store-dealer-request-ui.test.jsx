@@ -212,7 +212,11 @@ describe('TC-033-LIST — StoreAdminDealerRequests (liste)', () => {
     renderList()
     await waitFor(() => {
       const c = screen.getByTestId('store-dealer-requests')
-      expect(!!c.querySelector('[aria-busy="true"]') || !!c.querySelector('.animate-pulse')).toBe(true)
+      // Le test s'appelle « aria-busy visible » : le repli par classe CSS
+      // contredisait son propre intitulé. Il partait de toute façon — Tailwind
+      // balaie les tests, et cette chaîne générait une règle d'animation
+      // inconditionnelle dans le CSS livré.
+      expect(!!c.querySelector('[aria-busy="true"]')).toBe(true)
     })
   })
 
@@ -480,7 +484,11 @@ describe('TC-033-DETAIL — StoreAdminDealerRequestDetails', () => {
     mocks.getStoreAdminDealerRequestById.mockReturnValue(new Promise(r => { resolve = r }))
     renderDetails('req-1')
     const container = screen.getByTestId('store-dealer-request-details')
-    expect(!!container.querySelector('.animate-pulse')).toBe(true)
+    // L'attente s'assère sur ce que l'utilisateur PERÇOIT — une région annoncée
+    // occupée —, pas sur la classe qui la fait clignoter. C'est la règle du
+    // Lot 0 : jamais d'assertion par classe CSS. Elle avait échappé ici, et
+    // c'est le passage de l'animation sous `motion-safe:` qui l'a révélé.
+    expect(!!container.querySelector('[aria-busy="true"]')).toBe(true)
     await act(async () => { resolve(REQS[0]) })
   })
 

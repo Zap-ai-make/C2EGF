@@ -342,9 +342,12 @@ describe('TC-031-STORES — DealerStores', () => {
     renderWithRouter(DealerStores)
     await waitFor(() => {
       const container = screen.getByTestId('dealer-stores')
-      const hasBusy = !!container.querySelector('[aria-busy="true"]')
-      const hasSpinner = !!container.querySelector('.animate-spin')
-      expect(hasBusy || hasSpinner).toBe(true)
+      // Le repli par classe CSS est retiré : il ne pouvait plus matcher depuis
+      // que les animations passent sous `motion-safe:`, et surtout Tailwind
+      // BALAIE LES TESTS — nommer l'utilitaire de rotation, fût-ce dans une
+      // chaîne d'assertion, suffisait à en faire naître la règle
+      // inconditionnelle dans le CSS livré. Voir tc-094.
+      expect(!!container.querySelector('[aria-busy="true"]')).toBe(true)
     })
     await act(async () => { resolve(makeStoresResult([])) })
   })
@@ -639,9 +642,12 @@ describe('TC-031-REQS — DealerRequests', () => {
     renderWithRouter(DealerRequests, {}, '/dealer/requests')
     await waitFor(() => {
       const container = screen.getByTestId('dealer-requests')
-      const hasBusy = !!container.querySelector('[aria-busy="true"]')
-      const hasSpinner = !!container.querySelector('.animate-spin')
-      expect(hasBusy || hasSpinner).toBe(true)
+      // Le repli par classe CSS est retiré : il ne pouvait plus matcher depuis
+      // que les animations passent sous `motion-safe:`, et surtout Tailwind
+      // BALAIE LES TESTS — nommer l'utilitaire de rotation, fût-ce dans une
+      // chaîne d'assertion, suffisait à en faire naître la règle
+      // inconditionnelle dans le CSS livré. Voir tc-094.
+      expect(!!container.querySelector('[aria-busy="true"]')).toBe(true)
     })
   })
 
