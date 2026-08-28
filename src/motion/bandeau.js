@@ -49,36 +49,55 @@ gsap.registerPlugin(SplitText)
  * bonne réponse. C'est `Layout.jsx` qui tranche, avant d'appeler ici.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * DEUX GESTES PRÉVUS AU PLAN ONT ÉTÉ COUPÉS (DESIGN.md §14)
+ * CE QUE LA PREMIÈRE VERSION RATAIT
  *
- * « Dépense ta hardiesse à un seul endroit. » Elle est dépensée sur le
- * wordmark. Le reste se tait.
+ * Elle enchaînait trois fondus : la marque paraissait, les lettres montaient, la
+ * ligne de métier se posait. Trois arrivées polies, sans lien entre elles. La
+ * propagation n'était affirmée que dans ce commentaire — RIEN À L'ÉCRAN NE LA
+ * CAUSAIT —, et le décalage des lettres, à 25 ms, passait trop vite pour se
+ * lire autrement que « le mot apparaît ». Un geste qu'on ne voit pas revient à
+ * ne pas l'avoir fait.
  *
- * 1. L'IMPULSION ORANGE qui devait traverser la bande. Les deux lueurs vivent
- *    dans un `background-image` de `.bandeau-marque` : les animer demandait
- *    soit deux calques absolus de plus, soit de refondre le CSS en variables —
- *    et, dans les deux cas, de repeindre un dégradé de 1920 px à chaque image.
- *    Coût réel, pour redire une TROISIÈME fois ce que le départ du centre dit
- *    déjà. Sur mobile, où la photographie n'est pas chargée, elle serait même
- *    devenue l'élément le plus voyant de l'écran, en concurrence avec le texte.
+ * L'onde émise par la marque est la correction : elle relie la source à la
+ * conséquence. Elle atteint la ligne du nom juste avant que les lettres bougent,
+ * si bien que le regard lit un enchaînement et non une coïncidence.
  *
- * 2. LA CONTRACTION DE L'INTERLETTRAGE sur la ligne de métier. Deux raisons,
- *    dont une franchement disqualifiante : cette ligne porte `tracking-[0.18em]`
- *    en mobile et `md:tracking-[0.28em]` au-delà. Une valeur figée en style
- *    EN LIGNE par l'animation écraserait la bascule responsive — la ligne
- *    garderait l'interlettrage du bureau sur un téléphone. Et à 10 px de haut,
- *    en capitales, le geste est de toute façon invisible. L'interlettrage est
- *    par ailleurs une propriété de MISE EN PAGE : l'animer refait couler le
- *    texte à chaque image, quand tout le reste ici tient en transformations et
- *    en opacité.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * UNE SEULE HARDIESSE (DESIGN.md §14)
  *
- * Ce qui reste tient en trois gestes, sous 1,05 s, une seule fois, jamais en
- * boucle — la bande quitte l'écran, animer en boucle un élément qu'on ne
- * regarde plus coûterait de la batterie pour rien.
+ * Elle est dépensée sur l'onde et le nom. Tout le reste se tait — et deux gestes
+ * prévus au plan restent coupés :
+ *
+ * 1. L'IMPULSION ORANGE qui devait traverser toute la bande. Les deux lueurs
+ *    vivent dans le `background-image` de `.bandeau-marque` : les animer voulait
+ *    dire repeindre un dégradé de 1920 px à chaque image. L'onde dit désormais
+ *    la même chose pour le prix d'une transformation. Elle est BLANCHE, et non
+ *    orange : `net-orange` est le jeton de l'opérateur, réservé aux données — un
+ *    décor ne l'emprunte pas.
+ *
+ * 2. LA CONTRACTION DE L'INTERLETTRAGE sur la ligne de métier. Cette ligne porte
+ *    `tracking-[0.18em]` en mobile et `md:tracking-[0.28em]` au-delà : une valeur
+ *    figée en style EN LIGNE écraserait la bascule responsive. Et à 10 px, en
+ *    capitales, le geste est invisible.
+ *
+ * Quatre gestes, dans le budget, une seule fois, jamais en boucle — la bande
+ * quitte l'écran, animer en boucle un élément qu'on ne regarde plus coûterait de
+ * la batterie pour rien.
  */
 
-/** Durée totale, en secondes. Le banc Remotion en déduit son nombre d'images. */
-export const DUREE_BANDEAU = 1.05
+/**
+ * BUDGET de la séquence, en secondes — un plafond, pas une mesure.
+ *
+ * Le banc Remotion en déduit son nombre d'images, et tc-109 vérifie que la
+ * chorégraphie tient dedans. C'est le sens de ce chiffre : on ne le recopie pas
+ * depuis les tweens (il divergerait au premier réglage), on s'engage dessus.
+ *
+ * 1,6 s et non 1 s : la première version se lisait « le bandeau apparaît ». Un
+ * moment d'arrivée qu'on ne traverse qu'une fois par session peut prendre le
+ * temps de dire quelque chose — c'est sur les écrans de travail que le mouvement
+ * doit se faire oublier, pas ici.
+ */
+export const DUREE_BANDEAU = 1.6
 
 /**
  * Construit la séquence d'arrivée, EN PAUSE.
@@ -106,6 +125,7 @@ export function construireTimelineBandeau({ racine, timeline } = {}) {
   const pastille = trouver('pastille')
   const wordmark = trouver('wordmark')
   const metier = trouver('metier')
+  const onde = trouver('onde')
 
   // `mask: 'chars'` enferme chaque caractère dans son propre cadre à débordement
   // masqué : les lettres MONTENT DERRIÈRE leur masque au lieu de flotter. C'est
@@ -131,33 +151,62 @@ export function construireTimelineBandeau({ racine, timeline } = {}) {
   const tl = timeline ?? gsap.timeline({ paused: true })
   const ACCELERATION = 'power3.out'
 
-  // 1. LA MARQUE S'ALLUME — le nœud source du réseau. Elle arrive seule, avant
-  //    le nom : c'est d'elle que part la propagation.
+  // 1. LE NŒUD S'ALLUME. La marque arrive seule, avant tout le reste : c'est
+  //    d'elle que part ce qui suit.
   if (pastille) {
-    tl.from(pastille, { duration: 0.55, opacity: 0, scale: 0.92, ease: ACCELERATION }, 0)
+    tl.from(pastille, { duration: 0.55, opacity: 0, scale: 0.9, ease: ACCELERATION }, 0)
   }
 
-  // 2. LE NOM SE RÉSOUT, DU CENTRE VERS LES BORDS. `from: 'center'` n'est pas
-  //    un effet : c'est l'énoncé du concept. Le décalage est serré (25 ms) —
-  //    au-delà, treize lettres deviennent une vague, et une vague est
-  //    précisément le tic qu'on cherche à éviter.
+  // 2. LE NŒUD ÉMET. L'onde s'ouvre depuis la marque et se dissipe.
+  //
+  //    C'est LE geste qui manquait. La première version enchaînait trois
+  //    fondus : la marque paraissait, puis les lettres montaient, puis la ligne
+  //    de métier se posait. Trois arrivées polies, sans lien entre elles — la
+  //    propagation n'existait que dans ce commentaire. Rien à l'écran ne la
+  //    CAUSAIT.
+  //
+  //    L'onde établit cette causalité. Elle part de la marque et atteint la
+  //    ligne du nom juste avant que les lettres bougent : le regard lit une
+  //    conséquence, pas une coïncidence. C'est aussi la seule hardiesse de la
+  //    séquence (DESIGN.md §14) — tout le reste se tait.
+  //
+  //    `fromTo` et non `from` : l'onde n'a pas d'état naturel à retrouver, elle
+  //    doit FINIR invisible. Son opacité de départ est déjà nulle dans le CSS,
+  //    si bien que sans JavaScript elle n'apparaît jamais — et que l'état
+  //    d'arrivée de la séquence reste, ici aussi, l'état statique.
+  if (onde) {
+    tl.fromTo(
+      onde,
+      { opacity: 0.65, scale: 1 },
+      { duration: 0.75, opacity: 0, scale: 2.6, ease: 'power2.out' },
+      0.34
+    )
+  }
+
+  // 3. LE NOM SE RÉSOUT, DU CENTRE VERS LES BORDS — dans l'ordre où l'onde
+  //    passe sous les lettres. `from: 'center'` n'est pas un effet : la marque
+  //    est exactement au-dessus du centre du mot, et la radiation part de là.
+  //
+  //    Le décalage passe de 25 à 45 ms. À 25, les douze lettres se levaient en
+  //    300 ms — trop vite pour qu'on lise autre chose que « le mot apparaît ».
+  //    Le geste ne se voyait pas, ce qui revenait à ne pas l'avoir.
   if (decoupe?.chars?.length) {
     tl.from(
       decoupe.chars,
       {
-        duration: 0.5,
+        duration: 0.55,
         yPercent: 100,
         ease: ACCELERATION,
-        stagger: { each: 0.025, from: 'center' },
+        stagger: { each: 0.045, from: 'center' },
       },
-      0.25
+      0.52
     )
   }
 
-  // 3. LA LIGNE DE MÉTIER se pose en dernier, discrètement. Elle nomme le
-  //    métier ; elle n'a pas à se faire remarquer.
+  // 4. LA LIGNE DE MÉTIER se pose en dernier, une fois le calme revenu. Elle
+  //    nomme le métier ; elle n'a pas à se faire remarquer.
   if (metier) {
-    tl.from(metier, { duration: 0.45, opacity: 0, y: 8, ease: ACCELERATION }, 0.6)
+    tl.from(metier, { duration: 0.45, opacity: 0, y: 8, ease: ACCELERATION }, 1.05)
   }
 
   return {

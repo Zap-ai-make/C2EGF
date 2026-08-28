@@ -68,16 +68,36 @@ function BandeauMarque({ anime = true }) {
     <header ref={racine} className="bandeau-marque">
       <div className="flex flex-col items-center gap-3 px-4 py-8 text-center md:gap-4 md:py-12">
         {/* La marque dit déjà « C2EGF » : la répéter à voix haute encombrerait
-            le lecteur d'écran, qui a le nom en toutes lettres juste après. */}
-        <img
-          data-motion="pastille"
-          src="/c2egf-mark.png"
-          alt=""
-          aria-hidden="true"
-          width="56"
-          height="56"
-          className="h-12 w-12 rounded-full ring-1 ring-white/25 md:h-14 md:w-14"
-        />
+            le lecteur d'écran, qui a le nom en toutes lettres juste après.
+
+            L'enveloppe positionnée n'existe que pour l'onde : elle lui donne le
+            bloc conteneur qui la centre exactement sur la marque. Elle reprend
+            les dimensions de l'image, donc la mise en page ne bouge pas — c'est
+            `npm run deborde` et `npm run contraste` qui le vérifient. */}
+        <span className="relative inline-flex h-12 w-12 md:h-14 md:w-14">
+          <img
+            data-motion="pastille"
+            src="/c2egf-mark.png"
+            alt=""
+            aria-hidden="true"
+            width="56"
+            height="56"
+            className="h-full w-full rounded-full ring-1 ring-white/25"
+          />
+
+          {/* L'ONDE — le nœud source qui émet.
+              Elle part à `opacity-0` DANS LE CSS, et la séquence la ramène à
+              zéro : sans JavaScript, elle n'existe simplement pas, et l'état
+              d'arrivée reste rigoureusement l'état statique.
+              Le blanc, et non `net-orange` : l'orange est le jeton de
+              l'opérateur, réservé aux DONNÉES (index.css). Un décor ne
+              l'emprunte pas. */}
+          <span
+            data-motion="onde"
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 rounded-full opacity-0 ring-1 ring-white/50"
+          />
+        </span>
         <div className="min-w-0">
           <p
             data-motion="wordmark"

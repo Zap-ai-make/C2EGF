@@ -55,8 +55,8 @@ try {
   /** Le cas réel : la séquence se joue entièrement, puis on regarde. */
   const anime = await navigateur.newPage({ viewport: { width: LARGEUR, height: 700 } })
   await anime.goto(url, { waitUntil: 'networkidle' })
-  // Confortablement au-delà de la durée de la séquence (1,05 s), pour que le
-  // résultat ne dépende jamais de la charge de la machine.
+  // Confortablement au-delà du budget de la séquence (`DUREE_BANDEAU`, 1,6 s),
+  // pour que le résultat ne dépende jamais de la charge de la machine.
   await anime.waitForTimeout(2500)
   const apres = await anime.locator('.bandeau-marque').screenshot()
 

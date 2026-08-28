@@ -64,7 +64,16 @@ describe('tc-109 — séquence d’arrivée du bandeau', () => {
     const { racine } = poserBandeau()
     const { timeline, nettoyer } = construireTimelineBandeau({ racine })
 
-    expect(timeline.duration()).toBeCloseTo(DUREE_BANDEAU, 2)
+    // `DUREE_BANDEAU` est un PLAFOND, pas une mesure recopiée depuis les tweens
+    // — recopiée, elle divergerait au premier réglage de décalage. Le banc
+    // Remotion en déduit son nombre d'images : une séquence qui déborde serait
+    // coupée en fin de vidéo, et on validerait un mouvement amputé.
+    expect(timeline.duration()).toBeLessThanOrEqual(DUREE_BANDEAU)
+
+    // Et pas trop en dessous : un budget qu'on cesse d'occuper est un budget
+    // qu'on a oublié de mettre à jour.
+    expect(timeline.duration()).toBeGreaterThan(DUREE_BANDEAU - 0.25)
+
     nettoyer()
   })
 
