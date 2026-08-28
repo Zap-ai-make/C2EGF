@@ -69,12 +69,18 @@ Thumbs.db
 # marque. D'où l'exception explicite ci-dessous : sans elle, le logo source du
 # client n'entrerait jamais dans le dépôt, et les icônes générées seraient
 # irreproductibles.
+# Les trois premiers motifs sont ANCRES A LA RACINE (« / » de tete). Sans cet
+# ancrage, `Capture*` et `screenshot*` s'appliquent a TOUS les dossiers — et
+# comme Git est insensible a la casse sous Windows (core.ignorecase = true),
+# `Capture*` avalait `scripts/capture-ecran.mjs`. Un outil de QA versionne
+# disparaissait de chaque commit sans un mot. Ces motifs visent des captures
+# deposees a la racine ; ils y restent.
 pwa-test.html
-*test*.html
-Capture*
+/*test*.html
+/Capture*
+/screenshot*
 *.jpeg
 *.jpg
-screenshot*
 
 # Exception : logo source de la marque C2EGF. Versionné délibérément — c'est
 # l'original dont dérivent public/c2egf-mark.png et les icônes PWA.
