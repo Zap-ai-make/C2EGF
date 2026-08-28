@@ -1,7 +1,7 @@
 # Refonte C2EGF BURKINA — bilan
 
-**Branche** `feat/design-lot1-boutique` · 25 commits
-**Mis à jour le** 27 août 2026
+**Branche** `feat/design-lot1-boutique` · 29 commits
+**Mis à jour le** 28 août 2026
 **Périmètre** : le design. Le modèle de données et le fonctionnement métier ne
 sont pas touchés — aucun champ Firestore ajouté, renommé ou supprimé, aucune
 modification des flux de transaction, du calcul des soldes, des rôles ou des
@@ -127,7 +127,72 @@ tenir son contenu, et le `overflow-x-auto` placé à l'intérieur ne se déclenc
 jamais. `min-w-0` sur le jeton `CARTE`, plus une pagination qui plie. Mesure
 après correction : `document.scrollWidth = 390` pour une fenêtre de 390.
 
-### Défauts réels trouvés et corrigés dans ce lot
+### Lot 10 — le shell, remis dans son axe
+
+Retour du **fond d'origine** — la constellation de nœuds orange —, à la demande.
+La discipline de poids tient : PNG 1 805 921 o → JPEG 1920 × 560, **90 930 o**
+(−95,0 %), ré-encodé par le chromium déjà présent pour la QA
+(`scripts/reencode-fond.mjs`, versionné : l'opération est refaisable).
+
+Le **cadrage** compte autant que l'image : un bandeau de 220 px n'en montre
+qu'une tranche, et centrée elle tombait sur le continent sombre du milieu. Il
+vise désormais le haut (focus 0,22), là où sont les lumières.
+
+**Les trois bandes partagent enfin un axe.** Marque, nom, ligne de métier, les
+sept destinations et le groupe « Soldes + cartes » sont centrés. Le bouton
+d'installation sort du flux : laissé dans la rangée, il décalait les liens d'une
+demi-largeur de bouton — centrer dans l'espace qui reste n'est pas centrer. Le
+voile a suivi, de latéral à symétrique.
+
+**Les cartes de solde** ont reçu ce qui leur manquait : rail et vignette à la
+couleur de l'opérateur, icône, montant seul en grand et en chiffres tabulaires
+avec « FCFA » en exposant, ombre marine qui les décolle de la bande, anneau
+d'alerte au seuil bas. Libellés raccourcis — « Stock opérateur » se tronquait, et
+« Liquidité / LIQUIDITÉ FCFA » disait deux fois le même mot.
+
+**Le contraste est mesuré, pas calculé.** Mon estimation à la main était fausse
+de plusieurs points. Le fond est une photographie sous deux voiles dégradés : le
+contraste dépend du pixel. `npm run contraste` masque le texte, capture le fond,
+cherche le pixel le plus clair sous chaque ligne — **12,46:1** pour le wordmark,
+**8,11:1** pour la ligne de métier.
+
+### Lot 11 — « Demandes Dealer », la septième destination
+
+Les trois écrans de `src/pages/store/` et leurs deux composants : **96 couleurs
+hors palette, il n'en reste aucune.** Au-delà de la couleur :
+
+- **Le châssis** — `PageHeader` comme les six autres écrans, largeur rendue au
+  Layout.
+- **Les états** — le squelette de chargement montrait **trois cartes** quand le
+  contenu qui arrive est un **tableau** : la page sautait à l'arrivée des
+  données. Il passe à `SkeletonTable`, l'erreur à `ErrorState`, les deux vides à
+  `EmptyState` — et chacun gagne son issue : des filtres qui ne rendent rien
+  s'effacent, une boîte réellement vide n'attend rien de l'utilisateur et le dit.
+- **Les badges** — « En attente » était ambre ; le jeton `pending` existe et dit
+  exactement cela. L'ambre reste aux **seuils**. Les deux composants de badge
+  partagent désormais la même palette.
+- **Les écarts de clôture** étaient vert/rouge, donc succès/échec. Un écart est
+  un **mouvement signé** : `inflow`/`outflow`.
+
+### Deux défauts de `.gitignore` — invisibles, et en production
+
+Trouvés en commitant, pas en lisant. Même mécanisme, deux fois : **un motif écrit
+pour des fichiers de travail qui efface un fichier de produit.**
+
+| Fichier | Motif fautif | Conséquence |
+|---|---|---|
+| `public/bandeau-reseau.jpg` | `*.jpg` (exception pour le seul `logo.jpeg`) | **Jamais versionné**, alors que `src/index.css` le référence depuis le commit qui l'a introduit. Sur cette machine le bandeau s'affichait ; sur un clone, une CI ou un déploiement Vercel, l'URL ne résolvait pas et le bandeau retombait silencieusement sur ses dégradés. |
+| `scripts/capture-ecran.mjs` | `Capture*`, **non ancré**, + `core.ignorecase = true` sous Windows | Un outil de QA versionné disparaissait de chaque commit sans un mot. |
+
+Les deux sont corrigés, et la règle est écrite dans le fichier : un motif destiné
+à la racine **s'ancre** (`/Capture*`) ; `public/` contient des **actifs de
+produit**, pas des captures. Vérifié par un `git clone` dans un dossier neuf.
+
+Ces deux défauts partagent un trait avec ceux du §0 : **rien ne les signalait**.
+Ni le lint, ni les tests, ni la capture — qui lisait le disque local, pas le
+dépôt. C'est la vérification qui manquait, pas l'attention.
+
+### Défauts réels trouvés et corrigés en chemin
 
 - **`OptimisticToast`** — levait sans type explicite (voir §0).
 - **`StatusBadge`** — `${cls}${customCls}` sans espace.
@@ -139,6 +204,14 @@ après correction : `document.scrollWidth = 390` pour une fenêtre de 390.
   rose et vert où la couleur ne distinguait plus rien.
 - **`OfflineBanner`** — `bg-orange-600`, alors que l'orange est le jeton de
   l'opérateur, réservé aux données.
+- **Un `sr-only` qui élargissait la page de 645 px.** À 390 px, le document
+  défilait horizontalement alors qu'aucun élément visible ne dépassait. Le
+  coupable : `<span className="sr-only">Détail</span>` dans un `<th>`. `sr-only`
+  place son contenu en `position: absolute` ; **sans ancêtre positionné, son
+  bloc conteneur est la page**. Le span échappait au cadre défilant du tableau
+  et allait se poser à la largeur réelle de celui-ci, ~1 035 px. Un texte
+  invisible d'un pixel. Corrigé par `relative` sur le `th` — et c'est la sonde
+  réécrite qui l'a trouvé, l'ancienne en était incapable par construction.
 
 ### La suppression d'un client : une porte qui n'ouvrait sur rien
 
@@ -161,10 +234,34 @@ données plausibles — 187 agents, ~3 600 opérations sur 30 jours à la cadenc
 réelle de 4-5 passages/jour. Le banc (`preview.html`, `src/preview.jsx`) est
 **absent du build**, vérifié à chaque fois.
 
-Il ne montait que le tableau de bord ; il monte désormais aussi la liste des
-clients et l'historique, dans leurs deux états. **C'est ce qui a rendu visibles
-la teinte de ligne, le statut toujours vert et le débordement mobile** — aucun
-des trois n'apparaissait dans les tests.
+Il ne montait que le tableau de bord ; il monte désormais la liste des clients,
+l'historique et **les demandes Dealer**, dans leurs différents états. Ce dernier
+lit Firestore au montage : le banc sait maintenant **substituer l'accès aux
+données** (`src/preview-doubles/`, alias posé par `scripts/lib/banc.mjs`, jamais
+par `vite.config.js`). Il monte donc l'écran **réel** — pas une maquette qui
+dérive. Une adresse suffit à servir une variante : `preview.html?demandes=vide`
+ou `?demandes=erreur`, parce que l'état vide est celui qu'on dessine le plus
+soigneusement et qu'on regarde le moins.
+
+**C'est ce qui a rendu visibles** la teinte de ligne, le statut toujours vert, le
+débordement mobile et le `sr-only` ci-dessous — aucun n'apparaissait dans les
+tests.
+
+L'outillage est complet et versionné :
+
+| commande | ce qu'elle mesure |
+|---|---|
+| `npm run capture` | la page entière, à une largeur donnée |
+| `npm run contraste` | le contraste du bandeau **sur les pixels réellement rendus** |
+| `npm run deborde` | le débordement horizontal, **et le chemin jusqu'au coupable** |
+| `scripts/capture-ecran.mjs` | un écran seul, à l'échelle réelle, avec sa variante de données |
+
+**La sonde de débordement a dû être réécrite.** Elle raisonnait par ascendance —
+« un élément large dont un ancêtre défile est contenu, donc innocent ». Le
+raisonnement est faux pour les éléments absolus, et il a laissé passer le cas
+réel. Elle procède maintenant par **extinction** : on éteint un sous-arbre, on
+relit la largeur défilante, ce qui la fait retomber est le coupable, et on
+descend jusqu'à la feuille. Elle ne raisonne plus, elle mesure.
 
 ---
 
@@ -178,27 +275,17 @@ des trois n'apparaissait dans les tests.
 | Banc d'essai dans `dist/` | absent |
 | Débordement horizontal à 390 px | aucun (`scrollWidth` = 390) |
 | Couleurs décoratives — `src/pages/*.jsx` | **0** |
+| Couleurs décoratives — `src/pages/store/` (3 écrans) | **0** |
 | Couleurs décoratives — `components/{transactions,historique,dashboard,network}` | **0** |
 | Couleurs décoratives — `src/components/*.jsx` (racine) | **0** |
+| Contraste du bandeau, mesuré sur les pixels rendus | 12,46:1 · 8,11:1 |
+| Actifs de produit avalés par `.gitignore` | **0** (deux corrigés) |
 
 ---
 
 ## 4. Ce qui reste
 
-### A. L'espace boutique — deux écrans oubliés du découpage
-
-**À traiter en premier.** La navigation boutique compte **sept** entrées ; le
-plan du lot 9 n'en couvrait que cinq. « Demandes Dealer » (`/dealer-requests`)
-est une destination de la boutique, et ses deux écrans vivent dans
-`src/pages/store/` — rangés au bilan précédent avec les back-offices.
-
-| Fichier | Couleurs décoratives |
-|---|---|
-| `src/pages/store/` (3 écrans) | 80 |
-| `ui/DealerRequestStatusBadge.jsx` | 6 |
-| `ui/RejectionRemarkButton.jsx` | 10 |
-
-### B. L'authentification
+### A. L'authentification
 
 `authStyles.js` porte 28 occurrences, et son `THEME_VARIANTS.secondary` est
 **violet** — consommé **cinq fois** dans `SignUpForm.jsx`. Le formulaire
@@ -206,7 +293,7 @@ d'inscription est violet pendant que celui de connexion est marine, sur le même
 écran, à un clic d'intervalle. Les 7 fichiers `auth/` totalisent 22 occurrences
 de plus.
 
-### C. Les back-offices admin et dealer
+### B. Les back-offices admin et dealer
 
 | Zone | Couleurs décoratives |
 |---|---|
@@ -220,7 +307,7 @@ de `DESIGN.md` §8 — `icon="🏪"`, `"✅"`, `"⚠️"`, `"👥"`, `"📭"` da
 `AdminDashboard.jsx`, `"📦"`/`"💵"` dans `DealerInventoryBar.jsx`, un `👋` dans
 `DealerDashboard.jsx:86`.
 
-### D. Deux composants sans consommateur
+### C. Deux composants sans consommateur
 
 - **`ui/WorkspaceTopbar.jsx`** — aucun import nulle part. Il porte encore le
   wordmark en `text-green-900`, dernier vert AKAYIS.
@@ -230,21 +317,21 @@ de `DESIGN.md` §8 — `icon="🏪"`, `"✅"`, `"⚠️"`, `"👥"`, `"📭"` da
   *quand* un rollback doit parler est une spécification de comportement, pas une
   décision de design. Signalé, non inventé.
 
-### E. `networkConfig.js` — 42 couleurs pour 5 réseaux que ce client n'a pas
+### D. `networkConfig.js` — 42 couleurs pour 5 réseaux que ce client n'a pas
 
 Le fichier décrit six réseaux en arc-en-ciel (Orange, Moov, Telecel, Coris,
 Sank, Liquidité). Le profil C2EGF n'en active **qu'un**. Ces couleurs sont des
 données d'identité d'opérateur, pas du chrome — leur sort se décide avec le
 sujet « multi-réseau », pas dans un lot de restyle.
 
-### F. Architecture
+### E. Architecture
 
 - `subscribeToClients` et `subscribeToHistory` lisent des **collections
   entières sans `limit` ni `orderBy`**.
 - `useAllTransactions` est appelé **4 fois** et `useTodayTransactions` **3
   fois**, chacun recalculant son mémo indépendamment.
 
-### G. Sécurité
+### F. Sécurité
 
 - `cashier.canEditBalances: false` du profil n'est **lu nulle part**.
   L'affordance est gardée sur `userProfile?.role === 'dealer'` dans
@@ -253,18 +340,23 @@ sujet « multi-réseau », pas dans un lot de restyle.
 - `npm audit` : `@grpc/grpc-js` (haute) et `protobufjs` (modérée), toutes deux
   **préexistantes** et transitives via Firebase.
 
-### H. Fin de campagne
+### G. Fin de campagne
 
 Règle ESLint `no-restricted-syntax` par famille de couleur, pour que
-l'arc-en-ciel ne revienne pas. À poser **après** les lots A, B et C — pas avant,
+l'arc-en-ciel ne revienne pas. À poser **après** les lots A et B — pas avant,
 sinon elle bloque le travail qu'elle doit protéger.
+
+La règle devra excepter `networkConfig.js` (§D) tant que ses couleurs
+d'opérateur y vivent : ce sont des données d'identité, pas du chrome.
 
 ---
 
 ## 5. Ce qui attend une décision
 
-1. **L'ordre des lots restants** : les deux écrans oubliés de la boutique (A),
-   l'authentification (B), ou les back-offices (C) ?
+1. **L'ordre des deux lots restants** : l'authentification (A) — petite, très
+   visible, c'est le premier écran que voit un utilisateur — ou les back-offices
+   (B), bien plus gros, et où vivent encore les emoji bruts. La boutique, elle,
+   est terminée : ses sept destinations sont faites.
 2. **Le vocabulaire.** L'interface dit « clients » ; vous dites « agents ».
    `tc-102` note déjà que le renommage sera un lot déclaré. Il touche la
    navigation, les en-têtes de colonnes, les libellés de formulaire et l'export
@@ -290,8 +382,10 @@ sinon elle bloque le travail qu'elle doit protéger.
 npm run lint
 npm run test:unit && npm run test:components
 npm run build
-npm run capture                          # capture le banc d'essai à 1440
-node scripts/qa-visuelle.mjs c.png 390    # et à 390
+npm run capture                          # le banc entier, à 1440
+node scripts/qa-visuelle.mjs c.png 390   # et à 390
+npm run contraste                        # contraste du bandeau, pixels réels
+npm run deborde                          # débordement horizontal à 390
 npm run dev                              # puis regarder le rendu réel
 ```
 
