@@ -36,7 +36,9 @@
     "capture": "node scripts/qa-visuelle.mjs",
     "contraste": "node scripts/contraste.mjs",
     "deborde": "node scripts/deborde.mjs",
-    "mouvement": "node scripts/qa-mouvement.mjs"
+    "mouvement": "node scripts/qa-mouvement.mjs",
+    "motion": "remotion studio motion/index.jsx",
+    "motion:rendu": "remotion render motion/index.jsx BandeauArrivee motion-bandeau.mp4"
   },
   "dependencies": {
     "firebase": "^12.2.1",
@@ -52,6 +54,9 @@
     "@eslint/js": "^9.33.0",
     "@firebase/rules-unit-testing": "5.0.1",
     "@playwright/test": "^1.62.1",
+    "@remotion/cli": "^4.0.518",
+    "@remotion/gsap": "^4.0.518",
+    "@remotion/tailwind-v4": "^4.0.518",
     "@tailwindcss/vite": "^4.1.13",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -67,6 +72,7 @@
     "globals": "^16.3.0",
     "jsdom": "^29.1.1",
     "lightningcss": "^1.30.1",
+    "remotion": "^4.0.518",
     "tailwindcss": "^4.1.13",
     "vite": "^7.1.2",
     "vite-plugin-pwa": "^1.0.3",

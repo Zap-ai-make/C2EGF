@@ -31,17 +31,17 @@ let monte = null
 function poserBandeau() {
   const racine = document.createElement('div')
   racine.innerHTML = `
-    <img data-role="pastille" alt="" aria-hidden="true" />
-    <p data-role="wordmark">${NOM}</p>
-    <p data-role="metier">${METIER}</p>
+    <img data-motion="pastille" alt="" aria-hidden="true" />
+    <p data-motion="wordmark">${NOM}</p>
+    <p data-motion="metier">${METIER}</p>
   `
   document.body.append(racine)
   monte = racine
   return {
     racine,
-    pastille: racine.querySelector('[data-role="pastille"]'),
-    wordmark: racine.querySelector('[data-role="wordmark"]'),
-    metier: racine.querySelector('[data-role="metier"]'),
+    pastille: racine.querySelector('[data-motion="pastille"]'),
+    wordmark: racine.querySelector('[data-motion="wordmark"]'),
+    metier: racine.querySelector('[data-motion="metier"]'),
   }
 }
 
@@ -52,8 +52,8 @@ afterEach(() => {
 
 describe('tc-109 — séquence d’arrivée du bandeau', () => {
   it('rend une timeline EN PAUSE, qui ne démarre pas seule', () => {
-    const { pastille, wordmark, metier } = poserBandeau()
-    const { timeline, nettoyer } = construireTimelineBandeau({ pastille, wordmark, metier })
+    const { racine } = poserBandeau()
+    const { timeline, nettoyer } = construireTimelineBandeau({ racine })
 
     expect(timeline.paused()).toBe(true)
     expect(timeline.progress()).toBe(0)
@@ -61,16 +61,16 @@ describe('tc-109 — séquence d’arrivée du bandeau', () => {
   })
 
   it('tient dans le budget annoncé', () => {
-    const { pastille, wordmark, metier } = poserBandeau()
-    const { timeline, nettoyer } = construireTimelineBandeau({ pastille, wordmark, metier })
+    const { racine } = poserBandeau()
+    const { timeline, nettoyer } = construireTimelineBandeau({ racine })
 
     expect(timeline.duration()).toBeCloseTo(DUREE_BANDEAU, 2)
     nettoyer()
   })
 
   it('préserve le nom accessible malgré le découpage en caractères', () => {
-    const { wordmark, ...refs } = poserBandeau()
-    const { nettoyer } = construireTimelineBandeau({ ...refs, wordmark })
+    const { racine, wordmark } = poserBandeau()
+    const { nettoyer } = construireTimelineBandeau({ racine })
 
     // D'ABORD : le découpage a bien eu lieu. Sans cette vérification, le test
     // passerait aussi le jour où SplitText échouerait en silence — un texte
@@ -91,10 +91,10 @@ describe('tc-109 — séquence d’arrivée du bandeau', () => {
   })
 
   it('rend le texte d’un seul tenant une fois les lettres posées', () => {
-    const { wordmark, ...refs } = poserBandeau()
+    const { racine, wordmark } = poserBandeau()
     const avant = wordmark.innerHTML
 
-    const { timeline, restaurerTexte, nettoyer } = construireTimelineBandeau({ ...refs, wordmark })
+    const { timeline, restaurerTexte, nettoyer } = construireTimelineBandeau({ racine })
     expect(wordmark.children.length).toBeGreaterThan(1)
 
     // Ce que l'application branche sur `onComplete` : le découpage ne sert que
@@ -108,10 +108,10 @@ describe('tc-109 — séquence d’arrivée du bandeau', () => {
   })
 
   it('rend le DOM d’origine au nettoyage', () => {
-    const { wordmark, ...refs } = poserBandeau()
+    const { racine, wordmark } = poserBandeau()
     const avant = wordmark.innerHTML
 
-    const { nettoyer } = construireTimelineBandeau({ ...refs, wordmark })
+    const { nettoyer } = construireTimelineBandeau({ racine })
     nettoyer()
 
     expect(wordmark.innerHTML).toBe(avant)
@@ -119,8 +119,8 @@ describe('tc-109 — séquence d’arrivée du bandeau', () => {
   })
 
   it('laisse les nœuds dans leur état naturel à la fin', () => {
-    const { pastille, wordmark, metier } = poserBandeau()
-    const { timeline, nettoyer } = construireTimelineBandeau({ pastille, wordmark, metier })
+    const { racine, pastille, metier } = poserBandeau()
+    const { timeline, nettoyer } = construireTimelineBandeau({ racine })
 
     timeline.progress(1)
 
@@ -151,9 +151,9 @@ describe('tc-109 — séquence d’arrivée du bandeau', () => {
    * séquence, pas seulement pour StrictMode.
    */
   it('restitue les styles si la séquence est interrompue, et repart sain au montage suivant', () => {
-    const { pastille, wordmark, metier } = poserBandeau()
+    const { racine, pastille, metier } = poserBandeau()
 
-    const premiere = construireTimelineBandeau({ pastille, wordmark, metier })
+    const premiere = construireTimelineBandeau({ racine })
     premiere.timeline.progress(0.1)
     premiere.nettoyer()
 
@@ -162,7 +162,7 @@ describe('tc-109 — séquence d’arrivée du bandeau', () => {
     expect(pastille.style.opacity).toBe('')
     expect(metier.style.opacity).toBe('')
 
-    const seconde = construireTimelineBandeau({ pastille, wordmark, metier })
+    const seconde = construireTimelineBandeau({ racine })
     seconde.timeline.progress(1)
 
     expect(Number(pastille.style.opacity || 1)).toBe(1)

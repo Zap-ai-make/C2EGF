@@ -83,15 +83,30 @@ export const DUREE_BANDEAU = 1.05
 /**
  * Construit la séquence d'arrivée, EN PAUSE.
  *
- * @param {object} refs — les nœuds du bandeau. Chacun est facultatif : le banc
- *   comme les tests peuvent n'en fournir qu'une partie, et une signature qui
- *   lève sur un nœud manquant transformerait un décor en panne.
- * @returns {{ timeline: gsap.core.Timeline, nettoyer: () => void }}
+ * @param {Element|null} racine — le `<header>` du bandeau. Les trois nœuds
+ *   animés s'y désignent par `data-motion`. Tout est facultatif : un nœud
+ *   manquant est simplement sauté, car une signature qui lève sur un décor
+ *   incomplet transformerait une décoration en panne d'écran.
+ * @param {gsap.core.Timeline} [timeline] — une timeline à peupler plutôt que
+ *   d'en créer une. C'est par là que `@remotion/gsap` prend la main.
+ * @returns {{ timeline, restaurerTexte: () => void, nettoyer: () => void }}
  *   `nettoyer` est OBLIGATOIRE à l'appel : `SplitText` remplace le contenu du
  *   wordmark par un balisage de caractères, et seul `revert()` rend le DOM
  *   d'origine. Sans lui, chaque montage empile un découpage de plus.
  */
-export function construireTimelineBandeau({ pastille, wordmark, metier } = {}) {
+export function construireTimelineBandeau({ racine, timeline } = {}) {
+  // UN SEUL MÉCANISME DE REPÉRAGE, pour les deux consommateurs.
+  //
+  // La première version prenait trois refs React. Le banc Remotion ne peut pas
+  // les atteindre : il monte le composant, il n'en tient pas les refs. Faire
+  // porter le repérage par le DOM lui-même — `data-motion` — donne à
+  // l'application et au banc exactement la même prise, et supprime le risque
+  // qu'ils finissent par animer deux choses différentes.
+  const trouver = (nom) => racine?.querySelector(`[data-motion="${nom}"]`) ?? null
+  const pastille = trouver('pastille')
+  const wordmark = trouver('wordmark')
+  const metier = trouver('metier')
+
   // `mask: 'chars'` enferme chaque caractère dans son propre cadre à débordement
   // masqué : les lettres MONTENT DERRIÈRE leur masque au lieu de flotter. C'est
   // ce qui fait lire « révélation » plutôt que « vol ».
@@ -105,12 +120,21 @@ export function construireTimelineBandeau({ pastille, wordmark, metier } = {}) {
     ? SplitText.create(wordmark, { type: 'chars', mask: 'chars' })
     : null
 
-  const tl = gsap.timeline({ paused: true, defaults: { ease: 'power3.out' } })
+  // La timeline peut être FOURNIE. `@remotion/gsap` possède la sienne — déjà en
+  // pause à l'instant zéro — et la scrute par numéro d'image ; il faut alors la
+  // peupler plutôt qu'en créer une seconde qui vivrait à côté.
+  //
+  // L'accélération est donc écrite sur CHAQUE tween, et non dans les `defaults`
+  // de la timeline : une timeline reçue n'a pas nos défauts, et la séquence
+  // n'aurait alors pas la même allure dans le banc et dans l'application. Le
+  // banc mentirait, ce qui est la seule chose qu'on lui interdit.
+  const tl = timeline ?? gsap.timeline({ paused: true })
+  const ACCELERATION = 'power3.out'
 
   // 1. LA MARQUE S'ALLUME — le nœud source du réseau. Elle arrive seule, avant
   //    le nom : c'est d'elle que part la propagation.
   if (pastille) {
-    tl.from(pastille, { duration: 0.55, opacity: 0, scale: 0.92 }, 0)
+    tl.from(pastille, { duration: 0.55, opacity: 0, scale: 0.92, ease: ACCELERATION }, 0)
   }
 
   // 2. LE NOM SE RÉSOUT, DU CENTRE VERS LES BORDS. `from: 'center'` n'est pas
@@ -120,7 +144,12 @@ export function construireTimelineBandeau({ pastille, wordmark, metier } = {}) {
   if (decoupe?.chars?.length) {
     tl.from(
       decoupe.chars,
-      { duration: 0.5, yPercent: 100, stagger: { each: 0.025, from: 'center' } },
+      {
+        duration: 0.5,
+        yPercent: 100,
+        ease: ACCELERATION,
+        stagger: { each: 0.025, from: 'center' },
+      },
       0.25
     )
   }
@@ -128,7 +157,7 @@ export function construireTimelineBandeau({ pastille, wordmark, metier } = {}) {
   // 3. LA LIGNE DE MÉTIER se pose en dernier, discrètement. Elle nomme le
   //    métier ; elle n'a pas à se faire remarquer.
   if (metier) {
-    tl.from(metier, { duration: 0.45, opacity: 0, y: 8 }, 0.6)
+    tl.from(metier, { duration: 0.45, opacity: 0, y: 8, ease: ACCELERATION }, 0.6)
   }
 
   return {
