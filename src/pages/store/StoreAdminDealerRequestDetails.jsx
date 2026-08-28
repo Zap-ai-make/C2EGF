@@ -12,6 +12,7 @@ import DealerRequestStatusBadge from '../../components/ui/DealerRequestStatusBad
 import {
   DEALER_REQUEST_TYPE_LABELS,
 } from '../../constants/dealerConstants'
+import { ChevronLeft } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // Badges statut
@@ -23,7 +24,7 @@ import {
 
 function Field({ label, value }) {
   return (
-    <div className="flex py-3 border-b border-gray-100 last:border-0">
+    <div className="flex py-3 border-b border-line/60 last:border-0">
       <dt className="w-44 flex-shrink-0 text-sm text-gray-500">{label}</dt>
       <dd className="text-sm font-medium text-gray-800 break-all">{value ?? '—'}</dd>
     </div>
@@ -114,7 +115,7 @@ function ConfirmModal({ request, processing, onConfirm, onClose, initialFocusRef
         </dl>
 
         {/* Avertissement */}
-        <div className="rounded-md bg-amber-50 border border-amber-200 p-3 mb-5 text-sm text-amber-800" role="note">
+        <div className="rounded-md bg-warn-soft border border-warn/30 p-3 mb-5 text-sm text-warn" role="note">
           Cette action modifiera immédiatement le solde de la boutique et ne pourra pas être annulée.
         </div>
 
@@ -126,7 +127,7 @@ function ConfirmModal({ request, processing, onConfirm, onClose, initialFocusRef
             checked={checked}
             onChange={e => setChecked(e.target.checked)}
             disabled={processing}
-            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            className="mt-0.5 h-4 w-4 rounded border-line accent-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             aria-label="Je confirme avoir vérifié le montant et le type de demande"
             data-testid="confirm-checkbox"
           />
@@ -141,7 +142,7 @@ function ConfirmModal({ request, processing, onConfirm, onClose, initialFocusRef
             type="button"
             onClick={onClose}
             disabled={processing}
-            className="rounded border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 transition-colors"
+            className="rounded border border-line px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 transition-colors"
             data-testid="confirm-modal-cancel"
           >
             Annuler
@@ -151,7 +152,7 @@ function ConfirmModal({ request, processing, onConfirm, onClose, initialFocusRef
             onClick={onConfirm}
             disabled={!canSubmit}
             aria-disabled={!canSubmit}
-            className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500 transition-colors"
+            className="rounded bg-success px-4 py-2 text-sm font-medium text-white hover:bg-success/90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 transition-colors"
             data-testid="confirm-modal-submit"
           >
             {processing ? 'Confirmation…' : 'Confirmer la demande'}
@@ -235,14 +236,14 @@ function RejectModal({ processing, onReject, onClose, initialFocusRef }) {
             rows={4}
             maxLength={510}
             placeholder="Décrivez le motif du rejet (3 à 500 caractères)…"
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+            className="w-full rounded border border-line px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:opacity-50"
             aria-describedby={localError ? 'reject-reason-error' : 'reject-reason-hint'}
             data-testid="reject-reason-textarea"
           />
           <div className="flex justify-between items-center mt-1">
             <span
               id="reject-reason-hint"
-              className={`text-xs ${charCount > 500 ? 'text-red-600' : 'text-gray-400'}`}
+              className={`text-xs ${charCount > 500 ? 'text-danger' : 'text-gray-400'}`}
               aria-live="polite"
               data-testid="reject-char-counter"
             >
@@ -253,7 +254,7 @@ function RejectModal({ processing, onReject, onClose, initialFocusRef }) {
             <p
               id="reject-reason-error"
               role="alert"
-              className="mt-1 text-xs text-red-600"
+              className="mt-1 text-xs text-danger"
               data-testid="reject-local-error"
             >
               {localError}
@@ -267,7 +268,7 @@ function RejectModal({ processing, onReject, onClose, initialFocusRef }) {
             type="button"
             onClick={onClose}
             disabled={processing}
-            className="rounded border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 transition-colors"
+            className="rounded border border-line px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 transition-colors"
             data-testid="reject-modal-cancel"
           >
             Annuler
@@ -277,7 +278,7 @@ function RejectModal({ processing, onReject, onClose, initialFocusRef }) {
             onClick={handleSubmit}
             disabled={!canSubmit}
             aria-disabled={!canSubmit}
-            className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 transition-colors"
+            className="rounded bg-danger px-4 py-2 text-sm font-medium text-white hover:bg-danger/90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-danger transition-colors"
             data-testid="reject-modal-submit"
           >
             {processing ? 'Rejet en cours…' : 'Confirmer le rejet'}
@@ -445,7 +446,7 @@ function StoreAdminDealerRequestDetails() {
         <div className="bg-white rounded-lg shadow p-8 animate-pulse">
           <div className="h-6 w-48 bg-gray-200 rounded mb-6" />
           {[1, 2, 3, 4, 5, 6].map(n => (
-            <div key={n} className="flex py-3 border-b border-gray-100">
+            <div key={n} className="flex py-3 border-b border-line/60">
               <div className="w-44 h-4 bg-gray-200 rounded mr-4" />
               <div className="flex-1 h-4 bg-gray-200 rounded" />
             </div>
@@ -462,14 +463,14 @@ function StoreAdminDealerRequestDetails() {
   if (error) {
     return (
       <div className="max-w-2xl mx-auto" data-testid="store-dealer-request-details">
-        <div role="alert" className="rounded-lg bg-red-50 border border-red-200 p-5 text-red-700">
+        <div role="alert" className="rounded-lg bg-danger-soft border border-danger/30 p-5 text-danger">
           <p className="font-medium mb-1">Erreur</p>
           <p className="text-sm">{error}</p>
           <div className="mt-3 flex gap-3">
             <button
               type="button"
               onClick={() => navigate('/dealer-requests')}
-              className="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+              className="rounded bg-danger px-3 py-1.5 text-sm font-medium text-white hover:bg-danger/90 transition-colors"
               data-testid="btn-back-error"
             >
               Retour à la liste
@@ -513,15 +514,18 @@ function StoreAdminDealerRequestDetails() {
         />
       )}
 
-      {/* Retour */}
+      {/* Retour. La flèche était un caractère tapé au clavier : sa graisse ne
+          suit pas la typo, son rendu dépend de la police du système, et un
+          lecteur d'écran la prononce. */}
       <div className="mb-5">
         <button
           type="button"
           onClick={() => navigate('/dealer-requests')}
-          className="text-sm text-blue-600 hover:text-blue-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+          className="inline-flex items-center gap-1.5 rounded text-sm font-medium text-brand-500 transition-colors hover:text-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           data-testid="btn-back"
         >
-          ← Retour à la liste
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+          Retour à la liste
         </button>
       </div>
 
@@ -531,7 +535,7 @@ function StoreAdminDealerRequestDetails() {
           ref={successBannerRef}
           tabIndex={-1}
           role="status"
-          className="mb-4 rounded-lg bg-green-50 border border-green-200 p-4 text-green-800 text-sm focus:outline-none"
+          className="mb-4 rounded-lg bg-success-soft border border-success/30 p-4 text-sm text-success focus:outline-none"
           data-testid="action-success"
         >
           {actionSuccess}
@@ -542,7 +546,7 @@ function StoreAdminDealerRequestDetails() {
       {refreshError && (
         <div
           role="alert"
-          className="mb-4 rounded-lg bg-amber-50 border border-amber-200 p-4 text-amber-800 text-sm"
+          className="mb-4 rounded-lg bg-warn-soft border border-warn/30 p-4 text-sm text-warn"
           data-testid="refresh-error"
         >
           {refreshError}
@@ -553,7 +557,7 @@ function StoreAdminDealerRequestDetails() {
       {actionError && (
         <div
           role="alert"
-          className="mb-4 rounded-lg bg-red-50 border border-red-200 p-4 text-red-700 text-sm"
+          className="mb-4 rounded-lg bg-danger-soft border border-danger/30 p-4 text-sm text-danger"
           data-testid="action-error"
         >
           {actionError}
@@ -592,13 +596,13 @@ function StoreAdminDealerRequestDetails() {
 
         {/* Actions — uniquement pour les demandes en attente */}
         {isPending && (
-          <div className="mt-6 pt-5 border-t border-gray-100 flex flex-wrap gap-3" data-testid="action-buttons">
+          <div className="mt-6 pt-5 border-t border-line/60 flex flex-wrap gap-3" data-testid="action-buttons">
             <button
               ref={confirmTriggerRef}
               type="button"
               onClick={() => { setActionError(null); setActionSuccess(null); setRefreshError(null); setConfirmModalOpen(true) }}
               disabled={!!processingAction}
-              className="rounded bg-green-600 px-5 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500 transition-colors"
+              className="rounded bg-success px-5 py-2 text-sm font-medium text-white hover:bg-success/90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 transition-colors"
               aria-label="Confirmer cette demande Dealer"
               data-testid="btn-confirm"
             >
@@ -609,7 +613,7 @@ function StoreAdminDealerRequestDetails() {
               type="button"
               onClick={() => { setActionError(null); setActionSuccess(null); setRefreshError(null); setRejectModalOpen(true) }}
               disabled={!!processingAction}
-              className="rounded bg-red-600 px-5 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 transition-colors"
+              className="rounded bg-danger px-5 py-2 text-sm font-medium text-white hover:bg-danger/90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-danger transition-colors"
               aria-label="Rejeter cette demande Dealer"
               data-testid="btn-reject"
             >

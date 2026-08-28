@@ -18,19 +18,18 @@
  * À relancer dès que change l'image, son cadrage, ou l'opacité des voiles de
  * `.bandeau-marque` (src/index.css) : les trois entrent dans le résultat.
  */
-import { createServer } from 'vite'
 import { chromium } from 'playwright'
+
+import { ouvrirBanc } from './lib/banc.mjs'
 
 const largeur = Number(process.argv[2] || 1440)
 const SEUIL_AA = 4.5
 
-const serveur = await createServer({ server: { port: 0 }, logLevel: 'error' })
-await serveur.listen()
-const { port } = serveur.httpServer.address()
+const { serveur, url } = await ouvrirBanc()
 
 const navigateur = await chromium.launch()
 const page = await navigateur.newPage({ viewport: { width: largeur, height: 600 } })
-await page.goto(`http://localhost:${port}/preview.html`, { waitUntil: 'networkidle' })
+await page.goto(url, { waitUntil: 'networkidle' })
 await page.waitForTimeout(1200)
 
 // Emprise réelle du texte, relevée sur la page avant de le masquer.

@@ -8,14 +8,21 @@ import { DEALER_REQUEST_STATUS_LABELS } from '../../constants/dealerConstants'
  * DEALER_REQUEST_STATUS_LABELS ; palette et testid conservés à l'identique des
  * copies d'origine pour ne rien changer à l'affichage ni aux tests.
  *
- * Distinct du StatusBadge générique (components/ui/StatusBadge.jsx), dont l'API
- * (status + label + color) et la palette (amber) diffèrent.
+ * Reste distinct du StatusBadge générique (components/ui/StatusBadge.jsx) : leur
+ * API diffère (celui-ci dérive son libellé d'un dictionnaire métier, et porte un
+ * nom accessible « Statut : … » plus un testid). Leurs PALETTES, elles, sont
+ * désormais les mêmes — deux badges affichant « En attente » à deux endroits de
+ * l'application ne peuvent pas être de deux couleurs. Toute évolution de l'une
+ * se reporte sur l'autre.
+ *
+ * `pending` était ambre. Le jeton `pending` existe et dit exactement cela : en
+ * attente, ni succès ni échec. L'ambre reste réservé aux SEUILS (`warn`).
  */
 
 const STATUS_STYLES = {
-  pending:   'bg-yellow-100 text-yellow-800',
-  confirmed: 'bg-green-100 text-green-800',
-  rejected:  'bg-red-100 text-red-800',
+  pending:   'bg-pending-soft text-pending',
+  confirmed: 'bg-success-soft text-success',
+  rejected:  'bg-danger-soft text-danger',
 }
 
 function DealerRequestStatusBadge({ status }) {

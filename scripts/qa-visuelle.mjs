@@ -8,20 +8,14 @@
  *   node scripts/capture.mjs [chemin-de-sortie] [largeur]
  */
 
-import { createServer } from 'vite'
 import { chromium } from 'playwright'
+
+import { ouvrirBanc } from './lib/banc.mjs'
 
 const sortie = process.argv[2] || 'capture.png'
 const largeur = Number(process.argv[3] || 1440)
 
-const serveur = await createServer({
-  server: { port: 0 },
-  logLevel: 'error',
-})
-await serveur.listen()
-
-const { port } = serveur.httpServer.address()
-const url = `http://localhost:${port}/preview.html`
+const { serveur, url } = await ouvrirBanc()
 
 const navigateur = await chromium.launch()
 const page = await navigateur.newPage({ viewport: { width: largeur, height: 1000 } })
@@ -33,7 +27,9 @@ page.on('pageerror', (e) => erreurs.push(String(e)))
 await page.goto(url, { waitUntil: 'networkidle' })
 // Recharts mesure ses conteneurs après le montage : on lui laisse une frame.
 await page.waitForTimeout(2500)
-await page.screenshot({ path: sortie, fullPage: true })
+// `fullPage` attend que les polices soient prêtes, et la page du banc est
+// devenue longue : le délai par défaut de 30 s n'y suffit plus.
+await page.screenshot({ path: sortie, fullPage: true, timeout: 120_000, animations: 'disabled' })
 
 await navigateur.close()
 await serveur.close()

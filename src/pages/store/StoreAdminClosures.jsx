@@ -17,13 +17,18 @@ function fmtAmount(n) {
 
 function diffClass(v) {
   if (v === 0) return 'text-gray-500'
-  return v > 0 ? 'text-green-600' : 'text-red-600'
+  // Un écart de clôture est un MOUVEMENT D'ARGENT signé, pas un succès ni un
+  // échec : positif il entre, négatif il sort. D'où inflow/outflow et non
+  // success/danger — la distinction que toute l'application confondait.
+  return v > 0 ? 'text-inflow' : 'text-outflow'
 }
 
 const STATUS_LABELS = {
-  pending:   { label: 'En attente',  cls: 'bg-amber-100 text-amber-700' },
-  confirmed: { label: 'Confirmée',   cls: 'bg-green-100 text-green-700' },
-  rejected:  { label: 'Rejetée',     cls: 'bg-red-100   text-red-700'  },
+  // Mêmes jetons que DealerRequestStatusBadge : « En attente » ne peut pas être
+  // ambre ici et gris-bleu ailleurs.
+  pending:   { label: 'En attente',  cls: 'bg-pending-soft text-pending' },
+  confirmed: { label: 'Confirmée',   cls: 'bg-success-soft text-success' },
+  rejected:  { label: 'Rejetée',     cls: 'bg-danger-soft  text-danger'  },
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -63,27 +68,27 @@ function RejectModal({ closureId, onSuccess, onClose }) {
               value={reason}
               onChange={e => setReason(e.target.value)}
               maxLength={500}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400 resize-none"
+              className="w-full rounded-lg border border-line px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-danger resize-none"
               placeholder="Expliquez pourquoi vous rejetez cette clôture…"
               autoFocus
               data-testid="reject-reason-input"
             />
             <p className="text-xs text-gray-400 mt-0.5">{reason.length}/500</p>
           </div>
-          {err && <p className="text-sm text-red-600">{err}</p>}
+          {err && <p className="text-sm text-danger">{err}</p>}
           <div className="flex justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="rounded-lg border border-line bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             >
               Annuler
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+              className="rounded-lg bg-danger px-4 py-2 text-sm font-medium text-white hover:bg-danger/90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
               data-testid="reject-confirm-btn"
             >
               {submitting ? 'Envoi…' : 'Rejeter'}
@@ -172,7 +177,7 @@ function StoreAdminClosures() {
             type="button"
             onClick={() => loadClosures(true)}
             disabled={loading}
-            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            className="rounded-lg border border-line bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
             {loading ? 'Chargement…' : 'Actualiser'}
           </button>
@@ -180,7 +185,7 @@ function StoreAdminClosures() {
       />
 
       {actionError && (
-        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+        <div className="mb-4 rounded-lg bg-danger-soft border border-danger/30 px-4 py-3 text-sm text-danger">
           {actionError}
         </div>
       )}
@@ -194,7 +199,7 @@ function StoreAdminClosures() {
       {error && <ErrorState message={error} onRetry={() => loadClosures(true)} />}
 
       {!loading && !error && closures.length === 0 && (
-        <div className="rounded-xl border border-gray-200 bg-gray-50 p-12 text-center">
+        <div className="rounded-xl border border-line bg-gray-50 p-12 text-center">
           <p className="text-base font-medium text-gray-600">Aucune clôture en attente</p>
           <p className="mt-1 text-sm text-gray-400">Le Dealer n'a pas encore soumis de clôture pour votre boutique.</p>
         </div>
@@ -206,7 +211,7 @@ function StoreAdminClosures() {
             const st = STATUS_LABELS[c.status] ?? { label: c.status, cls: 'bg-gray-100 text-gray-700' }
             const isActing = actionLoading === c.id
             return (
-              <div key={c.id} className="rounded-xl border border-gray-200 bg-white p-4">
+              <div key={c.id} className="rounded-xl border border-line bg-white p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
                   <div>
                     <p className="font-semibold text-gray-900">{c.dealerName ?? c.dealerEmail ?? c.dealerUid}</p>
@@ -237,7 +242,7 @@ function StoreAdminClosures() {
                 </div>
 
                 {(c.stockDifference !== 0 || c.liquidityDifference !== 0) && (
-                  <div className="flex flex-wrap gap-4 text-sm border-t border-gray-100 pt-3 mb-3">
+                  <div className="flex flex-wrap gap-4 text-sm border-t border-line/60 pt-3 mb-3">
                     <div>
                       <span className="text-xs text-gray-400">Écart stock : </span>
                       <span className={`font-semibold ${diffClass(c.stockDifference)}`}>
@@ -257,16 +262,16 @@ function StoreAdminClosures() {
                   <p className="text-xs text-gray-500 italic mb-3">Motif Dealer : {c.reason}</p>
                 )}
                 {c.status === 'rejected' && c.rejectionReason && (
-                  <p className="text-xs text-red-600 mb-3">Rejet : {c.rejectionReason}</p>
+                  <p className="text-xs text-danger mb-3">Rejet : {c.rejectionReason}</p>
                 )}
 
                 {c.status === 'pending' && (
-                  <div className="flex gap-3 pt-2 border-t border-gray-100">
+                  <div className="flex gap-3 pt-2 border-t border-line/60">
                     <button
                       type="button"
                       onClick={() => handleConfirm(c.id)}
                       disabled={isActing}
-                      className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                      className="rounded-lg bg-success px-4 py-2 text-sm font-medium text-white hover:bg-success/90 transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
                       data-testid={`confirm-closure-${c.id}`}
                     >
                       {isActing ? 'Traitement…' : 'Confirmer'}
@@ -275,7 +280,7 @@ function StoreAdminClosures() {
                       type="button"
                       onClick={() => setRejectTarget(c.id)}
                       disabled={isActing}
-                      className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                      className="rounded-lg border border-danger/30 bg-danger-soft px-4 py-2 text-sm font-medium text-danger hover:bg-danger-soft/70 transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
                       data-testid={`reject-closure-${c.id}`}
                     >
                       Rejeter
@@ -292,7 +297,7 @@ function StoreAdminClosures() {
                 type="button"
                 onClick={() => loadClosures(false)}
                 disabled={loading}
-                className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                className="rounded-lg border border-line bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
               >
                 {loading ? 'Chargement…' : 'Charger plus'}
               </button>

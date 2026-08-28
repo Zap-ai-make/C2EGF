@@ -34,7 +34,8 @@
     "v2:user:verify": "node scripts/verifyTechnicalUser.mjs",
     "v2:user:delete": "node scripts/deleteTechnicalUser.mjs",
     "capture": "node scripts/qa-visuelle.mjs",
-    "contraste": "node scripts/contraste-bandeau.mjs"
+    "contraste": "node scripts/contraste-bandeau.mjs",
+    "deborde": "node scripts/deborde.mjs"
   },
   "dependencies": {
     "firebase": "^12.2.1",

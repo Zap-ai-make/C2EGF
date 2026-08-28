@@ -9,6 +9,11 @@ import { formatStoredAmount } from '../../utils/formatCurrency'
 import { mergeUniqueRequests } from '../../utils/mergeRequests'
 import { formatFirestoreDate } from '../../utils/formatFirestoreDate'
 import DealerRequestStatusBadge from '../../components/ui/DealerRequestStatusBadge'
+import PageHeader from '../../components/ui/PageHeader'
+import EmptyState from '../../components/ui/EmptyState'
+import ErrorState from '../../components/ui/ErrorState'
+import { SkeletonTable } from '../../components/ui/SkeletonList'
+import { RefreshCw, Inbox, SearchX } from 'lucide-react'
 import {
   DEALER_REQUEST_STATUS_LABELS,
   DEALER_REQUEST_STATUSES,
@@ -204,34 +209,42 @@ function StoreAdminDealerRequests() {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="max-w-6xl mx-auto" data-testid="store-dealer-requests">
-      {/* En-tête */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-        <h1 className="text-xl font-bold text-gray-800">Demandes Dealer</h1>
-        <button
-          type="button"
-          onClick={() => { setExtraRequests([]); setRefreshKey(k => k + 1) }}
-          disabled={loading}
-          className="rounded bg-gray-100 border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 transition-colors"
-          aria-label="Actualiser la liste"
-          data-testid="btn-refresh"
-        >
-          {loading ? 'Chargement…' : 'Actualiser'}
-        </button>
-      </div>
+    <div data-testid="store-dealer-requests">
+      {/* Le titre passe par PageHeader, comme les six autres écrans de la
+          boutique : un h1, un seul dessin, et une place prévue pour l'action.
+          L'écran ouvrait aussi sa propre largeur (`max-w-6xl mx-auto`) alors
+          que le Layout tient déjà la gouttière — un tableau de neuf colonnes
+          n'a aucune raison d'être plus étroit que celui de l'historique. */}
+      <PageHeader
+        title="Demandes Dealer"
+        subtitle="Ravitaillements demandés par le dealer pour votre boutique"
+        actions={
+          <button
+            type="button"
+            onClick={() => { setExtraRequests([]); setRefreshKey(k => k + 1) }}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-brand-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+            aria-label="Actualiser la liste"
+            data-testid="btn-refresh"
+          >
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            {loading ? 'Chargement…' : 'Actualiser'}
+          </button>
+        }
+      />
 
       {/* Filtres */}
-      <div className="bg-white rounded-lg shadow p-4 mb-5 flex flex-wrap gap-4 items-end">
+      <div className="mb-5 flex flex-wrap items-end gap-4 rounded-lg border border-line bg-surface p-4">
         {/* Statut */}
         <div className="flex-1 min-w-36">
-          <label htmlFor="status-filter" className="block text-xs font-medium text-gray-600 mb-1">
+          <label htmlFor="status-filter" className="mb-1 block text-xs font-medium text-ink-muted">
             Statut
           </label>
           <select
             id="status-filter"
             value={statusFilter}
             onChange={e => handleStatusChange(e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded border border-line px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             aria-label="Filtrer par statut"
             data-testid="filter-status"
           >
@@ -243,14 +256,14 @@ function StoreAdminDealerRequests() {
 
         {/* Type */}
         <div className="flex-1 min-w-36">
-          <label htmlFor="type-filter" className="block text-xs font-medium text-gray-600 mb-1">
+          <label htmlFor="type-filter" className="mb-1 block text-xs font-medium text-ink-muted">
             Type
           </label>
           <select
             id="type-filter"
             value={typeFilter}
             onChange={e => handleTypeChange(e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded border border-line px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             aria-label="Filtrer par type"
             data-testid="filter-type"
           >
@@ -262,7 +275,7 @@ function StoreAdminDealerRequests() {
 
         {/* Recherche locale Dealer */}
         <div className="flex-1 min-w-40">
-          <label htmlFor="dealer-search" className="block text-xs font-medium text-gray-600 mb-1">
+          <label htmlFor="dealer-search" className="mb-1 block text-xs font-medium text-ink-muted">
             Rechercher dans les demandes chargées
           </label>
           <input
@@ -271,116 +284,132 @@ function StoreAdminDealerRequests() {
             value={dealerSearch}
             onChange={e => setDealerSearch(e.target.value)}
             placeholder="Nom ou email Dealer…"
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            className="w-full rounded border border-line px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             aria-label="Rechercher parmi les demandes chargées"
             data-testid="filter-dealer"
           />
         </div>
       </div>
 
-      {/* État chargement initial */}
-      {loading && (
-        <div className="space-y-3" aria-busy="true" aria-label="Chargement des demandes">
-          {[1, 2, 3].map(n => (
-            <div key={n} className="bg-white rounded-lg shadow p-4 animate-pulse">
-              <div className="flex justify-between items-center">
-                <div className="h-4 w-40 bg-gray-200 rounded" />
-                <div className="h-5 w-20 bg-gray-200 rounded-full" />
-              </div>
-              <div className="mt-3 flex gap-6">
-                <div className="h-4 w-24 bg-gray-200 rounded" />
-                <div className="h-4 w-20 bg-gray-200 rounded" />
-                <div className="h-4 w-28 bg-gray-200 rounded" />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Chargement : le squelette partagé. Il en existait un quatrième ici,
+          fait main — trois fausses cartes, alors que le contenu qui arrive est
+          un TABLEAU. Un squelette qui n'annonce pas la bonne forme fait sauter
+          la page au moment où les données arrivent. */}
+      {loading && <SkeletonTable rows={4} cols={6} />}
 
-      {/* Erreur */}
-      {error && (
-        <div role="alert" className="rounded-lg bg-red-50 border border-red-200 p-5 text-red-700">
-          <p className="font-medium mb-1">Erreur</p>
-          <p className="text-sm">{error}</p>
-          <button
-            type="button"
-            onClick={() => setRefreshKey(k => k + 1)}
-            className="mt-3 rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 transition-colors"
-            data-testid="btn-retry"
-          >
-            Réessayer
-          </button>
-        </div>
-      )}
+      {/* Erreur : le composant partagé, qui porte déjà role="alert" et son
+          bouton « Réessayer ». */}
+      {error && <ErrorState message={error} onRetry={() => setRefreshKey(k => k + 1)} />}
 
-      {/* Liste vide */}
+      {/* Deux vides distincts, deux issues distinctes : des filtres qui ne
+          rendent rien s'effacent ; une boîte réellement vide n'attend rien de
+          l'utilisateur — elle attend le dealer, et le dit. */}
       {hasLoaded && !loading && !error && requests.length === 0 && (
-        <div className="bg-white rounded-lg shadow p-10 text-center text-gray-500" data-testid="empty-state">
-          {statusFilter || typeFilter
-            ? 'Aucune demande ne correspond aux filtres sélectionnés.'
-            : 'Aucune demande Dealer pour votre boutique.'}
+        <div data-testid="empty-state">
+          {statusFilter || typeFilter ? (
+            <EmptyState
+              icon={SearchX}
+              title="Aucune demande ne correspond aux filtres sélectionnés."
+              message="Élargissez la sélection pour voir les autres demandes."
+              action={
+                <button
+                  type="button"
+                  onClick={() => { handleStatusChange(''); handleTypeChange('') }}
+                  className="rounded border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                >
+                  Effacer les filtres
+                </button>
+              }
+            />
+          ) : (
+            <EmptyState
+              icon={Inbox}
+              title="Aucune demande Dealer pour votre boutique."
+              message="Les ravitaillements envoyés par le dealer apparaîtront ici, à valider ou à rejeter."
+            />
+          )}
         </div>
       )}
 
-      {/* Aucun résultat après filtre local */}
       {hasLoaded && !loading && !error && requests.length > 0 && filtered.length === 0 && (
-        <div className="bg-white rounded-lg shadow p-10 text-center text-gray-500" data-testid="empty-search">
-          Aucune demande ne correspond à « {dealerSearch} ».
+        <div data-testid="empty-search">
+          <EmptyState
+            icon={SearchX}
+            title={'Aucune demande ne correspond à \u00ab ' + dealerSearch + ' \u00bb.'}
+            message="La recherche ne porte que sur les demandes déjà chargées."
+            action={
+              <button
+                type="button"
+                onClick={() => setDealerSearch('')}
+                className="rounded border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+              >
+                Effacer la recherche
+              </button>
+            }
+          />
         </div>
       )}
 
       {/* Tableau */}
       {!loading && filtered.length > 0 && (
         <>
-          <div className="bg-white rounded-lg shadow overflow-x-auto" data-testid="requests-table">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
+          <div className="overflow-x-auto rounded-lg border border-line bg-surface" data-testid="requests-table">
+            <table className="min-w-full text-sm">
+              <thead className="border-b border-line bg-brand-50">
                 <tr>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dealer</th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Montant</th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Réseau</th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Créée le</th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mise à jour</th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">Dealer</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">Email</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">Type</th>
+                  <th scope="col" className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-ink-muted">Montant</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">Réseau</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">Statut</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">Créée le</th>
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">Mise à jour</th>
+                  {/* `relative` n'est pas décoratif ici : `sr-only` place son
+                      contenu en `position: absolute`. Sans ancêtre positionné,
+                      son bloc conteneur devient la PAGE — il échappe au cadre
+                      défilant du tableau et va se poser à la largeur réelle de
+                      celui-ci, ~1 035 px. Le document se met alors à défiler
+                      horizontalement sur mobile, alors que le tableau, lui,
+                      défilait correctement dans son cadre. Un texte invisible
+                      d'un pixel élargissait la page de 645 px. */}
+                  <th scope="col" className="relative px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">
                     <span className="sr-only">Détail</span>
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-100">
+              <tbody className="divide-y divide-line/60">
                 {filtered.map(req => (
-                  <tr key={req.id} data-testid={`request-row-${req.id}`}>
-                    <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-800">
+                  <tr key={req.id} className="transition-colors hover:bg-brand-50/60" data-testid={`request-row-${req.id}`}>
+                    <td className="whitespace-nowrap px-4 py-3 font-medium text-ink">
                       {req.dealerName ?? 'Dealer inconnu'}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-600 text-xs">
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-ink-muted">
                       {req.dealerEmail ?? 'Email indisponible'}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-600">
+                    <td className="whitespace-nowrap px-4 py-3 text-ink-muted">
                       {DEALER_REQUEST_TYPE_LABELS[req.requestType] ?? 'Type inconnu'}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-800 font-medium">
+                    <td className="whitespace-nowrap px-4 py-3 text-right font-medium tabular-nums text-ink">
                       {formatStoredAmount(req.amount)}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-600">
+                    <td className="whitespace-nowrap px-4 py-3 text-ink-muted">
                       {req.network ?? '—'}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <DealerRequestStatusBadge status={req.status} />
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-500 text-xs">
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-ink-muted">
                       {formatFirestoreDate(req.createdAt)}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-500 text-xs">
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-ink-muted">
                       {formatFirestoreDate(req.updatedAt)}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <button
                         type="button"
                         onClick={() => navigate(`/dealer-requests/${req.id}`)}
-                        className="text-blue-600 hover:text-blue-800 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                        className="text-brand-500 hover:text-brand-600 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 rounded"
                         aria-label={`Voir le détail de la demande ${req.id}`}
                         data-testid={`btn-detail-${req.id}`}
                       >
@@ -400,7 +429,7 @@ function StoreAdminDealerRequests() {
                 type="button"
                 onClick={loadMore}
                 disabled={loadingMore}
-                className="rounded bg-gray-100 border border-gray-300 px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 transition-colors"
+                className="rounded border border-line bg-surface px-6 py-2 text-sm font-medium text-ink transition-colors hover:bg-brand-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
                 data-testid="btn-load-more"
               >
                 {loadingMore ? 'Chargement…' : 'Charger plus'}

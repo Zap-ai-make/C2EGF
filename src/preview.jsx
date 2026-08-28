@@ -28,6 +28,7 @@ import { getTransactionStyles } from './utils/helpers.js'
 import PageHeader from './components/ui/PageHeader.jsx'
 import ClientsTable from './components/ClientsTable.jsx'
 import HistoriqueTable from './components/historique/HistoriqueTable.jsx'
+import StoreAdminDealerRequests from './pages/store/StoreAdminDealerRequests.jsx'
 import Balance from './components/dashboard/Balance.jsx'
 import ReseauCards from './components/dashboard/ReseauCards.jsx'
 import FluxChart from './components/dashboard/FluxChart.jsx'
@@ -244,7 +245,13 @@ function Preview() {
   return (
     <MemoryRouter>
     <ThemeProvider>
-    <AuthContext.Provider value={{ activeStore: { id: 'store-ouaga', name: 'C2EGF OUAGA' } }}>
+    <AuthContext.Provider
+      value={{
+        activeStore: { id: 'store-ouaga', name: 'C2EGF OUAGA' },
+        currentUser: { uid: 'banc-essai' },
+        userProfile: { role: 'store_admin', storeId: 'store-ouaga', name: 'Gérant OUAGA' },
+      }}
+    >
     <ClientsContext.Provider value={{ clients: agents, loading: false }}>
       <TransactionsContext.Provider
         value={{
@@ -311,6 +318,11 @@ function Preview() {
           <div className="rounded-lg bg-surface p-6 shadow-md">
             <HistoriqueTable transactions={[]} />
           </div>
+
+          {/* Septième destination de la boutique. L'écran RÉEL — pas une
+              maquette : le banc substitue seulement son accès aux données
+              (scripts/lib/banc.mjs). */}
+          <StoreAdminDealerRequests />
         </div>
       </div>
       </TransactionsContext.Provider>

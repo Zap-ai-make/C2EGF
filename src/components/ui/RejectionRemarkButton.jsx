@@ -28,7 +28,7 @@ function RejectionRemarkButton({ storeName, reason, testId }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+        className="inline-flex items-center gap-1 rounded-md border border-danger/30 bg-danger-soft px-2 py-1 text-xs font-medium text-danger hover:bg-danger-soft/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
         aria-label={`Voir la remarque de rejet de ${storeName}`}
         data-testid={testId}
       >
@@ -51,7 +51,7 @@ function RejectionRemarkButton({ storeName, reason, testId }) {
             className="w-full max-w-md rounded-xl bg-white shadow-xl"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4">
+            <div className="flex items-start justify-between gap-4 border-b border-line/60 px-5 py-4">
               <div>
                 <h2 id="remark-modal-title" className="text-base font-semibold text-gray-900">
                   Remarque de rejet
@@ -61,7 +61,7 @@ function RejectionRemarkButton({ storeName, reason, testId }) {
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
                 aria-label="Fermer"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
@@ -70,15 +70,15 @@ function RejectionRemarkButton({ storeName, reason, testId }) {
               </button>
             </div>
             <div className="px-5 py-4">
-              <p className="whitespace-pre-wrap rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+              <p className="whitespace-pre-wrap rounded-lg bg-danger-soft border border-danger/30 px-3 py-2 text-sm text-danger">
                 {reason}
               </p>
             </div>
-            <div className="flex justify-end border-t border-gray-100 px-5 py-3">
+            <div className="flex justify-end border-t border-line/60 px-5 py-3">
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+                className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
               >
                 Fermer
               </button>
