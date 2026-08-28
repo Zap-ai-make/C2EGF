@@ -1,6 +1,6 @@
 # Refonte C2EGF BURKINA — bilan
 
-**Branche** `feat/design-lot1-boutique` · 29 commits
+**Branche** `feat/design-lot1-boutique` · 30 commits
 **Mis à jour le** 28 août 2026
 **Périmètre** : le design. Le modèle de données et le fonctionnement métier ne
 sont pas touchés — aucun champ Firestore ajouté, renommé ou supprimé, aucune
@@ -174,6 +174,46 @@ hors palette, il n'en reste aucune.** Au-delà de la couleur :
 - **Les écarts de clôture** étaient vert/rouge, donc succès/échec. Un écart est
   un **mouvement signé** : `inflow`/`outflow`.
 
+### Lot 12 — l'authentification
+
+**Le violet n'était pas une teinte à corriger.** `authStyles.js` portait
+`THEME_VARIANTS` : **deux thèmes complets**, un `primary` marine et un
+`secondary` violet, consommé cinq fois par le seul formulaire d'inscription.
+Repeindre le violet en bleu aurait laissé en place un axe de variation sans
+raison d'être dans un produit à une seule marque — et qui serait revenu au
+premier composant distrait. `THEME_VARIANTS` part en entier ; ses quatre
+consommateurs pointent sur des styles nommés par leur **rôle**.
+**Zéro couleur hors jetons** dans `src/components/auth/`.
+
+**Un décor recouvrait l'action.** Une pastille — un cadenas dans un cercle blanc
+— était posée en `absolute bottom-8` sur un panneau au contenu centré
+verticalement : aux hauteurs réelles, elle passait **par-dessus le bouton
+d'appel à l'action**. Elle part, et le cadenas ne manque pas — une icône de
+sécurité sur un écran de connexion rassure sans rien prouver. Les deux blobs
+flous partent avec elle (`DESIGN.md` §1).
+
+**À leur place, la photographie du bandeau.** L'écran de connexion et l'écran
+d'accueil montrent la même image ; elle est déjà téléchargée sur ce format.
+
+**Les champs ont de vraies étiquettes.** Ils n'avaient qu'un placeholder, qui
+disparaît à la première frappe — et qui, à la saisie automatique, n'a jamais
+rien dit. La règle des 8 caractères est annoncée **avant** la saisie au lieu
+d'apparaître après l'échec.
+
+**Le texte.** « SE CONNECTER » et « S'INSCRIRE » quittent les capitales. Le
+bouton du panneau porte le **même mot** que celui du formulaire d'en face. Et
+les sous-titres commençaient par « ou utilisez votre email… » — un « ou » qui
+annonçait une alternative à une méthode inexistante.
+
+**La sonde de contraste a failli mentir.** Étendue au panneau, elle échantillonnait
+des zones **hors de la capture** — et du vide se lit `rgb(0,0,0)`, soit un
+parfait 21:1 sur les quatre lignes. Une mesure fausse qui annonce la réussite est
+pire que pas de mesure. Corrigée (coordonnées de page, capture pleine hauteur),
+et dotée d'un garde-fou qui **crie** quand une zone sort du cadre.
+
+Mesures réelles — bandeau **12,46:1** · **8,11:1** ; panneau **16,30:1** ·
+**15,44:1** · **8,95:1** · **9,73:1**.
+
 ### Deux défauts de `.gitignore` — invisibles, et en production
 
 Trouvés en commitant, pas en lisant. Même mécanisme, deux fois : **un motif écrit
@@ -278,22 +318,16 @@ descend jusqu'à la feuille. Elle ne raisonne plus, elle mesure.
 | Couleurs décoratives — `src/pages/store/` (3 écrans) | **0** |
 | Couleurs décoratives — `components/{transactions,historique,dashboard,network}` | **0** |
 | Couleurs décoratives — `src/components/*.jsx` (racine) | **0** |
-| Contraste du bandeau, mesuré sur les pixels rendus | 12,46:1 · 8,11:1 |
+| Couleurs décoratives — `src/components/auth/` + `authStyles.js` | **0** |
+| Contraste mesuré sur les pixels rendus — bandeau | 12,46:1 · 8,11:1 |
+| Contraste mesuré sur les pixels rendus — panneau d'authentification | 16,30:1 · 15,44:1 · 8,95:1 · 9,73:1 |
 | Actifs de produit avalés par `.gitignore` | **0** (deux corrigés) |
 
 ---
 
 ## 4. Ce qui reste
 
-### A. L'authentification
-
-`authStyles.js` porte 28 occurrences, et son `THEME_VARIANTS.secondary` est
-**violet** — consommé **cinq fois** dans `SignUpForm.jsx`. Le formulaire
-d'inscription est violet pendant que celui de connexion est marine, sur le même
-écran, à un clic d'intervalle. Les 7 fichiers `auth/` totalisent 22 occurrences
-de plus.
-
-### B. Les back-offices admin et dealer
+### A. Les back-offices admin et dealer
 
 | Zone | Couleurs décoratives |
 |---|---|
@@ -307,7 +341,7 @@ de `DESIGN.md` §8 — `icon="🏪"`, `"✅"`, `"⚠️"`, `"👥"`, `"📭"` da
 `AdminDashboard.jsx`, `"📦"`/`"💵"` dans `DealerInventoryBar.jsx`, un `👋` dans
 `DealerDashboard.jsx:86`.
 
-### C. Deux composants sans consommateur
+### B. Deux composants sans consommateur
 
 - **`ui/WorkspaceTopbar.jsx`** — aucun import nulle part. Il porte encore le
   wordmark en `text-green-900`, dernier vert AKAYIS.
@@ -317,21 +351,21 @@ de `DESIGN.md` §8 — `icon="🏪"`, `"✅"`, `"⚠️"`, `"👥"`, `"📭"` da
   *quand* un rollback doit parler est une spécification de comportement, pas une
   décision de design. Signalé, non inventé.
 
-### D. `networkConfig.js` — 42 couleurs pour 5 réseaux que ce client n'a pas
+### C. `networkConfig.js` — 42 couleurs pour 5 réseaux que ce client n'a pas
 
 Le fichier décrit six réseaux en arc-en-ciel (Orange, Moov, Telecel, Coris,
 Sank, Liquidité). Le profil C2EGF n'en active **qu'un**. Ces couleurs sont des
 données d'identité d'opérateur, pas du chrome — leur sort se décide avec le
 sujet « multi-réseau », pas dans un lot de restyle.
 
-### E. Architecture
+### D. Architecture
 
 - `subscribeToClients` et `subscribeToHistory` lisent des **collections
   entières sans `limit` ni `orderBy`**.
 - `useAllTransactions` est appelé **4 fois** et `useTodayTransactions` **3
   fois**, chacun recalculant son mémo indépendamment.
 
-### F. Sécurité
+### E. Sécurité
 
 - `cashier.canEditBalances: false` du profil n'est **lu nulle part**.
   L'affordance est gardée sur `userProfile?.role === 'dealer'` dans
@@ -340,23 +374,23 @@ sujet « multi-réseau », pas dans un lot de restyle.
 - `npm audit` : `@grpc/grpc-js` (haute) et `protobufjs` (modérée), toutes deux
   **préexistantes** et transitives via Firebase.
 
-### G. Fin de campagne
+### F. Fin de campagne
 
 Règle ESLint `no-restricted-syntax` par famille de couleur, pour que
-l'arc-en-ciel ne revienne pas. À poser **après** les lots A et B — pas avant,
-sinon elle bloque le travail qu'elle doit protéger.
+l'arc-en-ciel ne revienne pas. À poser **après** le lot A — pas avant, sinon
+elle bloque le travail qu'elle doit protéger.
 
-La règle devra excepter `networkConfig.js` (§D) tant que ses couleurs
+La règle devra excepter `networkConfig.js` (§C) tant que ses couleurs
 d'opérateur y vivent : ce sont des données d'identité, pas du chrome.
 
 ---
 
 ## 5. Ce qui attend une décision
 
-1. **L'ordre des deux lots restants** : l'authentification (A) — petite, très
-   visible, c'est le premier écran que voit un utilisateur — ou les back-offices
-   (B), bien plus gros, et où vivent encore les emoji bruts. La boutique, elle,
-   est terminée : ses sept destinations sont faites.
+1. **Il ne reste qu'un lot de design** : les back-offices admin et dealer (§4 A)
+   — 224 couleurs décoratives, et les **emoji bruts** encore en dur, seule
+   infraction restante à un non-négociable de `DESIGN.md`. La boutique et
+   l'authentification sont terminées.
 2. **Le vocabulaire.** L'interface dit « clients » ; vous dites « agents ».
    `tc-102` note déjà que le renommage sera un lot déclaré. Il touche la
    navigation, les en-têtes de colonnes, les libellés de formulaire et l'export
@@ -384,7 +418,7 @@ npm run test:unit && npm run test:components
 npm run build
 npm run capture                          # le banc entier, à 1440
 node scripts/qa-visuelle.mjs c.png 390   # et à 390
-npm run contraste                        # contraste du bandeau, pixels réels
+npm run contraste                        # bandeau ET panneau d'auth, pixels réels
 npm run deborde                          # débordement horizontal à 390
 npm run dev                              # puis regarder le rendu réel
 ```
