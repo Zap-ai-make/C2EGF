@@ -33,7 +33,7 @@
  * l'interface a l'air.
  */
 import { describe, it, expect } from 'vitest'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -51,10 +51,14 @@ const NON_PROTEGEE = /(?<!motion-safe:)(?<!motion-reduce:)(?<![\w-])animate-[a-z
 const SOI_MEME = path.join(RACINE, 'tests', 'unit', path.basename(fileURLToPath(import.meta.url)))
 
 function fichiersSource(racine) {
-  return readdirSync(racine).flatMap((entree) => {
-    const complet = path.join(racine, entree)
-    if (statSync(complet).isDirectory()) return fichiersSource(complet)
-    return /\.jsx?$/.test(entree) ? [complet] : []
+  // `withFileTypes` évite un `statSync` par entrée : sous Windows, ces appels
+  // traversent l'antivirus un par un, et c'est ce qui a fait dépasser le délai
+  // de ce test sur une machine chargée. La marche coûte 44 ms sans lui, 7 ms
+  // avec — le délai de 5 s n'était pas le problème, la marge l'était.
+  return readdirSync(racine, { withFileTypes: true }).flatMap((entree) => {
+    const complet = path.join(racine, entree.name)
+    if (entree.isDirectory()) return fichiersSource(complet)
+    return /\.jsx?$/.test(entree.name) ? [complet] : []
   })
 }
 
@@ -80,5 +84,13 @@ describe('tc-094 — couverture du mouvement réduit', () => {
       echappees,
       `Utilitaires d’animation sans garde-fou :\n  ${echappees.join('\n  ')}\n`
     ).toEqual([])
-  })
+
+    // CE TEST LIT LE DISQUE, il ne calcule pas — 268 fichiers, 2,4 Mo, dont une
+    // seconde passée à les OUVRIR (sous Windows chaque ouverture traverse
+    // l'antivirus). Le délai de 5 s de Vitest est taillé pour de la logique ; il
+    // ne l'est pas pour un balayage, et il a déjà fait échouer ce test sur une
+    // machine chargée alors que rien n'était cassé. Un test qui échoue pour la
+    // charge de la machine apprend à ignorer ses échecs, ce qui est pire que
+    // pas de test du tout.
+  }, 30_000)
 })
