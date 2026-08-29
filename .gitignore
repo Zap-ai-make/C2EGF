@@ -105,13 +105,3 @@ DEV-NOTES.md
 # tirees de production (.vercel/.env.production.local). Ajoute par `vercel link`.
 .vercel
 
-# Rendus du banc de mouvement (`npm run motion:rendu`). Ce sont des sorties,
-# refaisables d'une commande — le dossier `motion/`, lui, est du code et reste
-# suivi.
-#
-# Les motifs sont ANCRÉS à la racine (`/`), comme `/Capture*` : un motif flottant
-# s'applique à n'importe quelle profondeur et finit par avaler un fichier de
-# produit. C'est exactement ainsi que `public/bandeau-reseau.jpg` a disparu du
-# dépôt pendant tout un lot.
-/motion-bandeau.mp4
-/img-*.png

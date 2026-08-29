@@ -1,6 +1,5 @@
 import { Outlet } from 'react-router-dom'
 import { useTheme } from '../context/ThemeContext'
-import { useArrivee } from '../hooks/useArrivee'
 import BandeauMarque from './BandeauMarque'
 import NavBar from './NavBar'
 import NetworkCardsDrawer from './network/NetworkCardsDrawer'
@@ -39,27 +38,21 @@ import NetworkCardsDrawer from './network/NetworkCardsDrawer'
  */
 
 /**
- * `BandeauMarque` vit maintenant dans son propre fichier — le banc Remotion le
- * monte seul, et l'importer d'ici lui aurait fait traîner la navigation, les
- * contextes et Firebase. Il reste ré-exporté : `src/preview.jsx` l'atteint par
- * ce chemin depuis le lot du shell.
+ * `BandeauMarque` vit dans son propre fichier : le banc d'essai le monte seul,
+ * et l'importer d'ici lui aurait fait traîner la navigation, les contextes et
+ * Firebase pour afficher trois lignes de texte. Il reste ré-exporté — c'est par
+ * ce chemin que le shell l'a toujours atteint.
  */
 export { BandeauMarque }
 
 function Layout({ children }) {
   const { themeClasses } = useTheme()
 
-  /* L'arrivée traverse les trois bandes : elle est donc conduite d'ici, la
-     seule chose qui les contient toutes. La référence se pose sur une racine
-     QUI EXISTE DÉJÀ — un composant enveloppe aurait inséré un `<div>` au-dessus
-     d'une bande `sticky`, pour rien. */
-  const arrivee = useArrivee()
-
   return (
-    <div ref={arrivee} className={`min-h-screen ${themeClasses.background}`}>
+    <div className={`min-h-screen ${themeClasses.background}`}>
       <BandeauMarque />
 
-      <div data-motion="navigation" className="sticky top-0 z-50 shadow-lg shadow-brand-600/20">
+      <div className="sticky top-0 z-50 shadow-lg shadow-brand-600/20">
         <NavBar />
         <NetworkCardsDrawer />
       </div>

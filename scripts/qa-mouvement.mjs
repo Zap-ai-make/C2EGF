@@ -1,33 +1,38 @@
 /**
- * qa-mouvement.mjs — la séquence d'arrivée ne laisse jamais l'interface abîmée.
+ * qa-mouvement.mjs — l'arrivée du bandeau ne laisse jamais l'interface abîmée.
  *
  * POURQUOI CETTE SONDE EXISTE.
- * Elle est née d'un défaut qu'elle aurait empêché. La séquence du bandeau
- * s'écrit en `.from()`, ce qui pose l'état de DÉPART sur les nœuds dès la
- * construction — la marque passe à `opacity: 0` avant que rien ne bouge. Le
- * démontage se contentait alors de `kill()`, qui arrête sans restaurer : le
- * style en ligne restait. React montant deux fois en développement, la seconde
- * séquence lisait cette valeur comme sa valeur d'ARRIVÉE et animait de 0 vers
- * 0. Le bandeau s'affichait sans son logo ni sa ligne de métier, DÉFINITIVEMENT.
+ * Elle est née d'un défaut qu'elle aurait empêché. Une version antérieure de la
+ * séquence, écrite avec GSAP, posait l'état de DÉPART sur les nœuds dès sa
+ * construction — la marque passait à `opacity: 0` avant que rien ne bouge — et
+ * le démontage ne restaurait pas ce style en ligne. React montant deux fois en
+ * développement, la seconde séquence lisait cette valeur comme sa valeur
+ * D'ARRIVÉE : le bandeau s'affichait sans son logo, DÉFINITIVEMENT.
  *
  * Ni les tests, ni le lint, ni la sonde de contraste ne le voyaient. Il fallait
  * regarder l'image. C'est ce que fait ce script, et il le fait sans yeux.
  *
- * CE QU'IL MESURE — une seule chose, et elle est exigeante :
+ * L'animation est depuis passée en CSS pur, ce qui rend cette classe de défaut
+ * beaucoup moins probable — une `@keyframes` ne laisse rien derrière elle. La
+ * sonde reste : c'est elle qui a mesuré, sur la version précédente, que des
+ * montants devenaient plus flous après la séquence qu'avant (un `transform`
+ * résiduel promeut le nœud en couche composée et change l'anticrénelage du
+ * texte). Le défaut était invisible à l'œil et parfaitement mesurable.
+ *
+ * CE QU'ELLE MESURE — une seule chose, et elle est exigeante :
  *
  *   l'état APRÈS la séquence doit être RIGOUREUSEMENT celui qu'obtient une
- *   personne ayant demandé le mouvement réduit, pour qui aucune animation
- *   n'est construite.
+ *   personne ayant demandé le mouvement réduit, pour qui aucune animation ne
+ *   se joue.
  *
  * Cette égalité est la formulation vérifiable de la règle du lot : le mouvement
- * est une COUCHE, jamais une condition d'affichage. Si le JavaScript échoue, si
- * l'écran se démonte au milieu, si React remonte — le bandeau retombe sur son
- * état statique. Comparer deux captures au hash près ne laisse aucune place à
- * l'appréciation : un pixel d'écart, et la couche a fui.
+ * est une COUCHE, jamais une condition d'affichage. Comparer deux captures au
+ * hash près ne laisse aucune place à l'appréciation — un pixel d'écart, et la
+ * couche a fui.
  *
- * Il vérifie de surcroît que le DOM est rendu : `SplitText` découpe le wordmark
- * en caractères le temps de la séquence, et l'application le recolle à la fin.
- * Un découpage qui survivrait signalerait une fuite de nœuds à chaque montage.
+ * Elle vérifie de surcroît que le nom reste ANNONÇABLE : le wordmark est
+ * découpé en lettres pour être animé, et un découpage mal fait transforme un
+ * nom de marque en suite de caractères pour tout ce qui lit la page.
  */
 import { chromium } from '@playwright/test'
 import { createHash } from 'node:crypto'
@@ -37,12 +42,9 @@ const LARGEUR = Number(process.argv[2]) || 1440
 const empreinte = (tampon) => createHash('sha256').update(tampon).digest('hex').slice(0, 16)
 
 /**
- * La zone d'arrivée ENTIÈRE — bandeau, navigation, cartes de solde.
- *
- * Elle ne se limitait qu'au bandeau tant que la séquence s'y limitait. Depuis
- * qu'elle traverse les trois bandes, une capture du seul bandeau ne verrait pas
- * une carte restée invisible ni une navigation laissée décalée — précisément la
- * classe de défaut qui a coûté le logo.
+ * La zone d'arrivée. Plus large que le seul bandeau, à dessein : une capture
+ * trop serrée ne verrait pas un voisin laissé décalé par la séquence, et c'est
+ * précisément la classe de défaut qui a coûté le logo.
  */
 const capturerBarre = (page) =>
   page.screenshot({ clip: { x: 0, y: 0, width: LARGEUR, height: 420 } })
@@ -66,8 +68,8 @@ try {
   /** Le cas réel : la séquence se joue entièrement, puis on regarde. */
   const anime = await navigateur.newPage({ viewport: { width: LARGEUR, height: 700 } })
   await anime.goto(url, { waitUntil: 'networkidle' })
-  // Confortablement au-delà du budget de la séquence (`DUREE_BANDEAU`, 1,6 s),
-  // pour que le résultat ne dépende jamais de la charge de la machine.
+  // Confortablement au-delà de la séquence (1,5 s de bout en bout), pour que le
+  // résultat ne dépende jamais de la charge de la machine.
   await anime.waitForTimeout(2500)
   const apres = await capturerBarre(anime)
 
@@ -84,42 +86,27 @@ try {
     )
   }
 
+  // LE NOM RESTE-T-IL LISIBLE D'UN BLOC ?
+  // Le wordmark est découpé en lettres pour être animé. Le texte doit malgré
+  // tout rester entier dans le DOM — c'est ce qui fait fonctionner la recherche
+  // dans la page et la sélection — et le lecteur d'écran doit annoncer le nom,
+  // pas l'épeler. Le découpage étant déclaratif, il ne peut plus « survivre »
+  // à quoi que ce soit ; ce qu'on vérifie ici, c'est qu'il reste ANNONÇABLE.
   const dom = await anime.evaluate(() => {
     const wordmark = document.querySelector('.bandeau-marque p')
-    const montants = [...document.querySelectorAll('[data-motion="carte-solde"]')]
-      .map((carte) => carte.querySelector('.tabular-nums')?.textContent?.trim() ?? '')
     return {
-      enfants: wordmark?.children.length ?? -1,
-      texte: wordmark?.textContent?.trim() ?? '',
-      montants,
+      texte: wordmark?.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+      nomAccessible: wordmark?.getAttribute('aria-label') ?? '',
     }
   })
 
-  if (dom.enfants === 0) {
-    console.log(`  ✓ le wordmark est rendu d’un seul tenant — « ${dom.texte} »`)
+  if (dom.nomAccessible && dom.nomAccessible === dom.texte) {
+    console.log(`  ✓ le nom reste lisible d’un bloc — « ${dom.nomAccessible} »`)
   } else {
     echoue(
-      `le découpage en caractères a survécu à la séquence (${dom.enfants} nœuds) : ` +
-      'chaque montage en empilera un de plus'
+      `le nom annoncé (« ${dom.nomAccessible} ») ne correspond pas au texte rendu ` +
+      `(« ${dom.texte} ») : un lecteur d’écran épellerait le wordmark`
     )
-  }
-  // LES MONTANTS SE SONT-ILS RÉSOLUS ?
-  // Le décompte ne se joue qu'à la première donnée : s'il s'interrompt ou se
-  // trompe de cible, la carte reste bloquée sur « 0 » — un solde faux, affiché
-  // avec l'aplomb d'un solde vrai. C'est le pire défaut possible sur cet écran,
-  // et il est invisible à la comparaison de captures, puisque les deux pages
-  // s'arrêteraient sur le même chiffre faux.
-  const bloques = dom.montants.filter((m) => m === '' || m === '0')
-
-  if (dom.montants.length === 0) {
-    echoue('aucune carte de solde trouvée — la sonde ne mesure plus rien')
-  } else if (bloques.length > 0) {
-    echoue(
-      `${bloques.length} montant(s) restés à zéro sur ${dom.montants.length} : ` +
-      'le décompte ne s’est pas résolu'
-    )
-  } else {
-    console.log(`  ✓ les montants se sont résolus — ${dom.montants.join(' · ')}`)
   }
 } finally {
   await navigateur.close()

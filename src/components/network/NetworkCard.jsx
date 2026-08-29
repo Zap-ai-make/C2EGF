@@ -2,7 +2,6 @@ import { useState, useCallback, memo } from 'react'
 import { Signal, Wallet } from 'lucide-react'
 import { NETWORK_CONFIG, formatAmountWithCurrency } from '../../constants/networkConfig'
 import { useNetworkCards } from '../../hooks/useNetworkCards'
-import { useMontantAnime } from '../../hooks/useMontantAnime'
 import { useAuth } from '../../context/AuthContext'
 
 function NetworkCard({ network, stockAmount, liquiditeAmount }) {
@@ -16,14 +15,9 @@ function NetworkCard({ network, stockAmount, liquiditeAmount }) {
 
   const isLiquiditeCard = network === 'Liquidite'
   const displayAmount = isLiquiditeCard ? liquiditeAmount : stockAmount
-  const { label } = config
+  const { amount, label } = config
     ? formatAmountWithCurrency(displayAmount, isLiquiditeCard)
-    : { label: '' }
-
-  // Le montant se résout à l'arrivée, puis suit la donnée sans plus jamais
-  // défiler (voir `useMontantAnime`). Le hook s'appelle inconditionnellement —
-  // les règles des hooks ne tolèrent pas le `if (!config)` qui suit.
-  const amount = useMontantAnime(displayAmount)
+    : { amount: '0', label: '' }
 
   const getStockStatus = () => {
     if (isLiquiditeCard) return 'normal'
@@ -134,7 +128,6 @@ function NetworkCard({ network, stockAmount, liquiditeAmount }) {
           descend, et le badge « Bas » l'écrit. */
     <div
       data-testid={`carte-${network}`}
-      data-motion="carte-solde"
       className={`relative flex min-h-[76px] items-center gap-3.5 overflow-hidden rounded-xl bg-surface py-3 pl-5 pr-4 shadow-lg shadow-brand-600/25 transition-shadow ${status.ring}`}
     >
       <span

@@ -250,3 +250,84 @@ body {
     background-repeat: no-repeat;
   }
 }
+
+
+/* ── L'arrivée sur le bandeau ───────────────────────────────────────────────
+   La signature de l'application : le nom ne paraît pas, il se RÉSOUT — du
+   centre vers les bords, chaque lettre montant derrière son propre masque.
+
+   C2EGF est un distributeur : le float descend d'Orange à la centrale, puis aux
+   succursales, puis aux agents (REFONTE.md §1). La marque est exactement
+   au-dessus du centre du nom, et la propagation part de là. Le décalage se
+   calcule donc sur la DISTANCE AU CENTRE (`--rang`, posé par BandeauMarque),
+   jamais sur la position : un décalage par position produirait une vague de
+   gauche à droite — un effet, là où l'on veut un énoncé.
+
+   TOUT EST ICI, ET C'EST LE POINT. Une première version passait par GSAP et son
+   greffon SplitText : 31,9 Ko gzip transférés à chaque visiteur, plus un banc
+   Remotion et quatre paquets de développement, pour ce que trois `@keyframes`
+   font sans un octet. Le retrait n'a rien enlevé au rendu — il a enlevé des
+   défauts, dont la mécanique de restauration qui avait un jour effacé le logo.
+
+   `backwards` n'est pas décoratif : sans lui, l'élément s'afficherait dans son
+   état final pendant tout le délai, PUIS sauterait à son état de départ pour
+   s'animer. C'est ce mode qui tient la promesse du lot — le mouvement est une
+   couche, et l'état d'arrivée est exactement l'état statique.
+
+   Trois transformations et une opacité, rien d'autre : aucune propriété qui
+   refasse couler le texte. `npm run deborde` et `npm run contraste` rendent les
+   mêmes chiffres qu'avant ce lot, et `npm run mouvement` vérifie que la
+   séquence retombe au pixel près sur l'état statique. */
+
+@keyframes arrivee-lettre {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes arrivee-marque {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+@keyframes arrivee-metier {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.marque-arrivee {
+  animation: arrivee-marque 0.55s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* Le masque : la lettre monte DERRIÈRE son cadre au lieu de flotter. C'est ce
+   qui fait lire « révélation » plutôt que « vol ». */
+.wordmark-masque {
+  display: inline-block;
+  overflow: clip;
+  vertical-align: bottom;
+}
+
+.wordmark-lettre {
+  display: inline-block;
+  animation: arrivee-lettre 0.55s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation-delay: calc(0.52s + var(--rang, 0) * 0.045s);
+}
+
+.ligne-metier {
+  animation: arrivee-metier 0.45s cubic-bezier(0.16, 1, 0.3, 1) 1.05s backwards;
+}
+
+/* Une animation ne s'impose jamais à qui a demandé moins de mouvement
+   (DESIGN.md §9). Ici, aucune décision JavaScript n'est nécessaire : le CSS se
+   tait tout seul, et l'état statique EST déjà l'état d'arrivée. */
+@media (prefers-reduced-motion: reduce) {
+  .marque-arrivee,
+  .wordmark-lettre,
+  .ligne-metier {
+    animation: none;
+  }
+}
