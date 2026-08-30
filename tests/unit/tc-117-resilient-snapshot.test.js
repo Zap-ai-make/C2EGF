@@ -204,3 +204,77 @@ describe('TC-117-D — nettoyage au démontage', () => {
     expect(h.setTimeoutFn).not.toHaveBeenCalled()
   })
 })
+
+// ═════════════════════════════════════════════════════════════════════════════
+// TC-117-E — LE DÉMONTAGE NE PEUT PAS FAIRE TOMBER L'ÉCRAN
+//
+// Observé en conditions réelles : le SDK Firestore échoue sur une assertion
+// interne (`ca9`), puis TOUTE opération enfilée ensuite relance cet échec
+// (`b815`) — y compris `unsubscribe()`. Notre démontage étant appelé depuis un
+// nettoyage d'effet React, l'exception traversait le nettoyage, React traitait
+// ça comme une erreur de composant, démontait l'arbre et le confiait à la
+// frontière d'erreur — emportant la page ET la barre de navigation. Le
+// remontage rouvrait les mêmes abonnements, qui relevaient la même exception :
+// en boucle.
+//
+// Un incident de fond devenait donc un écran mort. C'est très exactement le
+// mode de défaillance que ce fichier existe pour éviter, en plus bruyant.
+// ═════════════════════════════════════════════════════════════════════════════
+
+import { safeUnsubscribe } from '../../src/services/resilientOnSnapshot.js'
+
+describe('TC-117-E — un démontage total', () => {
+  const explose = () => { throw new Error('INTERNAL ASSERTION FAILED (ID: b815)') }
+
+  it('un unsubscribe qui lève ne remonte pas jusqu’à React', () => {
+    const h = makeHarness()
+    h.subscribe.mockImplementation(() => explose)
+    const unsubscribe = resilientOnSnapshot('Q', { onNext: vi.fn(), ...h })
+    expect(() => unsubscribe()).not.toThrow()
+  })
+
+  it('un clearTimeout qui lève non plus', () => {
+    const h = makeHarness()
+    h.clearTimeoutFn.mockImplementation(explose)
+    const unsubscribe = resilientOnSnapshot('Q', { onNext: vi.fn(), onError: vi.fn(), ...h })
+    h.last().onError(err('unavailable'))
+    expect(() => unsubscribe()).not.toThrow()
+  })
+
+  it('malgré l’échec du démontage, l’abonnement est bien ARRÊTÉ', () => {
+    // Avaler l'exception ne doit pas avaler l'intention : plus aucun
+    // réabonnement ne doit repartir.
+    const h = makeHarness()
+    const vrai = h.subscribe.getMockImplementation()
+    h.subscribe.mockImplementation((...args) => { vrai(...args); return explose })
+    const unsubscribe = resilientOnSnapshot('Q', { onNext: vi.fn(), onError: vi.fn(), ...h })
+    h.last().onError(err('unavailable'))
+    unsubscribe()
+    h.timers.at(-1)?.fn?.()
+    expect(h.subscribe).toHaveBeenCalledTimes(1)
+  })
+
+  it('un onSnapshot qui LÈVE au lieu de rapporter est traité comme une erreur', () => {
+    // La file du SDK peut être tombée avant même qu'on s'abonne : `onSnapshot`
+    // lève alors de façon synchrone. Sans garde, l'exception traverserait
+    // l'effet React qui monte l'abonnement.
+    const h = makeHarness()
+    const onError = vi.fn()
+    h.subscribe.mockImplementation(explose)
+    expect(() => resilientOnSnapshot('Q', { onNext: vi.fn(), onError, ...h })).not.toThrow()
+    expect(onError).toHaveBeenCalledTimes(1)
+    expect(h.setTimeoutFn).toHaveBeenCalledTimes(1)
+  })
+
+  it('safeUnsubscribe rend total n’importe quel écouteur brut', () => {
+    expect(() => safeUnsubscribe(explose)()).not.toThrow()
+    expect(() => safeUnsubscribe(undefined)()).not.toThrow()
+    expect(() => safeUnsubscribe(null)()).not.toThrow()
+  })
+
+  it('safeUnsubscribe appelle bien l’écouteur quand tout va bien', () => {
+    const unsub = vi.fn()
+    safeUnsubscribe(unsub)()
+    expect(unsub).toHaveBeenCalledTimes(1)
+  })
+})

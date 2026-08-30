@@ -12,6 +12,7 @@ import {
 import { useTheme } from '../context/ThemeContext.jsx'
 import { useAuth } from '../context/AuthContext'
 import { subscribeStorePendingCount } from '../services/storeAdminDealerService'
+import { safeUnsubscribe } from '../services/resilientOnSnapshot'
 import { subscribePendingSettlementsCount } from '../services/collaborationService'
 import { useIncomingCollaborationsCount } from '../hooks/useIncomingCollaborationsCount'
 
@@ -166,12 +167,16 @@ function NavBar() {
 
   useEffect(() => {
     setPendingCount(0)
-    const unsub = subscribeStorePendingCount({
+    // ⚠ Cet abonnement-ci ne passe PAS par resilientOnSnapshot : il rend la
+    //   fonction brute du SDK, qui lève dès que la file interne de Firestore est
+    //   tombée. Rendue telle quelle à React, elle ferait tomber la BARRE DE
+    //   NAVIGATION en se fermant — l'utilisateur perdrait le moyen de quitter
+    //   l'écran fautif.
+    return safeUnsubscribe(subscribeStorePendingCount({
       currentUser,
       userProfile,
       onUpdate: setPendingCount,
-    })
-    return unsub
+    }))
   }, [currentUser, userProfile])
 
   /**

@@ -6,6 +6,7 @@ import {
   subscribeMyCredits,
 } from '../../services/collaborationService'
 import { subscribeStoreAdminDealerRequests } from '../../services/storeAdminDealerService'
+import { safeUnsubscribe } from '../../services/resilientOnSnapshot'
 import {
   COLLAB_OPERATION_TYPE_LABELS,
   COLLAB_STATUS_LABELS,
@@ -192,14 +193,15 @@ export function ArchiveDealer({ currentUser, userProfile }) {
   useEffect(() => {
     setLignes(null)
     if (!userProfile?.storeId) return undefined
-    return subscribeStoreAdminDealerRequests({
+    // Écouteur brut : son démontage doit être rendu total (cf. safeUnsubscribe).
+    return safeUnsubscribe(subscribeStoreAdminDealerRequests({
       currentUser,
       userProfile,
       statusFilter: null,
       typeFilter: null,
       onUpdate: ({ requests }) => setLignes(requests),
       onError: () => setLignes([]),
-    })
+    }))
   }, [currentUser, userProfile])
 
   return (

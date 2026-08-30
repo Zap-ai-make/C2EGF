@@ -35,6 +35,24 @@ export function isPermanentSnapshotError(err) {
 }
 
 /**
+ * Emballe un `unsubscribe` Firestore pour qu'il ne puisse pas faire tomber un
+ * écran en se fermant.
+ *
+ * À réserver aux abonnements qui n'utilisent PAS `resilientOnSnapshot` — celui-ci
+ * rend déjà un démontage total. Les écouteurs bruts (`onSnapshot` appelé en
+ * direct) rendent, eux, la fonction du SDK, qui lève dès que sa file interne est
+ * tombée. Rendue telle quelle à un `useEffect`, elle transforme un incident de
+ * fond en arbre React démonté.
+ */
+export function safeUnsubscribe(unsubscribe) {
+  return function demontageSur() {
+    try {
+      if (typeof unsubscribe === 'function') unsubscribe()
+    } catch { /* on abandonne cet écouteur de toute façon */ }
+  }
+}
+
+/**
  * @param {import('firebase/firestore').Query} query
  * @param {object} options
  * @param {(snapshot: import('firebase/firestore').QuerySnapshot) => void} options.onNext
@@ -60,42 +78,77 @@ export function resilientOnSnapshot(query, {
   let currentDelay = delayMs
   let stopped = false
 
+  function programmerReprise(err) {
+    if (stopped || isPermanentSnapshotError(err)) return
+    retryTimer = setTimeoutFn(() => {
+      retryTimer = null
+      currentDelay = Math.min(currentDelay * 2, maxDelayMs)
+      open()
+    }, currentDelay)
+  }
+
   function open() {
     if (stopped) return
-    currentUnsubscribe = subscribe(
-      query,
-      (snapshot) => {
-        // Un snapshot réussi réinitialise le backoff : une coupure passagère ne
-        // doit pas laisser la prochaine dans une fenêtre d'attente d'une minute.
-        currentDelay = delayMs
-        onNext?.(snapshot)
-      },
-      (err) => {
-        // On prévient TOUJOURS l'appelant d'abord : c'est lui qui décide quoi
-        // afficher. Le réabonnement vient après, jamais à la place.
-        onError?.(err)
-        if (stopped || isPermanentSnapshotError(err)) return
-
-        retryTimer = setTimeoutFn(() => {
-          retryTimer = null
-          currentDelay = Math.min(currentDelay * 2, maxDelayMs)
-          open()
-        }, currentDelay)
-      },
-    )
+    try {
+      currentUnsubscribe = subscribe(
+        query,
+        (snapshot) => {
+          // Un snapshot réussi réinitialise le backoff : une coupure passagère ne
+          // doit pas laisser la prochaine dans une fenêtre d'attente d'une minute.
+          currentDelay = delayMs
+          onNext?.(snapshot)
+        },
+        (err) => {
+          // On prévient TOUJOURS l'appelant d'abord : c'est lui qui décide quoi
+          // afficher. Le réabonnement vient après, jamais à la place.
+          onError?.(err)
+          programmerReprise(err)
+        },
+      )
+    } catch (err) {
+      // ⚠ `onSnapshot` peut LEVER au lieu de rapporter — c'est le cas quand la
+      //   file interne du SDK est déjà tombée : toute opération suivante relance
+      //   l'échec d'origine. Sans ce garde, l'exception traverserait l'effet
+      //   React qui a monté l'abonnement et ferait tomber l'écran entier.
+      currentUnsubscribe = null
+      onError?.(err)
+      programmerReprise(err)
+    }
   }
 
   open()
 
+  /**
+   * LE DÉMONTAGE NE PEUT PAS ÉCHOUER.
+   *
+   * Cette fonction est appelée depuis un nettoyage d'effet React. Une exception
+   * levée là n'est pas rattrapée par le `try` de personne : React la traite
+   * comme une erreur de composant, démonte l'arbre et le confie à la frontière
+   * d'erreur la plus proche. Sur cette application, ça emporte la page ET la
+   * barre de navigation — puis le remontage rouvre les mêmes abonnements, qui
+   * relèvent la même exception, en boucle.
+   *
+   * Or `unsubscribe()` de Firestore lève quand la file interne du SDK est déjà
+   * tombée (assertion `b815` : toute opération enfilée après un échec relance
+   * cet échec). Un incident de fond devient alors un écran mort — exactement ce
+   * que ce fichier existe pour éviter, en plus bruyant.
+   *
+   * On avale donc, et on avale VRAIMENT : arrêter un écouteur qu'on abandonne
+   * de toute façon n'a aucune information à remonter. Ce qui compte est que
+   * `stopped` soit posé — le réabonnement, lui, ne repartira pas.
+   */
   return function unsubscribe() {
     stopped = true
-    if (retryTimer !== null) {
-      clearTimeoutFn(retryTimer)
-      retryTimer = null
+    const listener = currentUnsubscribe
+    currentUnsubscribe = null
+    const minuteur = retryTimer
+    retryTimer = null
+
+    if (minuteur !== null) {
+      try { clearTimeoutFn(minuteur) } catch { /* rien à sauver ici */ }
     }
-    if (typeof currentUnsubscribe === 'function') {
-      currentUnsubscribe()
-      currentUnsubscribe = null
+    if (typeof listener === 'function') {
+      try { listener() } catch { /* rien à sauver ici */ }
     }
   }
 }
