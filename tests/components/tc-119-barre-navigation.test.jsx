@@ -30,6 +30,7 @@ import { MemoryRouter, Routes, Route, Link } from 'react-router-dom'
 
 let pendingCount = 0
 let settlementsCount = 0
+let collabsCount = 0
 
 vi.mock('../../src/context/ThemeContext.jsx', () => ({
   useTheme: () => ({ themeClasses: { navbar: 'navbar-stub' } }),
@@ -49,6 +50,10 @@ vi.mock('../../src/services/storeAdminDealerService', () => ({
 vi.mock('../../src/services/collaborationService', () => ({
   subscribePendingSettlementsCount: ({ onUpdate }) => {
     onUpdate(settlementsCount)
+    return () => {}
+  },
+  subscribeIncomingCollaborationsCount: ({ onUpdate }) => {
+    onUpdate(collabsCount)
     return () => {}
   },
 }))
@@ -79,6 +84,7 @@ const renderNav = (initial = '/') =>
 beforeEach(() => {
   pendingCount = 0
   settlementsCount = 0
+  collabsCount = 0
 })
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -232,9 +238,10 @@ describe('TC-119-D — le panneau mobile', () => {
     // dans le texte d'une option.
     pendingCount = 4
     settlementsCount = 3
+    collabsCount = 2
     renderNav()
     const total = screen.getByTestId('nav-total-badge')
-    expect(total).toHaveTextContent('7')
+    expect(total).toHaveTextContent('9')
   })
 
   it('[NAV-13] déplié, le panneau rend les deux groupes et le détail', () => {

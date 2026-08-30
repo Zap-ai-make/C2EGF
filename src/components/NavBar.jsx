@@ -13,10 +13,29 @@ import { useTheme } from '../context/ThemeContext.jsx'
 import { useAuth } from '../context/AuthContext'
 import { subscribeStorePendingCount } from '../services/storeAdminDealerService'
 import { subscribePendingSettlementsCount } from '../services/collaborationService'
+import { useIncomingCollaborationsCount } from '../hooks/useIncomingCollaborationsCount'
 
 import PWAInstallButton from './PWAInstallButton'
 
 const DEALER_REQUESTS_PATH = '/dealer-requests'
+const TRANSACTIONS_PATH = '/transactions'
+
+/**
+ * OÙ MÈNE UN COMPTEUR.
+ *
+ * Sur « Demandes dealer » et « Dettes internes », la file EST la page : le
+ * libellé et le compteur ont la même cible, et la pastille reste dans le lien.
+ *
+ * Sur « Transactions », non. La page s'ouvre sur la transaction client — le
+ * geste fait quarante fois par jour — et la file des collaborations reçues est
+ * un troisième onglet. Si le LIBELLÉ y menait dès qu'une demande traîne, un
+ * gérant venant enregistrer une opération atterrirait ailleurs sans l'avoir
+ * demandé. Le libellé garde donc sa destination, et c'est le COMPTEUR qui porte
+ * le raccourci : deux cibles, deux noms accessibles, un seul objet à l'œil.
+ */
+const RACCOURCIS = {
+  [TRANSACTIONS_PATH]: '/transactions?tab=collaborations&sub=incoming',
+}
 
 /**
  * Ce que compte chaque compteur, au singulier et au pluriel.
@@ -26,6 +45,13 @@ const DEALER_REQUESTS_PATH = '/dealer-requests'
  * règlements serait un mensonge pour qui n'a que le lecteur d'écran.
  */
 function libelleCompteur(path) {
+  if (path === TRANSACTIONS_PATH) {
+    return {
+      noun: 'collaboration reçue',
+      nounPluriel: 'collaborations reçues',
+      testId: 'store-collaborations-badge',
+    }
+  }
   if (path === INTERNAL_DEBTS_PATH) {
     return {
       noun: 'règlement à confirmer',
@@ -161,6 +187,8 @@ function NavBar() {
     return subscribePendingSettlementsCount({ storeId, onUpdate: setSettlementsCount })
   }, [userProfile?.storeId])
 
+  const collaborationsCount = useIncomingCollaborationsCount(userProfile?.storeId)
+
   // Naviguer referme le panneau. Sans ça, il resterait ouvert par-dessus la page
   // qu'on vient de demander.
   useEffect(() => {
@@ -184,6 +212,7 @@ function NavBar() {
   const compteurs = {
     [DEALER_REQUESTS_PATH]: pendingCount,
     [INTERNAL_DEBTS_PATH]: settlementsCount,
+    [TRANSACTIONS_PATH]: collaborationsCount,
   }
   Object.keys(compteurs).forEach(assertCompteurAutorise)
   const totalEnAttente = Object.values(compteurs).reduce((somme, n) => somme + n, 0)
@@ -201,12 +230,36 @@ function NavBar() {
       isActive ? 'bg-black/30' : ''
     }`
 
-  const renduBureau = (item) => (
-    <NavLink key={item.path} to={item.path} className={lienBureau}>
-      {item.name}
-      <PendingBadge count={compteurs[item.path]} {...libelleCompteur(item.path)} />
-    </NavLink>
-  )
+  const renduBureau = (item) => {
+    const compte = compteurs[item.path]
+    const raccourci = RACCOURCIS[item.path]
+
+    // Sans raccourci distinct, la pastille reste DANS le lien : deux cibles vers
+    // la même page seraient deux arrêts de tabulation pour rien.
+    if (!raccourci || !compte) {
+      return (
+        <NavLink key={item.path} to={item.path} className={lienBureau}>
+          {item.name}
+          <PendingBadge count={compte} {...libelleCompteur(item.path)} />
+        </NavLink>
+      )
+    }
+
+    // Avec raccourci : deux liens frères, un seul objet à l'œil.
+    // Imbriquer l'un dans l'autre serait un <a> dans un <a> — invalide, et le
+    // navigateur déferait la structure sans rien dire.
+    return (
+      <span key={item.path} className="inline-flex items-center">
+        <NavLink to={item.path} className={lienBureau}>{item.name}</NavLink>
+        <NavLink
+          to={raccourci}
+          className="-ml-2 rounded py-3 pr-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70"
+        >
+          <PendingBadge count={compte} {...libelleCompteur(item.path)} />
+        </NavLink>
+      </span>
+    )
+  }
 
   const renduPanneau = (item) => (
     <NavLink key={item.path} to={item.path} className={lienPanneau}>

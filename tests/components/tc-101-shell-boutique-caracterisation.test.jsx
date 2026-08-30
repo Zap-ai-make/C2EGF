@@ -42,6 +42,7 @@ vi.mock('../../src/services/collaborationService', () => ({
     onUpdate(settlementsCount)
     return () => {}
   },
+  subscribeIncomingCollaborationsCount: () => () => {},
 }))
 vi.mock('../../src/components/PWAInstallButton.jsx', () => ({
   default: () => null,

@@ -123,6 +123,7 @@ vi.mock('react-router-dom', async (importOriginal) => {
 import DealerLayout from '../../src/layouts/DealerLayout'
 vi.mock('../../src/services/collaborationService', () => ({
   subscribePendingSettlementsCount: () => () => {},
+  subscribeIncomingCollaborationsCount: () => () => {},
 }))
 
 import NavBar from '../../src/components/NavBar'
