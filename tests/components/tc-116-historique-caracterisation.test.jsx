@@ -25,9 +25,22 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 
 let contextValue
 
+vi.mock('../../src/context/AuthContext', () => ({
+  useAuth: () => ({ currentUser: { uid: 'u1' }, userProfile: { role: 'store_admin', storeId: 'store-a' } }),
+}))
+vi.mock('../../src/services/collaborationService', () => ({
+  subscribeOutgoingCollaborations: () => () => {},
+  subscribeIncomingCollaborations: () => () => {},
+  subscribeMyDebts: () => () => {},
+  subscribeMyCredits: () => () => {},
+}))
+vi.mock('../../src/services/storeAdminDealerService', () => ({
+  subscribeStoreAdminDealerRequests: () => () => {},
+}))
 vi.mock('../../src/context/ThemeContext.jsx', () => ({
   useTheme: () => ({
     themeClasses: { tableHeader: 'bg-gray-100 border-gray-300', tableBorder: 'border-gray-300', text: 'text-gray-900' },
@@ -77,15 +90,29 @@ beforeEach(() => {
 
 // ═════════════════════════════════════════════════════════════════════════════
 
+/**
+ * ⚠ LE HARNAIS A CHANGÉ, PAS LES ATTENTES.
+ *
+ *   La page lit maintenant l'URL (son onglet) et le profil (sa boutique).
+ *   Elle a donc besoin d'un routeur et d'un contexte d'authentification pour
+ *   se monter — alors que le COMPORTEMENT figé ci-dessous, lui, est
+ *   inchangé : mêmes colonnes, mêmes filtres, mêmes pluriels, même apostrophe
+ *   droite, mêmes absences.
+ *
+ *   C'est tout l'intérêt d'avoir écrit ce filet AVANT de déplacer l'écran :
+ *   il distingue « ce qui doit survivre » de « ce qui a le droit de bouger ».
+ */
+const poser = () => render(<MemoryRouter><Historique /></MemoryRouter>)
+
 describe('TC-116-A — structure de la page', () => {
   it('porte le titre « Historique »', () => {
-    render(<Historique />)
+    poser()
     expect(screen.getByRole('heading', { name: 'Historique' })).toBeInTheDocument()
   })
 
   it('expose les 9 colonnes du tableau, dans cet ordre', () => {
     contextValue = baseContext([tx()])
-    render(<Historique />)
+    poser()
     const headers = Array.from(document.querySelectorAll('thead th')).map((th) => th.textContent.trim())
     expect(headers).toEqual([
       'Date & heure', 'Client', 'Type', 'Réseau', 'Code', 'Montant', 'Statut', 'Utilisateur', 'Email utilisateur',
@@ -93,7 +120,7 @@ describe('TC-116-A — structure de la page', () => {
   })
 
   it('offre les commandes de filtre attendues', () => {
-    render(<Historique />)
+    poser()
     expect(screen.getByRole('button', { name: 'Filtrer' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: "Aujourd'hui" })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Rechercher' })).toBeInTheDocument()
@@ -101,13 +128,13 @@ describe('TC-116-A — structure de la page', () => {
   })
 
   it('offre l’export et l’import', () => {
-    render(<Historique />)
+    poser()
     expect(screen.getByRole('button', { name: /Exporter/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Importer/i })).toBeInTheDocument()
   })
 
   it('sans transaction, affiche l’état vide et aucune ligne', () => {
-    render(<Historique />)
+    poser()
     expect(screen.getByText("Aucune transaction dans l'historique")).toBeInTheDocument()
     expect(dataRows()).toHaveLength(0)
   })
@@ -117,13 +144,13 @@ describe('TC-116-A — structure de la page', () => {
       tx({ id: 'a', client: { nom: 'ALPHA', prenom: 'Un' } }),
       tx({ id: 'b', client: { nom: 'BETA', prenom: 'Deux' } }),
     ])
-    render(<Historique />)
+    poser()
     expect(dataRows()).toHaveLength(2)
   })
 
   it('la source est completedTransactions du contexte, rien d’autre', () => {
     contextValue = baseContext([tx({ client: { nom: 'SEULE', prenom: 'Ligne' } })])
-    render(<Historique />)
+    poser()
     expect(clientCells()).toEqual(['Ligne SEULE'])
   })
 })
@@ -139,7 +166,7 @@ describe('TC-116-B — filtre de dates : bornes INCLUSES, cadran LOCAL', () => {
 
   it('la borne « Du » est incluse', () => {
     contextValue = baseContext(jeu())
-    render(<Historique />)
+    poser()
     setDates('2026-08-25', null)
     fireEvent.click(screen.getByRole('button', { name: 'Filtrer' }))
     expect(clientCells()).toEqual(['X MARDI', 'X MERCREDI'])
@@ -147,7 +174,7 @@ describe('TC-116-B — filtre de dates : bornes INCLUSES, cadran LOCAL', () => {
 
   it('la borne « Au » est incluse', () => {
     contextValue = baseContext(jeu())
-    render(<Historique />)
+    poser()
     setDates(null, '2026-08-25')
     fireEvent.click(screen.getByRole('button', { name: 'Filtrer' }))
     expect(clientCells()).toEqual(['X LUNDI', 'X MARDI'])
@@ -155,7 +182,7 @@ describe('TC-116-B — filtre de dates : bornes INCLUSES, cadran LOCAL', () => {
 
   it('une seule journée ne retient que cette journée', () => {
     contextValue = baseContext(jeu())
-    render(<Historique />)
+    poser()
     setDates('2026-08-25', '2026-08-25')
     fireEvent.click(screen.getByRole('button', { name: 'Filtrer' }))
     expect(clientCells()).toEqual(['X MARDI'])
@@ -165,7 +192,7 @@ describe('TC-116-B — filtre de dates : bornes INCLUSES, cadran LOCAL', () => {
     // 23:59 le 25 doit passer un filtre borné au 25, ce qui ne serait pas le cas
     // si on comparait des instants plutôt que des jours.
     contextValue = baseContext([tx({ id: 'tard', client: { nom: 'TARD', prenom: 'X' }, date: '25/08/2026 23:59' })])
-    render(<Historique />)
+    poser()
     setDates('2026-08-25', '2026-08-25')
     fireEvent.click(screen.getByRole('button', { name: 'Filtrer' }))
     expect(clientCells()).toEqual(['X TARD'])
@@ -176,7 +203,7 @@ describe('TC-116-B — filtre de dates : bornes INCLUSES, cadran LOCAL', () => {
       tx({ id: 'ok', client: { nom: 'DATEE', prenom: 'X' }, date: '25/08/2026 09:00' }),
       tx({ id: 'ko', client: { nom: 'SANSDATE', prenom: 'X' }, date: '' }),
     ])
-    render(<Historique />)
+    poser()
     expect(dataRows()).toHaveLength(2)
     setDates('2026-08-25', '2026-08-25')
     fireEvent.click(screen.getByRole('button', { name: 'Filtrer' }))
@@ -185,20 +212,20 @@ describe('TC-116-B — filtre de dates : bornes INCLUSES, cadran LOCAL', () => {
 
   it('« Filtrer » reste inerte tant qu’aucune date n’est saisie', () => {
     contextValue = baseContext(jeu())
-    render(<Historique />)
+    poser()
     expect(screen.getByRole('button', { name: 'Filtrer' })).toBeDisabled()
   })
 
   it('une plage inversée n’est pas applicable', () => {
     contextValue = baseContext(jeu())
-    render(<Historique />)
+    poser()
     setDates('2026-08-26', '2026-08-24')
     expect(screen.getByRole('button', { name: 'Filtrer' })).toBeDisabled()
   })
 
   it('« Aujourd’hui » vide les champs de date', () => {
     contextValue = baseContext(jeu())
-    render(<Historique />)
+    poser()
     setDates('2026-08-25', '2026-08-25')
     fireEvent.click(screen.getByRole('button', { name: 'Filtrer' }))
     fireEvent.click(screen.getByRole('button', { name: "Aujourd'hui" }))
@@ -215,7 +242,7 @@ describe('TC-116-B — filtre de dates : bornes INCLUSES, cadran LOCAL', () => {
       tx({ id: 'today', client: { nom: 'AUJOURD', prenom: 'HUI' }, date: `${jj}/${mm}/${now.getFullYear()} 10:00` }),
       tx({ id: 'old', client: { nom: 'VIEUX', prenom: 'X' }, date: '01/01/2020 10:00' }),
     ])
-    render(<Historique />)
+    poser()
     fireEvent.click(screen.getByRole('button', { name: "Aujourd'hui" }))
     expect(clientCells()).toEqual(['HUI AUJOURD'])
   })
@@ -231,7 +258,7 @@ describe('TC-116-C — recherche', () => {
 
   it('cherche sur le nom du client, insensible à la casse', () => {
     contextValue = baseContext(jeu())
-    render(<Historique />)
+    poser()
     fireEvent.change(screen.getByPlaceholderText(/Rechercher par nom/i), { target: { value: 'ouedraogo' } })
     fireEvent.click(screen.getByRole('button', { name: 'Rechercher' }))
     expect(clientCells()).toEqual(['Awa OUEDRAOGO'])
@@ -239,7 +266,7 @@ describe('TC-116-C — recherche', () => {
 
   it('cherche sur le prénom', () => {
     contextValue = baseContext(jeu())
-    render(<Historique />)
+    poser()
     fireEvent.change(screen.getByPlaceholderText(/Rechercher par nom/i), { target: { value: 'guafarou' } })
     fireEvent.click(screen.getByRole('button', { name: 'Rechercher' }))
     expect(clientCells()).toEqual(['Guafarou BANABA'])
@@ -247,7 +274,7 @@ describe('TC-116-C — recherche', () => {
 
   it('cherche sur le code réseau', () => {
     contextValue = baseContext(jeu())
-    render(<Historique />)
+    poser()
     fireEvent.change(screen.getByPlaceholderText(/Rechercher par nom/i), { target: { value: '222222' } })
     fireEvent.click(screen.getByRole('button', { name: 'Rechercher' }))
     expect(clientCells()).toEqual(['Awa OUEDRAOGO'])
@@ -255,7 +282,7 @@ describe('TC-116-C — recherche', () => {
 
   it('cherche sur le réseau', () => {
     contextValue = baseContext(jeu())
-    render(<Historique />)
+    poser()
     fireEvent.change(screen.getByPlaceholderText(/Rechercher par nom/i), { target: { value: 'moov' } })
     fireEvent.click(screen.getByRole('button', { name: 'Rechercher' }))
     expect(clientCells()).toEqual(['Awa OUEDRAOGO'])
@@ -263,7 +290,7 @@ describe('TC-116-C — recherche', () => {
 
   it('ne cherche PAS sur le montant (comportement actuel, à ne pas « corriger » par mégarde)', () => {
     contextValue = baseContext(jeu())
-    render(<Historique />)
+    poser()
     fireEvent.change(screen.getByPlaceholderText(/Rechercher par nom/i), { target: { value: '250000' } })
     fireEvent.click(screen.getByRole('button', { name: 'Rechercher' }))
     expect(dataRows()).toHaveLength(0)
@@ -271,7 +298,7 @@ describe('TC-116-C — recherche', () => {
 
   it('une recherche vide ramène tout', () => {
     contextValue = baseContext(jeu())
-    render(<Historique />)
+    poser()
     fireEvent.change(screen.getByPlaceholderText(/Rechercher par nom/i), { target: { value: '' } })
     fireEvent.click(screen.getByRole('button', { name: 'Rechercher' }))
     expect(dataRows()).toHaveLength(2)
@@ -279,7 +306,7 @@ describe('TC-116-C — recherche', () => {
 
   it('la touche Entrée déclenche la recherche', () => {
     contextValue = baseContext(jeu())
-    render(<Historique />)
+    poser()
     const input = screen.getByPlaceholderText(/Rechercher par nom/i)
     fireEvent.change(input, { target: { value: 'awa' } })
     fireEvent.keyPress(input, { key: 'Enter', code: 'Enter', charCode: 13 })
@@ -297,13 +324,13 @@ describe('TC-116-D — navigation par jour', () => {
 
   it('groupe par jour et titre la section', () => {
     contextValue = baseContext(joursDistincts(3))
-    render(<Historique />)
+    poser()
     expect(screen.getByText('Navigation par jour')).toBeInTheDocument()
   })
 
   it('affiche 7 jours par page', () => {
     contextValue = baseContext(joursDistincts(10))
-    render(<Historique />)
+    poser()
     expect(screen.getByText(/Page 1 sur 2/)).toBeInTheDocument()
   })
 
@@ -312,7 +339,7 @@ describe('TC-116-D — navigation par jour', () => {
       tx({ id: 'a', date: '01/07/2026 10:00' }),
       tx({ id: 'b', date: '01/07/2026 11:00' }),
     ])
-    render(<Historique />)
+    poser()
     // Pluriel géré à la main : « 1 transaction », « 2 transactions ».
     expect(screen.getByText(/^2 transactions$/)).toBeInTheDocument()
   })
@@ -322,14 +349,14 @@ describe('TC-116-D — navigation par jour', () => {
       tx({ id: 'a', client: { nom: 'PREMIER', prenom: 'X' }, date: '01/07/2026 10:00' }),
       tx({ id: 'b', client: { nom: 'SECOND', prenom: 'X' }, date: '02/07/2026 10:00' }),
     ])
-    render(<Historique />)
+    poser()
     fireEvent.click(screen.getByText('01/07/2026'))
     expect(clientCells()).toEqual(['X PREMIER'])
   })
 
   it('Précédent / Suivant naviguent entre les pages de jours', () => {
     contextValue = baseContext(joursDistincts(10))
-    render(<Historique />)
+    poser()
     const suivant = screen.getByRole('button', { name: /Suivant/i })
     fireEvent.click(suivant)
     expect(screen.getByText(/Page 2 sur 2/)).toBeInTheDocument()
@@ -338,7 +365,7 @@ describe('TC-116-D — navigation par jour', () => {
   })
 
   it('sans transaction, la navigation annonce l’absence de données', () => {
-    render(<Historique />)
+    poser()
     expect(screen.getByText('Aucune transaction disponible')).toBeInTheDocument()
   })
 })
@@ -352,7 +379,7 @@ describe('TC-116-E — ce qui N’EXISTE PAS aujourd’hui', () => {
 
   it('aucun bouton « Voir plus » / « Charger plus »', () => {
     contextValue = baseContext(Array.from({ length: 80 }, (_, i) => tx({ id: `t${i}` })))
-    render(<Historique />)
+    poser()
     expect(screen.queryByRole('button', { name: /Voir plus|Charger plus/i })).toBeNull()
   })
 
@@ -362,14 +389,14 @@ describe('TC-116-E — ce qui N’EXISTE PAS aujourd’hui', () => {
     contextValue = baseContext(
       Array.from({ length: 80 }, (_, i) => tx({ id: `t${i}`, date: `0${(i % 3) + 1}/07/2026 10:00` })),
     )
-    render(<Historique />)
+    poser()
     expect(dataRows().length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: /Voir plus|Charger plus|Page suivante/i })).toBeNull()
   })
 
   it('aucun sous-onglet aujourd’hui : la page est mono-vue', () => {
     contextValue = baseContext([tx()])
-    render(<Historique />)
+    poser()
     for (const nom of ['Transactions clients', 'Opérations dealer', 'Collaborations', 'Dettes internes']) {
       expect(screen.queryByRole('button', { name: nom })).toBeNull()
     }
