@@ -130,6 +130,33 @@ body {
 }
 
 
+/* ── La part compensable d'une poutre ──────────────────────────────────────
+   Le seul motif de l'application, et il porte une information : c'est ce que
+   les deux bras d'un partenaire ont en commun — le montant que la compensation
+   effacerait des deux côtés à la fois.
+
+   Il est HACHURÉ, et non d'une autre couleur, parce que DESIGN.md §5 interdit
+   de transmettre une information par la seule couleur. La hachure survit au
+   daltonisme, au contraste réduit et à l'impression en noir et blanc ; une
+   troisième teinte, non. Le libellé de la légende le double en toutes lettres.
+
+   La trame est faite d'un dégradé répété vers la COULEUR DE SURFACE, pas vers
+   du blanc : sur un thème sombre, du blanc ferait des rayures lumineuses au
+   lieu d'évider la barre. C'est la même raison qui met `--color-surface` ici
+   plutôt qu'une valeur en dur.
+
+   Tailwind ne sait pas exprimer un `repeating-linear-gradient` ; c'est la seule
+   raison pour laquelle cette classe existe en CSS et non en utilitaires. */
+.fleau-compensable {
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--color-surface) 62%, transparent) 0 3px,
+    transparent 3px 6px
+  );
+  outline: 1px solid color-mix(in srgb, var(--color-surface) 55%, transparent);
+  outline-offset: -1px;
+}
+
 /* ── Bandeau de marque ─────────────────────────────────────────────────────
    La photographie d'origine est de retour : la constellation de nœuds orange
    sur fond noir, relevée du produit avant refonte. Elle avait été remplacée
