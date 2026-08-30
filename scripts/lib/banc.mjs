@@ -19,6 +19,12 @@ const racine = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..
 
 const DOUBLURES = [
   ['services/storeAdminDealerService', 'src/preview-doubles/storeAdminDealerService.js'],
+  // Le poste dealer (?espace=dealer) : ses cuves, ses compteurs, ses 84 caisses.
+  // Les trois règles sont disjointes — `services/dealerService` n'apparaît pas
+  // dans le chemin de `services/storeAdminDealerService` —, donc l'ordre est
+  // sans effet ici. Il le deviendrait si l'un devenait le préfixe d'un autre.
+  ['services/storeTransferService', 'src/preview-doubles/storeTransferService.js'],
+  ['services/dealerService', 'src/preview-doubles/dealerService.js'],
 ]
 
 export async function ouvrirBanc() {

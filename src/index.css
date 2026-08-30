@@ -236,6 +236,28 @@ body {
   }
 }
 
+/* ── Tête du poste dealer ──────────────────────────────────────────────────
+   La barre latérale n'a pas de bandeau : c'est un outil qu'on ouvre toute la
+   journée, pas un accueil. Elle a quand même besoin d'un moment de marque, et
+   il tient en une texture.
+
+   POURQUOI PAS `.bandeau-marque`. Cette classe-là charge la photographie en
+   `cover` dès 768 px de VIEWPORT — pas de conteneur. Dans un bloc de
+   224 × 64 px, elle en montrerait un fragment arbitraire, et le cadrage qui
+   fait tout l'intérêt du bandeau (focus 0,22, là où sont les lumières) n'a
+   aucun sens à cette taille. Ici : deux dégradés radiaux, nets à toute densité,
+   prévisibles à toute dimension, zéro octet transféré.
+
+   Les halos reprennent brand-400 et net-orange en transparence. `rgba()` ne
+   sait pas décomposer une variable de couleur : toute retouche de brand-400
+   doit être reportée ici à la main, comme pour `.bandeau-marque`. */
+.poste-marque {
+  background-color: #0f2745; /* = brand-600, en dur pour la même raison */
+  background-image:
+    radial-gradient(12rem 5rem at 22% 30%, rgba(39, 96, 165, 0.55), rgba(39, 96, 165, 0) 70%),
+    radial-gradient(8rem 4rem at 95% 110%, rgba(255, 107, 53, 0.16), rgba(255, 107, 53, 0) 70%);
+}
+
 /* ── Panneau d'accueil de l'authentification ───────────────────────────────
    La même photographie que le bandeau, sous un voile plus dense : le texte y
    est plus long et plus petit que le wordmark, et un bouton bordé de blanc doit

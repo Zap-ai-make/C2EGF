@@ -14,7 +14,7 @@ Réseau réel : **84 boutiques**. Contrats applicables : `DESIGN.md`, `SECURITY.
 |----|-----------------------------------------------|-----------|-----------|---------|
 | S1 | Caractérisation de l'espace dealer            | aucune    | MVP       | **terminée** |
 | S2 | Les caisses en une requête, et l'argent dehors| S1        | MVP       | **terminée** |
-| S3 | Le poste — shell de l'espace dealer           | S1        | MVP       | à faire |
+| S3 | Le poste — shell de l'espace dealer           | S1        | MVP       | **terminée** |
 | S4 | L'accueil — les caisses et la position        | S2, S3    | MVP       | à faire |
 | S5 | Les files et le geste de ravitaillement       | S3        | MVP       | à faire |
 | S6 | Le vocabulaire — « ravitaillement »           | S5        | MVP       | à faire |
@@ -92,6 +92,31 @@ Quatre choses apprises en écrivant le code, détaillées dans la spec :
 | **Une régression évitée** | Le compteur, écrit en `set(merge)`, créait `dealerBalances` — ce qui aurait fait passer la garde d'amorçage de `confirmDealerRequest` pour « inventaire amorcé », qui aurait alors levé `INSUFFICIENT_DEALER_BALANCE` à la confirmation suivante. **Un compteur d'affichage aurait bloqué tous les ravitaillements.** Attrapé par `tc-069 [CO-A]`. |
 | **Un type exclu** | `open_day` fixe les soldes sans débiter le dealer : il ne compte pas. |
 | **⚠ Une identité plus fine — pour S4** | `somme des caisses + retours en attente = solde initial + envoyé − revenu`. La boutique est débitée à la **création** du retour, le compteur avance à la **confirmation**. La ligne « en transit » devient le terme qui réconcilie, au lieu d'être décorative. Et « cuves + dehors » n'est **pas** conservé : un envoi de liquidité part vers Orange, hors inventaire suivi. |
+
+**S3 — terminée.** La barre latérale porte les cuves en permanence, la
+navigation en deux groupes avec son invariant de compteur exécutable, et le
+compte en pied. `DealerInventoryBar` cesse d'être une bande dans `<main>` :
+elle devient un rail, et rend au contenu la centaine de pixels qu'elle prenait
+sur chaque écran. `DealerHome.jsx`, mort, est supprimé. Zéro emoji, zéro couleur
+hors palette dans le shell.
+
+Le banc d'essai monte désormais le poste : `preview.html?espace=dealer`, avec
+`&cuves=basses` et `&cuves=vides`. Les doublures rendent **84 boutiques** — S4
+en aura besoin, et un écran vérifié à trois lignes ne prouve rien à
+quatre-vingt-quatre.
+
+**Deux défauts que seule la capture pouvait montrer** — ni les tests ni le lint
+ne les voyaient :
+
+| Défaut | Leçon |
+|---|---|
+| L'anneau d'alerte d'une cuve basse était `ring-warn` (#8a5a00), une teinte pour fond **clair** : invisible sur le marine de la barre. | Un jeton sémantique n'est pas neutre au fond sur lequel on le pose. La paire `warn` / `warn-soft` existe pour ça. |
+| À 390 px, le résumé des cuves tronquait « FCFA » **puis le mot « bas »** — le seul signal d'alerte de l'en-tête, sur l'écran où il compte le plus. | Ce qui rétrécit doit être le nombre, jamais l'alerte (`shrink-0`). |
+
+**Et un mensonge de test, trouvé en supprimant le fichier mort.**
+`tc-028` mockait `DealerHome` et son test A-12 s'appelait « → DealerHome
+rendu ». La route rend `DealerDashboard` ; le test passait parce que les deux
+portaient le même `data-testid`. Mock retiré, test renommé.
 
 ---
 

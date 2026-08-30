@@ -1,7 +1,11 @@
 /**
  * deborde.mjs — la page déborde-t-elle horizontalement, et par la faute de qui ?
  *
- *   node scripts/deborde.mjs [largeur]   (défaut 390)
+ *   node scripts/deborde.mjs [largeur] [variante]   (défaut 390, banc boutique)
+ *
+ * `variante` est la chaîne de requête du banc, sans le « ? » :
+ *   node scripts/deborde.mjs 390 'espace=dealer'
+ *   node scripts/deborde.mjs 390 'espace=dealer&cuves=basses'
  *
  * Un débordement horizontal ne se voit pas sur une capture pleine page : celle-ci
  * s'élargit pour tout contenir, et l'image paraît normale. Il faut le mesurer.
@@ -25,11 +29,13 @@ import { chromium } from 'playwright'
 import { ouvrirBanc } from './lib/banc.mjs'
 
 const largeur = Number(process.argv[2] || 390)
+const variante = process.argv[3] || ''
 
 const { serveur, url } = await ouvrirBanc()
+const adresse = variante ? `${url}?${variante}` : url
 const navigateur = await chromium.launch()
 const page = await navigateur.newPage({ viewport: { width: largeur, height: 900 } })
-await page.goto(url, { waitUntil: 'networkidle' })
+await page.goto(adresse, { waitUntil: 'networkidle' })
 await page.waitForTimeout(2500)
 
 const rapport = await page.evaluate((largeur) => {
@@ -73,7 +79,7 @@ await navigateur.close()
 await serveur.close()
 
 const deborde = rapport.scrollWidth > rapport.viewport + 1
-console.log(`fenêtre ${largeur} px — document.scrollWidth = ${rapport.scrollWidth}`)
+console.log(`fenêtre ${largeur} px${variante ? ` — ${variante}` : ''} — document.scrollWidth = ${rapport.scrollWidth}`)
 
 if (!deborde) {
   console.log('la page tient dans la fenêtre')

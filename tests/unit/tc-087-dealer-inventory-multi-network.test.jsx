@@ -26,9 +26,15 @@ vi.mock('../../src/config/firebase', () => ({
 }))
 
 // Force un dealer multi-réseaux (Orange + Moov), indépendamment du profil actif.
+// `estSousSeuil` et `DEALER_SEUIL_BAS` sont arrivés avec la spec S2 : le rail
+// signale une cuve basse. Le mock doit les fournir, sinon le composant appelle
+// `undefined`. Seuil volontairement haut ici pour que les cuves de ce test
+// restent au-dessus et que le rendu testé ne porte pas d'alerte parasite.
 vi.mock('../../src/constants/dealerConstants', () => ({
   DEALER_NETWORKS: ['Orange', 'Moov'],
   IS_DEALER_MULTI_NETWORK: true,
+  DEALER_SEUIL_BAS: 0,
+  estSousSeuil: () => false,
 }))
 
 vi.mock('../../src/services/storeTransferService', () => ({

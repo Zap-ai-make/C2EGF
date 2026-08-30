@@ -87,11 +87,63 @@ export const ADMIN_NAV_ITEMS = [
   { name: 'Profil', path: '/admin/profile', section: 'admin' },
 ]
 
+/**
+ * Les destinations de l'espace dealer, en DEUX GROUPES — comme la boutique, et
+ * pour la même raison : le groupe n'est pas un rangement, il porte l'invariant
+ * des compteurs.
+ *
+ *   distribuer  ce que la centrale envoie et reçoit — les endroits où l'on agit
+ *   consulter   ce qu'on va chercher
+ *
+ *   ⚠ UN COMPTEUR D'ATTENTE NE PEUT APPARAÎTRE QUE SUR LE GROUPE `distribuer`.
+ *
+ * `assertCompteurDealerAutorise` ci-dessous rend la règle exécutable, comme
+ * `assertCompteurAutorise` le fait pour la boutique. Les deux espaces ne
+ * partagent pas leurs listes, mais ils partagent la règle : un compteur dit
+ * « quelqu'un attend une réponse de vous », et on ne répond qu'où l'on agit.
+ *
+ * `Profil` a quitté cette liste, comme côté boutique. Ce n'est pas une
+ * destination sœur des autres : c'est le compte. Il est rendu à part, en pied
+ * de la barre latérale, sous le nom du dealer.
+ */
+export const DEALER_NAV_GROUPS = Object.freeze({
+  DISTRIBUER: 'distribuer',
+  CONSULTER: 'consulter',
+})
+
 export const DEALER_NAV_ITEMS = [
-  { name: 'Vue générale', path: '/dealer' },
-  { name: 'Boutiques', path: '/dealer/stores' },
-  { name: 'Ravitaillements', path: '/dealer/requests' },
-  { name: 'Retours boutiques', path: '/dealer/transfers' },
-  { name: 'Historique', path: '/dealer/history' },
-  { name: 'Profil', path: '/dealer/profile' },
+  { name: 'Vue générale',     path: '/dealer',           group: DEALER_NAV_GROUPS.DISTRIBUER },
+  { name: 'Ravitaillements',  path: '/dealer/requests',  group: DEALER_NAV_GROUPS.DISTRIBUER },
+  { name: 'Retours boutiques', path: '/dealer/transfers', group: DEALER_NAV_GROUPS.DISTRIBUER },
+  { name: 'Boutiques',        path: '/dealer/stores',    group: DEALER_NAV_GROUPS.CONSULTER },
+  { name: 'Historique',       path: '/dealer/history',   group: DEALER_NAV_GROUPS.CONSULTER },
 ]
+
+/** Le compte. Rendu en pied de barre, jamais dans la liste. */
+export const DEALER_ACCOUNT_ITEM = { name: 'Profil', path: '/dealer/profile' }
+
+/** Les libellés des deux groupes, tels qu'ils s'affichent en intertitre. */
+export const DEALER_GROUP_LABELS = Object.freeze({
+  [DEALER_NAV_GROUPS.DISTRIBUER]: 'Distribuer',
+  [DEALER_NAV_GROUPS.CONSULTER]: 'Consulter',
+})
+
+export function dealerNavItemsOfGroup(group) {
+  return DEALER_NAV_ITEMS.filter((item) => item.group === group)
+}
+
+/**
+ * L'invariant, sous forme exécutable. On le fait tomber en développement et en
+ * test, jamais en production : un dealer n'a pas à perdre sa navigation pour
+ * une pastille mal placée.
+ */
+export function assertCompteurDealerAutorise(path) {
+  const item = DEALER_NAV_ITEMS.find((entry) => entry.path === path)
+  if (item && item.group !== DEALER_NAV_GROUPS.DISTRIBUER && import.meta.env?.DEV) {
+    throw new Error(
+      `Compteur interdit sur « ${item.name} » (${path}) : un compteur signale une ` +
+      `attente, et on n'agit que dans le groupe « ${DEALER_NAV_GROUPS.DISTRIBUER} ».`,
+    )
+  }
+  return true
+}

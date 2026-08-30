@@ -124,9 +124,6 @@ vi.mock('../../src/pages/admin/AdminProfile', () => ({
 }))
 
 // Pages Dealer
-vi.mock('../../src/pages/dealer/DealerHome', () => ({
-  default: () => <div data-testid="dealer-home">DealerHome</div>,
-}))
 vi.mock('../../src/pages/dealer/DealerStores', () => ({
   default: () => <div data-testid="dealer-stores">DealerStores</div>,
 }))
@@ -327,7 +324,12 @@ describe('TC-028-A — URL finale par rôle', () => {
     expect(screen.getByTestId('admin-profile')).toBeInTheDocument()
   })
 
-  it('A-12 : dealer sur "/dealer" → DealerHome rendu', () => {
+  // Renommé : ce test a TOUJOURS rendu DealerDashboard, jamais DealerHome.
+  // La route `/dealer` pointe sur le tableau de bord ; `DealerHome` n'était
+  // importé nulle part et son mock, retiré avec lui, ne servait à rien. Le
+  // testid « dealer-home » est porté par DealerDashboard — nom trompeur, hors
+  // périmètre de ce lot, à reprendre en S4 quand l'écran sera réécrit.
+  it('A-12 : dealer sur "/dealer" → le tableau de bord dealer est rendu', () => {
     renderApp(dealerCtx(), '/dealer')
     expect(screen.getByTestId('dealer-home')).toBeInTheDocument()
     expect(screen.getByTestId('location').textContent).toBe('/dealer')

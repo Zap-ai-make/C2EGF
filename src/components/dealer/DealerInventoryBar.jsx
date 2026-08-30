@@ -1,21 +1,40 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useAuth } from '../../context/AuthContext'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { X } from 'lucide-react'
 import { useToast } from '../../hooks/useToast'
-import { subscribeDealerBalance, replenishDealerInventory, decreaseDealerInventory } from '../../services/storeTransferService'
+import { useDealerInventory } from '../../hooks/useDealerInventory'
+import { replenishDealerInventory, decreaseDealerInventory } from '../../services/storeTransferService'
 import { formatCurrency } from '../../utils/formatCurrency'
-import { DEALER_NETWORKS, IS_DEALER_MULTI_NETWORK } from '../../constants/dealerConstants'
+import { DEALER_NETWORKS, IS_DEALER_MULTI_NETWORK, estSousSeuil } from '../../constants/dealerConstants'
 import { NETWORK_CONFIG } from '../../constants/networkConfig'
-import { emptyDealerInventory } from '../../utils/dealerInventory'
 import Toast from '../Toast'
 
 /**
- * Bandeau d'inventaire dealer — persistant en haut de chaque page (comme le
- * bandeau des cartes réseau de l'espace boutique). Un unique bouton « Ajuster »
- * ouvre une modale unifiée (ressource + opération + montant).
+ * Les cuves du dealer — stock et liquidité — et le seul endroit où on les ajuste.
  *
- * Mono-réseau (ex. TAOFIC) : deux cartes Stock + Liquidité (comportement historique,
- * inchangé). Multi-réseaux (dealer multi-SIM) : une carte Stock PAR réseau + une
- * carte Liquidité globale (somme), et la modale ajoute un sélecteur de réseau.
+ * CE QUI A CHANGÉ, ET POURQUOI (spec S3)
+ * ──────────────────────────────────────
+ * C'était une BANDE horizontale, posée en haut de `<main>`, sur chaque écran.
+ * Elle avait deux défauts que le dessin ne pouvait pas corriger :
+ *
+ *   • elle mangeait une centaine de pixels de hauteur sur tous les écrans,
+ *     y compris ceux qui n'ont rien à voir avec l'inventaire ;
+ *   • elle DÉFILAIT malgré tout, alors que « ai-je de quoi servir ? » est la
+ *     condition de chaque action de la page.
+ *
+ * Elle devient un RAIL VERTICAL dans la barre latérale : présente en
+ * permanence, jamais dans le chemin du contenu. C'est le même déplacement que
+ * les cartes de solde de l'espace boutique, qui sont collantes pour la même
+ * raison.
+ *
+ * L'ABONNEMENT A QUITTÉ CE FICHIER pour `useDealerInventory` : les cuves
+ * s'affichent aussi en résumé dans l'en-tête mobile, où ce composant n'est pas
+ * déplié. Deux vues, une source.
+ *
+ * ⚠ LE DOUBLE VERROU DE SOUMISSION EST CONSERVÉ TEL QUEL. `submittingRef` est
+ *   un verrou SYNCHRONE qui bloque deux clics dans le même tick, avant que le
+ *   re-rendu n'applique `disabled` ; l'état `submitting` pilote l'affordance.
+ *   Les deux sont volontaires sur une action financière — ne pas retirer le ref
+ *   au profit du seul `disabled`.
  */
 
 const RESOURCES = [
@@ -23,18 +42,17 @@ const RESOURCES = [
   { value: 'liquidite', label: 'Liquidité' },
 ]
 const OPERATIONS = [
-  { value: 'increase', label: '+ Ajouter' },
-  { value: 'decrease', label: '− Retirer' },
+  { value: 'increase', label: 'Ajouter' },
+  { value: 'decrease', label: 'Retirer' },
 ]
-// Options du sélecteur de réseau (dealer multi-réseaux) — nom lisible du profil.
 const NETWORK_SEGMENT_OPTIONS = DEALER_NETWORKS.map(n => ({ value: n, label: NETWORK_CONFIG[n]?.name ?? n }))
 
-// Petit sélecteur segmenté accessible (radiogroup).
+/** Sélecteur segmenté accessible (radiogroup). */
 function Segmented({ label, options, value, onChange, name }) {
   return (
     <div>
-      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</p>
-      <div role="radiogroup" aria-label={label} className="inline-flex rounded-lg bg-gray-100 p-1">
+      <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">{label}</p>
+      <div role="radiogroup" aria-label={label} className="inline-flex rounded-lg bg-brand-100 p-1">
         {options.map(opt => {
           const active = opt.value === value
           return (
@@ -44,8 +62,8 @@ function Segmented({ label, options, value, onChange, name }) {
               role="radio"
               aria-checked={active}
               onClick={() => onChange(opt.value)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-400 ${
-                active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${
+                active ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
               }`}
               data-testid={`seg-${name}-${opt.value}`}
             >
@@ -58,31 +76,54 @@ function Segmented({ label, options, value, onChange, name }) {
   )
 }
 
-function DealerInventoryBar() {
-  const { currentUser, userProfile } = useAuth()
-  const { toasts, showToast, removeToast } = useToast()
+/**
+ * Une cuve.
+ *
+ * Le seuil bas est doublé D'UN MOT, jamais porté par la seule couleur
+ * (DESIGN.md §5). La pastille orange est l'identité de l'opérateur — c'est une
+ * donnée, le seul emploi que `index.css` autorise pour `net-orange`, qui
+ * plafonne à 2,84:1 et ne peut donc porter ni texte ni chrome.
+ */
+function Cuve({ label, montant, operateur = false }) {
+  const bas = estSousSeuil(montant)
+  return (
+    <div
+      // ⚠ L'anneau est `warn-soft`, pas `warn`. Les deux disent le seuil bas,
+      //   mais `warn` (#8a5a00) est une teinte pour fond CLAIR : sur le marine
+      //   de la barre elle disparaît, et un signal invisible n'est pas un
+      //   signal. Sur fond sombre, c'est la variante claire qui porte. Vu à la
+      //   capture, pas déduit.
+      className={`rounded-lg bg-white/[0.07] px-3 py-2 ${bas ? 'ring-1 ring-warn-soft/70' : ''}`}
+      data-testid={`cuve-${label}`}
+    >
+      <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-brand-200">
+        {operateur && (
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-net-orange" aria-hidden="true" />
+        )}
+        <span className="truncate">{label}</span>
+      </p>
+      <p className="mt-0.5 truncate text-base font-bold tabular-nums text-white">
+        {formatCurrency(montant)}
+      </p>
+      {bas && (
+        <p className="mt-0.5 text-[10px] font-semibold text-warn-soft">Sous le seuil bas</p>
+      )}
+    </div>
+  )
+}
 
-  const [inventory, setInventory] = useState(emptyDealerInventory())
+function DealerInventoryBar() {
+  const { toasts, showToast, removeToast } = useToast()
+  const { inventory, isDealer } = useDealerInventory()
+
   const [adjustOpen, setAdjustOpen] = useState(false)
-  const [resource, setResource]     = useState('stock')     // 'stock' | 'liquidite'
-  const [mode, setMode]             = useState('increase')  // 'increase' | 'decrease'
-  const [network, setNetwork]       = useState(DEALER_NETWORKS[0]) // réseau ciblé (multi-réseaux)
+  const [resource, setResource]     = useState('stock')
+  const [mode, setMode]             = useState('increase')
+  const [network, setNetwork]       = useState(DEALER_NETWORKS[0])
   const [amount, setAmount]         = useState('')
   const [submitting, setSubmitting] = useState(false)
-  // Défense en profondeur pour une action financière (appel de Cloud Function) :
-  //  - submittingRef : verrou SYNCHRONE, bloque deux clics dans le même tick avant
-  //    que le re-render n'applique `disabled` (fenêtre de double-soumission).
-  //  - submitting (state) : pilote `disabled` + le libellé du bouton.
-  // Les deux sont volontaires : ne pas retirer le ref au profit du seul `disabled`.
   const submittingRef = useRef(false)
-
-  const dealerUid = currentUser?.uid
-  const isDealer = userProfile?.role === 'dealer'
-
-  useEffect(() => {
-    if (!isDealer || !dealerUid) { setInventory(emptyDealerInventory()); return undefined }
-    return subscribeDealerBalance({ dealerUid, onUpdate: setInventory })
-  }, [dealerUid, isDealer])
+  const dialogRef = useRef(null)
 
   const closeModal = useCallback(() => {
     setAdjustOpen(false)
@@ -92,7 +133,7 @@ function DealerInventoryBar() {
     setNetwork(DEALER_NETWORKS[0])
   }, [])
 
-  // Fermeture à la touche Échap
+  // Échap referme, comme tout calque (DESIGN.md §11).
   useEffect(() => {
     if (!adjustOpen) return undefined
     const onKey = (e) => { if (e.key === 'Escape') closeModal() }
@@ -100,13 +141,18 @@ function DealerInventoryBar() {
     return () => window.removeEventListener('keydown', onKey)
   }, [adjustOpen, closeModal])
 
+  // Le focus entre dans la modale à l'ouverture. Sans cela, la tabulation
+  // continuerait derrière le calque, sur une page qu'on ne voit plus.
+  useEffect(() => {
+    if (!adjustOpen) return
+    dialogRef.current?.querySelector('input, button')?.focus()
+  }, [adjustOpen])
+
   const submit = useCallback(async () => {
     if (submittingRef.current) return
     submittingRef.current = true
     setSubmitting(true)
     const isDecrease = mode === 'decrease'
-    // Mono-réseau : payload historique { resource, amount } (aucun réseau transmis,
-    // compatible functions non mises à jour). Multi-réseaux : réseau sélectionné.
     const args = IS_DEALER_MULTI_NETWORK ? { resource, amount, network } : { resource, amount }
     try {
       if (isDecrease) await decreaseDealerInventory(args)
@@ -126,69 +172,67 @@ function DealerInventoryBar() {
   const isDecrease = mode === 'decrease'
   const amountValid = /^[0-9]+$/.test(amount.trim())
 
-  const Card = ({ label, value, icon, tint, dotColor }) => (
-    <div className={`flex-1 min-w-40 rounded-xl border border-gray-100 bg-gradient-to-br ${tint} to-white px-4 py-2.5`}>
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-          {dotColor && <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: dotColor }} aria-hidden="true" />}
-          {label}
-        </span>
-        <span className="text-lg" aria-hidden="true">{icon}</span>
-      </div>
-      <p className="mt-0.5 text-xl font-bold text-gray-900">{formatCurrency(value)}</p>
-    </div>
-  )
-
   return (
-    <div className="mb-6 rounded-2xl bg-white ring-1 ring-gray-100 shadow-sm">
-      <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center">
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-green-500" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-            {IS_DEALER_MULTI_NETWORK ? 'Mon inventaire' : 'Mon inventaire (Orange)'}
-          </span>
-        </div>
+    <div className="px-3 py-3">
+      <p className="px-1 pb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-200">
+        Mes cuves
+      </p>
+
+      <div className="grid gap-2">
         {IS_DEALER_MULTI_NETWORK ? (
-          <div className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-3">
+          <>
             {DEALER_NETWORKS.map(net => (
-              <Card
+              <Cuve
                 key={net}
                 label={NETWORK_CONFIG[net]?.name ?? net}
-                value={inventory.byNetwork?.[net]?.stock ?? 0}
-                icon="📦"
-                tint="from-blue-50"
-                dotColor={NETWORK_CONFIG[net]?.color}
+                montant={inventory.byNetwork?.[net]?.stock ?? 0}
+                operateur
               />
             ))}
-            <Card label="Liquidité" value={inventory.totalLiquidite ?? 0} icon="💵" tint="from-teal-50" />
-          </div>
+            <Cuve label="Liquidité" montant={inventory.totalLiquidite ?? 0} />
+          </>
         ) : (
-          <div className="flex flex-1 flex-col gap-3 sm:flex-row">
-            <Card label="Stock" value={inventory.stock} icon="📦" tint="from-blue-50" />
-            <Card label="Liquidité" value={inventory.liquidite} icon="💵" tint="from-teal-50" />
-          </div>
+          <>
+            <Cuve label={`Stock ${DEALER_NETWORKS[0]}`} montant={inventory.stock} operateur />
+            <Cuve label="Liquidité" montant={inventory.liquidite} />
+          </>
         )}
-        <div className="flex shrink-0">
-          <button
-            type="button"
-            onClick={() => { setAdjustOpen(true); setAmount(''); setResource('stock'); setMode('increase'); setNetwork(DEALER_NETWORKS[0]) }}
-            className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
-            data-testid="dealer-inventory-adjust"
-          >
-            Ajuster
-          </button>
-        </div>
       </div>
 
-      {/* Modale d'ajustement unifiée */}
+      <button
+        type="button"
+        onClick={() => { setAdjustOpen(true); setAmount(''); setResource('stock'); setMode('increase'); setNetwork(DEALER_NETWORKS[0]) }}
+        className="mt-2 w-full rounded-lg border border-white/25 px-3 py-1.5 text-xs font-semibold text-brand-100 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+        data-testid="dealer-inventory-adjust"
+      >
+        Ajuster
+      </button>
+
       {adjustOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="dealer-adjust-title">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <h2 id="dealer-adjust-title" className="text-lg font-semibold text-gray-900">Ajuster l'inventaire</h2>
-            <p className="mt-1 text-sm text-gray-500">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="dealer-adjust-title"
+        >
+          <div ref={dialogRef} className="w-full max-w-md rounded-xl bg-surface p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <h2 id="dealer-adjust-title" className="text-lg font-semibold text-ink">
+                Ajuster l’inventaire
+              </h2>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="-m-1 rounded p-1 text-ink-muted transition-colors hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                aria-label="Fermer"
+              >
+                <X className="h-4 w-4" aria-hidden="true" strokeWidth={2} />
+              </button>
+            </div>
+            <p className="mt-1 text-sm text-ink-muted">
               {IS_DEALER_MULTI_NETWORK
-                ? 'Approvisionnement ou correction de votre inventaire.'
-                : 'Approvisionnement ou correction de votre inventaire (Orange).'}
+                ? 'Approvisionnement ou correction de vos cuves.'
+                : `Approvisionnement ou correction de vos cuves (${DEALER_NETWORKS[0]}).`}
             </p>
 
             <div className="mt-4 space-y-4">
@@ -198,15 +242,19 @@ function DealerInventoryBar() {
               <Segmented label="Ressource" name="resource" options={RESOURCES} value={resource} onChange={setResource} />
               <Segmented label="Opération" name="operation" options={OPERATIONS} value={mode} onChange={setMode} />
               <div>
-                <label htmlFor="dealer-adjust-amount" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-gray-500">Montant</label>
+                <label htmlFor="dealer-adjust-amount" className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                  Montant
+                </label>
                 <input
                   id="dealer-adjust-amount"
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  placeholder="Montant (FCFA)"
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-400"
+                  placeholder="Ex : 50000"
+                  className="w-full rounded-lg border border-line px-3 py-2 text-sm tabular-nums text-ink focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
                 />
+                <p className="mt-1 text-xs text-ink-muted">Entier positif, sans virgule ni point.</p>
               </div>
             </div>
 
@@ -215,20 +263,21 @@ function DealerInventoryBar() {
                 type="button"
                 onClick={closeModal}
                 disabled={submitting}
-                className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className="rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-brand-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
               >
                 Annuler
               </button>
+              {/* Le bouton dit ce qui va se passer, et le mot survit au toast.
+                  Retirer du stock n'est pas une erreur : pas de rouge — `danger`
+                  reste à l'échec, au rejet et à la suppression. */}
               <button
                 type="button"
                 onClick={submit}
                 disabled={submitting || !amountValid}
-                className={`rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50 focus:outline-none focus-visible:ring-2 ${
-                  isDecrease ? 'bg-red-600 hover:bg-red-700 focus-visible:ring-red-500' : 'bg-green-600 hover:bg-green-700 focus-visible:ring-green-500'
-                }`}
+                className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
                 data-testid="dealer-adjust-submit"
               >
-                {submitting ? 'Traitement…' : 'Valider'}
+                {submitting ? 'Traitement…' : (isDecrease ? 'Retirer' : 'Ajouter')}
               </button>
             </div>
           </div>

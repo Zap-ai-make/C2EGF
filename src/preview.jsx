@@ -14,7 +14,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { Signal, Wallet } from 'lucide-react'
 
 import { ClientsContext } from './context/ClientsContext.jsx'
@@ -30,6 +30,7 @@ import ClientsTable from './components/ClientsTable.jsx'
 import HistoriqueTable from './components/historique/HistoriqueTable.jsx'
 import StoreAdminDealerRequests from './pages/store/StoreAdminDealerRequests.jsx'
 import AuthPage from './components/auth/AuthPage.jsx'
+import DealerLayout from './layouts/DealerLayout.jsx'
 import Balance from './components/dashboard/Balance.jsx'
 import ReseauCards from './components/dashboard/ReseauCards.jsx'
 import FluxChart from './components/dashboard/FluxChart.jsx'
@@ -345,8 +346,65 @@ function Preview() {
   )
 }
 
+
+/**
+ * LE POSTE DEALER — page à part du banc, atteinte par `preview.html?espace=dealer`.
+ *
+ * Pourquoi une page séparée plutôt qu'une section de plus dans la colonne de la
+ * boutique : la barre latérale du poste est en `position: fixed`. Posée dans la
+ * colonne, elle en sortirait et se superposerait à tout ce qui la suit — et la
+ * sonde de débordement mesurerait alors un empilement qui n'existe nulle part
+ * dans l'application.
+ *
+ * Le shell est le VRAI composant. Seul l'accès aux données est doublé
+ * (`src/preview-doubles/`, alias posé par `scripts/lib/banc.mjs`) : ce qu'on
+ * regarde ici est ce qui est livré.
+ *
+ * Variantes d'adresse :
+ *   ?espace=dealer                 le poste, cuves garnies
+ *   ?espace=dealer&cuves=basses    une cuve sous le seuil bas
+ *   ?espace=dealer&cuves=vides     tout à zéro
+ */
+function PosteDealer() {
+  return (
+    <MemoryRouter>
+      <AuthContext.Provider
+        value={{
+          currentUser: { uid: 'banc-dealer' },
+          userProfile: { role: 'dealer', active: true, name: 'Ousmane Sawadogo', email: 'ousmane@c2egf.bf' },
+          logout: () => {},
+        }}
+      >
+        <Routes>
+          <Route element={<DealerLayout />}>
+            <Route
+              path="*"
+              element={
+                <div className="grid gap-4">
+                  <PageHeader
+                    title="Les caisses"
+                    subtitle="84 boutiques · relevé de 08:12"
+                  />
+                  <p className="max-w-prose text-sm text-ink-muted">
+                    Le contenu de cet écran arrive avec la spec S4. Ce que ce banc
+                    montre aujourd’hui, c’est le POSTE : les deux cuves qui ne
+                    défilent plus, la navigation en deux groupes, les compteurs
+                    d’attente, et le comportement de la barre à 390 px.
+                  </p>
+                </div>
+              }
+            />
+          </Route>
+        </Routes>
+      </AuthContext.Provider>
+    </MemoryRouter>
+  )
+}
+
+const espace = new URLSearchParams(globalThis.location?.search ?? '').get('espace')
+
 createRoot(document.getElementById('preview')).render(
   <StrictMode>
-    <Preview />
+    {espace === 'dealer' ? <PosteDealer /> : <Preview />}
   </StrictMode>,
 )
