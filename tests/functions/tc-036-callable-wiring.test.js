@@ -60,7 +60,22 @@ describe('TC-036-WRA — exports callable de index.js', () => {
     // Import dynamique : index.js appelle initializeApp() au niveau module,
     // ce qui nécessite FIRESTORE_EMULATOR_HOST (déjà vérifié en beforeAll global).
     indexModule = await import('../../functions/src/index.js')
-  })
+  }, 60_000)
+  // ⚠ 60 s, et ce n'est PAS un délai gonflé pour masquer une lenteur.
+  //
+  //   Ce hook charge le graphe complet des 23 callables. À chaud il prend moins
+  //   d'une seconde ; à froid, cache disque vide, il a dépassé les 10 s par
+  //   défaut de Vitest — la suite tombait alors sans qu'aucune assertion soit en
+  //   cause, ce qui envoie chercher un bug là où il n'y en a pas.
+  //
+  //   Le même plafond de 10 s existe côté `firebase deploy` (étape de
+  //   découverte du manifeste) et a fait échouer un déploiement réel pour la
+  //   même raison. Là-bas il se relève avec FUNCTIONS_DISCOVERY_TIMEOUT ; ici,
+  //   avec ce troisième argument.
+  //
+  //   Ce que ce délai ne doit PAS devenir : un tapis sous lequel glisser un
+  //   import qui dérape. Mesure de référence, à refaire si le hook expire
+  //   encore — le manifeste complet se sert en 2,3 s sur cette machine.
 
   it('[WRA-01] confirmDealerRequest est exporté', () => {
     expect(indexModule.confirmDealerRequest).toBeDefined()
