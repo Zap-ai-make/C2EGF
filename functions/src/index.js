@@ -36,6 +36,9 @@ import { listStoreCollaborationProvidersHandler } from './collaborations/listSto
 import { declareInternalDebtSettlementHandler } from './collaborations/declareInternalDebtSettlement.js'
 import { confirmInternalDebtSettlementHandler } from './collaborations/confirmInternalDebtSettlement.js'
 import { rejectInternalDebtSettlementHandler } from './collaborations/rejectInternalDebtSettlement.js'
+import { declareInternalDebtCompensationHandler } from './collaborations/declareInternalDebtCompensation.js'
+import { confirmInternalDebtCompensationHandler } from './collaborations/confirmInternalDebtCompensation.js'
+import { rejectInternalDebtCompensationHandler } from './collaborations/rejectInternalDebtCompensation.js'
 
 // Garde idempotente : évite "App named '[DEFAULT]' already exists" lors des imports
 // dans les tests d'intégration (TC-036) qui s'exécutent après TC-035 dans le même processus.
@@ -153,3 +156,22 @@ export const rejectInternalDebtSettlement = onCall(
   wrapCallable(rejectInternalDebtSettlementHandler, deps)
 )
 
+// ── Dettes internes : compensation ──────────────────────────────────────────
+// Solder une dette D1 (A→B) contre la dette opposée D2 (B→A). Aucun float ne
+// bouge : deux créances s'annulent. La confirmation impute les DEUX dettes et
+// écrit une tranche miroir sous D2.
+
+export const declareInternalDebtCompensation = onCall(
+  { region: 'europe-west1', enforceAppCheck: false },
+  wrapCallable(declareInternalDebtCompensationHandler, deps)
+)
+
+export const confirmInternalDebtCompensation = onCall(
+  { region: 'europe-west1', enforceAppCheck: false },
+  wrapCallable(confirmInternalDebtCompensationHandler, deps)
+)
+
+export const rejectInternalDebtCompensation = onCall(
+  { region: 'europe-west1', enforceAppCheck: false },
+  wrapCallable(rejectInternalDebtCompensationHandler, deps)
+)
