@@ -5,16 +5,36 @@ import {
   STORE_NAV_ITEMS,
   STORE_ACCOUNT_ITEM,
   NAV_GROUPS,
+  INTERNAL_DEBTS_PATH,
   navItemsOfGroup,
   assertCompteurAutorise,
 } from '../constants/navigation'
 import { useTheme } from '../context/ThemeContext.jsx'
 import { useAuth } from '../context/AuthContext'
 import { subscribeStorePendingCount } from '../services/storeAdminDealerService'
+import { subscribePendingSettlementsCount } from '../services/collaborationService'
 
 import PWAInstallButton from './PWAInstallButton'
 
 const DEALER_REQUESTS_PATH = '/dealer-requests'
+
+/**
+ * Ce que compte chaque compteur, au singulier et au pluriel.
+ *
+ * Une seule source pour le bureau et le panneau : deux compteurs au même dessin
+ * doivent rester distincts à l'oreille. « 2 demandes en attente » sur une file de
+ * règlements serait un mensonge pour qui n'a que le lecteur d'écran.
+ */
+function libelleCompteur(path) {
+  if (path === INTERNAL_DEBTS_PATH) {
+    return {
+      noun: 'règlement à confirmer',
+      nounPluriel: 'règlements à confirmer',
+      testId: 'store-debts-badge',
+    }
+  }
+  return { noun: 'demande', nounPluriel: 'demandes', testId: 'store-pending-badge' }
+}
 
 /**
  * Les initiales du gérant, pour la pastille du compte.
@@ -38,13 +58,25 @@ export function initiales(nom) {
  * barre sans que ce soit du bruit — ils ont le même dessin et le même sens.
  * L'invariant qui interdit d'en poser un sur une destination de consultation
  * vit dans `constants/navigation.js`, et il est vérifié ici.
+ *
+ * ⚠ LE PLURIEL SE PASSE, IL NE SE FABRIQUE PAS. Ajouter un « s » à la fin
+ *   suffisait tant que le nom était un mot (« demande » → « demandes »). Dès que
+ *   c'est une locution, le « s » atterrit au mauvais endroit : « 2 règlement à
+ *   confirmers ». L'accord porte sur le NOM, pas sur la fin de la chaîne — et
+ *   ce libellé est tout ce qu'entend un lecteur d'écran.
  */
-function PendingBadge({ count, noun = 'demande', testId = 'store-pending-badge' }) {
+function PendingBadge({
+  count,
+  noun = 'demande',
+  nounPluriel,
+  testId = 'store-pending-badge',
+}) {
   if (!count) return null
+  const mot = count > 1 ? (nounPluriel ?? `${noun}s`) : noun
   return (
     <span
       className="ml-1.5 inline-flex items-center justify-center rounded-full bg-danger px-1.5 py-0.5 text-[10px] font-bold text-white leading-none min-w-[1.2rem]"
-      aria-label={`${count} ${noun}${count > 1 ? 's' : ''} en attente`}
+      aria-label={`${count} ${mot} en attente`}
       data-testid={testId}
     >
       {count > 99 ? '99+' : count}
@@ -103,6 +135,7 @@ function NavBar() {
   const { themeClasses } = useTheme()
   const { currentUser, userProfile } = useAuth()
   const [pendingCount, setPendingCount] = useState(0)
+  const [settlementsCount, setSettlementsCount] = useState(0)
   const [panneauOuvert, setPanneauOuvert] = useState(false)
 
   useEffect(() => {
@@ -114,6 +147,19 @@ function NavBar() {
     })
     return unsub
   }, [currentUser, userProfile])
+
+  /**
+   * Les règlements que mes consœurs ont déclarés et qui attendent MA
+   * confirmation. L'abonnement vit dans la barre et non dans la page : un
+   * compteur doit alerter même quand l'écran concerné n'est pas ouvert — c'est
+   * toute sa raison d'être.
+   */
+  useEffect(() => {
+    setSettlementsCount(0)
+    const storeId = userProfile?.storeId
+    if (!storeId) return undefined
+    return subscribePendingSettlementsCount({ storeId, onUpdate: setSettlementsCount })
+  }, [userProfile?.storeId])
 
   // Naviguer referme le panneau. Sans ça, il resterait ouvert par-dessus la page
   // qu'on vient de demander.
@@ -135,7 +181,10 @@ function NavBar() {
    * diverger. Les deux compteurs du module Dettes internes s'ajouteront ici,
    * et nulle part ailleurs.
    */
-  const compteurs = { [DEALER_REQUESTS_PATH]: pendingCount }
+  const compteurs = {
+    [DEALER_REQUESTS_PATH]: pendingCount,
+    [INTERNAL_DEBTS_PATH]: settlementsCount,
+  }
   Object.keys(compteurs).forEach(assertCompteurAutorise)
   const totalEnAttente = Object.values(compteurs).reduce((somme, n) => somme + n, 0)
 
@@ -155,14 +204,18 @@ function NavBar() {
   const renduBureau = (item) => (
     <NavLink key={item.path} to={item.path} className={lienBureau}>
       {item.name}
-      <PendingBadge count={compteurs[item.path]} />
+      <PendingBadge count={compteurs[item.path]} {...libelleCompteur(item.path)} />
     </NavLink>
   )
 
   const renduPanneau = (item) => (
     <NavLink key={item.path} to={item.path} className={lienPanneau}>
       <span>{item.name}</span>
-      <PendingBadge count={compteurs[item.path]} testId={`nav-panneau-badge-${item.path}`} />
+      <PendingBadge
+        count={compteurs[item.path]}
+        {...libelleCompteur(item.path)}
+        testId={`nav-panneau-badge-${item.path}`}
+      />
     </NavLink>
   )
 

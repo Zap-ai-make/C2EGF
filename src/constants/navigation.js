@@ -23,16 +23,30 @@
  * que la barre grossisse.
  */
 
+import { COLLABORATIONS_ENABLED } from './collaborationConstants.js'
+
 export const NAV_GROUPS = Object.freeze({
   COURANT: 'courant',
   REFERENTIEL: 'referentiel',
 })
 
+export const INTERNAL_DEBTS_PATH = '/dettes'
+
+/**
+ * ⚠ La liste VARIE selon le profil client : « Dettes internes » n'existe que si
+ *   `collaborations.enabled` l'autorise. C'est l'état « désactivé » de
+ *   DESIGN.md §10, traité comme il doit l'être — l'entrée n'existe pas du tout.
+ *   Pas de page grisée, pas de bouton mort : un gérant ne doit jamais voir une
+ *   porte qu'il ne peut pas ouvrir. La route est absente pour la même raison.
+ */
 export const STORE_NAV_ITEMS = [
   { name: 'Tableau de bord', path: '/',                group: NAV_GROUPS.COURANT },
   { name: 'Transactions',    path: '/transactions',    group: NAV_GROUPS.COURANT },
   { name: 'Formulaire',      path: '/formulaire',      group: NAV_GROUPS.COURANT },
   { name: 'Demandes Dealer', path: '/dealer-requests', group: NAV_GROUPS.COURANT },
+  ...(COLLABORATIONS_ENABLED
+    ? [{ name: 'Dettes internes', path: INTERNAL_DEBTS_PATH, group: NAV_GROUPS.COURANT }]
+    : []),
   { name: 'Clients',         path: '/clients',         group: NAV_GROUPS.REFERENTIEL },
   { name: 'Historique',      path: '/historique',      group: NAV_GROUPS.REFERENTIEL },
 ]

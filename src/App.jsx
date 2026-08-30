@@ -26,6 +26,9 @@ import Historique from './pages/Historique'
 import Formulaire from './pages/Formulaire'
 import Profil from './pages/Profil'
 import StoreAdminDealerRequests from './pages/store/StoreAdminDealerRequests.jsx'
+import StoreInternalDebts from './pages/store/StoreInternalDebts.jsx'
+import { INTERNAL_DEBTS_PATH } from './constants/navigation'
+import { COLLABORATIONS_ENABLED } from './constants/collaborationConstants'
 import StoreAdminDealerRequestDetails from './pages/store/StoreAdminDealerRequestDetails.jsx'
 
 // Pages Admin (system_manager)
@@ -112,6 +115,12 @@ export function AppContent() {
         <Route path="/formulaire" element={<Formulaire />} />
         <Route path="/profil" element={<Profil />} />
         <Route path="/dealer-requests" element={<StoreAdminDealerRequests />} />
+        {/* La route n'existe PAS quand le module est desactive, exactement comme
+            son entree de menu : un gerant ne doit jamais atteindre une page que
+            son profil n'autorise pas, meme en tapant l'adresse. */}
+        {COLLABORATIONS_ENABLED && (
+          <Route path={INTERNAL_DEBTS_PATH} element={<StoreInternalDebts />} />
+        )}
         <Route path="/dealer-requests/:requestId" element={<StoreAdminDealerRequestDetails />} />
         <Route path="/store/closures" element={<StoreAdminClosures />} />
       </Route>

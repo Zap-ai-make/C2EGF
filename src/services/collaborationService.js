@@ -20,7 +20,7 @@ import {
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from '../config/firebase.js'
-import { resilientOnSnapshot } from './resilientOnSnapshot.js'
+import { resilientOnSnapshot, isPermanentSnapshotError } from './resilientOnSnapshot.js'
 import {
   COLLABORATIONS_PAGE_SIZE,
   INTERNAL_DEBTS_PAGE_SIZE,
@@ -74,6 +74,14 @@ export const ERROR_MESSAGES = Object.freeze({
   INVALID_REJECTION_REASON: 'Le motif est invalide (3 à 500 caractères).',
   BALANCE_OVERFLOW: 'Le solde résultant est invalide.',
   TRANSACTION_FAILED: "L'opération n'a pas pu être finalisée.",
+
+  // ── Échecs d'ABONNEMENT, pas de commande ─────────────────────────────
+  // Ces deux-là ne se réessaient pas : ils exigent un déploiement. Le message le
+  // dit, parce qu'inviter à réessayer serait envoyer le gérant dans le mur.
+  SNAPSHOT_PERMISSION_DENIED:
+    "Vous n'avez pas accès à ces données. C'est un réglage à corriger : signalez-le au gérant, réessayer n'y changera rien.",
+  SNAPSHOT_FAILED_PRECONDITION:
+    "Cette vue n'est pas encore disponible côté serveur. Signalez-le au gérant : réessayer n'y changera rien.",
 })
 
 const DEFAULT_ERROR = "Une erreur inattendue s'est produite."
@@ -100,6 +108,43 @@ export function mapCollaborationError(err) {
   }
   const mapped = new Error(DEFAULT_ERROR)
   mapped.code = ''
+  return mapped
+}
+
+/**
+ * Traduit l'échec d'un ABONNEMENT, et dit s'il est définitif.
+ *
+ * POURQUOI CETTE FONCTION EXISTE, EN PLUS DE mapCollaborationError
+ * ──────────────────────────────────────────────────────
+ * `resilientOnSnapshot` sait déjà distinguer une coupure passagère d'un refus de
+ * règle ou d'un index manquant : il cesse de se réabonner dans le second cas.
+ * Mais `mapCollaborationError` n'était écrite que pour les callables — elle lit
+ * `err.details.code`, qu'un échec de snapshot ne porte pas — et rendait donc
+ * « Une erreur inattendue s'est produite » avec un code vide dans les DEUX cas.
+ *
+ * L'écran ne pouvait pas faire la différence entre « ça revient dans quelques
+ * secondes » et « ça ne reviendra jamais sans déploiement », et proposait donc
+ * d'attendre dans les deux cas. Le drapeau `permanent` rend cette distinction
+ * lisible à l'appelant, sans jamais exposer le message brut du serveur.
+ */
+export function mapSnapshotError(err) {
+  const code = String(err?.code ?? '')
+  if (code.includes('permission-denied')) {
+    const mapped = new Error(ERROR_MESSAGES.SNAPSHOT_PERMISSION_DENIED)
+    mapped.code = 'SNAPSHOT_PERMISSION_DENIED'
+    mapped.permanent = true
+    return mapped
+  }
+  if (code.includes('failed-precondition')) {
+    const mapped = new Error(ERROR_MESSAGES.SNAPSHOT_FAILED_PRECONDITION)
+    mapped.code = 'SNAPSHOT_FAILED_PRECONDITION'
+    mapped.permanent = true
+    return mapped
+  }
+  const mapped = mapCollaborationError(err)
+  // Toujours posé explicitement : un appelant qui teste `err.permanent` ne doit
+  // jamais lire `undefined` et le prendre pour « on ne sait pas ».
+  mapped.permanent = isPermanentSnapshotError(err)
   return mapped
 }
 
@@ -248,7 +293,7 @@ function subscribeCollaborations({
   )
   return resilientOnSnapshot(q, {
     onNext: (snap) => onUpdate?.(rows(snap)),
-    onError: (err) => onError?.(mapCollaborationError(err)),
+    onError: (err) => onError?.(mapSnapshotError(err)),
   })
 }
 
@@ -287,7 +332,7 @@ function subscribeDebts({ field, storeId, limitCount = INTERNAL_DEBTS_PAGE_SIZE,
   )
   return resilientOnSnapshot(q, {
     onNext: (snap) => onUpdate?.(rows(snap)),
-    onError: (err) => onError?.(mapCollaborationError(err)),
+    onError: (err) => onError?.(mapSnapshotError(err)),
   })
 }
 
@@ -310,7 +355,7 @@ export function subscribeDebtSettlements({ debtId, onUpdate, onError } = {}) {
   )
   return resilientOnSnapshot(q, {
     onNext: (snap) => onUpdate?.(rows(snap)),
-    onError: (err) => onError?.(mapCollaborationError(err)),
+    onError: (err) => onError?.(mapSnapshotError(err)),
   })
 }
 

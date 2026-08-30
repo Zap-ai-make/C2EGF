@@ -21,6 +21,7 @@ import { render, screen, within, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 let pendingCount = 0
+let settlementsCount = 0
 
 vi.mock('../../src/context/ThemeContext.jsx', () => ({
   useTheme: () => ({
@@ -33,6 +34,12 @@ vi.mock('../../src/context/AuthContext.jsx', () => ({
 vi.mock('../../src/services/storeAdminDealerService.js', () => ({
   subscribeStorePendingCount: ({ onUpdate }) => {
     onUpdate(pendingCount)
+    return () => {}
+  },
+}))
+vi.mock('../../src/services/collaborationService', () => ({
+  subscribePendingSettlementsCount: ({ onUpdate }) => {
+    onUpdate(settlementsCount)
     return () => {}
   },
 }))
@@ -60,6 +67,7 @@ const renderShell = (children = <p>CONTENU</p>) =>
 
 beforeEach(() => {
   pendingCount = 0
+  settlementsCount = 0
 })
 
 describe('TC-101 — repères de structure du shell', () => {
@@ -142,7 +150,10 @@ describe('TC-101 — points d’entrée de la navigation', () => {
         item.path,
       )
     }
-    expect(STORE_NAV_ITEMS).toHaveLength(6)
+    // Le NOMBRE de destinations n'est plus figé ici : il varie avec le profil
+    // client (« Dettes internes » n'existe que si le module est activé). Le
+    // garde-fou contre une destination ajoutée par mégarde vit dans TC-119,
+    // avec la liste attendue sous le profil réel.
   })
 
   it('le compte reste atteignable, mais hors de la rangée', () => {

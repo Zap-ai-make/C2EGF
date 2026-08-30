@@ -38,6 +38,7 @@ vi.mock('../../src/config/firebase.js', () => ({ db: {}, functions: {}, auth: {}
 import {
   ERROR_MESSAGES,
   mapCollaborationError,
+  mapSnapshotError,
   parseAmount,
   generateIdempotencyKey,
   createStoreCollaboration,
@@ -176,6 +177,61 @@ describe('TC-118-C — compteurs de badge', () => {
     subscribeMyDebts({ storeId: undefined, onUpdate })
     expect(onUpdate).toHaveBeenCalledWith([])
     expect(firestore.onSnapshot).not.toHaveBeenCalled()
+  })
+})
+
+describe('TC-118-D bis — l’échec d’un ABONNEMENT, et s’il est définitif', () => {
+  /**
+   * `resilientOnSnapshot` savait déjà distinguer une coupure passagère d'un refus
+   * de règle : il cesse de se réabonner dans le second cas. Mais l'écran, lui, ne
+   * pouvait pas le savoir — `mapCollaborationError` ne lit que `err.details.code`,
+   * qu'un échec de snapshot ne porte pas, et rendait donc « une erreur
+   * inattendue » avec un code vide dans les DEUX cas.
+   *
+   * Conséquence : la page proposait d'attendre un retour qui, pour un refus de
+   * règle ou un index manquant, n'arriverait jamais sans déploiement.
+   */
+
+  it('[SNAP-01] un refus de règle est définitif, et le dit', () => {
+    const mapped = mapSnapshotError({ code: 'permission-denied' })
+    expect(mapped.permanent).toBe(true)
+    expect(mapped.code).toBe('SNAPSHOT_PERMISSION_DENIED')
+    expect(mapped.message).toBe(ERROR_MESSAGES.SNAPSHOT_PERMISSION_DENIED)
+    // Le fond compte, pas la forme de l'apostrophe : ce dictionnaire les écrit
+    // droites, d'autres textes de l'application les écrivent courbes. Un test
+    // n'a pas à trancher cette question-là en la figeant au passage.
+    expect(mapped.message).toMatch(/réessayer n['’]y changera rien/)
+  })
+
+  it('[SNAP-02] un index manquant aussi', () => {
+    const mapped = mapSnapshotError({ code: 'failed-precondition' })
+    expect(mapped.permanent).toBe(true)
+    expect(mapped.code).toBe('SNAPSHOT_FAILED_PRECONDITION')
+  })
+
+  it('[SNAP-03] le préfixe « firestore/ » ne trompe pas la reconnaissance', () => {
+    expect(mapSnapshotError({ code: 'firestore/permission-denied' }).permanent).toBe(true)
+  })
+
+  it('[SNAP-04] une coupure réseau n’est PAS définitive', () => {
+    const mapped = mapSnapshotError({ code: 'unavailable' })
+    expect(mapped.permanent).toBe(false)
+  })
+
+  it('[SNAP-05] `permanent` est toujours posé, jamais laissé à undefined', () => {
+    // Un appelant qui teste `err.permanent` ne doit jamais lire `undefined` et
+    // le prendre pour « on ne sait pas ».
+    for (const err of [undefined, {}, { code: 'deadline-exceeded' }, new Error('boom')]) {
+      expect(typeof mapSnapshotError(err).permanent).toBe('boolean')
+    }
+  })
+
+  it('[SNAP-06] le message brut du serveur n’est pas plus exposé ici qu’ailleurs', () => {
+    const mapped = mapSnapshotError({
+      code: 'permission-denied',
+      message: 'Missing or insufficient permissions on internalDebts/abc',
+    })
+    expect(mapped.message).not.toContain('internalDebts')
   })
 })
 

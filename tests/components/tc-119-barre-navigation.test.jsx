@@ -29,6 +29,7 @@ import { render, screen, within, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, Link } from 'react-router-dom'
 
 let pendingCount = 0
+let settlementsCount = 0
 
 vi.mock('../../src/context/ThemeContext.jsx', () => ({
   useTheme: () => ({ themeClasses: { navbar: 'navbar-stub' } }),
@@ -36,12 +37,18 @@ vi.mock('../../src/context/ThemeContext.jsx', () => ({
 vi.mock('../../src/context/AuthContext', () => ({
   useAuth: () => ({
     currentUser: { uid: 'u1' },
-    userProfile: { role: 'store_admin', name: 'Swabo Hamadou' },
+    userProfile: { role: 'store_admin', name: 'Swabo Hamadou', storeId: 'store-a' },
   }),
 }))
 vi.mock('../../src/services/storeAdminDealerService', () => ({
   subscribeStorePendingCount: ({ onUpdate }) => {
     onUpdate(pendingCount)
+    return () => {}
+  },
+}))
+vi.mock('../../src/services/collaborationService', () => ({
+  subscribePendingSettlementsCount: ({ onUpdate }) => {
+    onUpdate(settlementsCount)
     return () => {}
   },
 }))
@@ -52,6 +59,7 @@ import {
   STORE_NAV_ITEMS,
   STORE_ACCOUNT_ITEM,
   NAV_GROUPS,
+  INTERNAL_DEBTS_PATH,
   navItemsOfGroup,
   assertCompteurAutorise,
 } from '../../src/constants/navigation.js'
@@ -70,6 +78,7 @@ const renderNav = (initial = '/') =>
 
 beforeEach(() => {
   pendingCount = 0
+  settlementsCount = 0
 })
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -80,6 +89,22 @@ describe('TC-119-A — les deux groupes', () => {
     for (const item of STORE_NAV_ITEMS) {
       expect(groupes, `« ${item.name} » : groupe inconnu`).toContain(item.group)
     }
+  })
+
+  it('[NAV-02b] la rangée contient exactement ces destinations, sous le profil réel', () => {
+    // Ce garde-fou vivait dans TC-101 sous forme de nombre (« 7 destinations »).
+    // Un nombre ne dit pas CE QUI a bougé, et il n'a plus de sens depuis que la
+    // liste varie avec le profil. La liste nommée dit les deux : ce qui est
+    // attendu, et sous quel profil.
+    expect(STORE_NAV_ITEMS.map((i) => i.name)).toEqual([
+      'Tableau de bord',
+      'Transactions',
+      'Formulaire',
+      'Demandes Dealer',
+      'Dettes internes',
+      'Clients',
+      'Historique',
+    ])
   })
 
   it('[NAV-02] les deux groupes sont peuplés — un filet ne sépare rien s’il est au bout', () => {
@@ -152,6 +177,43 @@ describe('TC-119-C — le compteur du bureau', () => {
   })
 })
 
+describe('TC-119-C bis — le second compteur', () => {
+  it('[NAV-09b] les règlements à confirmer se posent sur « Dettes internes »', () => {
+    settlementsCount = 2
+    renderNav()
+    const badge = screen.getByTestId('store-debts-badge')
+    expect(badge).toHaveTextContent('2')
+    expect(badge.closest('a')).toHaveAttribute('href', INTERNAL_DEBTS_PATH)
+  })
+
+  it('[NAV-09c] il dit ce qu’il compte, et pas « demandes »', () => {
+    // Deux compteurs au même dessin doivent rester distincts à l'oreille :
+    // « 2 demandes en attente » sur une file de règlements serait un mensonge
+    // pour qui n'a que le lecteur d'écran.
+    settlementsCount = 2
+    renderNav()
+    expect(screen.getByTestId('store-debts-badge'))
+      .toHaveAccessibleName('2 règlements à confirmer en attente')
+  })
+
+  it('[NAV-09d] les deux compteurs coexistent sans se confondre', () => {
+    pendingCount = 3
+    settlementsCount = 2
+    renderNav()
+    expect(screen.getByTestId('store-pending-badge')).toHaveTextContent('3')
+    expect(screen.getByTestId('store-debts-badge')).toHaveTextContent('2')
+  })
+
+  it('[NAV-09e] les deux restent du côté COURANT du filet', () => {
+    // L'invariant de navigation.js, vérifié sur le rendu réel et pas seulement
+    // sur la fonction qui le porte.
+    const aCompteur = ['/dealer-requests', INTERNAL_DEBTS_PATH]
+    for (const path of aCompteur) {
+      expect(STORE_NAV_ITEMS.find((i) => i.path === path).group).toBe(NAV_GROUPS.COURANT)
+    }
+  })
+})
+
 describe('TC-119-D — le panneau mobile', () => {
   it('[NAV-11] le bouton s’annonce replié, puis déplié', () => {
     renderNav()
@@ -169,10 +231,10 @@ describe('TC-119-D — le panneau mobile', () => {
     // exactement ce que le <select> ne savait pas faire — il écrivait « (3) »
     // dans le texte d'une option.
     pendingCount = 4
+    settlementsCount = 3
     renderNav()
     const total = screen.getByTestId('nav-total-badge')
-    expect(total).toHaveTextContent('4')
-    expect(total).toHaveAccessibleName('4 demandes en attente')
+    expect(total).toHaveTextContent('7')
   })
 
   it('[NAV-13] déplié, le panneau rend les deux groupes et le détail', () => {
