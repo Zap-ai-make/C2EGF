@@ -40,8 +40,20 @@ savait déjà.
 
 **Le geste**
 
+- [ ] **⚠ CORRECTION FONCTIONNELLE, trouvée en S4 — à faire AVANT le restyle et
+      dans un commit à part.** `NewDealerRequest` appelle `listActiveStores()`
+      **une seule fois**, sans boucle de pagination
+      (`DEALER_STORES_PAGE_SIZE = 20`). Son menu ne propose donc que **20
+      boutiques sur 84**, et sa garde d'existence efface silencieusement un
+      `?storeId=` visant l'une des 64 autres. **Le formulaire de ravitaillement
+      ne peut pas atteindre les trois quarts du réseau.** Le correctif est déjà
+      écrit : `listNetworkCaisses()` (S2) rend les 84 en deux allers-retours.
+      Un test de caractérisation fige d'abord le défaut.
 - [ ] Depuis la ligne d'une boutique, le formulaire arrive avec la boutique **et**
       la ressource déjà choisies. Il ne reste qu'un montant à saisir.
+      *(C'est ce critère qui rend l'action « ravitailler cette boutique »
+      livrable sur les lignes de l'accueil — elle a été retenue en S4 tant que
+      le formulaire ne voyait que 20 boutiques.)*
 - [ ] Le champ « Réseau » en lecture seule disparaît en mono-réseau : un champ qui
       ne peut valoir qu'une chose n'est pas un champ. Le sélecteur reste en
       multi-réseaux.
@@ -71,8 +83,11 @@ savait déjà.
 
 - Le renommage « demande » → « ravitaillement » : c'est S6, un changement déclaré.
   Cette spec garde le vocabulaire actuel pour rester un restyle pur.
-- La suppression ou la fusion d'un écran. `DealerStores` reste la liste de
-  référence, avec sa recherche et son détail.
+- La suppression ou la fusion d'un écran. ⚠ `DealerStores` n'est plus la liste
+  de référence — l'accueil de S4 l'a remplacé sur les trois points où il était
+  faible (20 par page, une requête de solde par boutique, recherche limitée à la
+  page). Son sort est une décision client, consignée dans le journal de la
+  ROADMAP ; cette spec le restyle sans le trancher.
 
 ---
 
@@ -86,6 +101,12 @@ toucher** : c'est de la logique de concurrence, pas du dessin, et S1 la fige.
 `RejectionRemarkButton`, `DealerRequestStatusBadge` et `StatusBadge` existent déjà
 et servent l'espace boutique. Les réutiliser ; si deux badges font le même travail,
 en retirer un plutôt que d'en aligner les couleurs.
+
+⚠ **Le lot n'est plus un restyle pur**, et il doit le dire. La correction de
+`listActiveStores()` ci-dessus change un comportement métier : elle part donc
+dans son **propre commit**, avant les commits de peinture, avec son test de
+caractérisation — jamais mêlée à un changement de `className` (AGENTS.md :
+« jamais refactoriser et changer le comportement métier dans le même lot »).
 
 Rappel de la règle du dépôt : dans un commit de restyle, la seule chose autorisée à
 changer est la valeur d'une chaîne `className`. Toute autre ligne modifiée sort du

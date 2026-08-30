@@ -157,6 +157,66 @@ body {
   outline-offset: -1px;
 }
 
+/* ── Le filet du seuil bas ─────────────────────────────────────────────────
+   Le repère vertical qui traverse la liste des caisses (spec S4). Il doit être
+   lisible sur TROIS fonds différents, puisqu'il passe successivement sur la
+   piste vide, sur une barre de stock et sur une barre de liquidité.
+
+   Une couleur plate n'y arrive pas, et c'est mesuré, pas supposé :
+     ink-muted sur la piste vide (#dde5f0)   4,84:1   lisible
+     ink-muted sur le stock (#ff6b35)        2,17:1   faible
+     ink-muted sur la liquidité (#2760a5)    1,03:1   INVISIBLE
+
+   Or « invisible sur la liquidité » veut dire invisible sur la moitié des
+   lignes — celles dont la liquidité dépasse le seuil, c'est-à-dire justement
+   celles qu'on voulait pouvoir écarter d'un coup d'œil. Un filet qui disparaît
+   là où il compte n'est pas un filet.
+
+   D'où un filet de 3 px qui PORTE SON PROPRE CONTRASTE : un cœur sombre entre
+   deux liserés de surface. Quel que soit le fond, le contraste cœur/liseré
+   reste de 17:1 — le repère ne dépend plus de ce qu'il traverse. Le décalage
+   d'un pixel remet le cœur exactement sur l'abscisse du seuil.
+
+   Tailwind ne sait pas exprimer un dégradé à paliers ; c'est la seule raison
+   pour laquelle cette classe existe en CSS et non en utilitaires. */
+.piste-seuil {
+  width: 3px;
+  margin-left: -1px;
+  background-image: linear-gradient(
+    to right,
+    var(--color-surface) 0 1px,
+    var(--color-ink) 1px 2px,
+    var(--color-surface) 2px 3px
+  );
+}
+
+/* ── Le cran de dépassement d'échelle ──────────────────────────────────────
+   Une caisse au-dessus du plafond de l'échelle des caisses (spec S4). Sa barre
+   est arrêtée à 100 % de la piste ; sans marque, elle serait indiscernable
+   d'une caisse pile au plafond, et la liste mentirait sur un ordre de grandeur.
+
+   Le cran est une DENTELURE au bord droit — une forme, pas une teinte : la
+   barre garde sa couleur de ressource, et le signal survit au daltonisme
+   comme à l'impression en noir et blanc (DESIGN.md §5). Le montant exact reste
+   écrit en toutes lettres à côté ; ce cran ne dit que « la barre s'arrête là,
+   pas le montant ».
+
+   Le clip suit le bord droit sur 6 px : c'est la même mécanique de découpe que
+   la hachure du fléau — Tailwind ne sait exprimer ni `clip-path` paramétré ni
+   `repeating-linear-gradient`, et c'est la seule raison pour laquelle ces deux
+   motifs vivent en CSS. */
+.piste-cran {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 6px) 0,
+    100% 25%,
+    calc(100% - 6px) 50%,
+    100% 75%,
+    calc(100% - 6px) 100%,
+    0 100%
+  );
+}
+
 /* ── Bandeau de marque ─────────────────────────────────────────────────────
    La photographie d'origine est de retour : la constellation de nœuds orange
    sur fond noir, relevée du produit avant refonte. Elle avait été remplacée

@@ -1,194 +1,135 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { listActiveStores, listDealerRequests, subscribeDealerPendingCount } from '../../services/dealerService'
-import { subscribeIncomingTransfersCount } from '../../services/storeTransferService'
-import { formatCurrency } from '../../utils/formatCurrency'
-import { formatDateTime as formatDate } from '../../utils/formatters'
-import StatCard from '../../components/ui/StatCard'
+import { listNetworkCaisses } from '../../services/dealerService'
+import { subscribeRetoursEnAttente } from '../../services/storeTransferService'
+import { useDealerInventory } from '../../hooks/useDealerInventory'
+import { rapprocherPosition } from '../../utils/positionDealer'
 import PageHeader from '../../components/ui/PageHeader'
 import ErrorState from '../../components/ui/ErrorState'
-import EmptyState from '../../components/ui/EmptyState'
-import StatusBadge from '../../components/ui/StatusBadge'
-import { SkeletonCards } from '../../components/ui/SkeletonList'
-import RejectionRemarkButton from '../../components/ui/RejectionRemarkButton'
-import { DEALER_REQUEST_STATUSES } from '../../constants/dealerConstants'
-import { CARD, TABLE_WRAP, TABLE_HEAD } from '../../constants/workspaceTheme'
+import PositionDealer from '../../components/dealer/PositionDealer'
+import CaissesReseau from '../../components/dealer/CaissesReseau'
+import { DEALER_NETWORK } from '../../constants/dealerConstants'
 
-const STATUS_LABELS = { pending: 'En attente', confirmed: 'Confirmée', rejected: 'Rejetée' }
-const TYPE_LABELS   = { stock_add: 'Ajout stock', liquidity_add: 'Ajout liquidité' }
-
+/**
+ * L'accueil du dealer — ses deux questions du matin.
+ *
+ *   1. Combien de mon argent est dehors ?      → `PositionDealer`
+ *   2. Quelle boutique est courte ?            → `CaissesReseau`
+ *
+ * CE QUI A DISPARU, ET POURQUOI
+ * ─────────────────────────────
+ * Quatre `StatCard` à émoji, et une table des huit dernières demandes.
+ *
+ * Les tuiles ne disaient rien d'utile, et deux d'entre elles disaient faux :
+ * « Boutiques partenaires » affichait la longueur de la PREMIÈRE PAGE suivie
+ * d'un « + » — soit « 20+ » en permanence sur un réseau de 84 boutiques — et
+ * « Mes demandes récentes » comptait la longueur d'une tranche plafonnée à 8,
+ * qui ne bougeait donc plus au-delà de huit demandes. Les deux autres
+ * répétaient des compteurs que la barre latérale porte désormais en
+ * permanence, sur les entrées où l'on agit (invariant de S3) : les répéter ici
+ * ne faisait qu'ajouter un second endroit à tenir à jour.
+ *
+ * La table des demandes, elle, doublait l'écran « Ravitaillements » — même
+ * données, huit lignes au lieu de vingt, et avec sa PROPRE table de libellés
+ * qui disait « Ajout stock » là où le reste de l'espace dit « Ajout de stock ».
+ * L'accueil renvoie à l'écran qui fait le travail ; il ne le refait pas en
+ * moins bien.
+ *
+ * UNE SEULE REQUÊTE POUR LES 84 CAISSES
+ * ─────────────────────────────────────
+ * `listNetworkCaisses` (S2) ramène les 84 boutiques et leurs 84 soldes en deux
+ * allers-retours, là où le motif précédent en faisait un par boutique. Le tri
+ * et la recherche travaillent ensuite en mémoire sur cette liste complète :
+ * aucune requête de plus, et surtout une recherche qui porte sur les 84 et non
+ * sur les 20 affichées.
+ */
 function DealerDashboard() {
   const { currentUser, userProfile } = useAuth()
-  const navigate = useNavigate()
+  const { inventory } = useDealerInventory()
 
-  const [pendingCount, setPendingCount]   = useState(0)
-  const [transfersCount, setTransfersCount] = useState(0)
-  const [storeCount, setStoreCount]       = useState(null)
-  const [recentReqs, setRecentReqs]       = useState([])
-  const [kpiLoading, setKpiLoading]       = useState(true)
-  const [reqsLoading, setReqsLoading]     = useState(true)
-  const [kpiError, setKpiError]           = useState(null)
-  const [reqsError, setReqsError]         = useState(null)
+  const [reseau, setReseau] = useState(null)
+  const [chargement, setChargement] = useState(true)
+  const [erreur, setErreur] = useState(null)
+  const [retours, setRetours] = useState({ nombre: 0, montant: 0, illisibles: 0 })
 
-  // Compteur pending en temps réel via subscription
-  useEffect(() => {
-    const unsub = subscribeDealerPendingCount({
-      currentUser,
-      userProfile,
-      onUpdate: setPendingCount,
-    })
-    return unsub
-  }, [currentUser, userProfile])
-
-  // Retours boutiques en attente (temps réel)
-  useEffect(() => {
-    if (userProfile?.role !== 'dealer' || !currentUser?.uid) return undefined
-    return subscribeIncomingTransfersCount({ dealerUid: currentUser.uid, onUpdate: setTransfersCount })
-  }, [currentUser, userProfile])
-
-  const loadKpi = useCallback(async () => {
-    setKpiLoading(true)
-    setKpiError(null)
+  const charger = useCallback(async () => {
+    setChargement(true)
+    setErreur(null)
     try {
-      const result = await listActiveStores()
-      setStoreCount(result.stores.length + (result.hasMore ? '+' : ''))
+      setReseau(await listNetworkCaisses())
     } catch (err) {
-      setKpiError(err.message)
+      setErreur(err.message)
+      setReseau(null)
     } finally {
-      setKpiLoading(false)
+      setChargement(false)
     }
   }, [])
 
-  const loadRecentReqs = useCallback(async () => {
-    if (!currentUser || !userProfile) return
-    setReqsLoading(true)
-    setReqsError(null)
-    try {
-      const result = await listDealerRequests({ currentUser, userProfile })
-      setRecentReqs(result.requests.slice(0, 8))
-    } catch (err) {
-      setReqsError(err.message)
-    } finally {
-      setReqsLoading(false)
-    }
-  }, [currentUser, userProfile])
+  useEffect(() => { charger() }, [charger])
 
-  useEffect(() => {
-    loadKpi()
-    loadRecentReqs()
-  }, [loadKpi, loadRecentReqs])
+  // Les retours en attente arrivent en temps réel : confirmer un retour depuis
+  // l'écran voisin doit faire bouger le transit ici sans recharger la page.
+  // La garde de rôle est la même que celle de l'ancien écran : un non-dealer
+  // n'ouvre aucune écoute.
+  const dealerUid = userProfile?.role === 'dealer' ? currentUser?.uid : null
+  useEffect(
+    () => subscribeRetoursEnAttente({ dealerUid, onUpdate: setRetours }),
+    [dealerUid],
+  )
+
+  const caisses = reseau?.caisses ?? []
+
+  // ⚠ Les retours au montant illisible comptent comme des caisses illisibles :
+  //   ils invalident le rapprochement au même titre, puisqu'ils manquent au
+  //   même total. Les compter à part laisserait passer un écart sans cause.
+  const position = rapprocherPosition({
+    flux: inventory?.flux,
+    sommeStock: reseau?.sommeStock ?? 0,
+    sommeLiquidite: reseau?.sommeLiquidite ?? 0,
+    illisibles: (reseau?.illisibles ?? 0) + (retours.illisibles ?? 0),
+    enTransit: retours.montant,
+    caissesLues: Boolean(reseau),
+  })
+
+  const sousTitre = chargement
+    ? 'Chargement du réseau…'
+    : erreur
+      ? 'Réseau indisponible'
+      : `${reseau?.total ?? 0} boutique${(reseau?.total ?? 0) > 1 ? 's' : ''} en service · réseau ${DEALER_NETWORK}`
 
   return (
-    <div data-testid="dealer-home">
+    <div data-testid="dealer-home" className="grid gap-6">
       <PageHeader
         title="Vue générale"
-        subtitle={`Bonjour ${userProfile?.name ?? ''} 👋`}
+        subtitle={sousTitre}
         actions={
           <button
             type="button"
-            onClick={() => { loadKpi(); loadRecentReqs() }}
-            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
+            onClick={charger}
+            disabled={chargement}
+            className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-brand-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
-            Actualiser
+            {chargement ? 'Chargement…' : 'Actualiser'}
           </button>
         }
       />
 
-      {/* KPI */}
-      <section aria-labelledby="kpi-heading" className="mb-8">
-        <h2 id="kpi-heading" className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-400">
-          Indicateurs
-        </h2>
-        {kpiError ? (
-          <ErrorState message={kpiError} onRetry={loadKpi} />
-        ) : kpiLoading ? (
-          <SkeletonCards count={4} />
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard label="Boutiques partenaires" value={storeCount ?? '—'} color="green" icon="🏪" />
-            <StatCard
-              label="Demandes en attente"
-              value={pendingCount}
-              color={pendingCount > 0 ? 'amber' : 'green'}
-              icon="📋"
-              onClick={() => navigate('/dealer/requests')}
-            />
-            <StatCard
-              label="Retours en attente"
-              value={transfersCount}
-              color={transfersCount > 0 ? 'amber' : 'green'}
-              icon="📥"
-              onClick={() => navigate('/dealer/transfers')}
-            />
-            <StatCard label="Mes demandes récentes" value={recentReqs.length} color="teal" icon="📊" />
-          </div>
-        )}
-      </section>
+      <PositionDealer
+        position={position}
+        retoursEnAttente={retours.nombre}
+        loading={chargement}
+      />
 
-      {/* Demandes récentes */}
-      <section aria-labelledby="recent-heading">
-        <div className="flex items-center justify-between mb-4">
-          <h2 id="recent-heading" className="text-sm font-semibold uppercase tracking-wider text-gray-400">
-            Mes dernières demandes
-          </h2>
-          <button
-            type="button"
-            onClick={() => navigate('/dealer/requests')}
-            className="text-xs font-medium text-green-600 hover:text-green-800 focus:outline-none focus-visible:underline"
-          >
-            Voir tout →
-          </button>
-        </div>
-
-        {reqsError && <ErrorState message={reqsError} onRetry={loadRecentReqs} />}
-        {reqsLoading && !reqsError && (
-          <div className={`${CARD} space-y-2 p-5`}>
-            {[1, 2, 3].map(n => <div key={n} className="h-10 motion-safe:animate-pulse rounded bg-gray-100" />)}
-          </div>
-        )}
-        {!reqsLoading && !reqsError && recentReqs.length === 0 && (
-          <div className={`${CARD} p-5`}>
-            <EmptyState title="Aucune demande" message="Créez votre première demande avec le bouton ci-dessus." />
-          </div>
-        )}
-        {!reqsLoading && !reqsError && recentReqs.length > 0 && (
-          <div className={TABLE_WRAP}>
-            <table className="min-w-full divide-y divide-gray-100 text-sm">
-              <thead className={TABLE_HEAD}>
-                <tr className="text-left text-xs font-medium uppercase tracking-wider">
-                  <th className="px-4 py-3">Boutique</th>
-                  <th className="px-4 py-3">Type</th>
-                  <th className="px-4 py-3">Montant</th>
-                  <th className="px-4 py-3">Statut</th>
-                  <th className="px-4 py-3">Remarque</th>
-                  <th className="px-4 py-3">Date</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {recentReqs.map(r => (
-                  <tr key={r.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-800 whitespace-nowrap">{r.targetStoreName}</td>
-                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{TYPE_LABELS[r.requestType] ?? r.requestType}</td>
-                    <td className="px-4 py-3 font-medium text-gray-800 whitespace-nowrap">{formatCurrency(r.amount)}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <StatusBadge status={r.status} label={STATUS_LABELS[r.status] ?? r.status} />
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <RejectionRemarkButton
-                        storeName={r.targetStoreName}
-                        reason={r.status === DEALER_REQUEST_STATUSES.REJECTED ? r.rejectionReason : null}
-                        testId={`remark-btn-${r.id}`}
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{formatDate(r.createdAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      {erreur ? (
+        <ErrorState message={erreur} onRetry={charger} />
+      ) : (
+        <CaissesReseau
+          caisses={caisses}
+          illisibles={reseau?.illisibles ?? 0}
+          loading={chargement}
+          reseau={DEALER_NETWORK}
+        />
+      )}
     </div>
   )
 }

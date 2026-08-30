@@ -19,9 +19,21 @@ const LOCALITES = [
   'GOUNGHIN', 'TENKODOGO', 'MANGA', 'KAYA',
 ]
 
-/** Variante demandée par l'URL : `?caisses=vide` ou `?caisses=erreur`. */
+/**
+ * Variante demandée par l'URL — `?caisses=…` :
+ *
+ *   garni            (défaut) les 84, toutes lisibles
+ *   vide             aucune boutique en service
+ *   erreur           la lecture du réseau échoue
+ *   erreur-partielle 3 caisses illisibles sur 84 — l'état où un total incomplet
+ *                    risque le plus de s'annoncer complet
+ *   clairseme        une seule boutique : l'échelle ne compare plus rien
+ */
 const variante =
   new URLSearchParams(globalThis.location?.search ?? '').get('caisses') ?? 'garni'
+
+/** Les caisses illisibles de la variante `erreur-partielle`, par indice. */
+const MUETTES = new Set([7, 31, 58])
 
 /**
  * 84 boutiques aux caisses plausibles. Le jeu est DÉTERMINISTE — pas de
@@ -77,18 +89,21 @@ export async function listNetworkCaisses() {
     return { caisses: [], total: 0, sommeStock: 0, sommeLiquidite: 0, illisibles: 0 }
   }
 
-  // Une caisse illisible dans le lot : l'état « partiel » doit pouvoir se
-  // regarder, c'est celui où un total incomplet risque de s'annoncer complet.
-  const caisses = boutiques.map((b, i) => ({
+  const source = variante === 'clairseme' ? boutiques.slice(0, 1) : boutiques
+  const muet = variante === 'erreur-partielle'
+
+  const caisses = source.map((b, i) => ({
     storeId: b.id,
     name: b.name,
-    stock: i === 7 ? null : b.stock,
-    liquidite: i === 7 ? null : b.liquidite,
+    stock: muet && MUETTES.has(i) ? null : b.stock,
+    liquidite: muet && MUETTES.has(i) ? null : b.liquidite,
   }))
 
   return {
     caisses,
     total: caisses.length,
+    // Les totaux ignorent les caisses illisibles, exactement comme le service
+    // réel : c'est `illisibles` qui dit que la somme est incomplète.
     sommeStock: caisses.reduce((s, c) => s + (c.stock ?? 0), 0),
     sommeLiquidite: caisses.reduce((s, c) => s + (c.liquidite ?? 0), 0),
     illisibles: caisses.filter(c => c.stock === null || c.liquidite === null).length,

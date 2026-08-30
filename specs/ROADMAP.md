@@ -15,7 +15,7 @@ Réseau réel : **84 boutiques**. Contrats applicables : `DESIGN.md`, `SECURITY.
 | S1 | Caractérisation de l'espace dealer            | aucune    | MVP       | **terminée** |
 | S2 | Les caisses en une requête, et l'argent dehors| S1        | MVP       | **terminée** |
 | S3 | Le poste — shell de l'espace dealer           | S1        | MVP       | **terminée** |
-| S4 | L'accueil — les caisses et la position        | S2, S3    | MVP       | à faire |
+| S4 | L'accueil — les caisses et la position        | S2, S3    | MVP       | **terminée** |
 | S5 | Les files et le geste de ravitaillement       | S3        | MVP       | à faire |
 | S6 | Le vocabulaire — « ravitaillement »           | S5        | MVP       | à faire |
 | S7 | La règle qui empêche l'arc-en-ciel de revenir | S6        | post-MVP  | à faire |
@@ -48,6 +48,9 @@ elle était posée avant. Elle vient après le dernier lot de restyle
 | Tests composants | 297, 18 fichiers | 297, 18 fichiers |
 | Tests functions (émulateur) | 275, 10 fichiers | **285, 11 fichiers** |
 | Lint · build | propre · passant | propre · passant |
+
+Après S4 : **2 255 unitaires (78 fichiers)** · 297 composants (18) · 285
+functions (11) · lint propre · build passant.
 
 ⚠ **Le premier relevé de baseline était faux et a été corrigé.** Il annonçait
 1 858 tests sur 67 fichiers. Cette exécution s'était terminée sur
@@ -117,6 +120,51 @@ ne les voyaient :
 `tc-028` mockait `DealerHome` et son test A-12 s'appelait « → DealerHome
 rendu ». La route rend `DealerDashboard` ; le test passait parce que les deux
 portaient le même `data-testid`. Mock retiré, test renommé.
+
+**S4 — terminée.** L'accueil répond aux deux questions du matin : les 84
+caisses sur une échelle commune, le seuil bas en filet continu, et « mon argent
+dehors » rapproché de la somme des caisses. Les quatre `StatCard` à émoji ont
+disparu, la table des demandes aussi — elle doublait l'écran
+« Ravitaillements » avec ses propres libellés.
+
+Les trois défauts figés par S1 sont maintenant tenus **à l'envers** dans
+`tc-200` : un test exige la correction et nomme le défaut qu'il remplace.
+
+| Défaut figé en S1 | Sort |
+|---|---|
+| « 20+ » boutiques en permanence | corrigé : le total exact, par la requête unique de S2 |
+| « Mes demandes récentes » = longueur d'une tranche de 8 | supprimé avec les tuiles |
+| « Ajout stock » ≠ « Ajout de stock » | résolu **par suppression** de l'écran qui portait la table locale. ⚠ Les trois écrans **admin** gardent chacun leur copie : hors chantier. Il reste donc à S6 le **renommage**, pas la déduplication. |
+
+**Trois défauts que seule la capture pouvait montrer** — aucun visible dans un
+test, un lint ou une relecture :
+
+| Défaut | Leçon |
+|---|---|
+| Le filet du seuil **dérivait de 4,7 px** sur 84 lignes : la colonne des montants était dimensionnée à son contenu. | Un repère partagé n'existe que si la sonde le mesure. Largeur fixe → amplitude **0,00 px**. |
+| Le filet était **invisible sur les barres de liquidité** (`ink-muted` sur `brand-400` = **1,03:1**), donc absent des lignes qu'on voulait écarter d'un coup d'œil. | S3 disait « un jeton n'est pas neutre au fond qui le porte ». Ici il y a **trois** fonds : le repère doit porter son propre contraste. |
+| « 3 caisses **n'aont** pas pu être lues » — pluralisation assemblée par morceaux, sur un avertissement qui parle d'argent manquant. | Une phrase bascule en entier, verbe compris. Deux occurrences corrigées. |
+
+**Une mesure assumée, pas masquée.** La barre de stock (`net-orange` sur
+`brand-100`) est à **2,23:1**, sous le 3:1 de WCAG 1.4.11. Aucune piste ne
+corrige ce chiffre : `#FF6B35` plafonne à 2,84:1 même sur blanc, ce
+qu'`index.css` documente déjà. L'encodage est redondant de bout en bout
+(montant exact écrit, colonne intitulée, mot « bas »). Sortir le stock de
+l'identité opérateur ou ajouter un orange assombri sont des **décisions de
+palette**, à prendre avec le client, pas des choix d'écran.
+
+**⚠ Un défaut fonctionnel trouvé en chemin, pour S5.** `NewDealerRequest`
+appelle `listActiveStores()` **une seule fois**, sans pagination : son menu ne
+propose que **20 boutiques sur 84**, et un `?storeId=` visant l'une des 64
+autres est silencieusement effacé. Le formulaire de ravitaillement ne peut donc
+pas atteindre les trois quarts du réseau. Ce n'est pas du dessin — c'est la
+raison pour laquelle l'action « ravitailler cette boutique » n'a **pas** été
+posée sur les lignes de l'accueil.
+
+**Et un écran qui fait désormais double emploi.** `DealerStores` montre les
+mêmes caisses en 20-par-page, avec une requête de solde par boutique et une
+recherche limitée à la page. Il n'est pas supprimé : rien dans S4 ne le
+demandait, et supprimer un écran routé se décide avec le client.
 
 ---
 

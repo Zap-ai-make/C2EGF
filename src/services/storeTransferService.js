@@ -257,6 +257,47 @@ export function subscribeIncomingTransfersCount({ dealerUid, onUpdate } = {}) {
 }
 
 /**
+ * Dealer : les retours en attente, en NOMBRE et en MONTANT — « l'en transit ».
+ *
+ * POURQUOI UNE SECONDE FONCTION SUR LA MÊME REQUÊTE
+ * ─────────────────────────────────────────────────
+ * `subscribeIncomingTransfersCount` alimente la pastille de navigation et ne
+ * rend qu'un entier ; l'accueil a besoin du montant pour boucler l'identité de
+ * `positionDealer.js`. Élargir sa charge utile casserait ses appelants et les
+ * tests qui la tiennent, pour un gain nul : la requête est ici IDENTIQUE, et le
+ * SDK Firestore multiplexe les écoutes portant sur la même cible — un seul flux
+ * part vers le serveur, quel que soit le nombre d'abonnés.
+ *
+ * ⚠ Le montant ignore les documents dont `amount` n'est pas un entier fini, et
+ *   `illisibles` dit combien. Un retour au montant corrompu ne doit pas entrer
+ *   en silence dans un terme de rapprochement : il fabriquerait un écart sans
+ *   cause visible, exactement l'inverse de ce que cet écran doit faire.
+ */
+export function subscribeRetoursEnAttente({ dealerUid, onUpdate, onError } = {}) {
+  const vide = { nombre: 0, montant: 0, illisibles: 0 }
+  if (!dealerUid) { onUpdate?.(vide); return () => {} }
+  const q = query(
+    collection(db, TRANSFERS_COLLECTION),
+    where('dealerUid', '==', dealerUid),
+    where('status', '==', 'pending'),
+  )
+  return onSnapshot(
+    q,
+    (snap) => {
+      let montant = 0
+      let illisibles = 0
+      snap.docs.forEach((d) => {
+        const brut = d.data()?.amount
+        if (typeof brut === 'number' && Number.isFinite(brut)) montant += brut
+        else illisibles += 1
+      })
+      onUpdate?.({ nombre: snap.size, montant, illisibles })
+    },
+    (err) => { onUpdate?.(vide); onError?.(mapTransferError(err)) },
+  )
+}
+
+/**
  * Dealer : son inventaire (dealerBalances/{uid}) en temps réel.
  * Renvoie la forme façonnée { byNetwork, stock, liquidite, totalLiquidite } :
  *   - `stock`/`liquidite` = réseau primaire → vue mono-réseau inchangée ;

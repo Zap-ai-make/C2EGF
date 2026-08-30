@@ -31,6 +31,7 @@ import HistoriqueTable from './components/historique/HistoriqueTable.jsx'
 import StoreAdminDealerRequests from './pages/store/StoreAdminDealerRequests.jsx'
 import AuthPage from './components/auth/AuthPage.jsx'
 import DealerLayout from './layouts/DealerLayout.jsx'
+import DealerDashboard from './pages/dealer/DealerDashboard.jsx'
 import Balance from './components/dashboard/Balance.jsx'
 import ReseauCards from './components/dashboard/ReseauCards.jsx'
 import FluxChart from './components/dashboard/FluxChart.jsx'
@@ -360,10 +361,16 @@ function Preview() {
  * (`src/preview-doubles/`, alias posé par `scripts/lib/banc.mjs`) : ce qu'on
  * regarde ici est ce qui est livré.
  *
- * Variantes d'adresse :
- *   ?espace=dealer                 le poste, cuves garnies
- *   ?espace=dealer&cuves=basses    une cuve sous le seuil bas
- *   ?espace=dealer&cuves=vides     tout à zéro
+ * Variantes d'adresse — elles se combinent :
+ *   ?espace=dealer                       le poste et l'accueil, 84 boutiques
+ *   &cuves=basses|vides                  l'état des CUVES du dealer
+ *   &caisses=vide|erreur|erreur-partielle|clairseme   l'état du RÉSEAU
+ *   &position=neufs|anomalie             l'état du RAPPROCHEMENT
+ *
+ * Trois axes séparés parce que ce sont trois sources distinctes — l'inventaire
+ * du dealer, la liste des boutiques, les compteurs de flux — et qu'un défaut
+ * de dessin se loge presque toujours dans une COMBINAISON : cuves vides et
+ * réseau à sec, par exemple, est l'écran le moins souvent regardé.
  */
 function PosteDealer() {
   return (
@@ -377,23 +384,7 @@ function PosteDealer() {
       >
         <Routes>
           <Route element={<DealerLayout />}>
-            <Route
-              path="*"
-              element={
-                <div className="grid gap-4">
-                  <PageHeader
-                    title="Les caisses"
-                    subtitle="84 boutiques · relevé de 08:12"
-                  />
-                  <p className="max-w-prose text-sm text-ink-muted">
-                    Le contenu de cet écran arrive avec la spec S4. Ce que ce banc
-                    montre aujourd’hui, c’est le POSTE : les deux cuves qui ne
-                    défilent plus, la navigation en deux groupes, les compteurs
-                    d’attente, et le comportement de la barre à 390 px.
-                  </p>
-                </div>
-              }
-            />
+            <Route path="*" element={<DealerDashboard />} />
           </Route>
         </Routes>
       </AuthContext.Provider>
