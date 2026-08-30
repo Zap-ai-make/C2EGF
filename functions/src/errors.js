@@ -56,6 +56,27 @@ export const HTTP_CODES = {
   INSUFFICIENT_DEALER_BALANCE:  'failed-precondition',
   // Dépôt partenaire (sous-dealer hors boîte)
   INVALID_PARTNER:              'invalid-argument',
+  // Collaborations inter-boutiques
+  // Le module entier est opt-in par profil : un client qui ne l'a pas souscrit
+  // est refusé jusqu'au serveur, pas seulement masqué dans l'UI.
+  COLLABORATIONS_DISABLED:       'failed-precondition',
+  INVALID_COLLABORATION_ID:      'invalid-argument',
+  INVALID_OPERATION_TYPE:        'invalid-argument',
+  INVALID_COLLABORATION_AMOUNT:  'invalid-argument',
+  INVALID_COLLABORATION_NETWORK: 'invalid-argument',
+  INVALID_STORE_ID:              'invalid-argument',
+  INVALID_CLIENT_ID:             'invalid-argument',
+  SAME_STORE_COLLABORATION:      'invalid-argument',
+  CLIENT_NOT_FOUND:              'not-found',
+  SUPPLIER_STORE_NOT_FOUND:      'not-found',
+  // Mono-réseau : toute boutique active opère le réseau, donc l'éligibilité d'une
+  // fournisseuse se réduit à « elle existe et elle est active ». C'est l'analogue
+  // du SUPPLIER_NOT_PROVIDER d'un profil multi-réseaux.
+  SUPPLIER_STORE_INACTIVE:       'failed-precondition',
+  INSUFFICIENT_SUPPLIER_BALANCE: 'failed-precondition',
+  COLLABORATION_NOT_FOUND:       'not-found',
+  COLLABORATION_NOT_PENDING:     'failed-precondition',
+  COLLABORATION_STORE_MISMATCH:  'permission-denied',
 }
 
 export class DealerRequestError extends Error {
