@@ -66,6 +66,24 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/stores/$(storeId)).data;
     }
 
+    // Accès aux tranches d'une dette interne, décidé sur le document PARENT.
+    //
+    // ⚠ NE PAS réécrire en resource.data.debtorStoreId. La page Dettes internes liste
+    // les tranches SANS clause `where` (orderBy declaredAt seul) : sur une LIST, les
+    // règles décident de l'ACCÈS, elles ne filtrent pas les RÉSULTATS. Une condition
+    // sur resource.data ferait échouer toute la requête (« Property … is undefined »),
+    // et la page se viderait en silence — les getDoc unitaires, eux, passeraient encore.
+    // $(debtId) est fixe pour une requête donnée : la condition reste évaluable.
+    function internalDebtData(debtId) {
+      return get(/databases/$(database)/documents/internalDebts/$(debtId)).data;
+    }
+
+    function canReadInternalDebt(debtId) {
+      return isSystemManager() ||
+        isStoreAdmin(internalDebtData(debtId).debtorStoreId) ||
+        isStoreAdmin(internalDebtData(debtId).creditorStoreId);
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Validation V1
     // ─────────────────────────────────────────────────────────────
@@ -413,6 +431,40 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // Collaborations inter-boutiques — écritures via CF uniquement.
+    // Une boutique à court de stock fait exécuter l'opération par une consœur.
+    // Un seul document, lu des deux côtés : la demandeuse et la fournisseuse.
+    // ─────────────────────────────────────────────────────────────
+
+    match /storeCollaborations/{collabId} {
+      allow read: if isStoreAdmin(resource.data.requestingStoreId);
+      allow read: if isStoreAdmin(resource.data.supplierStoreId);
+      allow read: if isSystemManager();
+      allow create, update, delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Dettes internes — écritures via CF uniquement.
+    // Née d'une collaboration confirmée. Débitrice et créancière lisent la dette
+    // ET ses tranches. settledAmount/remainingAmount sont de l'argent : seul le
+    // serveur les touche, dans une transaction, avec piste d'audit.
+    // ─────────────────────────────────────────────────────────────
+
+    match /internalDebts/{debtId} {
+      allow read: if isStoreAdmin(resource.data.debtorStoreId);
+      allow read: if isStoreAdmin(resource.data.creditorStoreId);
+      allow read: if isSystemManager();
+      allow create, update, delete: if false;
+
+      // Tranches de règlement. Accès décidé sur le document parent — voir
+      // canReadInternalDebt() et l'avertissement qui l'accompagne.
+      match /settlements/{settlementId} {
+        allow read: if canReadInternalDebt(debtId);
+        allow write: if false;
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Données par boutique (V1)
     // ─────────────────────────────────────────────────────────────
 
@@ -499,6 +551,23 @@ service cloud.firestore {
 
     match /{path=**}/networkBalances/{docId} {
       allow read: if isDealer() || isSystemManager();
+    }
+
+    // Badge « règlements à confirmer » : compte les tranches en attente de MA
+    // confirmation, toutes dettes confondues.
+    //
+    // ⚠ `settlements` est un nom PARTAGÉ. Le moteur de transactions client en a sous
+    // clients/{storeId}/drafts/{id}/settlements et .../history/{id}/settlements : ce
+    // joker les traverse aussi. La garde `'creditorStoreId' in resource.data` est ce
+    // qui les exclut — ces documents-là n'ont pas ce champ dénormalisé, la condition
+    // est donc fausse et ils restent hors d'atteinte par ce chemin.
+    // Symétriquement, la requête front DOIT filtrer sur creditorStoreId.
+    //
+    // Pas de isSystemManager() ici (moindre privilège) : seule la boutique créancière
+    // a besoin de ce compteur ; le gérant garde ses accès par les blocs dédiés.
+    match /{path=**}/settlements/{settlementId} {
+      allow read: if 'creditorStoreId' in resource.data
+                  && isStoreAdmin(resource.data.creditorStoreId);
     }
 
     // ─────────────────────────────────────────────────────────────
