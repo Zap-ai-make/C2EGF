@@ -13,7 +13,7 @@ Réseau réel : **84 boutiques**. Contrats applicables : `DESIGN.md`, `SECURITY.
 | ID | Spec                                          | Dépend de | Périmètre | Statut  |
 |----|-----------------------------------------------|-----------|-----------|---------|
 | S1 | Caractérisation de l'espace dealer            | aucune    | MVP       | **terminée** |
-| S2 | Les caisses en une requête, et l'argent dehors| S1        | MVP       | à faire |
+| S2 | Les caisses en une requête, et l'argent dehors| S1        | MVP       | **terminée** |
 | S3 | Le poste — shell de l'espace dealer           | S1        | MVP       | à faire |
 | S4 | L'accueil — les caisses et la position        | S2, S3    | MVP       | à faire |
 | S5 | Les files et le geste de ravitaillement       | S3        | MVP       | à faire |
@@ -44,9 +44,10 @@ elle était posée avant. Elle vient après le dernier lot de restyle
 
 | | avant S1 | après S1 |
 |---|---|---|
-| Tests unitaires | 2 173, 74 fichiers | **2 197, 75 fichiers** |
+| Tests unitaires | 2 173, 74 fichiers | **2 207, 75 fichiers** |
 | Tests composants | 297, 18 fichiers | 297, 18 fichiers |
-| Lint | propre | propre |
+| Tests functions (émulateur) | 275, 10 fichiers | **285, 11 fichiers** |
+| Lint · build | propre · passant | propre · passant |
 
 ⚠ **Le premier relevé de baseline était faux et a été corrigé.** Il annonçait
 1 858 tests sur 67 fichiers. Cette exécution s'était terminée sur
@@ -76,6 +77,21 @@ prouver plus tard qu'ils ont été corrigés et non déplacés :
 Le troisième n'était pas au plan : trouvé en écrivant le test, il est consigné
 ici plutôt que corrigé au passage (`WORKFLOW.md` §8 — ne rien construire hors
 périmètre).
+
+**S2 — terminée.** Les 84 soldes passent par une requête de groupe
+(`collectionGroup`), le motif que l'espace admin utilise déjà et que les règles
+autorisent déjà au dealer — **aucune règle élargie**. Deux compteurs
+`flux.envoyeCumul` / `flux.revenuCumul` vivent sur `dealerBalances/{uid}`, écrits
+dans les transactions qui existaient. Le seuil bas est un champ du profil client.
+
+Quatre choses apprises en écrivant le code, détaillées dans la spec :
+
+| | |
+|---|---|
+| **Une annonce corrigée** | Le gain est en **allers-retours** (≈90 → 2), pas en lectures facturées. Firestore facture au document lu : on lit toujours 84 soldes. Le critère d'acceptation a été réécrit. |
+| **Une régression évitée** | Le compteur, écrit en `set(merge)`, créait `dealerBalances` — ce qui aurait fait passer la garde d'amorçage de `confirmDealerRequest` pour « inventaire amorcé », qui aurait alors levé `INSUFFICIENT_DEALER_BALANCE` à la confirmation suivante. **Un compteur d'affichage aurait bloqué tous les ravitaillements.** Attrapé par `tc-069 [CO-A]`. |
+| **Un type exclu** | `open_day` fixe les soldes sans débiter le dealer : il ne compte pas. |
+| **⚠ Une identité plus fine — pour S4** | `somme des caisses + retours en attente = solde initial + envoyé − revenu`. La boutique est débitée à la **création** du retour, le compteur avance à la **confirmation**. La ligne « en transit » devient le terme qui réconcilie, au lieu d'être décorative. Et « cuves + dehors » n'est **pas** conservé : un envoi de liquidité part vers Orange, hors inventaire suivi. |
 
 ---
 

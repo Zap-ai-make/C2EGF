@@ -47,6 +47,40 @@ export function shapeDealerInventory(balancesData, networks = DEALER_NETWORKS) {
     stock: byNetwork[primary].stock,
     liquidite: byNetwork[primary].liquidite,
     totalLiquidite,
+    flux: shapeFlux(balancesData),
+  }
+}
+
+/**
+ * Les compteurs de flux — « l'argent du dealer qui est dehors » (spec S2).
+ *
+ * Ils arrivent par le MÊME document que les soldes, donc par l'abonnement qui
+ * existe déjà : les lire ne coûte pas une lecture de plus.
+ *
+ * `dehors` = envoyé − revenu. Ce n'est volontairement PAS découpé par ressource :
+ * au comptoir de la boutique, un dépôt fait stock ↓ et liquidité ↑, si bien que
+ * le stock envoyé devient de la liquidité chez elle. Deux nombres séparés
+ * dériveraient l'un vers l'autre sans qu'un franc ne sorte du réseau.
+ *
+ * ⚠ `dehors` peut être NÉGATIF, et on ne le masque pas. Les compteurs partent de
+ *   zéro le jour de leur mise en service : tant qu'ils n'ont pas rattaché
+ *   l'historique, des retours peuvent être comptés sans que l'envoi
+ *   correspondant l'ait été. Un négatif est donc le signal honnête d'un cumul
+ *   incomplet — le forcer à 0 fabriquerait une donnée fausse et masquerait
+ *   précisément ce que l'écran doit annoncer.
+ */
+function shapeFlux(balancesData) {
+  const flux = (balancesData && typeof balancesData === 'object' && balancesData.flux) || {}
+  const envoyeCumul = safeAmount(flux.envoyeCumul)
+  const revenuCumul = safeAmount(flux.revenuCumul)
+  return {
+    envoyeCumul,
+    revenuCumul,
+    dehors: envoyeCumul - revenuCumul,
+    // Aucune opération comptée ⇒ le rapprochement avec la somme des caisses
+    // n'a pas de sens. C'est l'écran qui le dira ; ici on se contente de le
+    // rendre lisible.
+    amorce: envoyeCumul > 0 || revenuCumul > 0,
   }
 }
 

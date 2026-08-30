@@ -60,10 +60,40 @@ describe('TC-086 — shapeDealerInventory', () => {
       .toEqual({ stock: 0, liquidite: 0 })
   })
 
-  it('emptyDealerInventory : tous réseaux à 0, agrégats à 0', () => {
+  // Mis à jour par la spec S2 : la forme porte désormais `flux`, les compteurs
+  // « envoyé / revenu » qui arrivent par le même document que les soldes.
+  // L'égalité est stricte à dessein — c'est ce qui rend un ajout de champ
+  // visible au lieu de le laisser passer en silence.
+  it('emptyDealerInventory : tous réseaux à 0, agrégats à 0, flux à 0', () => {
     expect(emptyDealerInventory(['Orange', 'Moov'])).toEqual({
       byNetwork: { Orange: { stock: 0, liquidite: 0 }, Moov: { stock: 0, liquidite: 0 } },
       stock: 0, liquidite: 0, totalLiquidite: 0,
+      flux: { envoyeCumul: 0, revenuCumul: 0, dehors: 0, amorce: false },
+    })
+  })
+
+  describe('flux — l’argent dehors (spec S2)', () => {
+    it('lit les deux compteurs et en déduit ce qui est dehors', () => {
+      const r = shapeDealerInventory(
+        { balances: { Orange: { stock: 10, liquidite: 5 } }, flux: { envoyeCumul: 341200000, revenuCumul: 142800000 } },
+        ['Orange'],
+      )
+      expect(r.flux.dehors).toBe(198400000)
+      expect(r.flux.amorce).toBe(true)
+    })
+
+    it('un document sans compteurs n’est pas amorcé, et ne prétend rien', () => {
+      const r = shapeDealerInventory({ balances: { Orange: { stock: 10, liquidite: 5 } } }, ['Orange'])
+      expect(r.flux).toEqual({ envoyeCumul: 0, revenuCumul: 0, dehors: 0, amorce: false })
+    })
+
+    it('laisse « dehors » négatif quand plus est revenu qu’il n’a été compté parti', () => {
+      // Cas réel au démarrage des compteurs : un retour est confirmé alors que
+      // le ravitaillement d'origine est antérieur à leur mise en service. Le
+      // négatif est le signal d'un cumul incomplet — il ne se masque pas.
+      const r = shapeDealerInventory({ flux: { envoyeCumul: 0, revenuCumul: 50000 } }, ['Orange'])
+      expect(r.flux.dehors).toBe(-50000)
+      expect(r.flux.amorce).toBe(true)
     })
   })
 

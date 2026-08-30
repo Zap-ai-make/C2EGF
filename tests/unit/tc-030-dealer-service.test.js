@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   addDoc: vi.fn(),
   serverTimestamp: vi.fn(() => 'SERVER_TS'),
   collection: vi.fn((_db, ...parts) => ({ path: parts.join('/') })),
+  collectionGroup: vi.fn((_db, id) => ({ group: id })),
   doc: vi.fn((_db, ...parts) => ({ path: parts.join('/') })),
   query: vi.fn((...args) => ({ query: args })),
   where: vi.fn((f, op, v) => ({ where: { f, op, v } })),
@@ -24,6 +25,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('firebase/firestore', () => ({
   collection: mocks.collection,
+  collectionGroup: mocks.collectionGroup,
   doc: mocks.doc,
   getDoc: mocks.getDoc,
   getDocs: mocks.getDocs,
@@ -50,6 +52,7 @@ import {
   listActiveStores,
   getStoreBalances,
   listDealerRequests,
+  listNetworkCaisses,
   parseDealerAmount,
 } from '../../src/services/dealerService'
 
@@ -575,5 +578,137 @@ describe('TC-030-REQ — listDealerRequests', () => {
       listDealerRequests({ currentUser: { uid: '' }, userProfile: DEALER_PROFILE })
     ).rejects.toThrow('UID utilisateur invalide')
     expect(mocks.getDocs).not.toHaveBeenCalled()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// listNetworkCaisses — l'état des caisses de tout le réseau (spec S2)
+// ---------------------------------------------------------------------------
+
+/** Snapshot de boutiques : chaque doc porte son id et ses données. */
+function makeStoresSnap(stores) {
+  return { docs: stores.map(s => ({ id: s.id, data: () => ({ name: s.name, active: true }) })) }
+}
+
+/**
+ * Snapshot de requête de GROUPE. La forme importe : un document `current` ne
+ * connaît sa boutique que par son grand-parent, `ref.parent.parent.id`.
+ */
+function makeBalancesSnap(entries) {
+  return {
+    docs: entries.map(e => ({
+      ref: { parent: { parent: e.storeId === null ? null : { id: e.storeId } } },
+      data: () => ({ balances: e.balances }),
+    })),
+  }
+}
+
+const orange = (stock, liquidite) => ({ Orange: { stock, liquidite } })
+
+describe('listNetworkCaisses', () => {
+  it('[CAI-01] joint les boutiques et leurs soldes en deux requêtes, quel que soit le nombre', async () => {
+    mocks.getDocs
+      .mockResolvedValueOnce(makeStoresSnap([
+        { id: 'store-a', name: 'POUYTENGA' },
+        { id: 'store-b', name: 'ZORGHO' },
+      ]))
+      .mockResolvedValueOnce(makeBalancesSnap([
+        { storeId: 'store-a', balances: orange(180000, 2940000) },
+        { storeId: 'store-b', balances: orange(4180000, 410000) },
+      ]))
+
+    const r = await listNetworkCaisses()
+
+    expect(mocks.getDocs).toHaveBeenCalledTimes(2)
+    expect(r.total).toBe(2)
+    expect(r.caisses[0]).toMatchObject({ storeId: 'store-a', name: 'POUYTENGA', stock: 180000, liquidite: 2940000 })
+    expect(r.sommeStock).toBe(4360000)
+    expect(r.sommeLiquidite).toBe(3350000)
+    expect(r.illisibles).toBe(0)
+  })
+
+  it('[CAI-02] ignore les soldes des boutiques inactives', async () => {
+    // La requête de groupe rend AUSSI les documents des boutiques fermées.
+    // Partir des soldes plutôt que des boutiques actives gonflerait la somme
+    // d'un argent qui n'est plus en service.
+    mocks.getDocs
+      .mockResolvedValueOnce(makeStoresSnap([{ id: 'store-a', name: 'POUYTENGA' }]))
+      .mockResolvedValueOnce(makeBalancesSnap([
+        { storeId: 'store-a', balances: orange(100, 200) },
+        { storeId: 'store-fermee', balances: orange(999999, 999999) },
+      ]))
+
+    const r = await listNetworkCaisses()
+
+    expect(r.total).toBe(1)
+    expect(r.sommeStock).toBe(100)
+    expect(r.sommeLiquidite).toBe(200)
+  })
+
+  it('[CAI-03] une caisse sans document de soldes est INCONNUE, pas vide', async () => {
+    mocks.getDocs
+      .mockResolvedValueOnce(makeStoresSnap([
+        { id: 'store-a', name: 'POUYTENGA' },
+        { id: 'store-neuve', name: 'BOUTIQUE NEUVE' },
+      ]))
+      .mockResolvedValueOnce(makeBalancesSnap([
+        { storeId: 'store-a', balances: orange(500, 700) },
+      ]))
+
+    const r = await listNetworkCaisses()
+
+    // null, jamais 0 : l'écran doit pouvoir dire « on ne sait pas ».
+    expect(r.caisses[1]).toMatchObject({ storeId: 'store-neuve', stock: null, liquidite: null })
+    expect(r.illisibles).toBe(1)
+    // Les totaux n'inventent rien à partir d'une caisse inconnue.
+    expect(r.sommeStock).toBe(500)
+  })
+
+  it('[CAI-04] un montant non numérique est inconnu, il n’est pas lu comme zéro', async () => {
+    mocks.getDocs
+      .mockResolvedValueOnce(makeStoresSnap([{ id: 'store-a', name: 'POUYTENGA' }]))
+      .mockResolvedValueOnce(makeBalancesSnap([
+        { storeId: 'store-a', balances: { Orange: { stock: 'beaucoup', liquidite: 300 } } },
+      ]))
+
+    const r = await listNetworkCaisses()
+
+    expect(r.caisses[0].stock).toBeNull()
+    expect(r.caisses[0].liquidite).toBe(300)
+    expect(r.illisibles).toBe(1)
+  })
+
+  it('[CAI-05] un réseau absent du document rend une caisse inconnue', async () => {
+    mocks.getDocs
+      .mockResolvedValueOnce(makeStoresSnap([{ id: 'store-a', name: 'POUYTENGA' }]))
+      .mockResolvedValueOnce(makeBalancesSnap([
+        { storeId: 'store-a', balances: { Moov: { stock: 10, liquidite: 20 } } },
+      ]))
+
+    const r = await listNetworkCaisses()
+
+    expect(r.caisses[0]).toMatchObject({ stock: null, liquidite: null })
+    expect(r.illisibles).toBe(1)
+  })
+
+  it('[CAI-06] un réseau vide ne rend aucune caisse, et aucune somme', async () => {
+    mocks.getDocs
+      .mockResolvedValueOnce(makeStoresSnap([]))
+      .mockResolvedValueOnce(makeBalancesSnap([]))
+
+    const r = await listNetworkCaisses()
+
+    expect(r.total).toBe(0)
+    expect(r.caisses).toEqual([])
+    expect(r.sommeStock).toBe(0)
+    expect(r.illisibles).toBe(0)
+  })
+
+  it('[CAI-07] une erreur Firestore remonte traduite, jamais brute', async () => {
+    const err = new Error('raw')
+    err.code = 'permission-denied'
+    mocks.getDocs.mockRejectedValue(err)
+
+    await expect(listNetworkCaisses()).rejects.toThrow('Accès refusé')
   })
 })

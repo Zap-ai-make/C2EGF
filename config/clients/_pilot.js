@@ -66,9 +66,18 @@ export const pilotProfile = Object.freeze({
   // enabled=false → pas d'espace dealer du tout.
   // networks     → réseaux qu'UN dealer approvisionne (multi-réseaux supporté).
   //   Invariant produit conservé : un seul dealer actif dans tout le système.
+  // seuilBas → montant EN FCFA sous lequel une caisse est signalée comme basse,
+  //   dans l'inventaire du dealer comme dans celui des boutiques qu'il alimente.
+  //   UN SEUL seuil pour tout le réseau : c'est la décision prise au cadrage de
+  //   la refonte dealer. Un seuil par boutique serait plus juste (Ouaga ne
+  //   tourne pas comme Niaogho) mais demande un champ sur chaque fiche — il
+  //   deviendra un axe à part le jour où le besoin sera avéré.
+  //   ⚠ Il remplace les constantes 10000 / 25000 qui vivaient en dur dans
+  //   NetworkCard.jsx : un seuil est une donnée client, pas une valeur magique.
   dealer: Object.freeze({
     enabled: true,
     networks: [...RESEAUX_SUPPORTES],
+    seuilBas: 500000,
   }),
 
   // ── Collaborations inter-boutiques et dettes internes ─────────────────────

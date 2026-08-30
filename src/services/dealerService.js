@@ -22,6 +22,7 @@
 
 import {
   collection,
+  collectionGroup,
   doc,
   getDoc,
   getDocs,
@@ -48,6 +49,7 @@ import {
 const STORES_COLLECTION = 'stores'
 const DEALER_REQUESTS_COLLECTION = 'dealerRequests'
 const NETWORK_BALANCES_DOC = 'current'
+const NETWORK_BALANCES_COLLECTION = 'networkBalances'
 
 // ---------------------------------------------------------------------------
 // Erreurs
@@ -145,6 +147,88 @@ export async function getStoreBalances(storeId) {
   } catch (err) {
     throw mapFirestoreError(err)
   }
+}
+
+// ---------------------------------------------------------------------------
+// listNetworkCaisses — l'état des caisses de TOUT le réseau (spec S2)
+//
+// CE QUE ÇA REMPLACE, ET CE QUE ÇA NE FAIT PAS
+// ────────────────────────────────────────────
+// L'écran des boutiques chargeait une page de 20 boutiques, puis lançait un
+// `getStoreBalances` PAR boutique — soit 1 + N requêtes, en parallèle. Ici, deux
+// requêtes, quel que soit le nombre de boutiques.
+//
+// ⚠ Le gain est en ALLERS-RETOURS, pas en lectures facturées. Firestore compte
+//   un document lu ; à 84 boutiques on lit 84 fiches + 84 documents de soldes
+//   dans les deux cas. Ce qui change, c'est qu'on passe d'environ 90 requêtes
+//   réseau à 2 — et surtout que l'écran peut enfin montrer les 84 d'un coup,
+//   ce que la pagination à 20 lui interdisait structurellement.
+//
+// Les deux requêtes partent ensemble : la seconde n'attend pas la première.
+//
+// Droits : `stores` est lisible par le dealer (firestore.rules §Boutiques), et
+// le groupe `networkBalances` aussi (`match /{path=**}/networkBalances/{docId}`).
+// Aucune règle n'a été élargie pour cette fonction.
+// ---------------------------------------------------------------------------
+
+export async function listNetworkCaisses({ network = DEALER_NETWORK } = {}) {
+  try {
+    const [storesSnap, balancesSnap] = await Promise.all([
+      getDocs(query(
+        collection(db, STORES_COLLECTION),
+        where('active', '==', true),
+        orderBy('name'),
+      )),
+      getDocs(query(collectionGroup(db, NETWORK_BALANCES_COLLECTION))),
+    ])
+
+    // Index des soldes par boutique. Le groupe rend des documents `current` ;
+    // l'identifiant de la boutique se lit sur le grand-parent du document,
+    // `clients/{storeId}/networkBalances/current`.
+    const soldes = new Map()
+    balancesSnap.docs.forEach((d) => {
+      const storeId = d.ref.parent.parent?.id
+      if (storeId) soldes.set(storeId, d.data()?.balances?.[network] ?? null)
+    })
+
+    // ⚠ On part des BOUTIQUES ACTIVES, pas des soldes. Le groupe rend aussi les
+    //   documents des boutiques fermées : les prendre pour base gonflerait la
+    //   somme des caisses d'un argent qui n'est plus en service.
+    const caisses = storesSnap.docs.map((d) => {
+      const solde = soldes.get(d.id)
+      return {
+        storeId: d.id,
+        name: d.data()?.name ?? null,
+        // `null` ≠ 0 : une boutique sans document de soldes n'a pas une caisse
+        // vide, elle a une caisse INCONNUE. L'écran doit pouvoir le dire, et la
+        // somme doit pouvoir refuser de se prononcer.
+        stock: readAmount(solde?.stock),
+        liquidite: readAmount(solde?.liquidite),
+      }
+    })
+
+    const illisibles = caisses.filter(c => c.stock === null || c.liquidite === null).length
+
+    return {
+      caisses,
+      total: caisses.length,
+      // Les totaux ignorent les caisses illisibles — et `illisibles` dit
+      // combien, pour que l'écran n'annonce jamais une somme complète qui ne
+      // l'est pas.
+      sommeStock: caisses.reduce((s, c) => s + (c.stock ?? 0), 0),
+      sommeLiquidite: caisses.reduce((s, c) => s + (c.liquidite ?? 0), 0),
+      illisibles,
+    }
+  } catch (err) {
+    throw mapFirestoreError(err)
+  }
+}
+
+// Un montant de caisse : entier fini, sinon `null` (inconnu, jamais 0).
+function readAmount(value) {
+  if (value === undefined || value === null) return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
 }
 
 // ---------------------------------------------------------------------------

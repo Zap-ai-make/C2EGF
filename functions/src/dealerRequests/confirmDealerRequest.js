@@ -26,7 +26,7 @@ import {
   getBalanceField,
   buildAuditEntry,
 } from './shared.js'
-import { readDealerBalanceAmount } from '../storeTransfers/shared.js'
+import { readDealerBalanceAmount, nextFluxAmount } from '../storeTransfers/shared.js'
 import { DEALER_NETWORKS } from '../config/dealerProfile.js'
 
 export async function confirmDealerRequestHandler(request, { db, FieldValue, dealerNetworks = DEALER_NETWORKS }) {
@@ -92,8 +92,18 @@ export async function confirmDealerRequestHandler(request, { db, FieldValue, dea
       // dealerBalances, on NE décrémente PAS (transition avant amorçage).
       // La lecture DOIT précéder les écritures (règle des transactions Firestore).
       let dealerDebit = null
+      // Compteur « envoyé » (spec S2). Il est calculé ici, à côté du débit, mais
+      // il en est INDÉPENDANT : le débit ne s'applique que si l'inventaire est
+      // amorcé, alors que l'argent part vers la boutique dans tous les cas.
+      let envoyeCumul = null
 
       if (reqData.requestType === 'open_day') {
+        // ⚠ `open_day` N'AVANCE PAS le compteur « envoyé » (spec S2), et ce
+        //   n'est pas un oubli. Une ouverture de jour FIXE les soldes de la
+        //   boutique au lieu de les augmenter, et ne débite pas l'inventaire du
+        //   dealer : rien n'est parti de chez lui. La compter reviendrait à
+        //   déclarer sorti un argent qui n'a pas bougé, et à fausser le
+        //   rapprochement avec la somme des caisses.
         // Ouverture du jour : définit stock ET liquidité (pas d'addition)
         const stockAmount     = reqData.amount
         const liquiditeAmount = reqData.liquidityAmount
@@ -133,6 +143,28 @@ export async function confirmDealerRequestHandler(request, { db, FieldValue, dea
         // Décrément inventaire dealer (même champ + réseau) si l'inventaire est amorcé.
         const dealerBalRef  = db.doc(`dealerBalances/${reqData.dealerUid}`)
         const dealerBalSnap = await t.get(dealerBalRef)
+
+        // Compteur « envoyé » — SOUMIS À LA MÊME GARDE D'AMORÇAGE que le débit,
+        // et ce n'est pas un choix esthétique.
+        //
+        // ⚠ PIÈGE. Écrire le compteur sur un document ABSENT le créerait, avec
+        //   un `flux` mais sans `balances`. À la confirmation suivante,
+        //   `dealerBalSnap.exists` vaudrait alors vrai, le code entrerait dans
+        //   la branche de débit ci-dessous, y lirait un solde à 0 et lèverait
+        //   INSUFFICIENT_DEALER_BALANCE. Autrement dit : un compteur d'affichage
+        //   aurait désarmé la garde d'amorçage et bloqué les approvisionnements.
+        //   C'est tc-069 [CO-A] qui l'a attrapé.
+        //
+        // Conséquence assumée : sans inventaire amorcé, aucun cumul. L'UI le
+        // sait — `flux.amorce` vaut alors faux et l'écran annonce qu'il ne peut
+        // pas encore rapprocher, au lieu d'afficher un écart trompeur.
+        if (dealerBalSnap.exists) {
+          envoyeCumul = {
+            ref: dealerBalRef,
+            next: nextFluxAmount(dealerBalSnap.data(), 'envoyeCumul', reqData.amount),
+          }
+        }
+
         if (dealerBalSnap.exists) {
           const previousDealerBalance = readDealerBalanceAmount(dealerBalSnap.data(), balField, network)
           if (previousDealerBalance < reqData.amount) {
@@ -190,6 +222,16 @@ export async function confirmDealerRequestHandler(request, { db, FieldValue, dea
           newBalance:      dealerDebit.next,
           createdAt:       now,
         })
+      }
+
+      // Compteur de flux — écriture séparée de celle du solde : le débit dépend
+      // du réseau et du champ, le compteur non. Le `merge` profond ne touche que
+      // `flux.envoyeCumul`. Le document existe forcément ici (garde ci-dessus).
+      if (envoyeCumul) {
+        t.set(envoyeCumul.ref, {
+          flux: { envoyeCumul: envoyeCumul.next },
+          updatedAt: now,
+        }, { merge: true })
       }
 
       // Piste d'audit dans clients/{storeId}/auditLogs

@@ -64,6 +64,9 @@ export const c2egfProfile = Object.freeze({
   dealer: Object.freeze({
     enabled: true,
     networks: ['Orange'],
+    // 500 000 FCFA — ordre de grandeur retenu au cadrage pour un réseau de
+    // 84 boutiques. À réviser avec le client une fois l'écran en service.
+    seuilBas: 500000,
   }),
 
   // regional : hérité du pilote (Africa/Ouagadougou) — C2EGF est au Burkina Faso.

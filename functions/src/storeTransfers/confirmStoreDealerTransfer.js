@@ -16,6 +16,7 @@ import {
   validateTransferType,
   transferBalanceField,
   readDealerBalanceAmount,
+  nextFluxAmount,
   resolveTransferNetwork,
 } from './shared.js'
 import { DEALER_NETWORKS } from '../config/dealerProfile.js'
@@ -75,11 +76,23 @@ export async function confirmStoreDealerTransferHandler(request, { db, FieldValu
       let newDealerBalance = null
       const now = FieldValue.serverTimestamp()
 
+      // Inventaire dealer — lu DANS TOUS LES CAS, car le compteur « revenu »
+      // en a besoin même quand le transfert ne crédite pas l'inventaire.
+      // (Une lecture de transaction doit précéder toute écriture.)
+      const balRef = db.doc(`dealerBalances/${actorUid}`)
+      const balSnap = await t.get(balRef)
+      const balData = balSnap.exists ? balSnap.data() : null
+
+      // Compteur « revenu » — avancé POUR LES DEUX TYPES DE RETOUR, alors que
+      // seul `return_stock` crédite l'inventaire. Ce n'est pas une incohérence :
+      // le compteur mesure ce qui a QUITTÉ LA CAISSE DE LA BOUTIQUE, et la
+      // boutique est débitée des deux à la création du transfert. Un envoi de
+      // liquidité part vers Orange sans repasser par l'inventaire du dealer —
+      // il n'en est pas moins sorti du réseau.
+      const revenuCumul = nextFluxAmount(balData, 'revenuCumul', amount)
+
       if (creditsDealer) {
-        // Solde dealer (peut ne pas exister → 0)
-        const balRef = db.doc(`dealerBalances/${actorUid}`)
-        const balSnap = await t.get(balRef)
-        previousDealerBalance = readDealerBalanceAmount(balSnap.exists ? balSnap.data() : null, field, network)
+        previousDealerBalance = readDealerBalanceAmount(balData, field, network)
         newDealerBalance = previousDealerBalance + amount
         if (!Number.isSafeInteger(newDealerBalance)) {
           throw new DealerRequestError('BALANCE_OVERFLOW', 'Le solde résultant dépasse la limite des entiers sûrs.')
@@ -88,6 +101,24 @@ export async function confirmStoreDealerTransferHandler(request, { db, FieldValu
         // le merge profond préserve l'autre champ : stock ↔ liquidite).
         t.set(balRef, {
           balances: { [network]: { [field]: newDealerBalance } },
+          updatedAt: now,
+        }, { merge: true })
+      }
+
+      // Compteur de flux — écriture séparée de celle du solde, parce que sa
+      // règle est différente : elle vaut pour les DEUX types de retour.
+      //
+      // ⚠ MAIS ELLE NE CRÉE JAMAIS LE DOCUMENT À ELLE SEULE. Un `dealerBalances`
+      //   né d'un `flux` sans `balances` ferait passer la garde d'amorçage de
+      //   confirmDealerRequest pour « inventaire amorcé », qui lirait alors un
+      //   solde à 0 et refuserait tout approvisionnement avec
+      //   INSUFFICIENT_DEALER_BALANCE. Un envoi de liquidité sur un dealer non
+      //   amorcé bloquerait donc ses ravitaillements — depuis un autre fichier.
+      //   D'où la condition : on n'écrit que si le document existe déjà, ou si
+      //   le crédit ci-dessus vient de le créer avec ses soldes.
+      if (balSnap.exists || creditsDealer) {
+        t.set(balRef, {
+          flux: { revenuCumul },
           updatedAt: now,
         }, { merge: true })
       }

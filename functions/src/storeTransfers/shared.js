@@ -165,6 +165,56 @@ export function readDealerBalanceAmount(balanceData, field, network = 'Orange') 
   return value
 }
 
+// ── Compteurs de flux du dealer (spec S2) ────────────────────────────────────
+//
+// Deux cumuls vivent sur `dealerBalances/{uid}`, sous la clé `flux` :
+//
+//   flux.envoyeCumul   total envoyé aux boutiques depuis l'origine
+//   flux.revenuCumul   total revenu des boutiques depuis l'origine
+//
+// Leur différence est « l'argent du dealer qui est dehors ». Ce sont des
+// COMPTEURS, pas des soldes : ils ne décroissent jamais, n'entrent dans aucun
+// calcul de solde, et ne peuvent donc pas corrompre une caisse s'ils dérivent.
+//
+// ⚠ POURQUOI PAS `FieldValue.increment()`. Il éviterait une lecture, mais il
+//   rendrait impossible le garde-fou d'entier sûr : un compteur incrémenté à
+//   l'aveugle peut franchir Number.MAX_SAFE_INTEGER sans que rien ne le dise,
+//   et une valeur corrompue serait alors silencieusement propagée. On lit, on
+//   vérifie, on écrit — comme pour tous les autres montants du produit.
+//
+// Le champ peut ne pas exister (compteur jamais initialisé) → 0. Toute valeur
+// présente doit être un entier sûr non-négatif, comme un solde.
+export function readFluxAmount(balanceData, field) {
+  if (balanceData === undefined || balanceData === null) return 0
+  if (typeof balanceData !== 'object') {
+    throw new DealerRequestError('INVALID_BALANCE_DATA', 'Inventaire dealer invalide.')
+  }
+  const flux = balanceData.flux
+  if (flux === undefined || flux === null) return 0
+  if (typeof flux !== 'object') {
+    throw new DealerRequestError('INVALID_BALANCE_DATA', 'Compteurs de flux dealer invalides.')
+  }
+  const value = flux[field]
+  if (value === undefined || value === null) return 0
+  if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isSafeInteger(value) || value < 0) {
+    throw new DealerRequestError('INVALID_BALANCE_DATA', `Compteur flux.${field} invalide : entier sûr non-négatif requis.`)
+  }
+  return value
+}
+
+// Avance un compteur de flux, en refusant tout dépassement d'entier sûr.
+export function nextFluxAmount(balanceData, field, amount) {
+  const previous = readFluxAmount(balanceData, field)
+  const next = previous + amount
+  if (!Number.isSafeInteger(next)) {
+    throw new DealerRequestError(
+      'BALANCE_OVERFLOW',
+      `Le compteur flux.${field} dépasserait la limite des entiers sûrs.`,
+    )
+  }
+  return next
+}
+
 // ── Résolution du dealer unique (compte role==='dealer' actif) ───────────────
 // Règle métier : il ne peut exister qu'UN SEUL dealer actif dans tout le système.
 // On lit jusqu'à 2 dealers pour détecter une violation d'invariant plutôt que de

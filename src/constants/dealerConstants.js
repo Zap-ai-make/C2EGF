@@ -33,6 +33,17 @@ export const DEALER_NETWORK = activeProfile.dealer.networks[0]
 export const DEALER_NETWORKS = activeProfile.dealer.networks
 export const IS_DEALER_MULTI_NETWORK = DEALER_NETWORKS.length > 1
 
+// Seuil bas d'une caisse, en FCFA — axe de variation client (spec S2).
+// Un seul seuil pour tout le réseau, décision de cadrage. Il vient du profil et
+// de nulle part ailleurs : une valeur en dur dans un composant serait
+// exactement la constante magique qu'il remplace (cf. NetworkCard.jsx).
+export const DEALER_SEUIL_BAS = activeProfile.dealer.seuilBas
+
+/** Une caisse est-elle sous le seuil ? `null` (montant inconnu) n'est pas bas. */
+export function estSousSeuil(montant) {
+  return typeof montant === 'number' && Number.isFinite(montant) && montant < DEALER_SEUIL_BAS
+}
+
 export const DEALER_REQUESTS_PAGE_SIZE = 20
 export const DEALER_STORES_PAGE_SIZE = 20
 export const STORE_DEALER_REQUESTS_PAGE_SIZE = 20
