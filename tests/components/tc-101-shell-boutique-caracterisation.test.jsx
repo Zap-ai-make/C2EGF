@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, within, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 let pendingCount = 0
@@ -53,7 +53,7 @@ vi.mock('../../src/components/network/NetworkCard.jsx', () => ({
 
 import Layout from '../../src/components/Layout.jsx'
 import { APP_NAME } from '../../src/constants/branding.js'
-import { STORE_NAV_ITEMS } from '../../src/constants/navigation.js'
+import { STORE_NAV_ITEMS, STORE_ACCOUNT_ITEM } from '../../src/constants/navigation.js'
 
 const renderShell = (children = <p>CONTENU</p>) =>
   render(<MemoryRouter><Layout>{children}</Layout></MemoryRouter>)
@@ -124,7 +124,16 @@ describe('TC-101 — repères de structure du shell', () => {
 })
 
 describe('TC-101 — points d’entrée de la navigation', () => {
-  it('propose les 7 destinations de l’espace boutique', () => {
+  // ── Ce bloc suit un changement de forme, pas d'intention ────────────────
+  // Le lot « barre » a sorti Profil de la rangée (c'est le compte, pas une
+  // destination sœur) et remplacé le <select> mobile par un bouton et un
+  // panneau. Ces tests vérifient toujours la même chose — toute destination
+  // reste atteignable depuis le shell, au clavier comme à la souris, sur les
+  // deux variantes — sur une structure qui a bougé. C'est le rôle d'un test de
+  // caractérisation : suivre le comportement quand il change exprès, en disant
+  // pourquoi.
+
+  it('rend les destinations de la rangée', () => {
     renderShell()
     const nav = screen.getByRole('navigation')
     for (const item of STORE_NAV_ITEMS) {
@@ -133,14 +142,35 @@ describe('TC-101 — points d’entrée de la navigation', () => {
         item.path,
       )
     }
-    expect(STORE_NAV_ITEMS).toHaveLength(7)
+    expect(STORE_NAV_ITEMS).toHaveLength(6)
+  })
+
+  it('le compte reste atteignable, mais hors de la rangée', () => {
+    renderShell()
+    const nav = screen.getByRole('navigation')
+    expect(
+      within(nav).getByRole('link', { name: new RegExp(STORE_ACCOUNT_ITEM.name) }),
+    ).toHaveAttribute('href', STORE_ACCOUNT_ITEM.path)
+    // Et il n'est PAS une destination de la rangée : c'est ce qui lui a fait
+    // gagner sa place à droite.
+    expect(STORE_NAV_ITEMS.some((item) => item.path === STORE_ACCOUNT_ITEM.path)).toBe(false)
   })
 
   it('offre un équivalent mobile nommé, couvrant les mêmes destinations', () => {
     renderShell()
-    const select = screen.getByLabelText('Navigation principale')
-    // 7 destinations + l'option de consigne désactivée.
-    expect(within(select).getAllByRole('option')).toHaveLength(STORE_NAV_ITEMS.length + 1)
+    const bouton = screen.getByRole('button', { name: /Menu/ })
+    expect(bouton).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(bouton)
+    expect(bouton).toHaveAttribute('aria-expanded', 'true')
+
+    const panneau = document.getElementById('nav-panneau-boutique')
+    expect(panneau).not.toBeNull()
+    for (const item of STORE_NAV_ITEMS) {
+      expect(
+        within(panneau).getByRole('link', { name: new RegExp(item.name) }),
+      ).toHaveAttribute('href', item.path)
+    }
   })
 
   it('sans demande en attente → aucun compteur affiché', () => {
