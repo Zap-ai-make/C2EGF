@@ -77,6 +77,22 @@ export const HTTP_CODES = {
   COLLABORATION_NOT_FOUND:       'not-found',
   COLLABORATION_NOT_PENDING:     'failed-precondition',
   COLLABORATION_STORE_MISMATCH:  'permission-denied',
+  // Dettes internes et règlements par tranche
+  INVALID_DEBT_ID:                 'invalid-argument',
+  INVALID_SETTLEMENT_ID:           'invalid-argument',
+  INVALID_SETTLEMENT_METHOD:       'invalid-argument',
+  INVALID_IDEMPOTENCY_KEY:         'invalid-argument',
+  INVALID_DEBT_DATA:               'failed-precondition',
+  DEBT_NOT_FOUND:                  'not-found',
+  DEBT_ALREADY_SETTLED:            'failed-precondition',
+  DEBT_STORE_MISMATCH:             'permission-denied',
+  SETTLEMENT_NOT_FOUND:            'not-found',
+  SETTLEMENT_NOT_DECLARED:         'failed-precondition',
+  SETTLEMENT_INSUFFICIENT_BALANCE: 'failed-precondition',
+  // Compensation d'une dette contre la dette opposée
+  INVALID_OPPOSITE_DEBT:           'invalid-argument',
+  NOT_OPPOSITE_PAIR:               'failed-precondition',
+  COMPENSATION_EXCEEDS_REMAINING:  'failed-precondition',
 }
 
 export class DealerRequestError extends Error {
