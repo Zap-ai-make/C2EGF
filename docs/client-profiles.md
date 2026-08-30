@@ -41,12 +41,18 @@ la résolution **stricte** (qui lève) est réservée à la génération de règ
 | Champ | Varie | Couche(s) qui en dérive(nt) |
 |---|---|---|
 | `branding` | nom / thème / PWA | Front |
-| `networks.enabled` | 1 → 5 réseaux boutique | Front + **Règles** |
+| `networks.enabled` | 1 → 5 réseaux boutique | Front + **Règles** + **Functions** |
 | `transactions.types` | avec / sans `Crédit` | Front + **Règles** |
-| `transactions.paymentMethods` | 2 → 6 méthodes | Front |
+| `transactions.paymentMethods` | 2 → 6 méthodes | Front + **Functions** |
 | `cashier.canEditBalances` | édition soldes par la boutique on/off | **Règles** + Front |
 | `dealer.enabled` / `dealer.networks` | dealer absent / mono / multi-réseaux | Front + **Règles** + **Functions** |
+| `collaborations.enabled` | collaborations inter-boutiques + dettes internes on/off | Front + **Functions** |
 | `regional.timezone` | fuseau horaire d'affichage des dates | Front |
+
+> `collaborations.enabled` est **indépendant du nombre de réseaux** : une boutique sollicite une
+> consœur parce qu'elle est à court de **stock**, pas parce qu'il lui manque une SIM. Un client
+> mono-réseau en a donc autant besoin qu'un multi-réseaux. Ne pas le déduire de
+> `networks.enabled.length`.
 
 Ajouter un axe = ajouter un champ **nommé et commenté** dans `_pilot.js` (défaut le plus
 riche), puis le faire dériver dans les couches.
@@ -61,6 +67,14 @@ seulement masquée dans l'UI. Deux artefacts sont **générés depuis le profil*
 |---|---|---|
 | Règles | bloc `profileDealerNetworks()` dans `firestore.rules` | `scripts/generate-rules.mjs --client <id>` |
 | Functions | `functions/src/config/dealerProfile.js` (`DEALER_NETWORKS`) | `scripts/generate-functions-config.mjs --client <id>` |
+| Functions | `functions/src/config/storeProfile.js` (`STORE_NETWORKS`, `COLLABORATIONS_ENABLED`, `DEBT_SETTLEMENT_METHODS`) | idem — le même script écrit les deux |
+
+`storeProfile.js` porte les axes **boutique** dont dépendent les collaborations et les dettes
+internes. Il n'a **pas** de pendant côté règles : toutes les écritures de `storeCollaborations` et
+`internalDebts` sont déjà `if false` (CF-only), donc un client qui n'a pas souscrit au module ne
+peut rien y écrire de toute façon — l'enforcement qui compte est celui des callables.
+`DEBT_SETTLEMENT_METHODS` = `transactions.paymentMethods` + `Banque` : une dette peut se solder par
+virement bancaire, une transaction client non.
 
 `--check` échoue en CI si un artefact ne correspond plus au profil. Comportement-préservant :
 pour `taofic_ajagbe`, la génération reproduit le mono-réseau `['Orange']` (identique à l'historique).

@@ -71,6 +71,20 @@ export const pilotProfile = Object.freeze({
     networks: [...RESEAUX_SUPPORTES],
   }),
 
+  // ── Collaborations inter-boutiques et dettes internes ─────────────────────
+  // Une boutique à court de stock fait exécuter l'opération Mobile Money par une
+  // consœur qui en a ; la contrepartie devient une dette interne, réglée en
+  // tranches ou compensée contre la dette opposée.
+  //   ⚠ Le besoin naît du STOCK, pas de la SIM : la fonctionnalité est donc
+  //   INDÉPENDANTE du nombre de réseaux. Un client mono-réseau en a autant besoin
+  //   qu'un multi-réseaux — d'où ce drapeau explicite plutôt qu'une déduction
+  //   depuis networks.enabled.length.
+  // enabled=false → aucune trace du module : ni menu, ni onglet, ni abonnement,
+  //   et les callables serveur refusent (COLLABORATIONS_DISABLED).
+  collaborations: Object.freeze({
+    enabled: true,
+  }),
+
   // ── Régional ────────────────────────────────────────────────────────────────
   // Fuseau horaire de référence pour l'affichage/formatage des dates : fixe le
   // rendu quel que soit le fuseau du navigateur de l'utilisateur.
