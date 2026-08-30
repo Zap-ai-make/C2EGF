@@ -29,6 +29,10 @@ import { rejectStoreDealerTransferHandler } from './storeTransfers/rejectStoreDe
 import { replenishDealerInventoryHandler } from './storeTransfers/replenishDealerInventory.js'
 import { decreaseDealerInventoryHandler } from './storeTransfers/decreaseDealerInventory.js'
 import { createPartnerDepositHandler } from './storeTransfers/createPartnerDeposit.js'
+import { createStoreCollaborationHandler } from './collaborations/createStoreCollaboration.js'
+import { confirmStoreCollaborationHandler } from './collaborations/confirmStoreCollaboration.js'
+import { rejectStoreCollaborationHandler } from './collaborations/rejectStoreCollaboration.js'
+import { listStoreCollaborationProvidersHandler } from './collaborations/listStoreCollaborationProviders.js'
 
 // Garde idempotente : évite "App named '[DEFAULT]' already exists" lors des imports
 // dans les tests d'intégration (TC-036) qui s'exécutent après TC-035 dans le même processus.
@@ -100,3 +104,29 @@ export const createPartnerDeposit = onCall(
   { region: 'europe-west1', enforceAppCheck: false },
   wrapCallable(createPartnerDepositHandler, deps)
 )
+
+// ── Collaborations inter-boutiques ──────────────────────────────────────────
+// Une boutique à court de stock fait exécuter l'opération par une consœur ; la
+// contrepartie devient une dette interne. Toute la mécanique financière est dans
+// confirmStoreCollaboration : la création n'engage aucun solde.
+
+export const createStoreCollaboration = onCall(
+  { region: 'europe-west1', enforceAppCheck: false },
+  wrapCallable(createStoreCollaborationHandler, deps)
+)
+
+export const confirmStoreCollaboration = onCall(
+  { region: 'europe-west1', enforceAppCheck: false },
+  wrapCallable(confirmStoreCollaborationHandler, deps)
+)
+
+export const rejectStoreCollaboration = onCall(
+  { region: 'europe-west1', enforceAppCheck: false },
+  wrapCallable(rejectStoreCollaborationHandler, deps)
+)
+
+export const listStoreCollaborationProviders = onCall(
+  { region: 'europe-west1', enforceAppCheck: false },
+  wrapCallable(listStoreCollaborationProvidersHandler, deps)
+)
+

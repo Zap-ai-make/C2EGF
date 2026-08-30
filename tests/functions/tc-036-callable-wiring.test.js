@@ -93,6 +93,11 @@ describe('TC-036-WRA — exports callable de index.js', () => {
       'replenishDealerInventory',
       'decreaseDealerInventory',
       'createPartnerDeposit',
+      // Collaborations inter-boutiques
+      'createStoreCollaboration',
+      'confirmStoreCollaboration',
+      'rejectStoreCollaboration',
+      'listStoreCollaborationProviders',
     ])
     for (const key of Object.keys(indexModule)) {
       expect(
@@ -115,6 +120,16 @@ describe('TC-036-WRA — exports callable de index.js', () => {
     const regions = fn.__endpoint?.region
     expect(Array.isArray(regions)).toBe(true)
     expect(regions).toContain('europe-west1')
+  })
+
+  it('[WRA-08] TOUS les callables déclarent europe-west1', () => {
+    // Formulation générale plutôt qu'un test par export : un callable ajouté plus
+    // tard dans une autre région (latence depuis l'Afrique de l'Ouest) échoue ici
+    // sans qu'il faille penser à écrire son test.
+    for (const [name, fn] of Object.entries(indexModule)) {
+      expect(Array.isArray(fn.__endpoint?.region), `${name} : région absente`).toBe(true)
+      expect(fn.__endpoint.region, `${name} : mauvaise région`).toContain('europe-west1')
+    }
   })
 })
 
