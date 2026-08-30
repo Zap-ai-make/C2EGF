@@ -154,6 +154,27 @@ describe('TC-036-WRA — exports callable de index.js', () => {
       expect(fn.__endpoint.region, `${name} : mauvaise région`).toContain('europe-west1')
     }
   })
+
+  it('[WRA-09] TOUS les callables plafonnent leurs instances', () => {
+    // Ce test parle d'ARGENT autant que de quota.
+    //
+    // Sans `maxInstances`, une function de 2e génération monte jusqu'à cent
+    // conteneurs. Sur un plan Blaze, un bug, une boucle de réessai côté client
+    // ou un appel répété les ouvrent — et les font payer. Le plafond est la
+    // seule chose qui borne le pire des cas.
+    //
+    // Il a aussi une conséquence immédiate au déploiement : 23 callables sans
+    // plafond réservent 2 300 vCPU dans la région, au-delà du quota d'un projet
+    // neuf. Trois functions ont échoué à se créer pour cette raison, avec un
+    // message qui ne parle que de CPU et jamais d'instances — la formulation
+    // générale de ce test évite d'avoir à s'en souvenir.
+    for (const [name, fn] of Object.entries(indexModule)) {
+      const plafond = fn.__endpoint?.maxInstances
+      expect(typeof plafond, `${name} : aucun plafond d'instances`).toBe('number')
+      expect(plafond, `${name} : plafond hors de portée du besoin`).toBeGreaterThan(0)
+      expect(plafond, `${name} : plafond trop haut pour être une protection`).toBeLessThanOrEqual(20)
+    }
+  })
 })
 
 // ─────────────────────────────────────────────────────────────────────────────

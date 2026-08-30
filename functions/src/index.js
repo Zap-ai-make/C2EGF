@@ -46,68 +46,95 @@ if (!getApps().length) initializeApp()
 const db = getFirestore()
 const deps = { db, FieldValue }
 
+/**
+ * Les options communes des 23 callables.
+ *
+ * POURQUOI UN PLAFOND D'INSTANCES
+ * ──────────────────────────────
+ * Sans `maxInstances`, une function de 2e génération peut monter à 100 instances.
+ * Multiplié par 23 callables et un vCPU chacune, cela réserve 2 300 vCPU dans la
+ * région — au-delà du quota d'un projet neuf. Trois functions ont échoué à se
+ * créer pour cette raison au premier déploiement, avec un message qui ne parle
+ * que de CPU et jamais d'instances.
+ *
+ * Mais la vraie raison n'est pas le quota, c'est LA FACTURE. Sur un plan Blaze,
+ * un plafond absent signifie qu'un bug, une boucle de réessai côté client ou un
+ * appel répété peuvent ouvrir cent conteneurs et les faire payer. Ce produit sert
+ * une poignée de boutiques : dix instances simultanées par callable sont déjà
+ * très au-dessus du besoin, et bornent le pire des cas.
+ *
+ * Un seul objet plutôt que la même accolade recopiée vingt-trois fois : le jour
+ * où la région ou le plafond change, il change à UN endroit. TC-036 [WRA-08] et
+ * [WRA-09] vérifient que tous les callables les portent.
+ */
+const CALLABLE = Object.freeze({
+  region: 'europe-west1',
+  enforceAppCheck: false,
+  maxInstances: 10,
+})
+
 export const confirmDealerRequest = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(confirmDealerRequestHandler, deps)
 )
 
 export const rejectDealerRequest = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(rejectDealerRequestHandler, deps)
 )
 
 export const createDealerClosure = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(createDealerClosureHandler, deps)
 )
 
 export const confirmDealerClosure = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(confirmDealerClosureHandler, deps)
 )
 
 export const rejectDealerClosure = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(rejectDealerClosureHandler, deps)
 )
 
 export const addTransactionPayment = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(addTransactionPaymentHandler, deps)
 )
 
 export const addTransactionRefund = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(addTransactionRefundHandler, deps)
 )
 
 export const createStoreDealerTransfer = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(createStoreDealerTransferHandler, deps)
 )
 
 export const confirmStoreDealerTransfer = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(confirmStoreDealerTransferHandler, deps)
 )
 
 export const rejectStoreDealerTransfer = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(rejectStoreDealerTransferHandler, deps)
 )
 
 export const replenishDealerInventory = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(replenishDealerInventoryHandler, deps)
 )
 
 export const decreaseDealerInventory = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(decreaseDealerInventoryHandler, deps)
 )
 
 export const createPartnerDeposit = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(createPartnerDepositHandler, deps)
 )
 
@@ -117,22 +144,22 @@ export const createPartnerDeposit = onCall(
 // confirmStoreCollaboration : la création n'engage aucun solde.
 
 export const createStoreCollaboration = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(createStoreCollaborationHandler, deps)
 )
 
 export const confirmStoreCollaboration = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(confirmStoreCollaborationHandler, deps)
 )
 
 export const rejectStoreCollaboration = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(rejectStoreCollaborationHandler, deps)
 )
 
 export const listStoreCollaborationProviders = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(listStoreCollaborationProvidersHandler, deps)
 )
 
@@ -142,17 +169,17 @@ export const listStoreCollaborationProviders = onCall(
 // rejette (libère la réservation, dette intacte).
 
 export const declareInternalDebtSettlement = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(declareInternalDebtSettlementHandler, deps)
 )
 
 export const confirmInternalDebtSettlement = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(confirmInternalDebtSettlementHandler, deps)
 )
 
 export const rejectInternalDebtSettlement = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(rejectInternalDebtSettlementHandler, deps)
 )
 
@@ -162,16 +189,16 @@ export const rejectInternalDebtSettlement = onCall(
 // écrit une tranche miroir sous D2.
 
 export const declareInternalDebtCompensation = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(declareInternalDebtCompensationHandler, deps)
 )
 
 export const confirmInternalDebtCompensation = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(confirmInternalDebtCompensationHandler, deps)
 )
 
 export const rejectInternalDebtCompensation = onCall(
-  { region: 'europe-west1', enforceAppCheck: false },
+  CALLABLE,
   wrapCallable(rejectInternalDebtCompensationHandler, deps)
 )
