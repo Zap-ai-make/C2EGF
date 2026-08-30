@@ -3,12 +3,9 @@ import { AlertTriangle, Lock } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { subscribeMyDebts, subscribeMyCredits } from '../../services/collaborationService'
 import { computeDebtPositions } from '../../utils/debtPositions'
-import { formatCurrency } from '../../utils/formatCurrency'
-import { formatFirestoreDate } from '../../utils/formatFirestoreDate'
-import { DEBT_STATUS_LABELS } from '../../constants/collaborationConstants'
 import PageHeader from '../../components/ui/PageHeader'
-import StatusBadge from '../../components/ui/StatusBadge'
 import Fleau from '../../components/debts/Fleau'
+import PartnerDetails from '../../components/debts/PartnerDetails'
 
 /**
  * Dettes internes — la page qui répond à « avec qui suis-je à découvert, de
@@ -37,38 +34,6 @@ import Fleau from '../../components/debts/Fleau'
  */
 
 const CHARGEMENT_INITIAL = { debts: null, credits: null }
-
-/** Le détail d'une dette, sous la poutre dépliée. */
-function LigneDette({ item, sens }) {
-  const estDette = sens === 'debt'
-  return (
-    <li className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line py-2 last:border-b-0">
-      <span className="flex items-baseline gap-2">
-        <span className={`text-xs font-semibold uppercase tracking-wide ${estDette ? 'text-outflow' : 'text-inflow'}`}>
-          {estDette ? 'Dette' : 'Créance'}
-        </span>
-        <span className="text-sm font-medium tabular-nums text-ink">
-          {formatCurrency(item.remainingAmount)}
-        </span>
-        {/* Le montant initial n'apparaît QUE s'il diffère du reste dû : le
-            répéter à l'identique sur chaque ligne noierait l'information dans
-            sa propre redite. */}
-        {item.settledAmount > 0 && (
-          <span className="text-xs text-ink-muted">
-            sur {formatCurrency(item.originalAmount)}
-          </span>
-        )}
-      </span>
-      <span className="flex items-center gap-3">
-        <span className="text-xs text-ink-muted">{formatFirestoreDate(item.createdAt)}</span>
-        <StatusBadge
-          status={item.status === 'settled' ? 'confirmed' : 'pending'}
-          label={DEBT_STATUS_LABELS[item.status] ?? item.status}
-        />
-      </span>
-    </li>
-  )
-}
 
 function StoreInternalDebts() {
   const { currentUser, userProfile } = useAuth()
@@ -126,15 +91,7 @@ function StoreInternalDebts() {
     [],
   )
 
-  const detail = useCallback(
-    (partner) => (
-      <ul aria-label={`Dettes et créances avec ${partner.name}`}>
-        {partner.debts.map((item) => <LigneDette key={item.id} item={item} sens="debt" />)}
-        {partner.credits.map((item) => <LigneDette key={item.id} item={item} sens="credit" />)}
-      </ul>
-    ),
-    [],
-  )
+  const detail = useCallback((partner) => <PartnerDetails partner={partner} />, [])
 
   // ── L'échec définitif : un état plein, pas un bandeau ──────────────────────
   if (erreur?.permanent) {

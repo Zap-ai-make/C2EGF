@@ -21,6 +21,7 @@ import {
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from '../config/firebase.js'
 import { resilientOnSnapshot, isPermanentSnapshotError } from './resilientOnSnapshot.js'
+import { parseAmount } from '../utils/parseAmount.js'
 import {
   COLLABORATIONS_PAGE_SIZE,
   INTERNAL_DEBTS_PAGE_SIZE,
@@ -170,20 +171,6 @@ export function generateIdempotencyKey() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Commandes — collaborations
 // ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * ⚠ `amount` est transmis BRUT au service, qui est la source unique du parse.
- *   Les composants ne convertissent pas : une conversion dupliquée finirait par
- *   diverger entre deux écrans.
- */
-export function parseAmount(raw) {
-  if (typeof raw === 'number') return Number.isSafeInteger(raw) && raw > 0 ? raw : null
-  if (typeof raw !== 'string') return null
-  const trimmed = raw.trim()
-  if (!/^[0-9]+$/.test(trimmed)) return null
-  const value = Number(trimmed)
-  return Number.isSafeInteger(value) && value > 0 ? value : null
-}
 
 // ⚠ Les commandes ci-dessous sont TOUTES `async`, y compris celles dont la seule
 // validation est synchrone : une fonction qui rend une promesse doit REJETER, pas
@@ -377,4 +364,4 @@ export function subscribePendingSettlementsCount({ storeId, onUpdate } = {}) {
   return resilientOnSnapshot(q, { onNext: (snap) => onUpdate?.(snap.size) })
 }
 
-export { doc }
+export { doc, parseAmount }

@@ -34,6 +34,15 @@ vi.mock('../../src/context/AuthContext', () => ({
 vi.mock('../../src/services/collaborationService', () => ({
   subscribeMyDebts: (options) => { flux.debts = options; return () => {} },
   subscribeMyCredits: (options) => { flux.credits = options; return () => {} },
+  // Le détail déplié s'abonne aux tranches de chaque dette. Ce fichier ne teste
+  // pas les actions (TC-124 s'en charge) : il lui suffit qu'elles existent.
+  subscribeDebtSettlements: () => () => {},
+  declareInternalDebtSettlement: vi.fn(),
+  confirmInternalDebtSettlement: vi.fn(),
+  rejectInternalDebtSettlement: vi.fn(),
+  declareInternalDebtCompensation: vi.fn(),
+  confirmInternalDebtCompensation: vi.fn(),
+  rejectInternalDebtCompensation: vi.fn(),
 }))
 
 import StoreInternalDebts from '../../src/pages/store/StoreInternalDebts.jsx'
