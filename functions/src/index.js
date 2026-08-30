@@ -33,6 +33,9 @@ import { createStoreCollaborationHandler } from './collaborations/createStoreCol
 import { confirmStoreCollaborationHandler } from './collaborations/confirmStoreCollaboration.js'
 import { rejectStoreCollaborationHandler } from './collaborations/rejectStoreCollaboration.js'
 import { listStoreCollaborationProvidersHandler } from './collaborations/listStoreCollaborationProviders.js'
+import { declareInternalDebtSettlementHandler } from './collaborations/declareInternalDebtSettlement.js'
+import { confirmInternalDebtSettlementHandler } from './collaborations/confirmInternalDebtSettlement.js'
+import { rejectInternalDebtSettlementHandler } from './collaborations/rejectInternalDebtSettlement.js'
 
 // Garde idempotente : évite "App named '[DEFAULT]' already exists" lors des imports
 // dans les tests d'intégration (TC-036) qui s'exécutent après TC-035 dans le même processus.
@@ -128,5 +131,25 @@ export const rejectStoreCollaboration = onCall(
 export const listStoreCollaborationProviders = onCall(
   { region: 'europe-west1', enforceAppCheck: false },
   wrapCallable(listStoreCollaborationProvidersHandler, deps)
+)
+
+// ── Dettes internes : remboursement par tranches ────────────────────────────
+// La DÉBITRICE déclare (n'impute rien, réserve du montant) ; la CRÉANCIÈRE
+// confirme (impute, et déplace du float si la méthode est du Mobile Money) ou
+// rejette (libère la réservation, dette intacte).
+
+export const declareInternalDebtSettlement = onCall(
+  { region: 'europe-west1', enforceAppCheck: false },
+  wrapCallable(declareInternalDebtSettlementHandler, deps)
+)
+
+export const confirmInternalDebtSettlement = onCall(
+  { region: 'europe-west1', enforceAppCheck: false },
+  wrapCallable(confirmInternalDebtSettlementHandler, deps)
+)
+
+export const rejectInternalDebtSettlement = onCall(
+  { region: 'europe-west1', enforceAppCheck: false },
+  wrapCallable(rejectInternalDebtSettlementHandler, deps)
 )
 
