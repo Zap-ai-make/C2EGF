@@ -7,8 +7,8 @@
  *
  * Trois choses se vérifient ici :
  *   §CI — les cibles, leur nature (lien ou bouton) et leur destination ;
- *   §MI — le miroir : « en route » figure dans les DEUX panneaux, au même
- *         franc, et c'est ce qui rend visible qu'il s'annule dans l'écart ;
+ *   §AT — les deux attentes : chacune du côté où l'argent VA, aucune dans un
+ *         total, et le filet dessiné pareil des deux côtés ;
  *   §NA — leur nom accessible, qui doit porter le montant ET la destination ;
  *   §MO — la modale : ce qu'elle montre, ce qu'elle refuse de taire, et le fait
  *         qu'elle n'ouvre AUCUNE lecture supplémentaire.
@@ -113,16 +113,13 @@ describe('TC-210-NA — chaque cible dit où elle mène', () => {
       .toHaveAccessibleName(/^Dehors : .*voir le détail par boutique$/)
   })
 
-  it('[NA-02] les sept noms sont distincts', () => {
-    // Deux d'entre eux portent le MÊME montant (le miroir) et mènent au MÊME
-    // écran : sans nom distinct, ils s'annonceraient à l'identique.
+  it('[NA-02] les cinq noms sont distincts', () => {
     monter()
     const noms = [
-      'ligne-ravitaillements', 'ligne-retours', 'ligne-en-route',
-      'ligne-stock', 'ligne-liquidite', 'ligne-dehors', 'ligne-en-route-caisses',
+      'ligne-ravitaillements', 'ligne-retours', 'ligne-stock', 'ligne-liquidite', 'ligne-dehors',
     ].map(t => screen.getByTestId(t).getAttribute('aria-label'))
-    expect(noms.filter(Boolean)).toHaveLength(7)
-    expect(new Set(noms).size).toBe(7)
+    expect(noms.filter(Boolean)).toHaveLength(5)
+    expect(new Set(noms).size).toBe(5)
   })
 
   it('[NA-03] Stock et Liquidité mènent au même écran mais ne se disent pas pareil', () => {
@@ -213,68 +210,71 @@ describe('TC-210-MO — le détail par boutique', () => {
 })
 
 // ===========================================================================
-// §MI — le miroir
+// §AT — les deux attentes
 //
-// « En route » est le seul terme des DEUX membres de l'identite : l'argent a
-// quitte le dealer, et le reseau en repond. Il s'annule donc dans l'ecart
-// (tc-203 [ER-02]). A l'ecran, on le montre DEUX FOIS, une fois par panneau —
-// c'est ce qui rend l'annulation lisible plutot que mysterieuse.
+// Arbitrage du dealer, 01/09/2026, sur capture. CHAQUE ATTENTE EST DU COTE OU
+// L'ARGENT VA, pas de celui d'ou il part : un retour de boutique revient vers
+// lui, il est annonce sous « Mon argent dehors » ; un ravitaillement qu'il
+// envoie part vers les caisses, il est annonce sous « Dans les caisses ».
+//
+// ⚠ AUCUNE DES DEUX N'EST UNE LIGNE D'ADDITION, et c'est [AT-02] qui le tient.
+//   A gauche parce qu'un retour en attente n'a pas fait avancer `revenuCumul` :
+//   il est DEJA compris dans « envoye - revenu », l'ajouter le compterait deux
+//   fois. A droite parce qu'un envoi en attente n'est pas dans une caisse.
 // ===========================================================================
 
-describe('TC-210-MI — le meme montant dans les deux panneaux', () => {
-  const montantDe = (testId) => screen.getByTestId(testId).textContent
-
-  it('[MI-01] les deux lignes portent le meme franc', () => {
+describe('TC-210-AT — chaque attente du cote ou l’argent va', () => {
+  it('[AT-01] le retour attendu est a GAUCHE, l’envoi attendu a DROITE', () => {
     monter()
-    const gauche = montantDe('ligne-en-route')
-    const droite = montantDe('ligne-en-route-caisses')
-    expect(gauche).toMatch(/300[\s\u202f\u00a0]000/)
-    expect(droite).toMatch(/300[\s\u202f\u00a0]000/)
+    const gauche = screen.getByTestId('montant-dehors').closest('div')
+    const droite = screen.getByTestId('montant-caisses').closest('div')
+
+    expect(gauche).toContainElement(screen.getByTestId('retours-en-attente'))
+    expect(droite).toContainElement(screen.getByTestId('envois-en-attente'))
   })
 
-  it('[MI-02] chacune fait EXACTEMENT le total de son propre panneau', () => {
-    // La premiere chose qu'un lecteur verifie du regard. Un terme qui ne tombe
-    // pas juste ruine la confiance dans les quatre autres.
+  it('[AT-02] REGLE — ni l’une ni l’autre n’entre dans son total', () => {
     const p = position()
-    expect(p.envoye - p.revenu + p.enRoute).toBe(p.dehors)
-    expect(p.sommeStock + p.sommeLiquidite + p.sommeDehors + p.enRoute).toBe(p.sommeCaisses)
+    expect(p.envoye - p.revenu).toBe(p.dehors)
+    expect(p.sommeStock + p.sommeLiquidite).toBe(p.sommeCaisses)
+    // Les deux montants existent pourtant, et l'ecran les annonce.
+    expect(p.enTransit).toBe(400_000)
+    expect(p.enRoute).toBe(300_000)
   })
 
-  it('[MI-03] les deux menent a la file des ravitaillements', () => {
+  it('[AT-03] les deux portent la meme phrase, et se distinguent a la voix', () => {
+    // Le dealer les veut identiques a l'oeil : leur PANNEAU dit qui attend.
+    // Un lecteur d'ecran, lui, entendrait deux fois la meme chose.
     monter()
-    for (const t of ['ligne-en-route', 'ligne-en-route-caisses']) {
-      expect(screen.getByTestId(t).tagName).toBe('A')
-      expect(screen.getByTestId(t).getAttribute('href')).toBe('/dealer/requests')
+    for (const t of ['retours-en-attente', 'envois-en-attente']) {
+      expect(screen.getByTestId(t).textContent).toContain('en attente de confirmation')
     }
+    expect(screen.getByTestId('retours-en-attente').textContent)
+      .not.toBe(screen.getByTestId('envois-en-attente').textContent)
   })
 
-  it('[MI-04] meme montant, meme destination, noms accessibles DIFFERENTS', () => {
-    monter()
-    expect(screen.getByTestId('ligne-en-route').getAttribute('aria-label'))
-      .not.toBe(screen.getByTestId('ligne-en-route-caisses').getAttribute('aria-label'))
-  })
-
-  it('[MI-05] la note en pied de la colonne de gauche a disparu', () => {
-    // Son montant est monte dans l'addition. La laisser afficherait deux fois
-    // le meme chiffre dans le meme panneau.
-    monter()
-    expect(screen.queryByTestId('envois-en-attente')).toBeNull()
-    // Celle de DROITE reste : `enTransit` n'est pas dans le total au-dessus.
-    expect(screen.getByTestId('retours-en-attente')).toBeInTheDocument()
-  })
-
-  it('[MI-06] le decompte bascule en entier, aux trois cas', () => {
+  it('[AT-04] le decompte bascule en entier, des deux cotes', () => {
     // Quatrieme occurrence dans ce depot du « s » colle au bout d'une locution.
-    const cas = [
-      [0, /voir la file des ravitaillements$/],
-      [1, /voir le ravitaillement envoyé$/],
-      [2, /voir les 2 ravitaillements envoyés$/],
-    ]
-    for (const [nombre, attendu] of cas) {
-      const { unmount } = monter({ envoisEnAttente: { nombre, montant: 300_000 } })
-      expect(screen.getByTestId('ligne-en-route').getAttribute('aria-label').normalize('NFD'))
-        .toMatch(attendu)
-      unmount()
-    }
+    const un = monter({ retoursEnAttente: 1, envoisEnAttente: { nombre: 1, montant: 300_000 } })
+    expect(screen.getByTestId('retours-en-attente').textContent).toContain('1 retour reçu')
+    expect(screen.getByTestId('envois-en-attente').textContent).toContain('1 ravitaillement envoyé')
+    un.unmount()
+
+    monter({ retoursEnAttente: 3, envoisEnAttente: { nombre: 2, montant: 300_000 } })
+    expect(screen.getByTestId('retours-en-attente').textContent).toContain('3 retours reçus')
+    expect(screen.getByTestId('envois-en-attente').textContent).toContain('2 ravitaillements envoyés')
+  })
+
+  it('[AT-05] « Dehors » est SOUS le filet, hors du total, et ouvre toujours le detail', () => {
+    // Il a quitte l'addition le 01/09/2026 : cet argent est chez les clients,
+    // il n'est dans aucune caisse. Il a change de place, pas de role.
+    monter()
+    const p = position()
+    expect(p.sommeCaisses).toBe(p.sommeStock + p.sommeLiquidite)
+    expect(p.sommeDehors).toBe(600_000)
+
+    expect(screen.getByTestId('ligne-dehors').tagName).toBe('BUTTON')
+    fireEvent.click(screen.getByTestId('ligne-dehors'))
+    expect(screen.getByTestId('dialogue-dehors')).toBeInTheDocument()
   })
 })

@@ -204,12 +204,17 @@ describe('TC-203-C — les trois refus de se prononcer', () => {
 describe('TC-203-D — le dehors des boutiques', () => {
   const flux = { envoyeCumul: 10_000_000, revenuCumul: 0, amorce: true }
 
-  it('[DH-01] les trois lignes font EXACTEMENT le total de la colonne', () => {
+  it('[DH-01] le total des caisses NE CONTIENT PAS le dehors, et c’est le sujet', () => {
+    // Changé le 01/09/2026 sur une remarque du dealer qui est simplement juste :
+    // cet argent est chez les clients, il n'est dans aucune caisse. Le total ne
+    // prétend plus le contenir — il vaut ses deux lignes, exactement.
     const p = rapprocherPosition({
       flux, sommeStock: 3_000_000, sommeLiquidite: 2_000_000, sommeDehors: 500_000,
     })
-    expect(p.sommeStock + p.sommeLiquidite + p.sommeDehors).toBe(p.sommeCaisses)
-    expect(p.sommeCaisses).toBe(5_500_000)
+    expect(p.sommeStock + p.sommeLiquidite).toBe(p.sommeCaisses)
+    expect(p.sommeCaisses).toBe(5_000_000)
+    // Il reste lu, affiché sous le filet, et il reste dans le CALCUL de l'écart.
+    expect(p.sommeDehors).toBe(500_000)
   })
 
   it('[DH-02] il s’AJOUTE aux caisses, il ne se retranche pas', () => {
@@ -239,13 +244,15 @@ describe('TC-203-D — le dehors des boutiques', () => {
     expect(sans.etat).toBe(ETATS.ANOMALIE)
   })
 
-  it('[DH-04] un dehors NÉGATIF abaisse les caisses, et c’est correct', () => {
+  it('[DH-04] un dehors NÉGATIF abaisse l’ÉCART, et c’est correct', () => {
     // Plus de retraits en attente que de dépôts : les boutiques ont encaissé du
-    // stock sans encore payer, la somme des caisses est trop HAUTE.
+    // stock sans encore payer. Depuis le 01/09/2026 il n'abaisse plus le TOTAL
+    // affiché — il n'y est plus — mais il abaisse toujours l'écart, qui est ce
+    // qu'il corrige réellement. Le terme a changé de place, pas d'effet.
     const p = rapprocherPosition({
       flux, sommeStock: 11_000_000, sommeLiquidite: 0, sommeDehors: -1_000_000,
     })
-    expect(p.sommeCaisses).toBe(10_000_000)
+    expect(p.sommeCaisses).toBe(11_000_000)
     expect(p.ecart).toBe(0)
   })
 
@@ -279,14 +286,18 @@ describe('TC-203-E — le quatrième refus', () => {
     expect(p.ecart).toBeNull()
   })
 
-  it('[RA-12] seul le total devient inconnu : stock et liquidité restent justes', () => {
+  it('[RA-12] seul le dehors devient inconnu : les caisses restent justes', () => {
     const p = rapprocherPosition({
       flux, sommeStock: 3_000_000, sommeLiquidite: 2_000_000, dehorsLu: false,
     })
     expect(p.sommeStock).toBe(3_000_000)
     expect(p.sommeLiquidite).toBe(2_000_000)
     expect(p.sommeDehors).toBeNull()
-    expect(p.sommeCaisses).toBeNull()
+    // ⚠ CHANGÉ le 01/09/2026, et c'est un gain net. Tant que ce total valait
+    //   stock + liquidité + dehors, un « dehors » illisible le rendait
+    //   incalculable et l'écran affichait « — » sur un chiffre qu'il
+    //   connaissait. Il ne vaut plus que ses deux lignes : il reste juste.
+    expect(p.sommeCaisses).toBe(5_000_000)
     // La colonne de gauche vient des compteurs, pas du réseau : elle ne bouge pas.
     expect(p.dehors).toBe(10_000_000)
   })
@@ -336,12 +347,17 @@ describe('TC-203-F — les ravitaillements envoyes, pas encore confirmes', () =>
   const flux = { envoyeCumul: 10_000_000, revenuCumul: 2_000_000, amorce: true }
   const jeu = { flux, sommeStock: 5_000_000, sommeLiquidite: 2_000_000, sommeDehors: 500_000 }
 
-  it('[ER-01] il monte les DEUX grands nombres, du meme montant', () => {
+  it('[ER-01] il ne monte AUCUN des deux totaux : il vit sous le filet', () => {
+    // Il les a montes pendant une demi-journee, le 01/09/2026, avant que le
+    // dealer ne corrige la lecture : cet argent n'est ni dans une caisse, ni
+    // revenu dans ses mains. Aucun des deux grands nombres ne le contient.
     const sans = rapprocherPosition(jeu)
     const avec = rapprocherPosition({ ...jeu, enRoute: 300_000 })
 
-    expect(avec.dehors - sans.dehors).toBe(300_000)
-    expect(avec.sommeCaisses - sans.sommeCaisses).toBe(300_000)
+    expect(avec.dehors).toBe(sans.dehors)
+    expect(avec.sommeCaisses).toBe(sans.sommeCaisses)
+    // Mais il est LU et rendu : l'ecran doit pouvoir l'annoncer sous le filet.
+    expect(avec.enRoute).toBe(300_000)
   })
 
   it('[ER-02] REGLE — l’ecart ne bouge pas d’un franc, quelle que soit sa valeur', () => {
@@ -355,21 +371,31 @@ describe('TC-203-F — les ravitaillements envoyes, pas encore confirmes', () =>
     }
   })
 
-  it('[ER-03] les trois lignes de gauche font EXACTEMENT le total de gauche', () => {
+  it('[ER-03] les deux lignes de gauche font EXACTEMENT le total de gauche', () => {
     const p = rapprocherPosition({ ...jeu, enRoute: 300_000 })
-    expect(p.envoye - p.revenu + p.enRoute).toBe(p.dehors)
+    expect(p.envoye - p.revenu).toBe(p.dehors)
   })
 
-  it('[ER-04] les quatre lignes de droite font EXACTEMENT le total de droite', () => {
+  it('[ER-04] les deux lignes de droite font EXACTEMENT le total de droite', () => {
     const p = rapprocherPosition({ ...jeu, enRoute: 300_000 })
-    expect(p.sommeStock + p.sommeLiquidite + p.sommeDehors + p.enRoute).toBe(p.sommeCaisses)
+    expect(p.sommeStock + p.sommeLiquidite).toBe(p.sommeCaisses)
+  })
+
+  it('[ER-11] REGLE — l’ecart n’est PAS la difference des deux totaux affiches', () => {
+    // Le prix assume de l'arbitrage du 01/09/2026, ecrit ici pour que personne
+    // ne le « corrige » par erreur. Trois termes reconciliateurs vivent hors
+    // des totaux : qui recalculerait `sommeCaisses - dehors` obtiendrait un
+    // nombre faux, et le croirait juste parce qu'il additionne ce qu'il voit.
+    const p = rapprocherPosition({ ...jeu, enRoute: 300_000, enTransit: 100_000 })
+    expect(p.sommeCaisses - p.dehors).not.toBe(p.ecart)
+    expect(p.ecart).toBe(p.sommeCaisses + p.sommeDehors + p.enTransit - p.dehors)
   })
 
   it('[ER-05] absent, il vaut zero et rien de ce qui precede ne change', () => {
     const p = rapprocherPosition(jeu)
     expect(p.enRoute).toBe(0)
     expect(p.dehors).toBe(8_000_000)
-    expect(p.sommeCaisses).toBe(7_500_000)
+    expect(p.sommeCaisses).toBe(7_000_000)
   })
 
   it('[ER-06] une valeur illisible vaut zero, jamais NaN', () => {
@@ -411,14 +437,15 @@ describe('TC-203-F — les ravitaillements envoyes, pas encore confirmes', () =>
     expect(p.enRoute).toBe(300_000)
     expect(p.sommeCaisses).toBeNull()
     // Et la colonne de gauche, elle, reste entierement juste.
-    expect(p.dehors).toBe(8_300_000)
+    expect(p.dehors).toBe(8_000_000)
   })
 
-  it('[ER-10] non terminees manquantes : meme partage', () => {
+  it('[ER-10] non terminees manquantes : les deux totaux restent justes', () => {
     const p = rapprocherPosition({ ...jeu, enRoute: 300_000, dehorsLu: false })
     expect(p.raison).toBe(RAISONS.DEHORS_INDISPONIBLE)
     expect(p.enRoute).toBe(300_000)
-    expect(p.dehors).toBe(8_300_000)
-    expect(p.sommeCaisses).toBeNull()
+    expect(p.dehors).toBe(8_000_000)
+    expect(p.sommeCaisses).toBe(7_000_000)
+    expect(p.sommeDehors).toBeNull()
   })
 })

@@ -274,60 +274,50 @@ describe('TC-200-A — DealerDashboard : l’accueil, les caisses et la position
     )
     renderDealer(<DealerDashboard />)
 
-    // ⚠ CES DEUX NOMBRES ONT CHANGÉ LE 01/09/2026, et le changement est le
-    //   sujet. Ils valaient 400 000 000 et 441 000 000 : le ravitaillement
-    //   envoyé n'entrait dans aucun des deux. Il y entre maintenant dans LES
-    //   DEUX — l'argent a quitté le dealer, et le réseau en répond.
-    // ⚠ POINT D'ATTENTE EXPLICITE, ET IL EST NÉCESSAIRE DEPUIS LE 01/09/2026.
-    //   Avant, « 400 000 000 » était atteint dès le PREMIER rendu : le
-    //   ravitaillement en attente n'entrait pas dans le total, et le `waitFor`
-    //   tombait juste sans rien attendre. Maintenant la valeur exige que la
-    //   seconde souscription soit arrivée. Sans cette attente-ci, le `waitFor`
-    //   sonde un écran qui n'a pas fini de se peindre.
+    // ⚠ CHAQUE ATTENTE EST DU CÔTÉ OÙ L'ARGENT VA, arbitrage du dealer du
+    //   01/09/2026. Aucune des deux n'est une ligne d'addition, et pour deux
+    //   raisons différentes — voir les deux assertions de total plus bas.
     await screen.findByTestId('caisses-liste')
-    await waitFor(() => expect(txt(screen.getByTestId('montant-dehors'))).toBe('405 000 000 FCFA'))
-    expect(txt(screen.getByTestId('montant-caisses'))).toBe('446 000 000 FCFA')
 
-    // À droite : ce que les boutiques ont renvoyé et qui attend MA confirmation.
-    // Il reste une NOTE et non une ligne : cet argent a quitté la caisse de la
-    // boutique, il n'est donc pas dans le total au-dessus.
+    // À GAUCHE, sous « Mon argent dehors » : ce que les boutiques me renvoient
+    // et qui attend MA confirmation. Cet argent revient vers moi.
     expect(txt(screen.getByTestId('retours-en-attente'))).toContain('2 150 000 FCFA en attente de confirmation')
     expect(txt(screen.getByTestId('retours-en-attente'))).toContain('3 retours')
 
-    // À gauche : ce que J'ai envoyé et qui attend la LEUR. C'était une note en
-    // pied — sous un total à 0 FCFA qu'elle contredisait. C'est une LIGNE.
-    expect(txt(screen.getByTestId('ligne-en-route'))).toContain('En attente de confirmation')
-    expect(txt(screen.getByTestId('ligne-en-route'))).toContain('5 000 000 FCFA')
-    expect(screen.getByTestId('ligne-en-route'))
-      .toHaveAccessibleName(/voir les 2 ravitaillements envoyés$/)
+    // À DROITE, sous « Dans les caisses » : ce que J'ai envoyé et qui attend la
+    // LEUR. Cet argent part vers les caisses.
+    expect(txt(screen.getByTestId('envois-en-attente'))).toContain('5 000 000 FCFA en attente de confirmation')
+    expect(txt(screen.getByTestId('envois-en-attente'))).toContain('2 ravitaillements')
 
-    // Et sa contrepartie, à droite, au franc près. Les voir toutes les deux est
-    // ce qui rend lisible le fait qu'elles s'annulent dans l'écart.
-    expect(txt(screen.getByTestId('ligne-en-route-caisses'))).toContain('5 000 000 FCFA')
-
-    // La note en pied de la colonne de GAUCHE n'existe plus : son montant est
-    // monté dans l'addition. La laisser aurait affiché deux fois le même
-    // chiffre dans le même panneau.
-    expect(screen.queryByTestId('envois-en-attente')).toBeNull()
+    // ⚠ NI L'UNE NI L'AUTRE N'EST DANS SON TOTAL. À gauche, un retour en
+    //   attente n'a pas fait avancer `revenuCumul` : il est DÉJÀ compris dans
+    //   « envoyé − revenu », l'ajouter le compterait deux fois. À droite, un
+    //   envoi en attente n'est simplement pas dans une caisse.
+    expect(txt(screen.getByTestId('montant-dehors'))).toBe('400 000 000 FCFA')
+    expect(txt(screen.getByTestId('montant-caisses'))).toBe('441 000 000 FCFA')
 
     // Le jargon est parti, et ne revient par aucun chemin.
     expect(screen.queryByTestId('en-transit')).toBeNull()
     expect(txt(screen.getByTestId('dealer-home'))).not.toMatch(/transit/i)
   })
 
-  it('« Dehors » est une TROISIÈME ligne des caisses, et il entre dans le total', async () => {
-    // Une transaction client non terminée n'a fait passer qu'une de ses deux
-    // jambes : la somme des caisses était fausse sans ce terme. Les trois lignes
-    // doivent faire exactement le grand nombre au-dessus d'elles.
+  it('« Dehors » est affiché SOUS le filet, et n’entre PAS dans le total', async () => {
+    // ⚠ RETOURNÉ le 01/09/2026, sur une remarque du dealer qui est simplement
+    //   juste : cet argent est chez les clients, il n'est dans aucune caisse.
+    //   Le total ne prétend plus le contenir. Il reste affiché, reste la porte
+    //   du détail par boutique, et reste dans le CALCUL de l'écart — il a
+    //   changé de place, pas de rôle.
     mocks.listArgentDehors.mockResolvedValue({
       parBoutique: [{ storeId: 'store-1', name: 'BOUTIQUE 1', depots: 9000000, retraits: 0, dehors: 9000000 }],
       depots: 9000000, retraits: 0, dehors: 9000000, illisibles: 0, horsReseau: 0,
     })
     renderDealer(<DealerDashboard />)
 
-    // 441 000 000 (stock + liquidité) + 9 000 000 (dehors)
-    await waitFor(() => expect(txt(screen.getByTestId('montant-caisses'))).toBe('450 000 000 FCFA'))
-    expect(txt(screen.getByTestId('dealer-home'))).toContain('Dehors')
+    // 441 000 000 = stock + liquidité. Les 9 000 000 n'y sont PAS.
+    await waitFor(() => expect(txt(screen.getByTestId('montant-caisses'))).toBe('441 000 000 FCFA'))
+    expect(txt(screen.getByTestId('ligne-dehors'))).toContain('9 000 000 FCFA')
+    // Et il ouvre toujours le détail par boutique.
+    expect(screen.getByTestId('ligne-dehors').tagName).toBe('BUTTON')
   })
 
   it('refuse de rapprocher quand les non terminées n’ont pas pu être lues', async () => {
@@ -338,9 +328,14 @@ describe('TC-200-A — DealerDashboard : l’accueil, les caisses et la position
     renderDealer(<DealerDashboard />)
 
     await waitFor(() => expect(txt(screen.getByTestId('rapprochement'))).toMatch(/non terminées/i))
-    // Les caisses, elles, restent justes : seul le TOTAL ne peut pas se former.
-    expect(txt(screen.getByTestId('montant-caisses'))).toBe('—')
+    // ⚠ LE TOTAL DES CAISSES RESTE AFFICHÉ depuis le 01/09/2026, et c'est un
+    //   gain de l'arbitrage. Tant qu'il valait stock + liquidité + dehors, un
+    //   « dehors » illisible le rendait incalculable : l'écran affichait « — »
+    //   sur un chiffre qu'il connaissait. Il ne vaut plus que ses deux lignes.
+    expect(txt(screen.getByTestId('montant-caisses'))).toBe('441 000 000 FCFA')
     expect(txt(screen.getByTestId('montant-dehors'))).toBe('400 000 000 FCFA')
+    // Seul l'écart se tait, et il dit pourquoi.
+    expect(txt(screen.getByTestId('rapprochement'))).toContain('Rapprochement indisponible')
   })
 
   it('CORRIGÉ (figé en S1) — le compte des boutiques est exact, et non « 20+ »', async () => {

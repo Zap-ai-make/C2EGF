@@ -47,17 +47,23 @@
  *   FAUTIVE. Les deux énoncés sont vrais séparément : cet argent a quitté les
  *   mains du dealer (membre de droite), et le réseau en répond (membre de
  *   gauche). Conséquence arithmétique : il S'ANNULE dans l'écart, qui ne bouge
- *   pas d'un franc — c'est tc-203 [ER-02] qui le tient. Ce qui change, ce sont
- *   les deux TOTAUX affichés, et c'est exactement ce qu'on cherchait : un
- *   ravitaillement envoyé ne peut plus laisser « Mon argent dehors » à zéro
- *   pendant que la ligne du dessous en annonce trois cent mille.
+ *   pas d'un franc — c'est tc-203 [ER-02] qui le tient. Il n'est donc pas écrit
+ *   dans le calcul : l'y mettre des deux côtés serait du bruit.
  *
  * ⚠ COROLLAIRE — et c'est lui qui explique qu'il n'y ait PAS de cinquième
  *   refus. Si ce terme manque ou se trompe, l'écart reste JUSTE : il s'annule
  *   des deux côtés. C'est ce qui le sépare de `sommeDehors`, qui n'entre que
- *   d'un seul côté et dont l'absence fait donc refuser le rapprochement. Le
- *   coût d'un « en route » manquant est deux totaux sous-estimés, pas un écart
- *   faux — on n'achète donc pas ce risque au prix d'un écran qui se tait.
+ *   d'un seul côté et dont l'absence fait donc refuser le rapprochement.
+ *
+ * ⚠ L'ÉCRAN N'AFFICHE PAS CETTE IDENTITÉ, ET IL FAUT LE SAVOIR EN LISANT LA
+ *   SUITE. Les deux grands nombres de l'accueil ne valent que leurs propres
+ *   lignes : `envoyé − revenu` à gauche, `stock + liquidité` à droite. Les
+ *   trois termes réconciliateurs sont montrés SOUS un filet, hors des totaux,
+ *   parce qu'aucun d'eux n'est là où son total le rangerait — ni dans une
+ *   caisse, ni dans les mains du dealer. Arbitrage du client du 01/09/2026 :
+ *   deux totaux qui disent vrai valent mieux que deux totaux qui se
+ *   rapprochent. Le prix est réel et il est payé sciemment — l'écart cesse
+ *   d'être dérivable à l'œil depuis les deux nombres affichés.
  *
  * ⚠ CE QUE CE RAPPROCHEMENT NE PROUVE PAS
  * ───────────────────────────────────────
@@ -144,17 +150,28 @@ export function rapprocherPosition({
   const envoye = nombre(flux?.envoyeCumul)
   const revenu = nombre(flux?.revenuCumul)
   const route = nombre(enRoute)
-  // ⚠ `route` est le SEUL terme des deux membres. Il monte ici le grand nombre
-  //   de gauche, et douze lignes plus bas celui de droite. Le retirer d'un seul
-  //   des deux endroits ferait apparaître un écart de sa valeur exacte, sur un
-  //   argent qui n'a pas bougé.
-  const dehors = envoye - revenu + route
   const dehorsBoutiques = nombre(sommeDehors)
-  // ⚠ Les lignes affichées font EXACTEMENT ce total, et c'est la première chose
-  //   qu'un lecteur vérifie du regard. Aucun terme ne s'y glisse qui ne soit pas
-  //   au-dessus, aucun n'en sort.
-  const sommeCaisses =
-    nombre(sommeStock) + nombre(sommeLiquidite) + dehorsBoutiques + route
+
+  // ⚠ CES DEUX TOTAUX SONT CE QUE L'ÉCRAN AFFICHE, PAS LES DEUX MEMBRES DE
+  //   L'IDENTITÉ. C'est la chose à comprendre avant de toucher à ce fichier.
+  //
+  //   Chacun ne contient QUE ce que ses lignes montrent, et rien d'autre :
+  //     `dehors`       = les deux lignes de gauche, exactement
+  //     `sommeCaisses` = les deux lignes de droite, exactement
+  //
+  //   Les trois autres termes de l'identité — `dehorsBoutiques`, `route`,
+  //   `transit` — sont affichés HORS de ces totaux, sous un filet, parce
+  //   qu'aucun n'est là où son total le mettrait :
+  //     • `dehorsBoutiques` est chez les clients, pas dans une caisse ;
+  //     • `route` a quitté le dealer et n'est pas arrivé chez la boutique ;
+  //     • `transit` a quitté la caisse et n'est pas arrivé chez le dealer.
+  //
+  //   Ils restent dans le CALCUL de l'écart, quinze lignes plus bas. Le prix
+  //   assumé : l'écart n'est plus dérivable des deux grands nombres à l'œil.
+  //   C'est un arbitrage du client, pris le 01/09/2026 sur capture — il a
+  //   prefere deux totaux qui disent vrai a deux totaux qui se rapprochent.
+  const dehors = envoye - revenu
+  const sommeCaisses = nombre(sommeStock) + nombre(sommeLiquidite)
   const transit = nombre(enTransit)
 
   const base = {
@@ -207,15 +224,17 @@ export function rapprocherPosition({
     return { ...base, etat: ETATS.INDISPONIBLE, raison: RAISONS.COMPTEURS_NEUFS, ecart: null }
   }
 
-  // Les caisses sont là, mais pas les non terminées. Seule `sommeDehors` passe
-  // à `null` : stock et liquidité restent justes et s'affichent, c'est le TOTAL
-  // qui ne peut pas se former — comme la colonne de gauche reste juste quand
-  // c'est le réseau qui manque.
+  // Les caisses sont là, mais pas les non terminées.
+  //
+  // ⚠ `sommeCaisses` NE PASSE PLUS À `null` ICI, et c'est un gain de
+  //   l'arbitrage du 01/09/2026. Tant que ce total valait
+  //   stock + liquidité + dehors, un « dehors » illisible le rendait
+  //   incalculable. Il ne vaut plus que stock + liquidité : il reste juste, et
+  //   s'affiche. Seuls `sommeDehors` et l'écart se taisent.
   if (!dehorsLu) {
     return {
       ...base,
       sommeDehors: null,
-      sommeCaisses: null,
       etat: ETATS.INDISPONIBLE,
       raison: RAISONS.DEHORS_INDISPONIBLE,
       ecart: null,
@@ -228,7 +247,12 @@ export function rapprocherPosition({
     return { ...base, etat: ETATS.INDISPONIBLE, raison: RAISONS.CAISSES_INCOMPLETES, ecart: null }
   }
 
-  const ecart = sommeCaisses + transit - dehors
+  // ⚠ TOUT CE QUE LES TOTAUX N'ONT PAS PRIS EST REPRIS ICI, et c'est ce qui
+  //   garde l'écart juste malgré des totaux plus étroits. `route` figure des
+  //   DEUX côtés de la soustraction — l'argent a quitté le dealer, et le réseau
+  //   en répond — donc il s'annule ; il n'est pas écrit, ce serait du bruit.
+  //   Vérifié : cet écart vaut au franc près celui d'avant le 01/09/2026.
+  const ecart = sommeCaisses + dehorsBoutiques + transit - dehors
   const etat = ecart === 0
     ? ETATS.CONCORDANT
     : ecart > 0 ? ETATS.ANTERIEUR : ETATS.ANOMALIE
