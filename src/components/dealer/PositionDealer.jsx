@@ -122,7 +122,7 @@ function Terme({ operation, libelle, montant, fort = false, vers, surClic, indic
  */
 function Colonne({ titre, montant, children, pied, testId }) {
   return (
-    <div className={`min-w-0 ${PANNEAU}`}>
+    <div className={`flex min-w-0 flex-col ${PANNEAU}`}>
       <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">{titre}</h3>
       <p className="mt-1 text-2xl font-bold tabular-nums text-ink sm:text-3xl" data-testid={testId}>
         {formatCurrency(montant)}
@@ -133,8 +133,22 @@ function Colonne({ titre, montant, children, pied, testId }) {
           une, un seul panneau avait donc un filet, et les deux comptes qu'on
           demande de comparer n'étaient pas découpés pareil. Ici, ce qui est
           AU-DESSUS fait le total ; ce qui est en dessous ne le fait pas. La
-          règle est la même des deux côtés, donc le trait aussi. */}
-      {pied && <div className="mt-3 space-y-2 border-t border-line pt-2">{pied}</div>}
+          règle est la même des deux côtés, donc le trait aussi.
+
+          ⚠ `mt-auto` COLLE CE BLOC AU BAS DU PANNEAU, et ce n'est pas de la
+            mise en page décorative. Les deux panneaux portent chacun leur
+            « en attente de confirmation », et le dealer les lit EN VIS-À-VIS :
+            il compare ce qu'il attend des boutiques à ce qu'elles attendent de
+            lui. Empilées depuis le haut, elles se décalaient d'une ligne parce
+            que le panneau de droite porte « Dehors » en plus — deux phrases
+            qu'on doit comparer, servies à deux hauteurs. La grille donne aux
+            panneaux la même hauteur ; `mt-auto` fait le reste, sans qu'aucune
+            ligne vide n'ait à être inventée pour combler l'écart. */}
+      {pied && (
+        <div className="mt-auto space-y-2 border-t border-line pt-2" data-testid={`hors-total-${testId}`}>
+          {pied}
+        </div>
+      )}
     </div>
   )
 }
@@ -176,8 +190,16 @@ function EnAttente({ montant, nombre, sens, singulier, pluriel, testId }) {
       <span className="font-semibold tabular-nums text-ink">{formatCurrency(montant)}</span>{' '}
       <span>
         en attente de confirmation
-        <span className="sr-only"> {sens}</span>
-        {nombre > 0 && ` — ${nombre} ${nombre > 1 ? pluriel : singulier}.`}
+        {/* ⚠ LE DÉCOMPTE N EST PLUS VISIBLE, et c est la demande d origine :
+            « juste le montant suivi de en attente de confirmation ». Gardé à
+            l œil, il faisait passer la note de droite sur DEUX lignes quand
+            celle de gauche en tenait une — et les deux se lisent en vis-à-vis.
+            Il reste ici en entier, pour la voix, où il ne coûte pas une ligne ;
+            le panneau mène de toute façon à la file qui le détaille. */}
+        <span className="sr-only">
+          {' '}{sens}
+          {nombre > 0 && ` — ${nombre} ${nombre > 1 ? pluriel : singulier}`}
+        </span>
       </span>
     </p>
   )

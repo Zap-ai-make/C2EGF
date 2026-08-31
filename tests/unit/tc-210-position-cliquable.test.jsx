@@ -277,4 +277,38 @@ describe('TC-210-AT — chaque attente du cote ou l’argent va', () => {
     fireEvent.click(screen.getByTestId('ligne-dehors'))
     expect(screen.getByTestId('dialogue-dehors')).toBeInTheDocument()
   })
+
+  it('[AT-06] les deux notes sont le DERNIER element de leur zone hors-total', () => {
+    // ⚠ C'EST LE CONTRAT QUI LES ALIGNE, et jsdom ne mesure aucune mise en
+    //   page — on ne peut donc pas verifier deux ordonnees egales ici. Ce qui
+    //   se verifie, c'est la structure qui les rend egales : la grille donne
+    //   aux deux panneaux la meme hauteur, `mt-auto` colle les deux zones au
+    //   bas, et si la note est la DERNIERE de chaque zone, les deux tombent
+    //   sur la meme ligne. Deplacer « Dehors » apres la note casserait
+    //   l'alignement sans casser aucun autre test — d'ou celui-ci.
+    monter()
+    const zones = {
+      'hors-total-montant-dehors': 'retours-en-attente',
+      'hors-total-montant-caisses': 'envois-en-attente',
+    }
+    for (const [zone, note] of Object.entries(zones)) {
+      const bloc = screen.getByTestId(zone)
+      expect(bloc.lastElementChild).toBe(screen.getByTestId(note))
+    }
+  })
+
+  it('[AT-07] le decompte n’est plus a l’oeil, mais reste a la voix', () => {
+    // La demande d'origine, au mot pres : « juste le montant suivi de en
+    // attente de confirmation ». Garde a l'oeil, le decompte faisait passer la
+    // note de droite sur deux lignes quand celle de gauche en tenait une.
+    monter({ envoisEnAttente: { nombre: 2, montant: 300_000 } })
+    const note = screen.getByTestId('envois-en-attente')
+
+    // Present dans l'arbre, donc annonce.
+    expect(note.textContent).toContain('2 ravitaillements envoyés')
+    // Mais dans un sous-arbre `sr-only`, donc invisible.
+    const cache = note.querySelector('.sr-only')
+    expect(cache).not.toBeNull()
+    expect(cache.textContent).toContain('2 ravitaillements envoyés')
+  })
 })

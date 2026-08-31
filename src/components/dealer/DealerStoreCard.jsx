@@ -28,9 +28,16 @@ import { CARD, BTN_SECOND } from '../../constants/workspaceTheme'
  *   `SkeletonList.jsx` documente le même piège pour l'animation de pulsation.
  *
  * Ce qui distinguait stock et liquidité était donc la couleur seule. Ce n'était
- * de toute façon pas admissible (DESIGN.md §5) : les deux intitulés — « Stock
- * Orange », « Liquidité Orange » — sont écrits en toutes lettres et portent
- * seuls la distinction désormais.
+ * de toute façon pas admissible (DESIGN.md §5) : les deux intitulés sont écrits
+ * en toutes lettres et portent seuls la distinction désormais.
+ *
+ * ⚠ « LIQUIDITÉ ORANGE » N'EXISTE PAS, et l'intitulé le disait quand même
+ *   jusqu'au 01/09/2026. Le stock EST de l'Orange — des unités de monnaie
+ *   électronique chez un opérateur nommé. La liquidité est de l'espèce : des
+ *   billets dans un tiroir, qui n'appartiennent à aucun réseau. Accoler
+ *   l'opérateur aux deux faisait symétrique et disait faux, et sur un profil
+ *   mono-réseau le qualificatif ne distinguait de toute façon rien. « Stock
+ *   Orange » le garde parce qu'il est vrai ; « Liquidité » le perd.
  *
  * DEUX BOUTONS DE MÊME POIDS, ET C'EST VOULU
  * ──────────────────────────────────────────
@@ -86,7 +93,7 @@ function DealerStoreCard({ store, balances, balanceError, isLoading }) {
           )}
         </div>
         <div className="flex-1 rounded-lg bg-canvas p-3">
-          <p className="mb-1 text-xs font-medium text-ink-muted">Liquidité Orange</p>
+          <p className="mb-1 text-xs font-medium text-ink-muted">Liquidité</p>
           {isLoading ? (
             <div className="h-5 w-24 rounded bg-gray-200 motion-safe:animate-pulse" aria-busy="true" />
           ) : (
