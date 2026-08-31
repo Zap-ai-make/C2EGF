@@ -1,12 +1,14 @@
 /**
- * TC-210 — Les cinq chiffres de la position mènent quelque part.
+ * TC-210 — Les chiffres de la position mènent quelque part.
  *
  * L'écran énonçait cinq nombres et n'ouvrait sur rien : « 341 200 000 FCFA de
  * ravitaillements confirmés » pose aussitôt la question « lesquels ? », et il
  * fallait retrouver la file par le menu.
  *
  * Trois choses se vérifient ici :
- *   §CI — les cinq cibles, leur nature (lien ou bouton) et leur destination ;
+ *   §CI — les cibles, leur nature (lien ou bouton) et leur destination ;
+ *   §MI — le miroir : « en route » figure dans les DEUX panneaux, au même
+ *         franc, et c'est ce qui rend visible qu'il s'annule dans l'écart ;
  *   §NA — leur nom accessible, qui doit porter le montant ET la destination ;
  *   §MO — la modale : ce qu'elle montre, ce qu'elle refuse de taire, et le fait
  *         qu'elle n'ouvre AUCUNE lecture supplémentaire.
@@ -34,6 +36,7 @@ const position = () => rapprocherPosition({
   sommeLiquidite: 3_000_000,
   sommeDehors: 600_000,
   enTransit: 400_000,
+  enRoute: 300_000,
 })
 
 const monter = (props = {}) => render(
@@ -110,13 +113,16 @@ describe('TC-210-NA — chaque cible dit où elle mène', () => {
       .toHaveAccessibleName(/^Dehors : .*voir le détail par boutique$/)
   })
 
-  it('[NA-02] les cinq noms sont distincts', () => {
+  it('[NA-02] les sept noms sont distincts', () => {
+    // Deux d'entre eux portent le MÊME montant (le miroir) et mènent au MÊME
+    // écran : sans nom distinct, ils s'annonceraient à l'identique.
     monter()
     const noms = [
-      'ligne-ravitaillements', 'ligne-retours', 'ligne-stock', 'ligne-liquidite', 'ligne-dehors',
+      'ligne-ravitaillements', 'ligne-retours', 'ligne-en-route',
+      'ligne-stock', 'ligne-liquidite', 'ligne-dehors', 'ligne-en-route-caisses',
     ].map(t => screen.getByTestId(t).getAttribute('aria-label'))
-    expect(noms.filter(Boolean)).toHaveLength(5)
-    expect(new Set(noms).size).toBe(5)
+    expect(noms.filter(Boolean)).toHaveLength(7)
+    expect(new Set(noms).size).toBe(7)
   })
 
   it('[NA-03] Stock et Liquidité mènent au même écran mais ne se disent pas pareil', () => {
@@ -203,5 +209,72 @@ describe('TC-210-MO — le détail par boutique', () => {
     fireEvent.click(screen.getByTestId('ligne-dehors'))
     const pieges = [...container.querySelectorAll('[aria-hidden="true"] a, [aria-hidden="true"] button')]
     expect(pieges).toEqual([])
+  })
+})
+
+// ===========================================================================
+// §MI — le miroir
+//
+// « En route » est le seul terme des DEUX membres de l'identite : l'argent a
+// quitte le dealer, et le reseau en repond. Il s'annule donc dans l'ecart
+// (tc-203 [ER-02]). A l'ecran, on le montre DEUX FOIS, une fois par panneau —
+// c'est ce qui rend l'annulation lisible plutot que mysterieuse.
+// ===========================================================================
+
+describe('TC-210-MI — le meme montant dans les deux panneaux', () => {
+  const montantDe = (testId) => screen.getByTestId(testId).textContent
+
+  it('[MI-01] les deux lignes portent le meme franc', () => {
+    monter()
+    const gauche = montantDe('ligne-en-route')
+    const droite = montantDe('ligne-en-route-caisses')
+    expect(gauche).toMatch(/300[\s\u202f\u00a0]000/)
+    expect(droite).toMatch(/300[\s\u202f\u00a0]000/)
+  })
+
+  it('[MI-02] chacune fait EXACTEMENT le total de son propre panneau', () => {
+    // La premiere chose qu'un lecteur verifie du regard. Un terme qui ne tombe
+    // pas juste ruine la confiance dans les quatre autres.
+    const p = position()
+    expect(p.envoye - p.revenu + p.enRoute).toBe(p.dehors)
+    expect(p.sommeStock + p.sommeLiquidite + p.sommeDehors + p.enRoute).toBe(p.sommeCaisses)
+  })
+
+  it('[MI-03] les deux menent a la file des ravitaillements', () => {
+    monter()
+    for (const t of ['ligne-en-route', 'ligne-en-route-caisses']) {
+      expect(screen.getByTestId(t).tagName).toBe('A')
+      expect(screen.getByTestId(t).getAttribute('href')).toBe('/dealer/requests')
+    }
+  })
+
+  it('[MI-04] meme montant, meme destination, noms accessibles DIFFERENTS', () => {
+    monter()
+    expect(screen.getByTestId('ligne-en-route').getAttribute('aria-label'))
+      .not.toBe(screen.getByTestId('ligne-en-route-caisses').getAttribute('aria-label'))
+  })
+
+  it('[MI-05] la note en pied de la colonne de gauche a disparu', () => {
+    // Son montant est monte dans l'addition. La laisser afficherait deux fois
+    // le meme chiffre dans le meme panneau.
+    monter()
+    expect(screen.queryByTestId('envois-en-attente')).toBeNull()
+    // Celle de DROITE reste : `enTransit` n'est pas dans le total au-dessus.
+    expect(screen.getByTestId('retours-en-attente')).toBeInTheDocument()
+  })
+
+  it('[MI-06] le decompte bascule en entier, aux trois cas', () => {
+    // Quatrieme occurrence dans ce depot du « s » colle au bout d'une locution.
+    const cas = [
+      [0, /voir la file des ravitaillements$/],
+      [1, /voir le ravitaillement envoyé$/],
+      [2, /voir les 2 ravitaillements envoyés$/],
+    ]
+    for (const [nombre, attendu] of cas) {
+      const { unmount } = monter({ envoisEnAttente: { nombre, montant: 300_000 } })
+      expect(screen.getByTestId('ligne-en-route').getAttribute('aria-label').normalize('NFD'))
+        .toMatch(attendu)
+      unmount()
+    }
   })
 })

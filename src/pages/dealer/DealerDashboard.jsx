@@ -116,6 +116,13 @@ function DealerDashboard() {
     caissesLues: Boolean(reseau),
     sommeDehors: dehors?.dehors ?? 0,
     dehorsLu: Boolean(dehors),
+    // ⚠ `envois.illisibles` N'EST VOLONTAIREMENT PAS AJOUTÉ à `illisibles`
+    //   ci-dessus, à la différence de ceux des retours et du réseau. Ce terme
+    //   entre dans les DEUX membres de l'identité : s'il manque, il manque des
+    //   deux côtés et l'écart reste juste (tc-203 [ER-02], [ER-07]). Faire
+    //   refuser le rapprochement pour un montant qui s'annule ferait taire
+    //   l'écran sans rien protéger.
+    enRoute: envois.montant,
   })
 
   return (

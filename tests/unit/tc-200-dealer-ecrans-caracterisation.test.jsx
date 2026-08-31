@@ -274,17 +274,41 @@ describe('TC-200-A — DealerDashboard : l’accueil, les caisses et la position
     )
     renderDealer(<DealerDashboard />)
 
-    await waitFor(() => expect(txt(screen.getByTestId('montant-dehors'))).toBe('400 000 000 FCFA'))
-    expect(txt(screen.getByTestId('montant-caisses'))).toBe('441 000 000 FCFA')
+    // ⚠ CES DEUX NOMBRES ONT CHANGÉ LE 01/09/2026, et le changement est le
+    //   sujet. Ils valaient 400 000 000 et 441 000 000 : le ravitaillement
+    //   envoyé n'entrait dans aucun des deux. Il y entre maintenant dans LES
+    //   DEUX — l'argent a quitté le dealer, et le réseau en répond.
+    // ⚠ POINT D'ATTENTE EXPLICITE, ET IL EST NÉCESSAIRE DEPUIS LE 01/09/2026.
+    //   Avant, « 400 000 000 » était atteint dès le PREMIER rendu : le
+    //   ravitaillement en attente n'entrait pas dans le total, et le `waitFor`
+    //   tombait juste sans rien attendre. Maintenant la valeur exige que la
+    //   seconde souscription soit arrivée. Sans cette attente-ci, le `waitFor`
+    //   sonde un écran qui n'a pas fini de se peindre.
+    await screen.findByTestId('caisses-liste')
+    await waitFor(() => expect(txt(screen.getByTestId('montant-dehors'))).toBe('405 000 000 FCFA'))
+    expect(txt(screen.getByTestId('montant-caisses'))).toBe('446 000 000 FCFA')
 
     // À droite : ce que les boutiques ont renvoyé et qui attend MA confirmation.
+    // Il reste une NOTE et non une ligne : cet argent a quitté la caisse de la
+    // boutique, il n'est donc pas dans le total au-dessus.
     expect(txt(screen.getByTestId('retours-en-attente'))).toContain('2 150 000 FCFA en attente de confirmation')
     expect(txt(screen.getByTestId('retours-en-attente'))).toContain('3 retours')
 
-    // À gauche : ce que J'ai envoyé et qui attend la LEUR. Cette attente
-    //  n'existait nulle part sur l'écran.
-    expect(txt(screen.getByTestId('envois-en-attente'))).toContain('5 000 000 FCFA en attente de confirmation')
-    expect(txt(screen.getByTestId('envois-en-attente'))).toContain('2 ravitaillements')
+    // À gauche : ce que J'ai envoyé et qui attend la LEUR. C'était une note en
+    // pied — sous un total à 0 FCFA qu'elle contredisait. C'est une LIGNE.
+    expect(txt(screen.getByTestId('ligne-en-route'))).toContain('En attente de confirmation')
+    expect(txt(screen.getByTestId('ligne-en-route'))).toContain('5 000 000 FCFA')
+    expect(screen.getByTestId('ligne-en-route'))
+      .toHaveAccessibleName(/voir les 2 ravitaillements envoyés$/)
+
+    // Et sa contrepartie, à droite, au franc près. Les voir toutes les deux est
+    // ce qui rend lisible le fait qu'elles s'annulent dans l'écart.
+    expect(txt(screen.getByTestId('ligne-en-route-caisses'))).toContain('5 000 000 FCFA')
+
+    // La note en pied de la colonne de GAUCHE n'existe plus : son montant est
+    // monté dans l'addition. La laisser aurait affiché deux fois le même
+    // chiffre dans le même panneau.
+    expect(screen.queryByTestId('envois-en-attente')).toBeNull()
 
     // Le jargon est parti, et ne revient par aucun chemin.
     expect(screen.queryByTestId('en-transit')).toBeNull()

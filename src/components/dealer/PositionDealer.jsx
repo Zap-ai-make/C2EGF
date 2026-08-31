@@ -63,6 +63,26 @@ const PANNEAU = 'rounded-lg bg-canvas p-4'
 const TERME_ACTIF =
   '-mx-2 rounded px-2 underline decoration-line decoration-1 underline-offset-2 transition-colors hover:bg-brand-50 hover:decoration-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400'
 
+/**
+ * Le décompte des ravitaillements en attente — pour l'oreille seule.
+ *
+ * Il s'affichait avant en toutes lettres, en pied de colonne : « 300 000 FCFA en
+ * attente de confirmation — 1 ravitaillement envoyé ». Le montant est devenu une
+ * ligne de l'addition ; le décompte, lui, n'a plus de place à l'œil et n'en
+ * mérite pas : le lien mène à la file, qui le dit mieux. Il reste dans le nom
+ * accessible, où il ne coûte aucune ligne.
+ *
+ * ⚠ LA PHRASE BASCULE EN ENTIER. Quatrième occurrence dans ce dépôt du « s »
+ *   collé au bout d'une locution — celui qui produit « 1 ravitaillements
+ *   envoyés ». Trois formes complètes, l'accord du participe compris.
+ */
+const indiceEnvois = (nombre) => {
+  if (!nombre) return 'voir la file des ravitaillements'
+  return nombre > 1
+    ? `voir les ${nombre} ravitaillements envoyés`
+    : 'voir le ravitaillement envoyé'
+}
+
 function Terme({ operation, libelle, montant, fort = false, vers, surClic, indice, testId }) {
   const dessin = `flex items-baseline gap-2 text-sm ${fort ? 'text-ink' : 'text-ink-muted'}`
   const contenu = (
@@ -140,10 +160,17 @@ function Colonne({ titre, montant, children, pied, testId }) {
  *   qui attend, ni quoi — c'était du vocabulaire de plomberie sur un écran qui
  *   parle d'argent.
  *
- * ⚠ LES DEUX PHRASES SONT IDENTIQUES À L'ŒIL, ET C'EST VOULU : leur COLONNE
- *   dit qui attend. Mais un lecteur d'écran, lui, entendrait deux fois la même
- *   chose sans savoir les distinguer — d'où le fragment `sr-only` qui précise
- *   le sens de l'attente sans alourdir ce qui est lu à l'œil.
+ * ⚠ IL N'EN RESTE QU'UNE, À DROITE, ET C'EST STRUCTUREL. Celle de gauche est
+ *   devenue une LIGNE le 01/09/2026, parce que son montant entre désormais dans
+ *   le total. Celle-ci ne peut pas suivre : `enTransit` est un terme de
+ *   l'identité mais PAS de `sommeCaisses` — l'argent a quitté la caisse de la
+ *   boutique. En faire une ligne casserait la règle que ce bloc tient partout
+ *   ailleurs : les lignes affichées font exactement le total au-dessus d'elles.
+ *   Une note en pied dit « ceci compte, mais pas dans ce total ».
+ *
+ * ⚠ Le fragment `sr-only` qui précise le sens de l'attente survit à la
+ *   disparition de sa jumelle : « en attente de confirmation » seul ne dit
+ *   toujours pas de QUI on attend la confirmation.
  *
  * ⚠ LA PHRASE BASCULE EN ENTIER, ELLE NE S'ASSEMBLE PAS. Une pluralisation par
  *   morceaux — un « s » collé au bout d'une locution — avait déjà produit
@@ -296,18 +323,25 @@ function PositionDealer({
             rendu : sans cela la page saute d'une mise en page à l'autre à
             l'arrivée des données, exactement là où on la regarde le moins. */}
         <div className={GRILLE}>
+          {/* Trois barres à gauche, quatre à droite : le compte EXACT des
+              lignes que chaque panneau va rendre. Un squelette qui en promet
+              deux quand il en vient quatre fait sauter la page au moment
+              précis où on la regarde le moins. */}
           <div className={`${PANNEAU} min-w-0`} aria-hidden="true">
             <span className="block h-3 w-32 rounded bg-gray-200 motion-safe:animate-pulse" />
             <span className="mt-2 block h-8 w-52 rounded bg-gray-200 motion-safe:animate-pulse" />
-            <span className="mt-3 block h-3 w-full rounded bg-gray-100 motion-safe:animate-pulse" />
-            <span className="mt-1.5 block h-3 w-full rounded bg-gray-100 motion-safe:animate-pulse" />
+            {[0, 1, 2].map((i) => (
+              <span key={i} className="mt-1.5 block h-3 w-full rounded bg-gray-100 motion-safe:animate-pulse" />
+            ))}
           </div>
           <div className="hidden bg-line sm:block" aria-hidden="true" />
           <div className={`${PANNEAU} min-w-0`} aria-hidden="true">
             <span className="block h-3 w-32 rounded bg-gray-200 motion-safe:animate-pulse" />
             <span className="mt-2 block h-8 w-52 rounded bg-gray-200 motion-safe:animate-pulse" />
-            <span className="mt-3 block h-3 w-full rounded bg-gray-100 motion-safe:animate-pulse" />
-            <span className="mt-1.5 block h-3 w-full rounded bg-gray-100 motion-safe:animate-pulse" />
+            {[0, 1, 2, 3].map((i) => (
+              <span key={i} className="mt-1.5 block h-3 w-full rounded bg-gray-100 motion-safe:animate-pulse" />
+            ))}
+            <span className="mt-3 block h-3 w-3/4 rounded bg-gray-100 motion-safe:animate-pulse" />
           </div>
         </div>
         <span className="mt-4 block h-8 w-full rounded-lg bg-gray-100 motion-safe:animate-pulse" aria-hidden="true" />
@@ -330,28 +364,29 @@ function PositionDealer({
             au-dessus d'elles. Aucun terme décoratif ne se glisse dans une
             addition qui ne tombe pas juste : c'est la première chose qu'un
             lecteur vérifie, et la première qui ruine sa confiance. */}
-        {/* ⚠ ASYMÉTRIE VOULUE ENTRE LES DEUX ATTENTES. Celle de DROITE
-            (`position.enTransit`) est un terme de l'identité : la boutique est
-            déjà débitée, l'argent a quitté sa caisse. Celle de GAUCHE vient
-            d'une PROP, hors de `position`, parce qu'un ravitaillement en
-            attente n'a encore rien débité — ni chez le dealer, ni chez la
-            boutique. Le faire entrer dans le rapprochement compterait deux fois
-            un argent qui n'a pas bougé. Les deux se ressemblent à l'écran ;
-            elles n'ont pas le même statut comptable. */}
+        {/* ⚠ CE COMMENTAIRE DISAIT L'INVERSE JUSQU'AU 01/09/2026, et il vaut
+            d'être raconté. Il déclarait « asymétrie voulue » : le ravitaillement
+            en attente restait hors du rapprochement au motif qu'il n'avait rien
+            débité — ce qui est vrai DU CRM, et faux du monde. Le transfert est
+            fait au guichet : l'argent a quitté le float du dealer et n'est pas
+            dans la caisse de la boutique. Le laisser dehors du calcul, c'était
+            afficher « Mon argent dehors : 0 FCFA » au-dessus d'une note disant
+            « 300 000 FCFA en attente ». Un total qui contredit sa propre note.
+
+            Il est donc devenu une LIGNE, des deux côtés — `position.enRoute`,
+            le seul terme des deux membres de l'identité. Il s'annule dans
+            l'écart (tc-203 [ER-02]) : ce qui bouge, ce sont les deux totaux.
+
+            ⚠ CE QUI RESTE ASYMÉTRIQUE, ET POURQUOI. `enTransit` — les retours
+              créés, pas encore confirmés — demeure une note en pied à DROITE et
+              n'a pas de contrepartie à gauche. Ce n'est pas un oubli : un
+              retour en attente n'a pas fait avancer `revenuCumul`, il est donc
+              DÉJÀ compté dans « Mon argent dehors », par omission. Lui donner
+              une ligne à gauche le compterait deux fois. */}
         <Colonne
           titre="Mon argent dehors"
           montant={position.dehors}
           testId="montant-dehors"
-          pied={
-            <EnAttente
-              montant={envoisEnAttente.montant}
-              nombre={envoisEnAttente.nombre}
-              sens="des boutiques"
-              singulier="ravitaillement envoyé"
-              pluriel="ravitaillements envoyés"
-              testId="envois-en-attente"
-            />
-          }
         >
           <Terme
             operation=""
@@ -368,6 +403,18 @@ function PositionDealer({
             vers="/dealer/transfers"
             indice="voir la file des retours"
             testId="ligne-retours"
+          />
+          {/* Le libellé est celui que le dealer a demandé, au mot près : le
+              montant, puis « en attente de confirmation ». Le décompte qui
+              suivait — « — 1 ravitaillement envoyé » — n'est pas perdu, il est
+              passé dans le nom accessible, où il ne coûte pas une ligne. */}
+          <Terme
+            operation="+"
+            libelle="En attente de confirmation"
+            montant={position.enRoute}
+            vers="/dealer/requests"
+            indice={indiceEnvois(envoisEnAttente.nombre)}
+            testId="ligne-en-route"
           />
         </Colonne>
 
@@ -426,6 +473,19 @@ function PositionDealer({
           ) : (
             <Terme operation="+" libelle="Dehors" montant={position.sommeDehors} />
           )}
+          {/* ⚠ LE MÊME MONTANT QU'EN FACE, ET C'EST LE POINT. Voir deux fois
+              trois cent mille, une fois dans chaque panneau, est ce qui rend
+              LISIBLE le fait qu'ils s'annulent : l'écart n'a pas bougé, et on
+              voit pourquoi. Masquer l'un des deux rendrait le total de l'autre
+              inexplicable. */}
+          <Terme
+            operation="+"
+            libelle="En route vers les boutiques"
+            montant={position.enRoute}
+            vers="/dealer/requests"
+            indice="le même montant qu’en face, compté du côté du réseau"
+            testId="ligne-en-route-caisses"
+          />
         </Colonne>
       </div>
 
