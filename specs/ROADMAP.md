@@ -271,6 +271,55 @@ n'est jamais neutre au fond qui le porte*. La pastille **dépliée** garde son
 rouge plein — ce qui la rend lisible là-bas n'est pas son fond mais le chiffre
 blanc dedans.
 
+### Après le MVP — « en route », le terme qui manquait des deux côtés (01/09/2026)
+
+**Demandé par le client, sur capture d'écran.** L'accueil affichait « MON ARGENT
+DEHORS — 0 FCFA » avec, juste dessous, « 300 000 FCFA en attente de
+confirmation ». Un total qui contredit sa propre note de bas de page.
+
+**Sa prémisse était fausse, et la vérification a servi.** Il pensait que la cuve
+du dealer était débitée à l'envoi. `confirmDealerRequest.js` fait l'inverse : la
+cuve du dealer **et** le solde de la boutique bougent dans un seul
+`runTransaction`, à la confirmation. Avant elle, le CRM ne bouge rien.
+
+Mais le fond lui donnait raison : le transfert est fait au guichet. L'argent a
+quitté le float du dealer et n'est pas dans la caisse de la boutique. Il est
+dehors, au sens propre — et le CRM était le seul à ne pas le savoir.
+
+L'identité passe donc à cinq termes, et le nouveau figure dans **les deux
+membres** :
+
+    stock + liquidité + dehors boutiques + en route + en attente
+        = fonds d'ouverture + envoyé + en route − revenu
+
+| Ce qui change | Ce qui ne change pas |
+|---|---|
+| Les **deux totaux** affichés montent du montant en route. | **L'écart**, au franc près. Un terme des deux membres s'annule. |
+| La note de pied gauche devient une **ligne** de l'addition. | La note de droite (`enTransit`) reste une note : cet argent a quitté la caisse, il n'est pas dans le total au-dessus. |
+
+**Vérifié au banc, pas seulement en test** : l'écart y vaut **87 250 787 FCFA**,
+sa valeur exacte d'avant le changement.
+
+**Pas de cinquième refus, et c'est un choix.** Si ce terme manque, l'écart reste
+juste — il s'annule des deux côtés. C'est ce qui le sépare de `sommeDehors`, qui
+n'entre que d'un côté et dont l'absence fait donc refuser le rapprochement. Un
+« en route » manquant coûte deux totaux sous-estimés, pas un écart faux : payer
+un écran muet pour ce risque-là serait plus cher que le risque.
+
+**Le même montant s'affiche deux fois, un par panneau, et c'est délibéré.** C'est
+ce qui rend *lisible* le fait qu'il s'annule. N'en montrer qu'un rendrait le
+total de l'autre inexplicable.
+
+**Un commentaire du dépôt disait le contraire** — « asymétrie voulue », le
+ravitaillement en attente reste hors du rapprochement. Il était vrai du CRM et
+faux du monde. Réécrit plutôt que laissé mentir.
+
+Deux commits : la règle (`positionDealer.js`, tc-203 : 25 → 35), puis le dessin.
+**2 391 unitaires (84 fichiers)** · 297 composants (18) · lint et build propres ·
+rien ne déborde à 390 px.
+
+---
+
 ---
 
 ## Les décisions qui cadrent ce chantier
@@ -292,5 +341,12 @@ Tranchées avec le client sur la proposition v2 :
 
 Le modèle de données et le fonctionnement métier. Aucun champ Firestore renommé ou
 supprimé, aucune modification des flux de transaction, du calcul des soldes, des
-rôles ou des permissions. Les deux compteurs de S2 sont un **ajout**, et ils
+rôles ou des permissions.
+
+⚠ Une nuance, depuis le 01/09/2026 : le **rapprochement affiché** a gagné un
+terme (« en route »). C'est un calcul de présentation, dans un module pur — aucun
+solde Firestore, aucune Cloud Function, aucun montant écrit n'en dépend. Et la
+valeur de l'écart n'a pas bougé : le terme s'annule. Ce qui a changé, ce sont les
+deux totaux lus à l'écran. La seule permission élargie du chantier reste la
+lecture des `drafts` par le dealer, tracée à sa propre date. Les deux compteurs de S2 sont un **ajout**, et ils
 n'entrent dans aucun calcul de solde.
