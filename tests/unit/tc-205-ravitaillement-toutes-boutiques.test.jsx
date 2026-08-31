@@ -39,6 +39,7 @@ const mocks = vi.hoisted(() => ({
     const n = Number(s)
     return Number.isSafeInteger(n) && n > 0 ? n : null
   }),
+  subscribeDealerBalance: vi.fn(() => vi.fn()),
   createPartnerDeposit: vi.fn(() => Promise.resolve({ success: true })),
   useAuth: vi.fn(),
   navigate: vi.fn(),
@@ -64,6 +65,11 @@ vi.mock('../../src/services/dealerService', () => ({
 }))
 vi.mock('../../src/services/storeTransferService', () => ({
   createPartnerDeposit: mocks.createPartnerDeposit,
+  // Ajouté en S5 : l'écran projette les cuves du dealer avant confirmation, via
+  // `useDealerInventory`. CÂBLAGE seul — aucune assertion de ce fichier ne
+  // dépend de l'inventaire, et l'abonnement muet laisse la projection à son
+  // état « inconnu », qui est justement celui qui n'affirme rien.
+  subscribeDealerBalance: mocks.subscribeDealerBalance,
 }))
 vi.mock('../../src/context/AuthContext', () => ({ useAuth: () => mocks.useAuth() }))
 vi.mock('react-router-dom', async (importOriginal) => {

@@ -1,4 +1,5 @@
 import { useMemo, useState, useId } from 'react'
+import { Link } from 'react-router-dom'
 import { formatCurrency } from '../../utils/formatCurrency'
 import {
   TRIS,
@@ -11,7 +12,7 @@ import {
   trierCaisses,
   triParId,
 } from '../../utils/caissesReseau'
-import { estSousSeuil } from '../../constants/dealerConstants'
+import { DEALER_REQUEST_TYPES, estSousSeuil } from '../../constants/dealerConstants'
 
 /**
  * Les caisses du réseau — la signature de l'écran d'accueil du dealer.
@@ -95,6 +96,22 @@ function Piste({ montant, echelle, teinte }) {
 const CELLULE_MONTANT = 'w-32 shrink-0 text-right sm:w-40'
 
 /**
+ * Le gabarit des colonnes, écrit UNE fois.
+ *
+ * L'en-tête, les lignes et le squelette le partagent. C'est la même raison que
+ * pour la largeur fixe des montants : trois gabarits recopiés, c'est trois
+ * occasions d'en oublier un et de faire dériver le filet du seuil — sauf que
+ * cette fois la dérive se produirait entre le squelette et les données, donc
+ * pendant le chargement, là où on la regarde le moins.
+ *
+ * La quatrième colonne est fixe et non `auto` : son contenu (« Stock · Liquidité »)
+ * est identique sur toutes les lignes, mais le squelette, lui, n'a rien à y
+ * mettre. En `auto`, il la réduirait à zéro et toute la liste sauterait à
+ * l'arrivée des données.
+ */
+const GABARIT = 'sm:grid-cols-[minmax(7rem,12rem)_1fr_1fr_9.5rem]'
+
+/**
  * Une caisse : sa piste, son montant exact, et le mot « bas » s'il le faut.
  *
  * ⚠ LE LIBELLÉ N'EST PAS UN DOUBLON DE L'INTITULÉ DE COLONNE. Sur le bureau,
@@ -108,7 +125,10 @@ function Cellule({ montant, echelle, teinte, label }) {
   const inconnu = montant === null || montant === undefined
   const bas = estSousSeuil(montant)
   return (
-    <span className="flex min-w-0 items-center gap-2">
+    // Décorative par nature : la phrase de la ligne dit déjà tout ce qu'elle
+    // montre. Le masque est porté ici, et non plus par le conteneur de ligne,
+    // qui accueille désormais des liens (voir `Ligne`).
+    <span aria-hidden="true" className="flex min-w-0 items-center gap-2">
       <span className="w-14 shrink-0 truncate text-[10px] font-semibold uppercase tracking-wide text-ink-muted sm:hidden">
         {label}
       </span>
@@ -125,17 +145,65 @@ function Cellule({ montant, echelle, teinte, label }) {
   )
 }
 
+/**
+ * Ravitailler cette boutique — l'action que la liste rendait impossible.
+ *
+ * La question du matin est « qui est court ? » ; la suivante est « combien lui
+ * envoyer ? ». Jusqu'ici la réponse à la première n'ouvrait sur rien : il
+ * fallait quitter l'accueil, ouvrir le formulaire, et y RETROUVER la boutique
+ * qu'on venait de repérer, dans une liste de quatre-vingt-quatre noms. Le lien
+ * porte la boutique ET la ressource ; le formulaire n'a plus qu'un montant à
+ * demander.
+ *
+ * ⚠ Cette action a été retenue en S4, et le report était la bonne décision : le
+ *   formulaire ne voyait alors que 20 boutiques sur 84, si bien que le lien
+ *   aurait effacé en silence le `?storeId=` des soixante-quatre autres. Livrer
+ *   un raccourci qui rate les trois quarts des lignes aurait été pire que ne
+ *   rien livrer. Le correctif est arrivé en 202f385.
+ *
+ * DEUX LIENS, ET NON DEUX BOUTONS : ce sont des navigations. Un lien s'ouvre
+ * dans un onglet, se copie, s'annonce comme « lien » — et le dealer qui veut
+ * préparer trois ravitaillements les ouvre côte à côte.
+ */
+const LIEN_ACTION =
+  'rounded px-1.5 py-0.5 text-xs font-medium text-brand-600 underline decoration-brand-300 underline-offset-2 transition-colors hover:bg-brand-50 hover:decoration-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400'
+
+function Actions({ caisse }) {
+  // Le nom accessible porte SA ligne. Quatre-vingt-quatre liens nommés
+  // « Stock » sont quatre-vingt-quatre fois le même mot, et rien ne dit lequel
+  // on active (même défaut que les boutons de la file des retours).
+  const nom = caisse.name ?? 'cette boutique'
+  const lien = (type) =>
+    `/dealer/requests/new?storeId=${encodeURIComponent(caisse.storeId)}&type=${type}`
+  return (
+    <span className="flex items-center gap-1 sm:justify-end">
+      <Link to={lien(DEALER_REQUEST_TYPES.STOCK_ADD)} className={LIEN_ACTION} aria-label={`Ravitailler ${nom} en stock`}>
+        Stock
+      </Link>
+      <span aria-hidden="true" className="text-ink-muted">·</span>
+      <Link to={lien(DEALER_REQUEST_TYPES.LIQUIDITY_ADD)} className={LIEN_ACTION} aria-label={`Ravitailler ${nom} en liquidité`}>
+        Liquidité
+      </Link>
+    </span>
+  )
+}
+
+/**
+ * ⚠ `aria-hidden` est descendu du conteneur de ligne SUR SES TROIS CELLULES
+ *   VISUELLES. Il ne peut plus coiffer toute la ligne : les deux liens y
+ *   vivent désormais, et un élément focusable dans un sous-arbre `aria-hidden`
+ *   est un piège au clavier — atteignable par tabulation, absent de l'arbre
+ *   d'accessibilité. Ce qui est masqué reste exactement ce qui l'était.
+ */
 function Ligne({ caisse, echelle }) {
   return (
     <li className="border-b border-line last:border-b-0">
       <p className="sr-only">{phraseAccessible(caisse)}</p>
-      <div
-        aria-hidden="true"
-        className="grid grid-cols-1 gap-1 px-4 py-2.5 sm:grid-cols-[minmax(7rem,12rem)_1fr_1fr] sm:items-center sm:gap-4"
-      >
-        <span className="truncate text-sm font-medium text-ink">{caisse.name ?? '—'}</span>
+      <div className={`grid grid-cols-1 gap-1 px-4 py-2.5 sm:items-center sm:gap-4 ${GABARIT}`}>
+        <span aria-hidden="true" className="truncate text-sm font-medium text-ink">{caisse.name ?? '—'}</span>
         <Cellule montant={caisse.stock} echelle={echelle} teinte="bg-net-orange" label="Stock" />
         <Cellule montant={caisse.liquidite} echelle={echelle} teinte="bg-brand-400" label="Liquidité" />
+        <Actions caisse={caisse} />
       </div>
     </li>
   )
@@ -148,7 +216,7 @@ function Squelette({ echelle }) {
       {[0, 1, 2, 3, 4, 5].map((i) => (
         <li
           key={i}
-          className="grid grid-cols-1 gap-1 border-b border-line px-4 py-2.5 last:border-b-0 sm:grid-cols-[minmax(7rem,12rem)_1fr_1fr] sm:items-center sm:gap-4"
+          className={`grid grid-cols-1 gap-1 border-b border-line px-4 py-2.5 last:border-b-0 sm:items-center sm:gap-4 ${GABARIT}`}
         >
           <span className="h-4 w-28 rounded bg-gray-200 motion-safe:animate-pulse" />
           {[0, 1].map((c) => (
@@ -280,11 +348,14 @@ function CaissesReseau({
           phrase complète, et les relire à chaque ligne serait 84 répétitions. */}
       <div
         aria-hidden="true"
-        className="hidden border-b border-line px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-muted sm:grid sm:grid-cols-[minmax(7rem,12rem)_1fr_1fr] sm:gap-4"
+        className={`hidden border-b border-line px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-muted sm:grid sm:gap-4 ${GABARIT}`}
       >
         <span>Boutique</span>
         <span>Stock {reseau}</span>
         <span>Liquidité</span>
+        {/* Le verbe est ici, une fois, pour que les liens de chaque ligne
+            tiennent en un mot. */}
+        <span className="sm:text-right">Ravitailler</span>
       </div>
 
       {loading ? (

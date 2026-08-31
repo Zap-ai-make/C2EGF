@@ -14,7 +14,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { Signal, Wallet } from 'lucide-react'
 
 import { ClientsContext } from './context/ClientsContext.jsx'
@@ -35,6 +35,7 @@ import DealerDashboard from './pages/dealer/DealerDashboard.jsx'
 import DealerRequests from './pages/dealer/DealerRequests.jsx'
 import DealerTransfers from './pages/dealer/DealerTransfers.jsx'
 import DealerHistory from './pages/dealer/DealerHistory.jsx'
+import NewDealerRequest from './pages/dealer/NewDealerRequest.jsx'
 import Balance from './components/dashboard/Balance.jsx'
 import ReseauCards from './components/dashboard/ReseauCards.jsx'
 import FluxChart from './components/dashboard/FluxChart.jsx'
@@ -369,8 +370,11 @@ function Preview() {
  *   &cuves=basses|vides                  l'état des CUVES du dealer
  *   &caisses=vide|erreur|erreur-partielle|clairseme   l'état du RÉSEAU
  *   &position=neufs|anomalie             l'état du RAPPROCHEMENT
- *   &ecran=ravitaillements|retours|historique   l'écran monté (défaut : accueil)
+ *   &ecran=ravitaillements|retours|historique|ravitailler  l'écran monté
  *   &file=vide                           les files, sans rien à traiter
+ *   &storeId=…&type=stock_add            le formulaire tel qu'il ARRIVE depuis
+ *                                        une ligne : boutique et ressource déjà
+ *                                        choisies, montant seul à saisir
  *
  * Trois axes séparés parce que ce sont trois sources distinctes — l'inventaire
  * du dealer, la liste des boutiques, les compteurs de flux — et qu'un défaut
@@ -387,17 +391,39 @@ const ECRANS = {
   ravitaillements: DealerRequests,
   retours: DealerTransfers,
   historique: DealerHistory,
+  ravitailler: NewDealerRequest,
+}
+
+/**
+ * Les mêmes écrans, cette fois indexés par leur VRAIE route.
+ *
+ * Sans cela le banc reste figé sur `?ecran=` : le formulaire navigue vers
+ * `/dealer/requests` après un envoi, et l'écran d'arrivée — celui qui porte le
+ * message de retour — ne s'affichait jamais. Or c'est justement le seul endroit
+ * où ce message existe.
+ */
+const PAR_CHEMIN = {
+  '/dealer/requests': DealerRequests,
+  '/dealer/requests/new': NewDealerRequest,
+  '/dealer/transfers': DealerTransfers,
+  '/dealer/history': DealerHistory,
 }
 
 function EcranDealer() {
+  const { pathname } = useLocation()
   const nom = new URLSearchParams(globalThis.location?.search ?? '').get('ecran') ?? 'accueil'
-  const Ecran = ECRANS[nom] ?? DealerDashboard
+  const Ecran = PAR_CHEMIN[pathname] ?? ECRANS[nom] ?? DealerDashboard
   return <Ecran />
 }
 
 function PosteDealer() {
+  // Le routeur hérite de la query du banc. `?storeId=` et `?type=` sont lus par
+  // le formulaire via `useSearchParams` : sans cette transmission, l'arrivée
+  // pré-remplie — le geste même que S5 livre — serait la seule chose du poste
+  // qu'on ne pourrait pas regarder.
+  const adresse = `/${globalThis.location?.search ?? ''}`
   return (
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[adresse]}>
       <AuthContext.Provider
         value={{
           currentUser: { uid: 'banc-dealer' },

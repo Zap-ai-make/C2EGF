@@ -417,12 +417,35 @@ describe('TC-031-NEW — NewDealerRequest', () => {
     })
   })
 
-  it('[NEW-02] champ réseau non modifiable (readonly)', async () => {
+  // ⚠ SEULE assertion préexistante que S5 retourne, et elle est retournée
+  //   sciemment. L'ancienne exigeait qu'un champ « Réseau » en LECTURE SEULE
+  //   soit présent en mono-réseau ; la spec S5 le fait disparaître — un champ
+  //   qui ne peut valoir qu'une chose n'est pas un champ, il ne se remplit pas
+  //   et ne peut pas échouer.
+  //
+  //   Ce qui devait être préservé l'est, et c'est ce que ce test vérifie
+  //   maintenant : la VALEUR n'a pas bougé. `network: 'Orange'` part toujours
+  //   dans le payload (tc-030 [PAY-*] le fige clé par clé, sans modification),
+  //   et le réseau reste écrit sur l'écran de confirmation, où il n'est plus un
+  //   champ mais une mention du reçu.
+  //
+  //   La branche MULTI-réseaux, elle, garde son sélecteur : tc-089 l'exige, et
+  //   son assertion n'a pas bougé non plus.
+  it('[NEW-02] mono-réseau → aucun champ « Réseau » à remplir, mais la valeur reste sur le reçu', async () => {
     renderWithRouter(NewDealerRequest, {}, '/dealer/requests/new')
-    await waitFor(() => screen.getByTestId('network-display'))
-    const el = screen.getByTestId('network-display')
-    const isReadonly = el.getAttribute('readonly') !== null || el.getAttribute('disabled') !== null
-    expect(isReadonly).toBe(true)
+    await waitFor(() => screen.getByTestId('select-store'))
+
+    // Ni champ en lecture seule, ni sélecteur : rien à faire de ce côté.
+    expect(screen.queryByTestId('network-display')).toBeNull()
+    expect(screen.queryByTestId('select-network')).toBeNull()
+
+    fireEvent.change(screen.getByTestId('select-store'), { target: { value: 'store-a' } })
+    fireEvent.click(screen.getByTestId('radio-type-stock_add'))
+    fireEvent.change(screen.getByTestId('input-amount'), { target: { value: '5000' } })
+    fireEvent.click(screen.getByTestId('btn-review'))
+
+    await waitFor(() => screen.getByTestId('confirm-network'))
+    expect(screen.getByTestId('confirm-network').textContent).toBe('Orange')
   })
 
   it('[NEW-03] erreur chargement boutiques → message d\'erreur', async () => {
@@ -541,9 +564,19 @@ describe('TC-031-NEW — NewDealerRequest', () => {
     await waitFor(() => screen.getByTestId('btn-submit-confirm'))
     fireEvent.click(screen.getByTestId('btn-submit-confirm'))
 
+    // ⚠ Deuxième et dernière assertion préexistante que S5 touche. Ce qu'elle
+    //   vérifiait — la destination et le `replace` — est INCHANGÉ et reste
+    //   vérifié à l'identique ci-dessous. Ce qui s'y ajoute est un état de
+    //   routeur : le message de retour, que l'écran d'arrivée affiche (le
+    //   formulaire quittait jusque-là sans un mot). Sa formulation est figée
+    //   par tc-206 [GE-07] ; ici on constate seulement qu'il voyage.
     await waitFor(() => {
-      expect(mocks.navigate).toHaveBeenCalledWith('/dealer/requests', { replace: true })
+      expect(mocks.navigate).toHaveBeenCalledWith(
+        '/dealer/requests',
+        expect.objectContaining({ replace: true }),
+      )
     })
+    expect(mocks.navigate.mock.calls.at(-1)[1].state.message).toBeTruthy()
   })
 
   it('[NEW-12] erreur service → message d\'erreur, retour formulaire', async () => {

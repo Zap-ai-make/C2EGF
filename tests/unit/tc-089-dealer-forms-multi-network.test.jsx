@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
     return Number.isSafeInteger(n) && n > 0 ? n : null
   }),
   createPartnerDeposit: vi.fn(() => Promise.resolve({ success: true })),
+  subscribeDealerBalance: vi.fn(() => vi.fn()),
   createStoreDealerTransfer: vi.fn(() => Promise.resolve({ success: true })),
   subscribeStoreTransfers: vi.fn(() => vi.fn()),
   useAuth: vi.fn(),
@@ -50,6 +51,11 @@ vi.mock('../../src/constants/dealerConstants', () => ({
   STORE_TRANSFER_TYPES: { RETURN_STOCK: 'return_stock', RETURN_LIQUIDITY: 'return_liquidity' },
   STORE_TRANSFER_TYPE_LABELS: { return_stock: 'Retour de stock', return_liquidity: 'Envoi de liquidité' },
   STORE_TRANSFERS_PAGE_SIZE: 20,
+  // Lus par `cuvesApresEnvoi` depuis S5. Ce mock REMPLACE le module entier :
+  // tout ce que le code sous test y lit doit y figurer, sans quoi l'écran
+  // casse sur un `undefined` sans aucun rapport avec le multi-réseaux.
+  DEALER_SEUIL_BAS: 500000,
+  estSousSeuil: (m) => typeof m === 'number' && Number.isFinite(m) && m < 500000,
 }))
 
 vi.mock('../../src/services/dealerService', () => ({
@@ -62,6 +68,9 @@ vi.mock('../../src/services/storeTransferService', () => ({
   createPartnerDeposit: mocks.createPartnerDeposit,
   createStoreDealerTransfer: mocks.createStoreDealerTransfer,
   subscribeStoreTransfers: mocks.subscribeStoreTransfers,
+  // Ajouté en S5 : `NewDealerRequest` projette les cuves du dealer avant
+  // confirmation (`useDealerInventory`). Câblage seul.
+  subscribeDealerBalance: mocks.subscribeDealerBalance,
 }))
 vi.mock('../../src/context/AuthContext', () => ({ useAuth: () => mocks.useAuth() }))
 vi.mock('../../src/hooks/useToast', () => ({

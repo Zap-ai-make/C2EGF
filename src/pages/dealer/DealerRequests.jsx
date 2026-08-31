@@ -11,6 +11,7 @@ import {
   DEALER_NETWORK,
 } from '../../constants/dealerConstants'
 import PageHeader from '../../components/ui/PageHeader'
+import MessageDeRetour from '../../components/dealer/MessageDeRetour'
 import EmptyState from '../../components/ui/EmptyState'
 import ErrorState from '../../components/ui/ErrorState'
 import RejectionRemarkButton from '../../components/ui/RejectionRemarkButton'
@@ -275,6 +276,10 @@ function DealerRequests() {
           </>
         }
       />
+
+      {/* Le retour du geste qui vient d'être fait, s'il y en a un : il arrive
+          par l'état du routeur, depuis l'écran de ravitaillement. */}
+      <MessageDeRetour />
 
       {/* Filtres */}
       <div className="mb-5 flex flex-wrap items-end gap-3">

@@ -21,21 +21,21 @@ savait déjà.
 
 **Les files**
 
-- [ ] `DealerRequests`, `DealerTransfers` et `DealerHistory` partagent **un seul**
+- [x] `DealerRequests`, `DealerTransfers` et `DealerHistory` partagent **un seul**
       dessin de tableau et le châssis `PageHeader` : la largeur appartient au
       Layout, pas à la page.
-- [ ] Les états passent par les composants existants — `SkeletonTable`,
+- [x] Les états passent par les composants existants — `SkeletonTable`,
       `ErrorState`, `EmptyState` — et le squelette a la forme d'un **tableau**,
       pas de trois cartes.
-- [ ] **Deux vides distincts** : « rien » invite à créer un premier
+- [x] **Deux vides distincts** : « rien » invite à créer un premier
       ravitaillement ; « rien qui corresponde » propose d'effacer les filtres.
 - [ ] L'état mort « Appuyez sur Actualiser » de `DealerStores`, jamais atteint,
       disparaît (relevé en S1).
-- [ ] Les montants sont en chiffres tabulaires et alignés à droite, en-têtes
+- [x] Les montants sont en chiffres tabulaires et alignés à droite, en-têtes
       compris.
-- [ ] Les badges de statut passent aux jetons sémantiques : `pending` pour
+- [x] Les badges de statut passent aux jetons sémantiques : `pending` pour
       l'attente, `danger` pour le rejet. L'ambre reste aux seuils.
-- [ ] Confirmer et rejeter gardent leur hiérarchie : une primaire, une secondaire —
+- [x] Confirmer et rejeter gardent leur hiérarchie : une primaire, une secondaire —
       pas deux boutons pleins de deux couleurs.
 
 **Le geste**
@@ -49,22 +49,27 @@ savait déjà.
       ne peut pas atteindre les trois quarts du réseau.** Le correctif est déjà
       écrit : `listNetworkCaisses()` (S2) rend les 84 en deux allers-retours.
       Un test de caractérisation fige d'abord le défaut.
-- [ ] Depuis la ligne d'une boutique, le formulaire arrive avec la boutique **et**
+- [x] Depuis la ligne d'une boutique, le formulaire arrive avec la boutique **et**
       la ressource déjà choisies. Il ne reste qu'un montant à saisir.
       *(C'est ce critère qui rend l'action « ravitailler cette boutique »
       livrable sur les lignes de l'accueil — elle a été retenue en S4 tant que
       le formulaire ne voyait que 20 boutiques.)*
-- [ ] Le champ « Réseau » en lecture seule disparaît en mono-réseau : un champ qui
+- [x] Le champ « Réseau » en lecture seule disparaît en mono-réseau : un champ qui
       ne peut valoir qu'une chose n'est pas un champ. Le sélecteur reste en
       multi-réseaux.
-- [ ] Avant confirmation, l'écran montre **l'état des cuves du dealer après
+- [x] Avant confirmation, l'écran montre **l'état des cuves du dealer après
       l'envoi**, et signale si l'envoi le fait passer sous son propre seuil bas.
-- [ ] Le verrou de double-soumission est conservé : `submitLockRef` **et** l'état
+      *(⚠ Le débit n'a lieu qu'à la **confirmation par la boutique** : la
+      projection porte son moment, et n'affiche jamais un solde résultant que
+      l'opération ne produira pas — une cuve trop juste est refusée, elle ne
+      passe pas en négatif. Quand cuve vide et inventaire non amorcé sont
+      indiscernables, l'écran dit qu'il ne sait pas.)*
+- [x] Le verrou de double-soumission est conservé : `submitLockRef` **et** l'état
       `disabled`. Les deux sont volontaires (fenêtre de double-clic dans le même
       tick).
-- [ ] La validation du montant est inchangée : entier strictement positif, sûr,
+- [x] La validation du montant est inchangée : entier strictement positif, sûr,
       sans virgule ni notation scientifique.
-- [ ] Un message de retour suit l'action, avec le même mot que le bouton.
+- [x] Un message de retour suit l'action, avec le même mot que le bouton.
 
 **Le socle**
 
@@ -76,6 +81,15 @@ savait déjà.
 - [ ] Focus visible, contraste AA, noms accessibles sur les boutons d'action de
       ligne (« Confirmer le retour de Fada », pas « Confirmer »).
 - [ ] Les tests de S1 passent sans modification de leurs assertions.
+      *(`tc-200` — tenu. ⚠ **Trois** assertions PRÉEXISTANTES ont changé dans ce
+      lot, toutes hors S1, toutes déclarées sur place :*
+      *`tc-080` [ET-02], le vide non filtré qui invite désormais à agir ;*
+      *`tc-031` [NEW-02], qui exigeait le champ « Réseau » en lecture seule que
+      ce lot supprime — elle vérifie maintenant que la VALEUR, elle, n'a pas
+      bougé ;*
+      *`tc-031` [NEW-11], dont la destination et le `replace` sont inchangés et
+      toujours vérifiés, et à qui s'ajoute l'état de routeur du message de
+      retour.)*
 
 ---
 

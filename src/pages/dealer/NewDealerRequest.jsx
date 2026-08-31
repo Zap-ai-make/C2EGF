@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { listAllActiveStores, createDealerRequest, parseDealerAmount } from '../../services/dealerService'
@@ -7,12 +7,14 @@ import { formatCurrency } from '../../utils/formatCurrency'
 import {
   DEALER_REQUEST_TYPES,
   DEALER_REQUEST_TYPE_LABELS,
-  DEALER_NETWORK,
   DEALER_NETWORKS,
   IS_DEALER_MULTI_NETWORK,
 } from '../../constants/dealerConstants'
 import { NETWORK_CONFIG } from '../../constants/networkConfig'
 import { DEALER_PARTNERS, partnerLabel, findPartner } from '../../constants/dealerPartners'
+import { useDealerInventory } from '../../hooks/useDealerInventory'
+import { projeterRavitaillement, projeterOperationPartenaire } from '../../utils/cuvesApresEnvoi'
+import CuvesApresEnvoi from '../../components/dealer/CuvesApresEnvoi'
 
 function validateAmount(raw) {
   const s = String(raw ?? '').trim()
@@ -29,7 +31,10 @@ function NewDealerRequest() {
   const [searchParams] = useSearchParams()
 
   const preStoreId = searchParams.get('storeId') || ''
-  const preType = searchParams.get('type') || ''
+  const preTypeBrut = searchParams.get('type') || ''
+  // Un `?type=` inconnu ne pré-choisit rien plutôt que d'introduire une valeur
+  // que le formulaire ne sait pas afficher.
+  const preType = Object.values(DEALER_REQUEST_TYPES).includes(preTypeBrut) ? preTypeBrut : ''
 
   const [targetType, setTargetType] = useState('store') // 'store' | 'partner'
 
@@ -38,9 +43,7 @@ function NewDealerRequest() {
   const [storesError, setStoresError] = useState(null)
 
   const [selectedStoreId, setSelectedStoreId] = useState(preStoreId)
-  const [requestType, setRequestType] = useState(
-    Object.values(DEALER_REQUEST_TYPES).includes(preType) ? preType : ''
-  )
+  const [requestType, setRequestType] = useState(preType)
   const [selectedPartnerId, setSelectedPartnerId] = useState('')
   const [partnerOperation, setPartnerOperation] = useState('deposit') // 'deposit' | 'withdrawal'
   const [network, setNetwork] = useState(DEALER_NETWORKS[0]) // réseau ciblé (multi-réseaux)
@@ -82,6 +85,43 @@ function NewDealerRequest() {
   const selectedPartner = findPartner(selectedPartnerId)
   const isPartner = targetType === 'partner'
 
+  /**
+   * Arrivée depuis la ligne d'une boutique : il ne reste QUE le montant.
+   *
+   * La ligne d'accueil et la carte boutique passent `?storeId=` ET `?type=`. Le
+   * formulaire les honorait déjà ; ce qu'il ne faisait pas, c'était le DIRE et
+   * en tirer les conséquences. Deux champs sur trois sont remplis, et le curseur
+   * était quand même à l'entrée du formulaire : le dealer relisait un choix
+   * qu'il venait de faire, puis descendait au montant.
+   *
+   * ⚠ Déplacer le focus sans l'annoncer désoriente un lecteur d'écran, qui
+   *   atterrit sur un champ « Montant » sans savoir pour qui ni pour quoi. D'où
+   *   la ligne `role="status"` ci-dessous : elle nomme la boutique et la
+   *   ressource déjà choisies, et elle est LUE, pas seulement affichée.
+   */
+  const preRempli = Boolean(preStoreId && preType && selectedStore && !isPartner)
+  const champMontantRef = useRef(null)
+  const focusPreRempliFait = useRef(false)
+  useEffect(() => {
+    if (focusPreRempliFait.current || storesLoading || !preRempli) return
+    focusPreRempliFait.current = true
+    champMontantRef.current?.focus()
+  }, [storesLoading, preRempli])
+
+  /**
+   * Les cuves du dealer, pour la projection de l'écran de confirmation.
+   *
+   * Le hook ouvre la même écoute Firestore que la barre latérale ; le SDK les
+   * multiplexe, il n'y a pas de lecture supplémentaire (cf. `useDealerInventory`).
+   */
+  const { inventory } = useDealerInventory()
+  const projectionCuves = useMemo(() => {
+    const montant = parseDealerAmount(amountRaw)
+    return isPartner
+      ? projeterOperationPartenaire({ operation: partnerOperation, montant, inventaire: inventory, reseau: network })
+      : projeterRavitaillement({ requestType, montant, inventaire: inventory, reseau: network })
+  }, [isPartner, partnerOperation, requestType, amountRaw, inventory, network])
+
   const handleReview = useCallback(() => {
     if (isPartner) {
       if (!selectedPartnerId) return
@@ -110,7 +150,17 @@ function NewDealerRequest() {
           operation: partnerOperation,
           network: IS_DEALER_MULTI_NETWORK ? network : undefined,
         })
-        navigate('/dealer/history', { replace: true })
+        // Le message porte le MÊME MOT que le bouton (« Confirmer » →
+        // « confirmée ») et voyage dans l'état du routeur : c'est à l'arrivée
+        // qu'on a besoin de savoir que le geste a abouti.
+        navigate('/dealer/history', {
+          replace: true,
+          state: {
+            message: `Opération partenaire confirmée : ${
+              partnerOperation === 'withdrawal' ? 'retrait' : 'dépôt'
+            } de ${formatCurrency(parseDealerAmount(amountRaw))} pour ${partnerLabel(findPartner(selectedPartnerId))}.`,
+          },
+        })
       } else {
         // écriture directe : network toujours présent (champ requis) ; mono = 'Orange'.
         await createDealerRequest({
@@ -121,7 +171,14 @@ function NewDealerRequest() {
           amount: parseDealerAmount(amountRaw),
           network,
         })
-        navigate('/dealer/requests', { replace: true })
+        navigate('/dealer/requests', {
+          replace: true,
+          state: {
+            message: `Ravitaillement confirmé : ${formatCurrency(parseDealerAmount(amountRaw))} de ${
+              DEALER_REQUEST_TYPE_LABELS[requestType].replace(/^Ajout de /, '')
+            } pour ${selectedStore?.name ?? selectedStoreId}.`,
+          },
+        })
       }
     } catch (err) {
       setSubmitError(err.message)
@@ -130,7 +187,7 @@ function NewDealerRequest() {
       submitLockRef.current = false
       setIsSubmitting(false)
     }
-  }, [isPartner, currentUser, userProfile, selectedStoreId, requestType, selectedPartnerId, partnerOperation, network, amountRaw, navigate, isSubmitting])
+  }, [isPartner, currentUser, userProfile, selectedStoreId, selectedStore, requestType, selectedPartnerId, partnerOperation, network, amountRaw, navigate, isSubmitting])
 
   const switchTarget = (t) => {
     setTargetType(t)
@@ -206,6 +263,8 @@ function NewDealerRequest() {
             </div>
           </dl>
 
+          <CuvesApresEnvoi projection={projectionCuves} />
+
           {submitError && (
             <div role="alert" className="mb-4 rounded bg-red-50 border border-red-200 p-3 text-sm text-red-700">{submitError}</div>
           )}
@@ -256,6 +315,17 @@ function NewDealerRequest() {
 
         {submitError && (
           <div role="alert" className="mb-4 rounded bg-red-50 border border-red-200 p-3 text-sm text-red-700">{submitError}</div>
+        )}
+
+        {/* Ce que le lien a déjà répondu — et pourquoi le curseur a sauté au
+            montant. Annoncé (`role="status"`), pas seulement affiché. */}
+        {preRempli && (
+          <p role="status" data-testid="pre-rempli" className="mb-4 text-sm text-ink-muted">
+            <span className="font-medium text-ink">{selectedStore.name}</span>
+            {' — '}
+            {DEALER_REQUEST_TYPE_LABELS[requestType].toLowerCase()}. Il ne reste
+            que le montant à saisir.
+          </p>
         )}
 
         <form onSubmit={e => { e.preventDefault(); handleReview() }} noValidate>
@@ -368,12 +438,27 @@ function NewDealerRequest() {
             </>
           )}
 
-          {/* Réseau — lecture seule en mono ; sélecteur en multi-réseaux */}
-          <div className="mb-4">
-            <label htmlFor="network-display" className="block text-sm font-medium text-gray-700 mb-1">Réseau</label>
-            {IS_DEALER_MULTI_NETWORK ? (
+          {/*
+            Réseau — un sélecteur en multi-réseaux, RIEN en mono.
+            ─────────────────────────────────────────────────────
+            Il y avait ici, en mono-réseau, un champ en lecture seule affichant
+            « Orange » : un champ qui ne peut valoir qu'une chose n'est pas un
+            champ. Il ne se remplit pas, ne se choisit pas, n'échoue pas — et il
+            occupait le même dessin, le même intitulé et le même rang que la
+            boutique et le montant, qui, eux, demandent une décision. Sur un
+            formulaire de trois questions, la troisième n'en était pas une.
+
+            ⚠ Ce n'est PAS la valeur qui disparaît, seulement sa saisie :
+              `network` reste dans l'état, part inchangé dans le payload
+              (`network: 'Orange'` — tc-030 le fige) et reste écrit sur l'écran
+              de confirmation, où il n'est plus un champ mais une mention du
+              reçu.
+          */}
+          {IS_DEALER_MULTI_NETWORK && (
+            <div className="mb-4">
+              <label htmlFor="network-select" className="block text-sm font-medium text-gray-700 mb-1">Réseau</label>
               <select
-                id="network-display"
+                id="network-select"
                 value={network}
                 onChange={e => setNetwork(e.target.value)}
                 className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
@@ -381,14 +466,8 @@ function NewDealerRequest() {
               >
                 {DEALER_NETWORKS.map(n => (<option key={n} value={n}>{NETWORK_CONFIG[n]?.name ?? n}</option>))}
               </select>
-            ) : (
-              <input
-                id="network-display" type="text" value={DEALER_NETWORK} readOnly
-                className="w-full rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500 cursor-not-allowed"
-                aria-readonly="true" data-testid="network-display"
-              />
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Montant */}
           <div className="mb-6">
@@ -397,6 +476,7 @@ function NewDealerRequest() {
             </label>
             <input
               id="amount-input" type="text" inputMode="numeric" pattern="[0-9]*"
+              ref={champMontantRef}
               value={amountRaw}
               onChange={e => { setAmountRaw(e.target.value); if (amountError) setAmountError(null) }}
               placeholder="Ex : 50000" required

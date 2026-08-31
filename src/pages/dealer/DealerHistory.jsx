@@ -10,6 +10,7 @@ import {
   DEALER_REQUEST_STATUSES,
 } from '../../constants/dealerConstants'
 import PageHeader from '../../components/ui/PageHeader'
+import MessageDeRetour from '../../components/dealer/MessageDeRetour'
 import EmptyState from '../../components/ui/EmptyState'
 import ErrorState from '../../components/ui/ErrorState'
 import DealerRequestStatusBadge from '../../components/ui/DealerRequestStatusBadge'
@@ -169,6 +170,9 @@ function DealerHistory() {
           </button>
         }
       />
+
+      {/* Le retour d'une opération partenaire, qui atterrit ici. */}
+      <MessageDeRetour />
 
       <div className="mb-5 flex flex-wrap gap-3">
         <select
