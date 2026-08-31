@@ -362,9 +362,41 @@ service cloud.firestore {
     //
     // Politique d'accès Dealer (choix métier validé) :
     //   Le rôle dealer est GLOBAL — il approvisionne toutes les boutiques.
-    //   Accès autorisé : stores (toutes actives), networkBalances, ses propres dealerRequests.
-    //   Accès refusé   : clients/{storeId}/history, drafts, globalClients, auditLogs,
-    //                    profils caissières, dealerRequests d'un autre Dealer.
+    //   Accès autorisé : stores (toutes actives), networkBalances,
+    //                    clients/{storeId}/drafts EN LECTURE SEULE (voir ci-dessous),
+    //                    ses propres dealerRequests.
+    //   Accès refusé   : clients/{storeId}/history, drafts/{id}/settlements,
+    //                    sessions, auditLogs, globalClients, profils caissières,
+    //                    dealerRequests d'un autre Dealer.
+    //
+    // ⚠ ÉLARGISSEMENT DU 31/08/2026 — `drafts` EN LECTURE, POUR LE DEALER.
+    //   Décision client, prise après objection écrite.
+    //
+    //   CE QU'ELLE SERT. L'accueil dealer affiche « Dehors » : la somme, par
+    //   boutique, des dépôts non terminés moins les retraits non terminés. Un
+    //   dépôt non terminé a déjà retiré du stock sans ajouter de liquidité, un
+    //   retrait non terminé fait l'inverse ; ce solde est donc exactement le
+    //   terme qui manque à la somme des caisses pour être juste, et sans lui le
+    //   rapprochement affiche un écart qu'il ne sait pas expliquer.
+    //
+    //   CE QU'ELLE COÛTE, ET IL FAUT LE LIRE. Le navigateur du dealer reçoit
+    //   désormais TOUTES les transactions non terminées du réseau, document par
+    //   document : `clientId`, `montant`, `type`, `reseau`, `operatorName`,
+    //   `operatorEmail`, `date`. Ce n'est pas un agrégat. L'alternative
+    //   recommandée — une Cloud Function ne renvoyant que des totaux par
+    //   boutique — a été écartée par le client.
+    //
+    //   CE QU'ELLE N'ÉLARGIT PAS. Un seul chemin bouge. `history` reste refusé
+    //   en direct comme en groupe ; les sous-collections `settlements` aussi
+    //   (le montant restant dû est déjà porté par le document `drafts`
+    //   lui-même, écrit par `addTransactionPayment`). L'écriture reste refusée :
+    //   le dealer lit, il ne touche pas.
+    //
+    //   ⚠ La garde est `isDealer()`, donc elle ne regarde PAS le `storeId` du
+    //     profil. Un compte dealer dont le profil porterait un `storeId`
+    //     falsifié gagne le même accès en lecture aux brouillons. C'est
+    //     inhérent à un rôle global, pas un défaut d'écriture — et c'est la
+    //     raison pour laquelle [BYP-01] a été retourné plutôt que contourné.
     // ─────────────────────────────────────────────────────────────
 
     match /dealerRequests/{requestId} {
@@ -473,7 +505,9 @@ service cloud.firestore {
       allow write: if false;
 
       match /drafts/{draftId} {
-        allow read: if isStoreMember(storeId);
+        // Le dealer LIT (élargissement du 31/08/2026, cf. § Demandes Dealer) ;
+        // il n'écrit rien : les trois clauses ci-dessous restent `isStoreMember`.
+        allow read: if isStoreMember(storeId) || isDealer();
         allow create: if isStoreMember(storeId) &&
           validStoreScopedTransaction(request.resource.data, storeId) &&
           isPendingStatus(request.resource.data.statut) &&
@@ -545,8 +579,12 @@ service cloud.firestore {
       allow read: if isSystemManager();
     }
 
+    // ⚠ `drafts` en groupe est ouvert au dealer ; `history` juste au-dessus ne
+    //   l'est PAS, et l'écart est voulu. Un brouillon est une opération en
+    //   cours, dont le solde manque au rapprochement du dealer ; l'historique
+    //   est l'activité client passée, qui ne lui a jamais été nécessaire.
     match /{path=**}/drafts/{docId} {
-      allow read: if isSystemManager();
+      allow read: if isDealer() || isSystemManager();
     }
 
     match /{path=**}/networkBalances/{docId} {
