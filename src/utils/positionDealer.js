@@ -10,10 +10,10 @@
  *   qu'elles doivent à leurs clients. Ils sont dans les deux membres OPPOSÉS de
  *   l'égalité ci-dessous. Les confondre inverserait le signe de l'écart.
  *
- * L'IDENTITÉ, ET POURQUOI ELLE A QUATRE TERMES ET NON DEUX
- * ───────────────────────────────────────────────────────
- * On voudrait écrire « somme des caisses = envoyé − revenu ». C'est faux deux
- * fois, et la vérification du code l'a montré.
+ * L'IDENTITÉ, ET POURQUOI ELLE A CINQ TERMES ET NON DEUX
+ * ──────────────────────────────────────────────────────
+ * On voudrait écrire « somme des caisses = envoyé − revenu ». C'est faux trois
+ * fois, et la vérification du code l'a montré à chaque fois.
  *
  * D'abord (S2) : la boutique est débitée à la CRÉATION d'un retour, tandis que
  * `flux.revenuCumul` n'avance qu'à sa CONFIRMATION. Entre les deux, l'argent
@@ -28,13 +28,36 @@
  * `sommeDehors = dépôts − retraits` est exactement ce qu'il faut lui rendre.
  * D'où :
  *
- *     stock + liquidité + dehors boutiques + en attente
- *         = fonds d'ouverture + envoyé − revenu
+ * Enfin (31/08/2026) : `confirmDealerRequest.js` débite la cuve du dealer ET
+ * crédite la boutique dans la MÊME transaction, à la confirmation. Avant elle,
+ * le CRM ne bouge rien — vérifié, c'est un seul `runTransaction`. Mais l'argent,
+ * lui, est déjà parti : le transfert a été fait au guichet, il n'est plus dans
+ * le float du dealer et pas encore dans la caisse de la boutique. Il est dehors,
+ * au sens propre du terme, et le CRM était le seul à ne pas le savoir. D'où :
  *
- * Aucun de ces deux termes n'est un ornement : chacun est ce qui réconcilie.
+ *     stock + liquidité + dehors boutiques + en route + en attente
+ *         = fonds d'ouverture + envoyé + en route − revenu
+ *
+ * Aucun de ces trois termes n'est un ornement : chacun est ce qui réconcilie.
  * Retirer le premier casse l'égalité à chaque retour en attente ; retirer le
  * second, à chaque transaction non réglée d'une des quatre-vingt-quatre
  * boutiques — c'est-à-dire en permanence.
+ *
+ * ⚠ « EN ROUTE » FIGURE DANS LES DEUX MEMBRES, ET CE N'EST PAS UNE RECOPIE
+ *   FAUTIVE. Les deux énoncés sont vrais séparément : cet argent a quitté les
+ *   mains du dealer (membre de droite), et le réseau en répond (membre de
+ *   gauche). Conséquence arithmétique : il S'ANNULE dans l'écart, qui ne bouge
+ *   pas d'un franc — c'est tc-203 [ER-02] qui le tient. Ce qui change, ce sont
+ *   les deux TOTAUX affichés, et c'est exactement ce qu'on cherchait : un
+ *   ravitaillement envoyé ne peut plus laisser « Mon argent dehors » à zéro
+ *   pendant que la ligne du dessous en annonce trois cent mille.
+ *
+ * ⚠ COROLLAIRE — et c'est lui qui explique qu'il n'y ait PAS de cinquième
+ *   refus. Si ce terme manque ou se trompe, l'écart reste JUSTE : il s'annule
+ *   des deux côtés. C'est ce qui le sépare de `sommeDehors`, qui n'entre que
+ *   d'un seul côté et dont l'absence fait donc refuser le rapprochement. Le
+ *   coût d'un « en route » manquant est deux totaux sous-estimés, pas un écart
+ *   faux — on n'achète donc pas ce risque au prix d'un écran qui se tait.
  *
  * ⚠ CE QUE CE RAPPROCHEMENT NE PROUVE PAS
  * ───────────────────────────────────────
@@ -105,6 +128,7 @@ const nombre = (valeur) => (typeof valeur === 'number' && Number.isFinite(valeur
  * @param {boolean} args.caissesLues   `false` si la lecture du réseau a échoué
  * @param {number} args.sommeDehors    dépôts non terminés − retraits non terminés
  * @param {boolean} args.dehorsLu      `false` si la lecture des non terminées a échoué
+ * @param {number} args.enRoute       ravitaillements envoyés, pas encore confirmés
  */
 export function rapprocherPosition({
   flux,
@@ -115,20 +139,28 @@ export function rapprocherPosition({
   caissesLues = true,
   sommeDehors = 0,
   dehorsLu = true,
+  enRoute = 0,
 } = {}) {
   const envoye = nombre(flux?.envoyeCumul)
   const revenu = nombre(flux?.revenuCumul)
-  const dehors = envoye - revenu
+  const route = nombre(enRoute)
+  // ⚠ `route` est le SEUL terme des deux membres. Il monte ici le grand nombre
+  //   de gauche, et douze lignes plus bas celui de droite. Le retirer d'un seul
+  //   des deux endroits ferait apparaître un écart de sa valeur exacte, sur un
+  //   argent qui n'a pas bougé.
+  const dehors = envoye - revenu + route
   const dehorsBoutiques = nombre(sommeDehors)
-  // ⚠ Les trois lignes affichées font EXACTEMENT ce total, et c'est la première
-  //   chose qu'un lecteur vérifie du regard. Aucun terme ne s'y glisse qui ne
-  //   soit pas au-dessus, aucun n'en sort.
-  const sommeCaisses = nombre(sommeStock) + nombre(sommeLiquidite) + dehorsBoutiques
+  // ⚠ Les lignes affichées font EXACTEMENT ce total, et c'est la première chose
+  //   qu'un lecteur vérifie du regard. Aucun terme ne s'y glisse qui ne soit pas
+  //   au-dessus, aucun n'en sort.
+  const sommeCaisses =
+    nombre(sommeStock) + nombre(sommeLiquidite) + dehorsBoutiques + route
   const transit = nombre(enTransit)
 
   const base = {
     envoye,
     revenu,
+    enRoute: route,
     dehors,
     sommeStock: nombre(sommeStock),
     sommeLiquidite: nombre(sommeLiquidite),
@@ -141,6 +173,12 @@ export function rapprocherPosition({
   // ⚠ Lecture échouée : les sommes passent à `null`, pas à zéro. Zéro se lit
   //   « les caisses sont vides » — c'est un montant, et c'est faux. `null`
   //   s'affiche « — » et ne se confond avec rien.
+  //
+  // ⚠ `enRoute` N'EN FAIT PAS PARTIE et reste un nombre, y compris ici. Il ne
+  //   vient pas de la lecture du réseau mais des demandes du dealer, qui a
+  //   réussi : le passer à `null` pour faire une colonne homogène effacerait un
+  //   montant qu'on connaît. La colonne de droite affiche donc trois tirets et
+  //   un chiffre — ce qui est la vérité de l'écran à cet instant.
   if (!caissesLues) {
     return {
       ...base,

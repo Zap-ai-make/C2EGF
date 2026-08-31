@@ -311,3 +311,114 @@ describe('TC-203-E — le quatrième refus', () => {
     expect(p.raison).toBe(RAISONS.DEHORS_INDISPONIBLE)
   })
 })
+
+// ===========================================================================
+// TC-203-F — « en route », le terme qui est dans LES DEUX membres
+//
+// Ajoute le 01/09/2026. Les tests ci-dessus n'ont pas bouge : le nouveau terme
+// vaut 0 par defaut, donc tout ce qui etait vrai le reste ([ER-05] le tient).
+//
+// LE FAIT VERIFIE DANS LE CODE : `confirmDealerRequest.js` debite la cuve du
+// dealer ET credite la boutique dans un seul `runTransaction`, a la
+// confirmation. Avant elle, le CRM ne bouge rien. Mais le transfert, lui, a ete
+// fait au guichet : l'argent a quitte le dealer sans etre arrive chez la
+// boutique. Il est dehors, et il est du au reseau — d'ou sa presence des deux
+// cotes de l'egalite.
+//
+// ⚠ C'EST [ER-02] QUI PORTE TOUT CE BLOC. Un terme present dans les deux
+//   membres doit s'annuler dans l'ecart. S'il ne s'annulait pas, on aurait
+//   fabrique une anomalie de sa valeur exacte sur un argent qui n'a pas bouge —
+//   c'est-a-dire envoye le dealer chercher tous les matins un trou qui n'existe
+//   pas. C'est la promesse faite au client avant d'ecrire ce terme.
+// ===========================================================================
+
+describe('TC-203-F — les ravitaillements envoyes, pas encore confirmes', () => {
+  const flux = { envoyeCumul: 10_000_000, revenuCumul: 2_000_000, amorce: true }
+  const jeu = { flux, sommeStock: 5_000_000, sommeLiquidite: 2_000_000, sommeDehors: 500_000 }
+
+  it('[ER-01] il monte les DEUX grands nombres, du meme montant', () => {
+    const sans = rapprocherPosition(jeu)
+    const avec = rapprocherPosition({ ...jeu, enRoute: 300_000 })
+
+    expect(avec.dehors - sans.dehors).toBe(300_000)
+    expect(avec.sommeCaisses - sans.sommeCaisses).toBe(300_000)
+  })
+
+  it('[ER-02] REGLE — l’ecart ne bouge pas d’un franc, quelle que soit sa valeur', () => {
+    // La promesse. Un terme des deux membres s'annule ; s'il ne s'annulait pas,
+    // ajouter cette ligne aurait fabrique une anomalie sur un argent immobile.
+    const reference = rapprocherPosition(jeu).ecart
+    for (const montant of [0, 1, 300_000, 87_250_787, Number.MAX_SAFE_INTEGER - 1e9]) {
+      const p = rapprocherPosition({ ...jeu, enRoute: montant })
+      expect(p.ecart).toBe(reference)
+      expect(p.etat).toBe(rapprocherPosition(jeu).etat)
+    }
+  })
+
+  it('[ER-03] les trois lignes de gauche font EXACTEMENT le total de gauche', () => {
+    const p = rapprocherPosition({ ...jeu, enRoute: 300_000 })
+    expect(p.envoye - p.revenu + p.enRoute).toBe(p.dehors)
+  })
+
+  it('[ER-04] les quatre lignes de droite font EXACTEMENT le total de droite', () => {
+    const p = rapprocherPosition({ ...jeu, enRoute: 300_000 })
+    expect(p.sommeStock + p.sommeLiquidite + p.sommeDehors + p.enRoute).toBe(p.sommeCaisses)
+  })
+
+  it('[ER-05] absent, il vaut zero et rien de ce qui precede ne change', () => {
+    const p = rapprocherPosition(jeu)
+    expect(p.enRoute).toBe(0)
+    expect(p.dehors).toBe(8_000_000)
+    expect(p.sommeCaisses).toBe(7_500_000)
+  })
+
+  it('[ER-06] une valeur illisible vaut zero, jamais NaN', () => {
+    for (const v of ['x', undefined, NaN, Infinity, null, {}]) {
+      const p = rapprocherPosition({ ...jeu, enRoute: v })
+      expect(p.enRoute).toBe(0)
+      expect(Number.isNaN(p.ecart)).toBe(false)
+    }
+  })
+
+  it('[ER-07] il n’ouvre AUCUN cinquieme refus', () => {
+    // Le corollaire de [ER-02], et la raison assumee de ne pas ajouter de
+    // refus : un « en route » manquant coute deux totaux sous-estimes, pas un
+    // ecart faux. `sommeDehors`, qui n'entre que d'un cote, fait refuser — pas
+    // celui-ci. Se taire ici serait payer un ecran muet pour rien.
+    const p = rapprocherPosition({ ...jeu, enRoute: 0 })
+    expect(p.etat).not.toBe(ETATS.INDISPONIBLE)
+    expect(p.raison).toBeNull()
+  })
+
+  it('[ER-08] il ne retourne jamais un concordant en anomalie', () => {
+    // Le jeu ci-dessous concorde exactement. Aucun montant en route ne doit
+    // pouvoir le faire basculer : c'est [ER-02] vu du cote de l'utilisateur.
+    const concordant = {
+      flux: { envoyeCumul: 8_000_000, revenuCumul: 500_000, amorce: true },
+      sommeStock: 5_000_000, sommeLiquidite: 2_000_000, sommeDehors: 400_000, enTransit: 100_000,
+    }
+    expect(rapprocherPosition(concordant).etat).toBe(ETATS.CONCORDANT)
+    for (const montant of [1, 300_000, 50_000_000]) {
+      expect(rapprocherPosition({ ...concordant, enRoute: montant }).etat).toBe(ETATS.CONCORDANT)
+    }
+  })
+
+  it('[ER-09] reseau illisible : il reste un nombre, seul le total passe a null', () => {
+    // Il ne vient pas de la lecture du reseau mais des demandes du dealer, qui
+    // a reussi. Le passer a `null` pour faire une colonne homogene effacerait un
+    // montant qu'on connait.
+    const p = rapprocherPosition({ ...jeu, enRoute: 300_000, caissesLues: false })
+    expect(p.enRoute).toBe(300_000)
+    expect(p.sommeCaisses).toBeNull()
+    // Et la colonne de gauche, elle, reste entierement juste.
+    expect(p.dehors).toBe(8_300_000)
+  })
+
+  it('[ER-10] non terminees manquantes : meme partage', () => {
+    const p = rapprocherPosition({ ...jeu, enRoute: 300_000, dehorsLu: false })
+    expect(p.raison).toBe(RAISONS.DEHORS_INDISPONIBLE)
+    expect(p.enRoute).toBe(300_000)
+    expect(p.dehors).toBe(8_300_000)
+    expect(p.sommeCaisses).toBeNull()
+  })
+})
