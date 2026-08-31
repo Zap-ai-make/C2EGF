@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { X } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import {
   subscribeIncomingTransfers,
@@ -11,9 +12,34 @@ import { useToast } from '../../hooks/useToast'
 import PageHeader from '../../components/ui/PageHeader'
 import EmptyState from '../../components/ui/EmptyState'
 import ErrorState from '../../components/ui/ErrorState'
-import { SkeletonTable } from '../../components/ui/SkeletonList'
+import Registre, { SqueletteRegistre } from '../../components/dealer/Registre'
 import Toast from '../../components/Toast'
 import { formatDateTime as formatDate } from '../../utils/formatters'
+
+/**
+ * Les retours des boutiques — la file où le dealer répond.
+ *
+ * DEUX ACTIONS, UNE SEULE PRIMAIRE
+ * ────────────────────────────────
+ * Confirmer et rejeter étaient deux boutons pleins de deux couleurs, vert et
+ * rouge, de poids visuel égal. C'est le dessin qui fait cliquer à côté : deux
+ * affordances identiques placées à 8 px l'une de l'autre, sur une action qui
+ * déplace de l'argent. Confirmer devient la primaire, rejeter une secondaire
+ * discrète — et le rouge disparaît d'un geste qui n'est pas un échec : rejeter
+ * un retour est une décision, pas une panne (`danger` reste à l'échec).
+ *
+ * Le nom accessible de chaque bouton porte SA ligne (« Confirmer le retour de
+ * FADA »). Sur une file de vingt lignes, vingt boutons nommés « Confirmer »
+ * sont vingt fois la même phrase, et rien ne dit laquelle on active.
+ */
+
+const COLONNES = [
+  { cle: 'boutique', titre: 'Boutique' },
+  { cle: 'type', titre: 'Type' },
+  { cle: 'montant', titre: 'Montant', nombre: true },
+  { cle: 'date', titre: 'Date', discret: true },
+  { cle: 'actions', titre: 'Actions', fin: true },
+]
 
 function DealerTransfers() {
   const { currentUser } = useAuth()
@@ -27,6 +53,7 @@ function DealerTransfers() {
   const [reason, setReason]       = useState('')
   // Incrémenté par « Réessayer » pour relancer l'abonnement sans recharger la page.
   const [refreshKey, setRefreshKey] = useState(0)
+  const dialogRef = useRef(null)
 
   const dealerUid = currentUser?.uid
 
@@ -41,6 +68,23 @@ function DealerTransfers() {
     })
     return unsub
   }, [dealerUid, refreshKey])
+
+  const fermerRejet = useCallback(() => { setRejectFor(null); setReason('') }, [])
+
+  // Échap referme, comme tout calque (DESIGN.md §11).
+  useEffect(() => {
+    if (!rejectFor) return undefined
+    const onKey = (e) => { if (e.key === 'Escape') fermerRejet() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [rejectFor, fermerRejet])
+
+  // Le focus entre dans la modale : sans cela la tabulation continuerait
+  // derrière le calque, sur une file qu'on ne voit plus.
+  useEffect(() => {
+    if (!rejectFor) return
+    dialogRef.current?.querySelector('textarea, button')?.focus()
+  }, [rejectFor])
 
   const handleConfirm = useCallback(async (id) => {
     setActingId(id)
@@ -69,96 +113,117 @@ function DealerTransfers() {
     }
   }, [rejectFor, reason, showToast])
 
+  const nomBoutique = (t) => t.storeName ?? t.storeId
+
+  const cellules = (t) => ({
+    boutique: <span className="font-medium text-ink">{nomBoutique(t)}</span>,
+    type: <span className="text-ink-muted">{STORE_TRANSFER_TYPE_LABELS[t.transferType] ?? t.transferType}</span>,
+    montant: formatCurrency(t.amount),
+    date: formatDate(t.createdAt),
+    actions: (
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => handleConfirm(t.id)}
+          disabled={actingId === t.id}
+          aria-label={`Confirmer le retour de ${nomBoutique(t)}`}
+          className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-brand-600 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+          data-testid={`confirm-${t.id}`}
+        >
+          {actingId === t.id ? 'Traitement…' : 'Confirmer'}
+        </button>
+        <button
+          type="button"
+          onClick={() => { setRejectFor(t.id); setReason('') }}
+          disabled={actingId === t.id}
+          aria-label={`Rejeter le retour de ${nomBoutique(t)}`}
+          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:bg-brand-50 hover:text-ink disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+          data-testid={`reject-${t.id}`}
+        >
+          Rejeter
+        </button>
+      </div>
+    ),
+  })
+
   return (
     <div data-testid="dealer-transfers">
       <PageHeader
         title="Retours boutiques"
-        subtitle="Retours de stock / liquidité envoyés par les boutiques — à confirmer ou rejeter"
+        subtitle="Retours de stock et envois de liquidité des boutiques — à confirmer ou rejeter"
       />
 
-      {loading && <SkeletonTable rows={5} cols={5} />}
+      {loading && <SqueletteRegistre colonnes={COLONNES} lignes={5} />}
       {error && <ErrorState message={error} onRetry={() => { setError(null); setRefreshKey(k => k + 1) }} />}
       {!loading && !error && transfers.length === 0 && (
-        <EmptyState title="Aucun retour en attente" message="Les boutiques n'ont envoyé aucun retour pour le moment." />
+        <EmptyState
+          title="Aucun retour en attente"
+          message="Rien ne vous attend ici. Les retours déjà traités restent consultables dans l’historique."
+        />
       )}
 
       {!loading && !error && transfers.length > 0 && (
-        <div className="overflow-x-auto rounded-2xl bg-white ring-1 ring-gray-100 shadow-sm">
-          <table className="min-w-full divide-y divide-gray-100 text-sm">
-            <thead className="bg-green-50/70">
-              <tr className="text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                <th className="px-4 py-3">Boutique</th>
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Montant</th>
-                <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {transfers.map(t => (
-                <tr key={t.id} className="hover:bg-gray-50" data-testid={`transfer-row-${t.id}`}>
-                  <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{t.storeName ?? t.storeId}</td>
-                  <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{STORE_TRANSFER_TYPE_LABELS[t.transferType] ?? t.transferType}</td>
-                  <td className="px-4 py-3 font-medium text-gray-800 whitespace-nowrap">{formatCurrency(t.amount)}</td>
-                  <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">{formatDate(t.createdAt)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleConfirm(t.id)}
-                        disabled={actingId === t.id}
-                        className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
-                        data-testid={`confirm-${t.id}`}
-                      >
-                        {actingId === t.id ? '…' : 'Confirmer'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setRejectFor(t.id); setReason('') }}
-                        disabled={actingId === t.id}
-                        className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
-                        data-testid={`reject-${t.id}`}
-                      >
-                        Rejeter
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Registre
+          colonnes={COLONNES}
+          lignes={transfers}
+          cle={(t) => t.id}
+          cellules={cellules}
+          libelle="Retours de boutiques en attente"
+          testId="transfers-table"
+          testIdLigne={(t) => `transfer-row-${t.id}`}
+        />
       )}
 
-      {/* Modale de rejet */}
       {rejectFor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold text-gray-900">Rejeter le retour</h2>
-            <p className="mt-1 text-sm text-gray-500">Indiquez un motif (3–500 caractères). Le solde de la boutique sera restauré.</p>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="rejet-titre"
+        >
+          <div ref={dialogRef} className="w-full max-w-md rounded-xl bg-surface p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-4">
+              <h2 id="rejet-titre" className="text-lg font-semibold text-ink">Rejeter le retour</h2>
+              <button
+                type="button"
+                onClick={fermerRejet}
+                className="-m-1 rounded p-1 text-ink-muted transition-colors hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                aria-label="Fermer"
+              >
+                <X className="h-4 w-4" aria-hidden="true" strokeWidth={2} />
+              </button>
+            </div>
+            <p className="mt-1 text-sm text-ink-muted">
+              Indiquez un motif (3 à 500 caractères). Le solde de la boutique sera restauré.
+            </p>
+            <label htmlFor="rejet-motif" className="sr-only">Motif du rejet</label>
             <textarea
+              id="rejet-motif"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
-              className="mt-3 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:border-green-400 focus:ring-1 focus:ring-green-400"
+              className="mt-3 w-full rounded-lg border border-line px-3 py-2 text-sm text-ink focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
               placeholder="Motif du rejet…"
             />
             <div className="mt-4 flex justify-end gap-3">
               <button
                 type="button"
-                onClick={() => { setRejectFor(null); setReason('') }}
+                onClick={fermerRejet}
                 disabled={actingId === rejectFor}
-                className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className="rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-brand-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
               >
                 Annuler
               </button>
+              {/* Rejeter est ici la PRIMAIRE : c'est l'action de cette modale,
+                  et on l'a demandée. Le rouge reste absent — un rejet motivé
+                  est une décision, pas un échec. */}
               <button
                 type="button"
                 onClick={handleReject}
                 disabled={actingId === rejectFor || reason.trim().length < 3}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
               >
-                {actingId === rejectFor ? 'Rejet…' : 'Rejeter'}
+                {actingId === rejectFor ? 'Traitement…' : 'Rejeter'}
               </button>
             </div>
           </div>

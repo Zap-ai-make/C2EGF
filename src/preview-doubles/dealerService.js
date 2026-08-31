@@ -130,12 +130,35 @@ const abonnement = (valeur) => ({ onUpdate }) => {
 
 export const subscribeDealerPendingCount = abonnement(4)
 
+/**
+ * La file des ravitaillements — `?file=garnie|vide|filtre`.
+ *
+ * `filtre` rend une file NON vide dont aucun élément ne correspondra au filtre
+ * appliqué : c'est le seul moyen de regarder le second état vide, celui qui
+ * invite à élargir plutôt qu'à créer. Les deux vides ne se dessinent pas
+ * pareil, donc ils se regardent tous les deux.
+ */
+const fileVariante = new URLSearchParams(globalThis.location?.search ?? '').get('file') ?? 'garnie'
+
+const jour = (h) => new Date(2026, 7, 31, h, 12)
+
+const RAVITAILLEMENTS = [
+  { id: 'rq1', targetStoreName: 'POUYTENGA', requestType: 'stock_add', amount: 1800000, status: 'pending', network: 'Orange', createdAt: jour(9) },
+  { id: 'rq2', targetStoreName: 'ZORGHO', requestType: 'liquidity_add', amount: 410000, status: 'confirmed', network: 'Orange', newBalance: 3066975, createdAt: jour(8) },
+  { id: 'rq3', targetStoreName: 'KOUDOUGOU', requestType: 'stock_add', amount: 90000, status: 'rejected', rejectionReason: 'Montant supérieur au besoin annoncé ce matin.', network: 'Orange', createdAt: jour(7) },
+  { id: 'rq4', targetStoreName: 'OUAGA CENTRE', requestType: 'stock_add', amount: 12400000, status: 'confirmed', network: 'Orange', newBalance: 14200000, createdAt: jour(6) },
+  { id: 'rq5', targetStoreName: 'FADA', requestType: 'liquidity_add', amount: 640000, status: 'pending', network: 'Orange', createdAt: jour(5) },
+]
+
+const fileRavitaillements = () =>
+  fileVariante === 'vide' ? [] : RAVITAILLEMENTS
+
 export async function listDealerRequests() {
-  return { requests: [], lastDoc: null, hasMore: false }
+  return { requests: fileRavitaillements(), lastDoc: null, hasMore: fileVariante === 'garnie' }
 }
 
 export const subscribeDealerRequests = ({ onUpdate }) => {
-  onUpdate?.({ requests: [], lastDoc: null, hasMore: false })
+  onUpdate?.({ requests: fileRavitaillements(), lastDoc: null, hasMore: fileVariante === 'garnie' })
   return () => {}
 }
 

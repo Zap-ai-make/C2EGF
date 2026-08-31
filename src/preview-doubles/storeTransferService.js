@@ -83,11 +83,24 @@ export const subscribeRetoursEnAttente = abonnement({
   illisibles: 0,
 })
 
-export const subscribeIncomingTransfers = abonnement([
-  { id: 't1', storeName: 'OUAGA CENTRE', transferType: 'return_liquidity', amount: 640000, createdAt: new Date() },
-  { id: 't2', storeName: 'FADA', transferType: 'return_stock', amount: 1200000, createdAt: new Date() },
-  { id: 't3', storeName: 'KOUPELA', transferType: 'return_liquidity', amount: 310000, createdAt: new Date() },
-])
+/** L'état de la file : `?file=garnie` (défaut) ou `?file=vide`. */
+const fileVariante = new URLSearchParams(globalThis.location?.search ?? '').get('file') ?? 'garnie'
+
+// ⚠ Dates FIXES, et non `new Date()`. Le jeu du banc est déterministe par
+//   principe : une capture doit pouvoir se comparer à la précédente, et un
+//   écart doit venir du code, jamais de l'heure à laquelle on l'a prise.
+//   Les trois montants sont ceux de `subscribeRetoursEnAttente` ci-dessus —
+//   c'est la même file vue deux fois, et elle ne doit pas diverger.
+const RETOURS = [
+  { id: 't1', storeName: 'OUAGA CENTRE', transferType: 'return_liquidity', amount: 640000, createdAt: new Date(2026, 7, 31, 7, 48) },
+  { id: 't2', storeName: 'FADA', transferType: 'return_stock', amount: 1200000, createdAt: new Date(2026, 7, 30, 17, 20) },
+  { id: 't3', storeName: 'KOUPELA', transferType: 'return_liquidity', amount: 310000, createdAt: new Date(2026, 7, 30, 11, 5) },
+]
+
+export const subscribeIncomingTransfers = ({ onUpdate }) => {
+  onUpdate?.(fileVariante === 'vide' ? [] : RETOURS)
+  return () => {}
+}
 
 export const subscribePartnerDeposits = abonnement([])
 

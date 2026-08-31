@@ -10,13 +10,27 @@ import {
   DEALER_REQUEST_STATUSES,
   DEALER_NETWORK,
 } from '../../constants/dealerConstants'
+import PageHeader from '../../components/ui/PageHeader'
+import EmptyState from '../../components/ui/EmptyState'
+import ErrorState from '../../components/ui/ErrorState'
 import RejectionRemarkButton from '../../components/ui/RejectionRemarkButton'
 import DealerRequestStatusBadge from '../../components/ui/DealerRequestStatusBadge'
+import Registre, { SqueletteRegistre } from '../../components/dealer/Registre'
 import { formatDateTime as formatDate } from '../../utils/formatters'
 
-// ---------------------------------------------------------------------------
-// DealerRequests
-// ---------------------------------------------------------------------------
+/**
+ * Mes ravitaillements — la file de ce que le dealer a envoyé.
+ *
+ * ⚠ SEUL LE RENDU A CHANGÉ DANS CE FICHIER. Tout ce qui est au-dessus du
+ *   `return` — la double source (abonnement temps réel sur la première page,
+ *   curseur `getDocs` sur les suivantes), les quatre `ref` de garde, la
+ *   génération de contexte — est de la logique de CONCURRENCE, pas du dessin.
+ *   Elle est figée par S1 et n'a pas été touchée.
+ *
+ * L'état « Appuyez sur Actualiser » a disparu : il était inatteignable, puisque
+ * l'abonnement part au montage. Un état mort dans le code est un état qu'on
+ * croit avoir dessiné.
+ */
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Tous les statuts' },
@@ -24,6 +38,18 @@ const STATUS_OPTIONS = [
   { value: DEALER_REQUEST_STATUSES.CONFIRMED, label: DEALER_REQUEST_STATUS_LABELS.confirmed },
   { value: DEALER_REQUEST_STATUSES.REJECTED, label: DEALER_REQUEST_STATUS_LABELS.rejected },
 ]
+
+const COLONNES = [
+  { cle: 'boutique', titre: 'Boutique' },
+  { cle: 'type', titre: 'Type' },
+  { cle: 'montant', titre: 'Montant', nombre: true },
+  { cle: 'reseau', titre: 'Réseau' },
+  { cle: 'statut', titre: 'Statut' },
+  { cle: 'remarque', titre: 'Remarque' },
+  { cle: 'date', titre: 'Date', discret: true },
+]
+
+const CHAMP = 'rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400'
 
 function DealerRequests() {
   const { currentUser, userProfile } = useAuth()
@@ -191,37 +217,76 @@ function DealerRequests() {
       )
     : requests
 
+  const filtreActif = Boolean(statusFilter || storeSearch.trim())
+  const effacerFiltres = () => { handleStatusChange(''); setStoreSearch('') }
+
+  // Le vide filtré NOMME le filtre qui ne rend rien. « Aucun résultat » tout
+  // court oblige à remonter lire les champs pour comprendre ce qu'on cherchait ;
+  // sur un écran où deux filtres se combinent, c'est une devinette.
+  const critereActif = [
+    statusFilter && `le statut « ${DEALER_REQUEST_STATUS_LABELS[statusFilter] ?? statusFilter} »`,
+    storeSearch.trim() && `la boutique « ${storeSearch.trim()} »`,
+  ].filter(Boolean).join(' et ')
+
+  const cellules = (req) => ({
+    boutique: <span className="font-medium text-ink">{req.targetStoreName}</span>,
+    type: <span className="text-ink-muted">{DEALER_REQUEST_TYPE_LABELS[req.requestType] ?? req.requestType}</span>,
+    montant: formatCurrency(req.amount),
+    reseau: <span className="text-ink-muted">{req.network ?? DEALER_NETWORK}</span>,
+    statut: <DealerRequestStatusBadge status={req.status} />,
+    remarque: (
+      <RejectionRemarkButton
+        storeName={req.targetStoreName}
+        reason={req.status === DEALER_REQUEST_STATUSES.REJECTED ? req.rejectionReason : null}
+        testId={`remark-btn-${req.id}`}
+      />
+    ),
+    date: formatDate(req.createdAt),
+  })
+
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="max-w-5xl mx-auto" data-testid="dealer-requests">
-      {/* En-tête */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-        <h1 className="text-xl font-bold text-gray-800">Mes demandes</h1>
-        <button
-          type="button"
-          onClick={() => navigate('/dealer/requests/new')}
-          className="rounded bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600 transition-colors"
-          data-testid="btn-new-request"
-        >
-          Nouvelle demande
-        </button>
-      </div>
+    <div data-testid="dealer-requests">
+      <PageHeader
+        title="Mes ravitaillements"
+        subtitle="Ce que j’ai envoyé aux boutiques, et où ça en est"
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => { setExtraRequests([]); setRefreshKey(k => k + 1) }}
+              disabled={loading}
+              className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-brand-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+              aria-label="Actualiser la liste"
+            >
+              {loading ? 'Chargement…' : 'Actualiser'}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/dealer/requests/new')}
+              className="rounded-lg bg-brand-500 px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+              data-testid="btn-new-request"
+            >
+              Nouveau ravitaillement
+            </button>
+          </>
+        }
+      />
 
       {/* Filtres */}
-      <div className="bg-white rounded-lg shadow p-4 mb-5 flex flex-wrap gap-4 items-end">
-        {/* Statut */}
-        <div className="flex-1 min-w-40">
-          <label htmlFor="status-filter" className="block text-xs font-medium text-gray-600 mb-1">
+      <div className="mb-5 flex flex-wrap items-end gap-3">
+        <div className="min-w-40 flex-1 sm:max-w-56">
+          <label htmlFor="status-filter" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-muted">
             Statut
           </label>
           <select
             id="status-filter"
             value={statusFilter}
             onChange={e => handleStatusChange(e.target.value)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
+            className={`w-full ${CHAMP}`}
             aria-label="Filtrer par statut"
             data-testid="filter-status"
           >
@@ -231,9 +296,8 @@ function DealerRequests() {
           </select>
         </div>
 
-        {/* Recherche boutique */}
-        <div className="flex-1 min-w-40">
-          <label htmlFor="store-filter" className="block text-xs font-medium text-gray-600 mb-1">
+        <div className="min-w-40 flex-1 sm:max-w-80">
+          <label htmlFor="store-filter" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-muted">
             Boutique
           </label>
           <input
@@ -242,144 +306,77 @@ function DealerRequests() {
             value={storeSearch}
             onChange={e => setStoreSearch(e.target.value)}
             placeholder="Nom de la boutique…"
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
+            className={`w-full ${CHAMP}`}
             aria-label="Filtrer par nom de boutique"
             data-testid="filter-store"
           />
         </div>
-
-        {/* Actualiser */}
-        <button
-          type="button"
-          onClick={() => { setExtraRequests([]); setRefreshKey(k => k + 1) }}
-          disabled={loading}
-          className="rounded bg-gray-100 border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 transition-colors"
-          aria-label="Actualiser la liste"
-        >
-          {loading ? 'Chargement…' : 'Actualiser'}
-        </button>
       </div>
 
-      {/* État initial (n'apparaît jamais avec l'abonnement automatique) */}
-      {!hasLoaded && !loading && (
-        <div className="bg-white rounded-lg shadow p-10 text-center text-gray-500">
-          Appuyez sur <strong>Actualiser</strong> pour charger vos demandes.
-        </div>
-      )}
-
-      {loading && (
-        <div className="space-y-3" aria-busy="true" aria-label="Chargement des demandes">
-          {[1, 2, 3].map(n => (
-            <div key={n} className="bg-white rounded-lg shadow p-4 motion-safe:animate-pulse">
-              <div className="flex justify-between items-center">
-                <div className="h-4 w-32 bg-gray-200 rounded" />
-                <div className="h-5 w-20 bg-gray-200 rounded-full" />
-              </div>
-              <div className="mt-3 flex gap-6">
-                <div className="h-4 w-24 bg-gray-200 rounded" />
-                <div className="h-4 w-20 bg-gray-200 rounded" />
-                <div className="h-4 w-28 bg-gray-200 rounded" />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      {loading && <SqueletteRegistre colonnes={COLONNES} lignes={5} />}
 
       {error && (
-        <div role="alert" className="rounded-lg bg-red-50 border border-red-200 p-5 text-red-700">
-          <p className="font-medium mb-1">Erreur</p>
-          <p className="text-sm">{error}</p>
-          <button
-            type="button"
-            onClick={() => setRefreshKey(k => k + 1)}
-            className="mt-3 rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 transition-colors"
-          >
-            Réessayer
-          </button>
-        </div>
+        <ErrorState message={error} onRetry={() => setRefreshKey(k => k + 1)} />
       )}
 
-      {hasLoaded && !loading && !error && requests.length === 0 && (
-        <div className="bg-white rounded-lg shadow p-10 text-center text-gray-500" data-testid="empty-state">
-          {statusFilter
-            ? `Aucune demande avec le statut « ${DEALER_REQUEST_STATUS_LABELS[statusFilter] ?? statusFilter} ».`
-            : 'Vous n\'avez pas encore de demande.'}
-        </div>
+      {/* Deux vides, et non un seul (DESIGN.md §10). « Vous n'avez encore rien
+          envoyé » invite à créer ; « rien ne correspond » invite à élargir.
+          Un texte unique en trahirait forcément un des deux. */}
+      {hasLoaded && !loading && !error && filtered.length === 0 && (
+        filtreActif ? (
+          <div data-testid="empty-state">
+            <EmptyState
+              title="Aucun ravitaillement ne correspond"
+              message={`Aucune demande avec ${critereActif}.`}
+              action={
+                <button
+                  type="button"
+                  onClick={effacerFiltres}
+                  className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                >
+                  Effacer les filtres
+                </button>
+              }
+            />
+          </div>
+        ) : (
+          <div data-testid="empty-state">
+            <EmptyState
+              title="Aucun ravitaillement"
+              message="Envoyez du stock ou de la liquidité à une boutique de votre réseau ; le ravitaillement apparaîtra ici jusqu’à ce qu’elle le confirme."
+              action={
+                <button
+                  type="button"
+                  onClick={() => navigate('/dealer/requests/new')}
+                  className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                >
+                  Nouveau ravitaillement
+                </button>
+              }
+            />
+          </div>
+        )
       )}
 
-      {/* Liste */}
       {!loading && !error && filtered.length > 0 && (
         <>
-          {/* Tableau — scroll horizontal sur mobile */}
-          <div className="bg-white rounded-lg shadow overflow-x-auto" data-testid="requests-table">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-green-50/70">
-                <tr>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Boutique
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Type
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Montant
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Réseau
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Statut
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Remarque
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Date
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-100">
-                {filtered.map(req => (
-                  <tr key={req.id} data-testid={`request-row-${req.id}`}>
-                    <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-800">
-                      {req.targetStoreName}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-600">
-                      {DEALER_REQUEST_TYPE_LABELS[req.requestType] ?? req.requestType}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-800 font-medium">
-                      {formatCurrency(req.amount)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-600">
-                      {req.network ?? DEALER_NETWORK}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <DealerRequestStatusBadge status={req.status} />
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <RejectionRemarkButton
-                        storeName={req.targetStoreName}
-                        reason={req.status === DEALER_REQUEST_STATUSES.REJECTED ? req.rejectionReason : null}
-                        testId={`remark-btn-${req.id}`}
-                      />
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-gray-500 text-xs">
-                      {formatDate(req.createdAt)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Registre
+            colonnes={COLONNES}
+            lignes={filtered}
+            cle={(req) => req.id}
+            cellules={cellules}
+            libelle="Mes ravitaillements envoyés aux boutiques"
+            testId="requests-table"
+            testIdLigne={(req) => `request-row-${req.id}`}
+          />
 
-          {/* Pagination Firestore */}
           {hasMore && (
             <div className="mt-4 text-center">
               <button
                 type="button"
                 onClick={loadMore}
                 disabled={loadingMore}
-                className="rounded bg-gray-100 border border-gray-300 px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 transition-colors"
+                className="rounded-lg border border-line bg-surface px-6 py-2 text-sm font-medium text-ink transition-colors hover:bg-brand-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
                 data-testid="btn-load-more"
               >
                 {loadingMore ? 'Chargement…' : 'Voir plus'}

@@ -196,8 +196,14 @@ describe('TC-080-ET — états', () => {
     const sub = captureSubscription()
     renderPage()
     act(() => sub.onUpdate({ requests: [], lastDoc: null, hasMore: false }))
+    // Texte réécrit par S5 — SEULE assertion de ce fichier que le lot a
+    // touchée. L'ancienne (« Vous n'avez pas encore de demande. ») constatait
+    // le vide ; la nouvelle invite à agir, comme l'exige DESIGN.md §10.
+    // ⚠ ET-03 juste en dessous n'a PAS bougé : le vide FILTRÉ nomme toujours
+    //   le filtre qui ne rend rien, et c'est ce qui prouve que le redessin n'a
+    //   pas troqué la précision contre une jolie phrase.
     await waitFor(() =>
-      expect(screen.getByTestId('empty-state')).toHaveTextContent('Vous n\'avez pas encore de demande.')
+      expect(screen.getByTestId('empty-state')).toHaveTextContent('Aucun ravitaillement')
     )
   })
 

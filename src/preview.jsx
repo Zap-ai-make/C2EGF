@@ -32,6 +32,9 @@ import StoreAdminDealerRequests from './pages/store/StoreAdminDealerRequests.jsx
 import AuthPage from './components/auth/AuthPage.jsx'
 import DealerLayout from './layouts/DealerLayout.jsx'
 import DealerDashboard from './pages/dealer/DealerDashboard.jsx'
+import DealerRequests from './pages/dealer/DealerRequests.jsx'
+import DealerTransfers from './pages/dealer/DealerTransfers.jsx'
+import DealerHistory from './pages/dealer/DealerHistory.jsx'
 import Balance from './components/dashboard/Balance.jsx'
 import ReseauCards from './components/dashboard/ReseauCards.jsx'
 import FluxChart from './components/dashboard/FluxChart.jsx'
@@ -366,12 +369,32 @@ function Preview() {
  *   &cuves=basses|vides                  l'état des CUVES du dealer
  *   &caisses=vide|erreur|erreur-partielle|clairseme   l'état du RÉSEAU
  *   &position=neufs|anomalie             l'état du RAPPROCHEMENT
+ *   &ecran=ravitaillements|retours|historique   l'écran monté (défaut : accueil)
+ *   &file=vide                           les files, sans rien à traiter
  *
  * Trois axes séparés parce que ce sont trois sources distinctes — l'inventaire
  * du dealer, la liste des boutiques, les compteurs de flux — et qu'un défaut
  * de dessin se loge presque toujours dans une COMBINAISON : cuves vides et
  * réseau à sec, par exemple, est l'écran le moins souvent regardé.
  */
+/**
+ * L'écran monté dans le poste, choisi par `?ecran=`. Un seul à la fois : la
+ * barre latérale est en `position: fixed`, et empiler deux écrans sous elle
+ * mesurerait un débordement qui n'existe nulle part.
+ */
+const ECRANS = {
+  accueil: DealerDashboard,
+  ravitaillements: DealerRequests,
+  retours: DealerTransfers,
+  historique: DealerHistory,
+}
+
+function EcranDealer() {
+  const nom = new URLSearchParams(globalThis.location?.search ?? '').get('ecran') ?? 'accueil'
+  const Ecran = ECRANS[nom] ?? DealerDashboard
+  return <Ecran />
+}
+
 function PosteDealer() {
   return (
     <MemoryRouter>
@@ -384,7 +407,7 @@ function PosteDealer() {
       >
         <Routes>
           <Route element={<DealerLayout />}>
-            <Route path="*" element={<DealerDashboard />} />
+            <Route path="*" element={<EcranDealer />} />
           </Route>
         </Routes>
       </AuthContext.Provider>

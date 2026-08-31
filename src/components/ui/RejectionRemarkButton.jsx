@@ -21,7 +21,12 @@ function RejectionRemarkButton({ storeName, reason, testId }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [open])
 
-  if (!reason) return <span className="text-gray-300">—</span>
+  // ⚠ `gray-300` mesurait 1,49:1 sur blanc — le tiret était pratiquement
+  //   invisible. Et il n'est pas décoratif : dans une colonne « Remarque », il
+  //   dit « rien à signaler », ce qui n'est pas la même chose que ne rien
+  //   afficher. Seule ligne touchée hors des cinq fichiers du lot S5, parce que
+  //   ce tiret se rend DANS ces écrans et compte dans leur contraste.
+  if (!reason) return <span className="text-ink-muted">—</span>
 
   return (
     <>
