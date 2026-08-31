@@ -223,7 +223,7 @@ function NewDealerRequest() {
       <div className="max-w-xl mx-auto" data-testid="new-dealer-request">
         <div className="rounded-2xl bg-surface p-6 shadow-sm ring-1 ring-gray-100">
           <h1 className="text-lg font-bold text-ink mb-5">
-            {isPartner ? 'Confirmer l\'opération partenaire' : 'Confirmer la demande'}
+            {isPartner ? 'Confirmer l\'opération partenaire' : 'Confirmer le ravitaillement'}
           </h1>
           <dl className="mb-6 divide-y divide-line/60">
             {isPartner ? (
@@ -305,7 +305,9 @@ function NewDealerRequest() {
   return (
     <div className="max-w-xl mx-auto" data-testid="new-dealer-request">
       <div className="rounded-2xl bg-surface p-6 shadow-sm ring-1 ring-gray-100">
-        <h1 className="text-lg font-bold text-ink mb-4">Nouvelle demande</h1>
+        <h1 className="text-lg font-bold text-ink mb-4">
+          {isPartner ? 'Nouvelle opération partenaire' : 'Nouveau ravitaillement'}
+        </h1>
 
         {/* Bascule destinataire */}
         <div className="mb-5 flex gap-2">
@@ -416,7 +418,7 @@ function NewDealerRequest() {
               <div className="mb-4">
                 <fieldset>
                   <legend className="mb-2 block text-sm font-medium text-ink">
-                    Type de demande <span aria-hidden="true" className="text-danger">*</span>
+                    Type de ravitaillement <span aria-hidden="true" className="text-danger">*</span>
                   </legend>
                   <div className="flex flex-wrap gap-4">
                     {Object.entries(DEALER_REQUEST_TYPE_LABELS).map(([value, label]) => (
@@ -508,7 +510,11 @@ function NewDealerRequest() {
               className="flex-1 rounded-xl bg-brand-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
               data-testid="btn-review"
             >
-              Vérifier
+              {/* Le bouton nomme CE QUI VA SE PASSER, et pas le geste abstrait
+                  de vérifier. « Vérifier » seul ne disait ni quoi ni pour qui,
+                  et un lecteur d'écran qui parcourt les boutons d'un formulaire
+                  n'entendait qu'un verbe sans objet. */}
+              {isPartner ? 'Vérifier l’opération' : 'Vérifier le ravitaillement'}
             </button>
           </div>
         </form>

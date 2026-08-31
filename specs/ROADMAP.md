@@ -17,7 +17,7 @@ Réseau réel : **84 boutiques**. Contrats applicables : `DESIGN.md`, `SECURITY.
 | S3 | Le poste — shell de l'espace dealer           | S1        | MVP       | **terminée** |
 | S4 | L'accueil — les caisses et la position        | S2, S3    | MVP       | **terminée** |
 | S5 | Les files et le geste de ravitaillement       | S3        | MVP       | **terminée** |
-| S6 | Le vocabulaire — « ravitaillement »           | S5        | MVP       | à faire |
+| S6 | Le vocabulaire — « ravitaillement »           | S5        | MVP       | **terminée** |
 | S7 | La règle qui empêche l'arc-en-ciel de revenir | S6        | post-MVP  | à faire |
 
 ---
@@ -52,6 +52,8 @@ elle était posée avant. Elle vient après le dernier lot de restyle
 Après S4 : **2 255 unitaires (78 fichiers)** · 297 composants (18) · 285
 functions (11) · lint propre · build passant.
 Après S5 : **2 301 unitaires (81 fichiers)** · 297 composants (18) · 285
+functions (11) · lint propre · build passant.
+Après S6 : **2 316 unitaires (82 fichiers)** · 297 composants (18) · 285
 functions (11) · lint propre · build passant.
 
 ⚠ **Le premier relevé de baseline était faux et a été corrigé.** Il annonçait
@@ -208,6 +210,35 @@ demandé une porte dérobée dans le formulaire livré.
 **⚠ `DealerStores` est repeint, pas tranché.** Il fait double emploi avec
 l'accueil depuis S4 (20 par page, une requête de solde par boutique, recherche
 limitée à la page). Supprimer un écran routé reste une décision client.
+
+**S6 — terminée.** L'interface disait « demande », le métier dit
+« ravitaillement ». Un mot d'action porte maintenant le même nom du lien de
+navigation jusqu'au message de retour : « Vérifier le ravitaillement » →
+« Confirmer le ravitaillement » → « Ravitaillement confirmé : … ».
+
+Aucun identifiant technique n'a bougé — `dealerRequests`, `requestType`,
+`stock_add`, `DEALER_REQUEST_STATUSES` sont intacts, et tc-207 [ID-01..04] le
+tient, jusqu'au payload envoyé au service.
+
+**Trois refus de renommer, chacun pour une raison différente.** C'est là que ce
+lot se joue : appliquer le mot partout aurait été plus rapide et faux.
+
+| Ce qui n'est PAS renommé | Pourquoi |
+|---|---|
+| Le badge **total** de l'en-tête mobile | Il additionne ravitaillements ET retours de boutiques. « 5 ravitaillements » là où il y en a 3 est un mensonge que l'œil ne voit pas — le badge n'affiche qu'un chiffre — et que seul un lecteur d'écran entend. Il dit « 5 opérations en attente ». Même règle que la barre boutique, tc-119 [NAV-09c]. |
+| L'onglet **partenaire** du formulaire | Une opération partenaire n'envoie rien à une boutique : elle échange du stock contre de la liquidité chez le dealer. « Nouvelle opération partenaire », « Vérifier l'opération ». |
+| Les **libellés de statut** | `DEALER_REQUEST_STATUS_LABELS` est partagé avec les espaces boutique et admin, hors périmètre. Un dictionnaire ne porte pas deux genres, et le scinder aurait créé la duplication que S6 supprime. Le vide filtré **cite** le libellé entre guillemets, ce qui l'isole de l'accord. |
+
+**Une valeur par défaut retirée.** `PendingBadge` avait `noun = 'demande'` en
+défaut de paramètre — c'est exactement ce qui a permis au compteur total de
+s'annoncer « demandes » sans que personne ne le choisisse. Le paramètre est
+désormais obligatoire à l'usage : un mot par défaut sur un compteur générique
+est un mot que personne ne relit.
+
+**⚠ Un critère sans objet, consigné plutôt que coché.** La spec demandait de
+mettre à jour l'**export Excel**. Il n'y en a pas : `excelUtils.js` est
+l'import/export des **clients**, et aucun écran de l'espace dealer ne propose
+de téléchargement. Le critère supposait un export qui n'a jamais été écrit.
 
 ---
 

@@ -332,7 +332,7 @@ function DealerRequests() {
           <div data-testid="empty-state">
             <EmptyState
               title="Aucun ravitaillement ne correspond"
-              message={`Aucune demande avec ${critereActif}.`}
+              message={`Aucun ravitaillement avec ${critereActif}.`}
               action={
                 <button
                   type="button"

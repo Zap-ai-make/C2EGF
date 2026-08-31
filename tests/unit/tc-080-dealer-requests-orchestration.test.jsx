@@ -215,8 +215,17 @@ describe('TC-080-ET — états', () => {
 
     fireEvent.change(screen.getByTestId('filter-status'), { target: { value: 'rejected' } })
     act(() => sub.onUpdate({ requests: [], lastDoc: null, hasMore: false }))
+    // S6 change UN mot de cette phrase : le nom de l'objet. « demande » devient
+    // « ravitaillement », ce que dit déjà le métier et, depuis S3, la
+    // navigation. Tout le reste est intact, et c'est le reste qui compte :
+    // le filtre est toujours NOMMÉ, avec le libellé français de son statut.
+    //
+    // ⚠ Ce test avait été délibérément laissé intact par le lot de restyle
+    //   (`c6a915f`), pour prouver que le redessin n'avait pas troqué cette
+    //   précision contre une jolie phrase. Il change ici, dans un lot de
+    //   vocabulaire DÉCLARÉ — jamais dans un commit de dessin.
     await waitFor(() =>
-      expect(screen.getByTestId('empty-state')).toHaveTextContent('Aucune demande avec le statut « Rejetée »')
+      expect(screen.getByTestId('empty-state')).toHaveTextContent('Aucun ravitaillement avec le statut « Rejetée »')
     )
   })
 

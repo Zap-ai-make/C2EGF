@@ -56,11 +56,17 @@ const ACCUEIL = '/dealer'
  * même barre sans que ce soit du bruit.
  *
  * ⚠ LE PLURIEL SE PASSE, IL NE SE FABRIQUE PAS — même leçon que la barre
- *   boutique : « 2 retour boutiques » ou « 2 demandes en attentes » sont ce que
- *   produit un « s » ajouté au bout d'une locution. C'est tout ce qu'entend un
- *   lecteur d'écran.
+ *   boutique : « 2 retour boutiques » ou « 2 ravitaillement en attentes » sont
+ *   ce que produit un « s » ajouté au bout d'une locution. C'est tout ce
+ *   qu'entend un lecteur d'écran.
+ *
+ * ⚠ `noun` n'a plus de valeur par défaut. Il en avait une — « demande » — et
+ *   c'est ce qui a permis au compteur TOTAL de s'annoncer « demandes » alors
+ *   qu'il additionne deux files de natures différentes. Un mot par défaut sur
+ *   un compteur générique, c'est un mot que personne ne choisit et que
+ *   personne ne relit.
  */
-function PendingBadge({ count, noun = 'demande', nounPluriel, testId = 'dealer-pending-badge' }) {
+function PendingBadge({ count, noun, nounPluriel, testId = 'dealer-pending-badge' }) {
   if (!count) return null
   const mot = count > 1 ? (nounPluriel ?? `${noun}s`) : noun
   return (
@@ -83,7 +89,11 @@ function libelleCompteur(path) {
       testId: 'dealer-transfers-badge',
     }
   }
-  return { noun: 'demande', nounPluriel: 'demandes', testId: 'dealer-pending-badge' }
+  return {
+    noun: 'ravitaillement',
+    nounPluriel: 'ravitaillements',
+    testId: 'dealer-pending-badge',
+  }
 }
 
 function NavItem({ item, badgeCount, onNavigate }) {
@@ -245,7 +255,7 @@ function DealerLayout() {
 
         {/* L'action principale, à demeure. C'est le geste que la centrale fait
             dix fois par jour ; il vivait derrière deux clics, sur l'écran des
-            demandes. Il est ici parce que DESIGN.md §3 demande que l'action
+            ravitaillements. Il est ici parce que DESIGN.md §3 demande que
             principale soit immédiatement lisible — sur TOUS les écrans, pas
             seulement celui qui la contient. */}
         <div className="shrink-0 px-3 pt-3">
@@ -326,7 +336,15 @@ function DealerLayout() {
           aria-expanded={barreOuverte}
         >
           <Menu className="h-5 w-5" aria-hidden="true" strokeWidth={1.75} />
-          <PendingBadge count={totalEnAttente} noun="demande" nounPluriel="demandes" testId="dealer-total-badge" />
+          {/* ⚠ CE COMPTEUR-CI N'EST PAS UN COMPTEUR DE RAVITAILLEMENTS.
+              `totalEnAttente` additionne les ravitaillements ET les retours de
+              boutiques ; le renommer « ravitaillements » avec le reste de S6
+              aurait fabriqué un mensonge, et un mensonge qui ne s'entend QUE
+              au lecteur d'écran, puisque le badge n'affiche qu'un chiffre.
+              « opération » est le seul mot qui couvre les deux files.
+              Même règle que la barre boutique — tc-119 [NAV-09c] : un compteur
+              dit ce qu'il compte. */}
+          <PendingBadge count={totalEnAttente} noun="opération" nounPluriel="opérations" testId="dealer-total-badge" />
         </button>
         {/* Les cuves restent lisibles sans ouvrir le menu. */}
         <CuvesResume inventory={inventory} />
