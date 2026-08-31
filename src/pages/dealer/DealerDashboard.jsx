@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../../context/AuthContext'
-import { listNetworkCaisses } from '../../services/dealerService'
+import {
+  listNetworkCaisses,
+  listArgentDehors,
+  subscribeRavitaillementsEnAttente,
+} from '../../services/dealerService'
 import { subscribeRetoursEnAttente } from '../../services/storeTransferService'
 import { useDealerInventory } from '../../hooks/useDealerInventory'
 import { rapprocherPosition } from '../../utils/positionDealer'
@@ -51,15 +55,30 @@ function DealerDashboard() {
   const [chargement, setChargement] = useState(true)
   const [erreur, setErreur] = useState(null)
   const [retours, setRetours] = useState({ nombre: 0, montant: 0, illisibles: 0 })
+  const [envois, setEnvois] = useState({ nombre: 0, montant: 0, illisibles: 0 })
+  // `null` tant que la lecture n'a pas abouti — le rapprochement doit pouvoir
+  // distinguer « aucune non terminée » de « je n'ai pas pu lire ».
+  const [dehors, setDehors] = useState(null)
 
   const charger = useCallback(async () => {
     setChargement(true)
     setErreur(null)
     try {
-      setReseau(await listNetworkCaisses())
+      // Les deux lectures partent ensemble : la seconde n'attend pas la
+      // première. Mais elles ne PARTAGENT PAS leur sort — les non terminées
+      // dépendent d'un élargissement de règles déployé séparément, et un refus
+      // de ce côté-là ne doit pas emporter les caisses, qui sont justes.
+      const reseauLu = await listNetworkCaisses()
+      setReseau(reseauLu)
+      try {
+        setDehors(await listArgentDehors({ boutiques: reseauLu.caisses }))
+      } catch {
+        setDehors(null)
+      }
     } catch (err) {
       setErreur(err.message)
       setReseau(null)
+      setDehors(null)
     } finally {
       setChargement(false)
     }
@@ -77,6 +96,13 @@ function DealerDashboard() {
     [dealerUid],
   )
 
+  // Le pendant, de l'autre côté du guichet : ce que J'ai envoyé et qui attend
+  // la confirmation des boutiques.
+  useEffect(
+    () => subscribeRavitaillementsEnAttente({ currentUser, userProfile, onUpdate: setEnvois }),
+    [currentUser, userProfile],
+  )
+
   const caisses = reseau?.caisses ?? []
 
   // ⚠ Les retours au montant illisible comptent comme des caisses illisibles :
@@ -86,9 +112,11 @@ function DealerDashboard() {
     flux: inventory?.flux,
     sommeStock: reseau?.sommeStock ?? 0,
     sommeLiquidite: reseau?.sommeLiquidite ?? 0,
-    illisibles: (reseau?.illisibles ?? 0) + (retours.illisibles ?? 0),
+    illisibles: (reseau?.illisibles ?? 0) + (retours.illisibles ?? 0) + (dehors?.illisibles ?? 0),
     enTransit: retours.montant,
     caissesLues: Boolean(reseau),
+    sommeDehors: dehors?.dehors ?? 0,
+    dehorsLu: Boolean(dehors),
   })
 
   const sousTitre = chargement
@@ -117,6 +145,7 @@ function DealerDashboard() {
       <PositionDealer
         position={position}
         retoursEnAttente={retours.nombre}
+        envoisEnAttente={envois}
         loading={chargement}
       />
 

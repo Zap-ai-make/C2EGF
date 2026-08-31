@@ -41,6 +41,8 @@ const mocks = vi.hoisted(() => ({
   // dealerService
   listActiveStores: vi.fn(),
   listNetworkCaisses: vi.fn(),
+  listArgentDehors: vi.fn(),
+  subscribeRavitaillementsEnAttente: vi.fn(),
   listDealerRequests: vi.fn(),
   subscribeDealerPendingCount: vi.fn(),
   // storeTransferService
@@ -102,6 +104,11 @@ vi.mock('../../src/config/firebase', () => ({
 vi.mock('../../src/services/dealerService', () => ({
   listActiveStores: mocks.listActiveStores,
   listNetworkCaisses: mocks.listNetworkCaisses,
+  // Ajoutés le 31/08/2026 : l'accueil lit les transactions non terminées du
+  // réseau (« Dehors ») et les ravitaillements en attente de confirmation.
+  // CÂBLAGE seul.
+  listArgentDehors: mocks.listArgentDehors,
+  subscribeRavitaillementsEnAttente: mocks.subscribeRavitaillementsEnAttente,
   listDealerRequests: mocks.listDealerRequests,
   subscribeDealerPendingCount: mocks.subscribeDealerPendingCount,
 }))
@@ -226,6 +233,14 @@ beforeEach(() => {
   mocks.subscribeIncomingTransfers.mockImplementation(pushOnce([]))
   mocks.listActiveStores.mockResolvedValue({ stores: STORES, lastDoc: null, hasMore: false })
   mocks.listNetworkCaisses.mockResolvedValue(reseauCaisses())
+  // Défaut : réseau sans transaction en cours. Les tests qui portent sur
+  // « Dehors » posent leur propre valeur.
+  mocks.listArgentDehors.mockResolvedValue({
+    parBoutique: [], depots: 0, retraits: 0, dehors: 0, illisibles: 0, horsReseau: 0,
+  })
+  mocks.subscribeRavitaillementsEnAttente.mockImplementation(
+    pushOnce({ nombre: 0, montant: 0, illisibles: 0 }),
+  )
   mocks.subscribeDealerBalance.mockImplementation(pushOnce(inventaire()))
   mocks.subscribeRetoursEnAttente.mockImplementation(
     pushOnce({ nombre: 3, montant: 2150000, illisibles: 0 }),
@@ -248,13 +263,60 @@ describe('TC-200-A — DealerDashboard : l’accueil, les caisses et la position
   /** Les séparateurs de `Intl.NumberFormat('fr-FR')` sont insécables. */
   const txt = (el) => (el?.textContent ?? '').replace(/\s+/g, ' ').trim()
 
-  it('affiche la position : l’argent dehors, la somme des caisses, et le transit', async () => {
+  // ⚠ RÉÉCRIT le 31/08/2026. Ce qu'il vérifiait — les deux grands nombres —
+  //   est INCHANGÉ et toujours vérifié à l'identique. Deux choses s'y ajoutent, sur
+  //   demande client : le mot « transit » disparaît (il ne disait ni qui attend
+  //   ni quoi), et la seconde attente apparaît — celle des ravitaillements que
+  //   le dealer a envoyés et dont il attend la confirmation des boutiques.
+  it('affiche la position : l’argent dehors, la somme des caisses, et les DEUX attentes', async () => {
+    mocks.subscribeRavitaillementsEnAttente.mockImplementation(
+      pushOnce({ nombre: 2, montant: 5000000, illisibles: 0 }),
+    )
     renderDealer(<DealerDashboard />)
 
     await waitFor(() => expect(txt(screen.getByTestId('montant-dehors'))).toBe('400 000 000 FCFA'))
     expect(txt(screen.getByTestId('montant-caisses'))).toBe('441 000 000 FCFA')
-    expect(txt(screen.getByTestId('en-transit'))).toContain('2 150 000 FCFA en transit')
-    expect(txt(screen.getByTestId('en-transit'))).toContain('3 retours')
+
+    // À droite : ce que les boutiques ont renvoyé et qui attend MA confirmation.
+    expect(txt(screen.getByTestId('retours-en-attente'))).toContain('2 150 000 FCFA en attente de confirmation')
+    expect(txt(screen.getByTestId('retours-en-attente'))).toContain('3 retours')
+
+    // À gauche : ce que J'ai envoyé et qui attend la LEUR. Cette attente
+    //  n'existait nulle part sur l'écran.
+    expect(txt(screen.getByTestId('envois-en-attente'))).toContain('5 000 000 FCFA en attente de confirmation')
+    expect(txt(screen.getByTestId('envois-en-attente'))).toContain('2 ravitaillements')
+
+    // Le jargon est parti, et ne revient par aucun chemin.
+    expect(screen.queryByTestId('en-transit')).toBeNull()
+    expect(txt(screen.getByTestId('dealer-home'))).not.toMatch(/transit/i)
+  })
+
+  it('« Dehors » est une TROISIÈME ligne des caisses, et il entre dans le total', async () => {
+    // Une transaction client non terminée n'a fait passer qu'une de ses deux
+    // jambes : la somme des caisses était fausse sans ce terme. Les trois lignes
+    // doivent faire exactement le grand nombre au-dessus d'elles.
+    mocks.listArgentDehors.mockResolvedValue({
+      parBoutique: [{ storeId: 'store-1', name: 'BOUTIQUE 1', depots: 9000000, retraits: 0, dehors: 9000000 }],
+      depots: 9000000, retraits: 0, dehors: 9000000, illisibles: 0, horsReseau: 0,
+    })
+    renderDealer(<DealerDashboard />)
+
+    // 441 000 000 (stock + liquidité) + 9 000 000 (dehors)
+    await waitFor(() => expect(txt(screen.getByTestId('montant-caisses'))).toBe('450 000 000 FCFA'))
+    expect(txt(screen.getByTestId('dealer-home'))).toContain('Dehors')
+  })
+
+  it('refuse de rapprocher quand les non terminées n’ont pas pu être lues', async () => {
+    // Compter 0 reviendrait à affirmer qu'aucune boutique du réseau n'a
+    // d'opération en cours — et l'écart afficherait le trou qu'on vient
+    // d'ouvrir, en le présentant comme un fait.
+    mocks.listArgentDehors.mockRejectedValue(new Error('Accès refusé.'))
+    renderDealer(<DealerDashboard />)
+
+    await waitFor(() => expect(txt(screen.getByTestId('rapprochement'))).toMatch(/non terminées/i))
+    // Les caisses, elles, restent justes : seul le TOTAL ne peut pas se former.
+    expect(txt(screen.getByTestId('montant-caisses'))).toBe('—')
+    expect(txt(screen.getByTestId('montant-dehors'))).toBe('400 000 000 FCFA')
   })
 
   it('CORRIGÉ (figé en S1) — le compte des boutiques est exact, et non « 20+ »', async () => {

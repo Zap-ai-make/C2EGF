@@ -43,7 +43,7 @@ function Terme({ operation, libelle, montant, fort = false }) {
   )
 }
 
-function Colonne({ titre, montant, children, testId }) {
+function Colonne({ titre, montant, children, pied, testId }) {
   return (
     <div className="min-w-0 flex-1 basis-64">
       <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">{titre}</h3>
@@ -51,7 +51,45 @@ function Colonne({ titre, montant, children, testId }) {
         {formatCurrency(montant)}
       </p>
       <div className="mt-2 space-y-1">{children}</div>
+      {pied}
     </div>
+  )
+}
+
+/**
+ * Ce qui attend une confirmation, au pied d'une colonne.
+ *
+ * ⚠ LE MOT « TRANSIT » EST PARTI, et il ne manque à personne. Il ne disait ni
+ *   qui attend, ni quoi — c'était du vocabulaire de plomberie sur un écran qui
+ *   parle d'argent.
+ *
+ * ⚠ LES DEUX PHRASES SONT IDENTIQUES À L'ŒIL, ET C'EST VOULU : leur COLONNE
+ *   dit qui attend. Mais un lecteur d'écran, lui, entendrait deux fois la même
+ *   chose sans savoir les distinguer — d'où le fragment `sr-only` qui précise
+ *   le sens de l'attente sans alourdir ce qui est lu à l'œil.
+ *
+ * ⚠ LA PHRASE BASCULE EN ENTIER, ELLE NE S'ASSEMBLE PAS. Une pluralisation par
+ *   morceaux — un « s » collé au bout d'une locution — avait déjà produit
+ *   « 3 caisses n'aont pas pu être lues » dans ce même écran, puis ici même
+ *   « 3 retour reçus » à la première écriture de ce composant. Deux formes
+ *   complètes, l'accord du participe compris.
+ */
+function EnAttente({ montant, nombre, sens, singulier, pluriel, testId }) {
+  return (
+    <p
+      className="mt-3 flex flex-wrap items-baseline gap-x-2 border-t border-line pt-2 text-sm text-ink-muted"
+      data-testid={testId}
+    >
+      {/* L'espace est ÉCRIT, pas seulement dessiné par le `gap` : sans lui,
+          `textContent` colle les deux fragments et un lecteur d'écran annonce
+          « … FCFAen attente ». La mise en page n'ajoute pas de mots. */}
+      <span className="font-semibold tabular-nums text-ink">{formatCurrency(montant)}</span>{' '}
+      <span>
+        en attente de confirmation
+        <span className="sr-only"> {sens}</span>
+        {nombre > 0 && ` — ${nombre} ${nombre > 1 ? pluriel : singulier}.`}
+      </span>
+    </p>
   )
 }
 
@@ -69,6 +107,7 @@ function Rapprochement({ position }) {
   if (position.etat === ETATS.INDISPONIBLE) {
     const neufs = position.raison === RAISONS.COMPTEURS_NEUFS
     const injoignable = position.raison === RAISONS.CAISSES_INDISPONIBLES
+    const dehorsManquant = position.raison === RAISONS.DEHORS_INDISPONIBLE
     return (
       <p
         className="mt-4 rounded-lg bg-pending-soft px-3 py-2 text-xs text-pending"
@@ -80,6 +119,14 @@ function Rapprochement({ position }) {
             des caisses n’a pas pu être lu. « Mon argent dehors » reste juste — il
             vient de vos compteurs, pas du réseau — mais il n’y a rien à comparer
             tant que la liste n’est pas revenue.
+          </>
+        ) : dehorsManquant ? (
+          <>
+            <span className="font-semibold">Rapprochement indisponible.</span> Les
+            transactions non terminées des boutiques n’ont pas pu être lues. Le
+            stock et la liquidité ci-dessus restent justes ; c’est leur TOTAL qui
+            ne peut pas se former, parce qu’il lui manque un terme entier — et un
+            total faux qui s’annonce juste est pire que pas de total.
           </>
         ) : neufs ? (
           <>
@@ -141,9 +188,10 @@ function Rapprochement({ position }) {
           </>
         ) : (
           <>
-            C’est le float que les boutiques détenaient déjà quand les compteurs ont
-            été mis en service, plus les opérations en cours chez elles. Cet écart
-            doit rester <span className="font-semibold">stable</span> — c’est son
+            C’est le float que les boutiques détenaient déjà quand les compteurs
+            ont été mis en service. Les opérations en cours chez elles n’y sont
+            plus : elles sont comptées à part, dans « Dehors ». Cet écart doit
+            rester <span className="font-semibold">stable</span> — c’est son
             mouvement d’un jour à l’autre qui est un signal, jamais sa valeur.
           </>
         )}
@@ -152,7 +200,12 @@ function Rapprochement({ position }) {
   )
 }
 
-function PositionDealer({ position, retoursEnAttente = 0, loading = false }) {
+function PositionDealer({
+  position,
+  retoursEnAttente = 0,
+  envoisEnAttente = { nombre: 0, montant: 0 },
+  loading = false,
+}) {
   if (loading || !position) {
     return (
       <section
@@ -183,40 +236,59 @@ function PositionDealer({ position, retoursEnAttente = 0, loading = false }) {
             au-dessus d'elles. Aucun terme décoratif ne se glisse dans une
             addition qui ne tombe pas juste : c'est la première chose qu'un
             lecteur vérifie, et la première qui ruine sa confiance. */}
-        <Colonne titre="Mon argent dehors" montant={position.dehors} testId="montant-dehors">
+        {/* ⚠ ASYMÉTRIE VOULUE ENTRE LES DEUX ATTENTES. Celle de DROITE
+            (`position.enTransit`) est un terme de l'identité : la boutique est
+            déjà débitée, l'argent a quitté sa caisse. Celle de GAUCHE vient
+            d'une PROP, hors de `position`, parce qu'un ravitaillement en
+            attente n'a encore rien débité — ni chez le dealer, ni chez la
+            boutique. Le faire entrer dans le rapprochement compterait deux fois
+            un argent qui n'a pas bougé. Les deux se ressemblent à l'écran ;
+            elles n'ont pas le même statut comptable. */}
+        <Colonne
+          titre="Mon argent dehors"
+          montant={position.dehors}
+          testId="montant-dehors"
+          pied={
+            <EnAttente
+              montant={envoisEnAttente.montant}
+              nombre={envoisEnAttente.nombre}
+              sens="des boutiques"
+              singulier="ravitaillement envoyé"
+              pluriel="ravitaillements envoyés"
+              testId="envois-en-attente"
+            />
+          }
+        >
           <Terme operation="" libelle="Ravitaillements confirmés" montant={position.envoye} />
           <Terme operation="−" libelle="Retours confirmés" montant={position.revenu} />
         </Colonne>
 
-        <Colonne titre="Dans les caisses" montant={position.sommeCaisses} testId="montant-caisses">
+        <Colonne
+          titre="Dans les caisses"
+          montant={position.sommeCaisses}
+          testId="montant-caisses"
+          pied={
+            <EnAttente
+              montant={position.enTransit}
+              nombre={retoursEnAttente}
+              sens="de ma part"
+              singulier="retour reçu"
+              pluriel="retours reçus"
+              testId="retours-en-attente"
+            />
+          }
+        >
           <Terme operation="" libelle="Stock" montant={position.sommeStock} />
           <Terme operation="+" libelle="Liquidité" montant={position.sommeLiquidite} />
+          {/* ⚠ CE TERME N'EST PAS UN AJOUT DÉCORATIF. Une transaction client non
+              terminée n'a fait passer qu'une de ses deux jambes : un dépôt en
+              attente a baissé le stock sans monter la liquidité, un retrait en
+              attente a fait l'inverse. Sans lui, les deux lignes du dessus ne
+              font pas le total du dessus d'elles — et le rapprochement porte un
+              trou qu'il ne sait pas nommer. */}
+          <Terme operation="+" libelle="Dehors" montant={position.sommeDehors} />
         </Colonne>
       </div>
-
-      {/* L'EN TRANSIT N'APPARTIENT À AUCUNE DES DEUX COLONNES, et c'est
-          précisément pour cela qu'il est posé entre elles et le rapprochement.
-          La boutique est débitée à la CRÉATION du retour, le compteur du dealer
-          n'avance qu'à sa CONFIRMATION : entre les deux, cet argent a quitté
-          les caisses sans être encore compté comme revenu. Il n'est ni dedans
-          ni dehors — il est le terme qui ferme l'identité. */}
-      <p
-        className="mt-4 flex flex-wrap items-baseline gap-x-2 border-t border-line pt-3 text-sm text-ink-muted"
-        data-testid="en-transit"
-      >
-        {/* L'espace est écrit, pas seulement dessiné par le `gap` : sans lui,
-            `textContent` colle les deux fragments et un lecteur d'écran
-            annonce « … FCFAen transit ». La mise en page n'ajoute pas de mots. */}
-        <span className="font-semibold tabular-nums text-ink">
-          {formatCurrency(position.enTransit)}
-        </span>{' '}
-        <span>
-          en transit —{' '}
-          {retoursEnAttente > 0
-            ? `${retoursEnAttente} retour${retoursEnAttente > 1 ? 's' : ''} sorti${retoursEnAttente > 1 ? 's' : ''} des caisses, pas encore confirmé${retoursEnAttente > 1 ? 's' : ''}.`
-            : 'aucun retour en attente de confirmation.'}
-        </span>
-      </p>
 
       <Rapprochement position={position} />
     </section>

@@ -3,13 +3,20 @@
  *
  * L'identité que cet écran affiche :
  *
- *     somme des caisses + en transit = fonds d'ouverture + envoyé − revenu
+ *     stock + liquidité + dehors boutiques + en attente
+ *         = fonds d'ouverture + envoyé − revenu
  *
- * Elle a trois termes et non deux, et c'est la découverte de S2 : la boutique
- * est débitée à la CRÉATION d'un retour, le compteur du dealer n'avance qu'à sa
- * CONFIRMATION. Ces tests tiennent le troisième terme, et surtout les trois cas
- * où l'écran doit REFUSER de se prononcer — un total faux qui s'annonce juste
- * est pire que pas de total.
+ * Elle a quatre termes et non deux, et chacun des deux termes réconciliateurs a
+ * sa découverte :
+ *
+ *   • « en attente » (S2) — la boutique est débitée à la CRÉATION d'un retour,
+ *     le compteur du dealer n'avance qu'à sa CONFIRMATION ;
+ *   • « dehors boutiques » (31/08/2026) — une transaction client non terminée
+ *     n'a fait passer qu'une de ses deux jambes.
+ *
+ * Ces tests tiennent les deux, et surtout les QUATRE cas où l'écran doit
+ * REFUSER de se prononcer — un total faux qui s'annonce juste est pire que pas
+ * de total.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -177,5 +184,130 @@ describe('TC-203-C — les trois refus de se prononcer', () => {
     expect(p.etat).toBe(ETATS.INDISPONIBLE)
     expect(p.raison).toBe(RAISONS.COMPTEURS_NEUFS)
     expect(p.dehors).toBe(0)
+  })
+})
+
+// ===========================================================================
+// TC-203-D — « dehors boutiques », le quatrième terme de l'identité
+//
+// Ajouté le 31/08/2026. Les quatorze tests ci-dessus n'ont PAS bougé : le
+// nouveau terme vaut 0 par défaut, donc tout ce qui était vrai le reste. Ce
+// bloc tient ce qu'il apporte.
+//
+// ⚠ Deux choses s'appellent « dehors » ici, et c'est le piège du fichier :
+//   `dehors` est l'argent DU DEALER (envoyé − revenu), `sommeDehors` celui DES
+//   BOUTIQUES (ce que leurs clients leur doivent, moins ce qu'elles leur
+//   doivent). Ils sont dans les deux membres OPPOSÉS de l'égalité. Les
+//   confondre inverserait le signe de l'écart — d'où [DH-02].
+// ===========================================================================
+
+describe('TC-203-D — le dehors des boutiques', () => {
+  const flux = { envoyeCumul: 10_000_000, revenuCumul: 0, amorce: true }
+
+  it('[DH-01] les trois lignes font EXACTEMENT le total de la colonne', () => {
+    const p = rapprocherPosition({
+      flux, sommeStock: 3_000_000, sommeLiquidite: 2_000_000, sommeDehors: 500_000,
+    })
+    expect(p.sommeStock + p.sommeLiquidite + p.sommeDehors).toBe(p.sommeCaisses)
+    expect(p.sommeCaisses).toBe(5_500_000)
+  })
+
+  it('[DH-02] il s’AJOUTE aux caisses, il ne se retranche pas', () => {
+    // Le signe est tout : ces transactions ont retiré du stock sans ajouter de
+    // liquidité. La somme des caisses est donc trop BASSE, et le terme la
+    // relève. L'inverser doublerait l'écart au lieu de l'annuler.
+    const sans = rapprocherPosition({ flux, sommeStock: 9_000_000, sommeLiquidite: 0 })
+    const avec = rapprocherPosition({
+      flux, sommeStock: 9_000_000, sommeLiquidite: 0, sommeDehors: 1_000_000,
+    })
+    expect(sans.ecart).toBe(-1_000_000)
+    expect(avec.ecart).toBe(0)
+    expect(avec.etat).toBe(ETATS.CONCORDANT)
+  })
+
+  it('[DH-03] RÈGLE — c’est bien lui qui referme l’identité', () => {
+    // Le pendant de [RA-02] pour le second terme réconciliateur : le même jeu
+    // de chiffres, une fois avec, une fois sans, et l'écart passe de zéro à
+    // une anomalie. Preuve qu'il n'est pas décoratif.
+    const jeu = {
+      flux: { envoyeCumul: 8_000_000, revenuCumul: 500_000, amorce: true },
+      sommeStock: 5_000_000, sommeLiquidite: 2_000_000, enTransit: 100_000,
+    }
+    expect(rapprocherPosition({ ...jeu, sommeDehors: 400_000 }).ecart).toBe(0)
+    const sans = rapprocherPosition(jeu)
+    expect(sans.ecart).toBe(-400_000)
+    expect(sans.etat).toBe(ETATS.ANOMALIE)
+  })
+
+  it('[DH-04] un dehors NÉGATIF abaisse les caisses, et c’est correct', () => {
+    // Plus de retraits en attente que de dépôts : les boutiques ont encaissé du
+    // stock sans encore payer, la somme des caisses est trop HAUTE.
+    const p = rapprocherPosition({
+      flux, sommeStock: 11_000_000, sommeLiquidite: 0, sommeDehors: -1_000_000,
+    })
+    expect(p.sommeCaisses).toBe(10_000_000)
+    expect(p.ecart).toBe(0)
+  })
+
+  it('[DH-05] absent, il vaut zéro et rien ne change', () => {
+    const p = rapprocherPosition({ flux, sommeStock: 10_000_000, sommeLiquidite: 0 })
+    expect(p.sommeDehors).toBe(0)
+    expect(p.ecart).toBe(0)
+  })
+
+  it('[DH-06] une valeur illisible vaut zéro, jamais NaN', () => {
+    for (const v of ['x', undefined, NaN, Infinity, null]) {
+      const p = rapprocherPosition({ flux, sommeStock: 10_000_000, sommeDehors: v })
+      expect(p.sommeDehors).toBe(0)
+      expect(Number.isNaN(p.ecart)).toBe(false)
+    }
+  })
+})
+
+describe('TC-203-E — le quatrième refus', () => {
+  const flux = { envoyeCumul: 10_000_000, revenuCumul: 0, amorce: true }
+
+  it('[RA-11] lecture des non terminées échouée → on refuse de rapprocher', () => {
+    // Compter 0 reviendrait à affirmer qu'aucune boutique du réseau n'a
+    // d'opération en cours — l'affirmation la moins probable des deux — et
+    // l'écart afficherait alors exactement le trou qu'on vient d'ouvrir.
+    const p = rapprocherPosition({
+      flux, sommeStock: 3_000_000, sommeLiquidite: 2_000_000, dehorsLu: false,
+    })
+    expect(p.etat).toBe(ETATS.INDISPONIBLE)
+    expect(p.raison).toBe(RAISONS.DEHORS_INDISPONIBLE)
+    expect(p.ecart).toBeNull()
+  })
+
+  it('[RA-12] seul le total devient inconnu : stock et liquidité restent justes', () => {
+    const p = rapprocherPosition({
+      flux, sommeStock: 3_000_000, sommeLiquidite: 2_000_000, dehorsLu: false,
+    })
+    expect(p.sommeStock).toBe(3_000_000)
+    expect(p.sommeLiquidite).toBe(2_000_000)
+    expect(p.sommeDehors).toBeNull()
+    expect(p.sommeCaisses).toBeNull()
+    // La colonne de gauche vient des compteurs, pas du réseau : elle ne bouge pas.
+    expect(p.dehors).toBe(10_000_000)
+  })
+
+  it('[RA-13] le réseau illisible l’emporte sur les non terminées manquantes', () => {
+    const p = rapprocherPosition({ flux, caissesLues: false, dehorsLu: false })
+    expect(p.raison).toBe(RAISONS.CAISSES_INDISPONIBLES)
+  })
+
+  it('[RA-14] « compteurs neufs » l’emporte sur les non terminées manquantes', () => {
+    // Sur une mise en service les deux sont vrais, et c'est « ça vient de
+    // démarrer » qui explique l'écran.
+    const p = rapprocherPosition({
+      flux: { envoyeCumul: 0, revenuCumul: 0, amorce: false }, dehorsLu: false,
+    })
+    expect(p.raison).toBe(RAISONS.COMPTEURS_NEUFS)
+  })
+
+  it('[RA-15] les non terminées manquantes l’emportent sur une caisse illisible', () => {
+    // Le plus gros trou d'abord : un terme entier du total contre un montant.
+    const p = rapprocherPosition({ flux, dehorsLu: false, illisibles: 3 })
+    expect(p.raison).toBe(RAISONS.DEHORS_INDISPONIBLE)
   })
 })

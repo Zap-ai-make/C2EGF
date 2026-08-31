@@ -6,9 +6,11 @@
  *   clients/{storeId}/networkBalances/current  (lecture soldes)
  *   dealerRequests                       (lecture propres demandes, création)
  *
+ *   clients/{storeId}/drafts             (LECTURE SEULE, élargie le 31/08/2026)
+ *
  * Collections interdites :
- *   globalClients, history, drafts, users d'autres comptes,
- *   sessions, auditLogs, transactions.
+ *   globalClients, history, drafts/{id}/settlements, users d'autres comptes,
+ *   sessions, auditLogs.
  *
  * Le service ne confirme, ne rejette, ne modifie et ne supprime
  * jamais une demande existante. Aucune modification de solde.
@@ -37,6 +39,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import { parseStrictInteger as parseDealerAmount } from '../utils/parseStrictInteger'
+import { agregerArgentDehors } from '../utils/argentDehors'
 import { AUTH_ROLES } from '../constants/authMessages'
 import {
   DEALER_NETWORK,
@@ -50,6 +53,7 @@ const STORES_COLLECTION = 'stores'
 const DEALER_REQUESTS_COLLECTION = 'dealerRequests'
 const NETWORK_BALANCES_DOC = 'current'
 const NETWORK_BALANCES_COLLECTION = 'networkBalances'
+const DRAFTS_COLLECTION = 'drafts'
 
 // ---------------------------------------------------------------------------
 // Erreurs
@@ -263,6 +267,102 @@ function readAmount(value) {
   if (value === undefined || value === null) return null
   const n = Number(value)
   return Number.isFinite(n) ? n : null
+}
+
+// ---------------------------------------------------------------------------
+// listArgentDehors — les transactions non terminées du réseau, agrégées
+//
+// UNE REQUÊTE, PAS QUATRE-VINGT-QUATRE. Même mécanique que
+// `listNetworkCaisses` ci-dessus : `collectionGroup` rend les brouillons de
+// toutes les boutiques en un aller-retour, et l'identifiant de la boutique se
+// lit sur le grand-parent du document (`clients/{storeId}/drafts/{id}`).
+//
+// AUCUN FILTRE `where`, ET CE N'EST PAS UN OUBLI. L'appartenance à `drafts`
+// EST le statut « non terminé » : `firestore.rules` interdit d'y écrire un
+// document qui ne soit pas pending. Filtrer sur `statut` ajouterait un index à
+// déployer pour retirer zéro document.
+//
+// ⚠ DROITS. Cette fonction est la seule de ce service à dépendre de
+//   l'élargissement du 31/08/2026 (`match /{path=**}/drafts/{docId}`). Tant
+//   qu'il n'est pas déployé, elle rend « Accès refusé » — et l'écran doit
+//   savoir le dire plutôt que compter zéro.
+//
+// ⚠ CE QU'ELLE RAMÈNE, ET QU'ELLE JETTE AUSSITÔT. Le document brut porte
+//   `clientId`, `operatorName`, `operatorEmail`, la date. Rien de tout cela ne
+//   sort d'ici : seuls `storeId`, `type`, `montant` et `remainingAmount`
+//   passent à l'agrégation. Ce n'est pas une protection — le réseau a déjà
+//   transporté le reste — mais c'est la garantie qu'aucun écran ne pourra
+//   l'afficher par accident.
+// ---------------------------------------------------------------------------
+
+export async function listArgentDehors({ boutiques = [] } = {}) {
+  try {
+    const snap = await getDocs(query(collectionGroup(db, DRAFTS_COLLECTION)))
+    const brouillons = snap.docs.map((d) => {
+      const data = d.data() ?? {}
+      return {
+        storeId: d.ref.parent.parent?.id ?? null,
+        type: data.type,
+        montant: data.montant,
+        remainingAmount: data.remainingAmount,
+      }
+    })
+    return agregerArgentDehors(brouillons, boutiques)
+  } catch (err) {
+    throw mapFirestoreError(err)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// subscribeRavitaillementsEnAttente — ce que le dealer a envoyé et qui attend
+//
+// Le pendant exact de `subscribeRetoursEnAttente` (storeTransferService), de
+// l'autre côté du guichet : là-bas ce sont les boutiques qui attendent MA
+// confirmation, ici c'est moi qui attends la LEUR.
+//
+// POURQUOI UNE SECONDE FONCTION SUR LA MÊME REQUÊTE
+// ─────────────────────────────────────────────────
+// `subscribeDealerPendingCount` alimente la pastille de navigation et ne rend
+// qu'un entier. L'accueil a besoin du MONTANT. Élargir sa charge utile
+// casserait ses appelants et les tests qui la tiennent, pour un gain nul : la
+// requête est ici IDENTIQUE, et le SDK Firestore multiplexe les écoutes
+// portant sur la même cible — un seul flux part vers le serveur, quel que soit
+// le nombre d'abonnés. Aucun index ni aucune règle n'a été ajouté pour elle.
+//
+// ⚠ Un `amount` qui n'est pas un entier fini n'entre pas dans la somme et
+//   incrémente `illisibles`. Un montant muet compté pour zéro, sur un écran qui
+//   sert à décider combien envoyer, se lit comme « rien n'attend ».
+// ---------------------------------------------------------------------------
+
+export function subscribeRavitaillementsEnAttente({ currentUser, userProfile, onUpdate, onError } = {}) {
+  const vide = { nombre: 0, montant: 0, illisibles: 0 }
+  if (
+    !currentUser?.uid ||
+    !userProfile?.active ||
+    userProfile?.role !== AUTH_ROLES.DEALER
+  ) {
+    onUpdate?.(vide)
+    return () => {}
+  }
+  const q = query(
+    collection(db, DEALER_REQUESTS_COLLECTION),
+    where('dealerUid', '==', currentUser.uid),
+    where('status', '==', 'pending'),
+  )
+  return onSnapshot(
+    q,
+    (snap) => {
+      let montant = 0
+      let illisibles = 0
+      snap.docs.forEach((d) => {
+        const brut = d.data()?.amount
+        if (typeof brut === 'number' && Number.isFinite(brut)) montant += brut
+        else illisibles += 1
+      })
+      onUpdate?.({ nombre: snap.size, montant, illisibles })
+    },
+    (err) => { onUpdate?.(vide); onError?.(mapFirestoreError(err)) },
+  )
 }
 
 // ---------------------------------------------------------------------------

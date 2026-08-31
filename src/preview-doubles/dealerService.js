@@ -162,5 +162,77 @@ export const subscribeDealerRequests = ({ onUpdate }) => {
   return () => {}
 }
 
+/**
+ * L'argent dehors des boutiques — `?dehors=garni|vide|erreur|negatif|partiel`.
+ *
+ *   garni    (défaut) une trentaine de boutiques exposées, dépôts > retraits
+ *   vide     aucune transaction en cours nulle part
+ *   erreur   la lecture échoue — c'est l'état où le rapprochement doit REFUSER
+ *            de se prononcer au lieu de compter zéro
+ *   negatif  plus de retraits en attente que de dépôts : le total passe sous
+ *            zéro, et rien ne doit le borner
+ *   partiel  trois boutiques dont les deux colonnes s'annulent, et trois
+ *            montants illisibles
+ */
+const dehorsVariante =
+  new URLSearchParams(globalThis.location?.search ?? '').get('dehors') ?? 'garni'
+
+export async function listArgentDehors({ boutiques = [] } = {}) {
+  if (dehorsVariante === 'erreur') throw new Error('Accès refusé. Vérifiez vos permissions.')
+
+  const source = boutiques.length ? boutiques : []
+  const parBoutique = []
+  let depots = 0
+  let retraits = 0
+
+  if (dehorsVariante !== 'vide') {
+    source.forEach((b, i) => {
+      // Suite déterministe — une capture doit se comparer à la précédente, et
+      // un écart doit venir du code, jamais du tirage. Une boutique sur trois
+      // n'a rien en cours : c'est le cas le plus fréquent en vrai.
+      if (i % 3 === 2) return
+
+      const brut = 40000 + ((i * 91711) % 1_400_000)
+      let d = brut
+      let r = Math.round(brut * 0.35)
+
+      if (dehorsVariante === 'negatif') { const t = d; d = r; r = t * 2 }
+      if (dehorsVariante === 'partiel' && i % 11 === 0) r = d
+
+      depots += d
+      retraits += r
+      parBoutique.push({ storeId: b.storeId, name: b.name, depots: d, retraits: r, dehors: d - r })
+    })
+  }
+
+  parBoutique.sort((a, b) =>
+    b.dehors - a.dehors || String(a.name ?? '').localeCompare(String(b.name ?? '')))
+
+  return {
+    parBoutique,
+    depots,
+    retraits,
+    dehors: depots - retraits,
+    illisibles: dehorsVariante === 'partiel' ? 3 : 0,
+    horsReseau: dehorsVariante === 'partiel' ? 2 : 0,
+  }
+}
+
+/**
+ * Les ravitaillements que le dealer a envoyés et qui attendent la confirmation
+ * des boutiques. Le montant est DÉRIVÉ des ravitaillements en attente de la
+ * file ci-dessus : deux écrans du même banc qui affichent le même fait ne
+ * doivent pas afficher deux chiffres.
+ */
+export const subscribeRavitaillementsEnAttente = ({ onUpdate }) => {
+  const enAttente = RAVITAILLEMENTS.filter(r => r.status === 'pending')
+  onUpdate?.({
+    nombre: enAttente.length,
+    montant: enAttente.reduce((s, r) => s + r.amount, 0),
+    illisibles: 0,
+  })
+  return () => {}
+}
+
 export async function createDealerRequest() { return { id: 'banc' } }
 export { parseStrictInteger as parseDealerAmount } from '../utils/parseStrictInteger'

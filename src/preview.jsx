@@ -371,6 +371,7 @@ function Preview() {
  *   &cuves=basses|vides                  l'état des CUVES du dealer
  *   &caisses=vide|erreur|erreur-partielle|clairseme   l'état du RÉSEAU
  *   &position=neufs|anomalie             l'état du RAPPROCHEMENT
+ *   &dehors=vide|erreur|negatif|partiel  l'argent DEHORS des boutiques
  *   &ecran=ravitaillements|retours|historique|ravitailler|boutiques  l'écran monté
  *   &file=vide                           les files, sans rien à traiter
  *   &storeId=…&type=stock_add            le formulaire tel qu'il ARRIVE depuis
