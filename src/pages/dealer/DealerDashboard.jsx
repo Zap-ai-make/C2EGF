@@ -8,7 +8,6 @@ import {
 import { subscribeRetoursEnAttente } from '../../services/storeTransferService'
 import { useDealerInventory } from '../../hooks/useDealerInventory'
 import { rapprocherPosition } from '../../utils/positionDealer'
-import PageHeader from '../../components/ui/PageHeader'
 import ErrorState from '../../components/ui/ErrorState'
 import PositionDealer from '../../components/dealer/PositionDealer'
 import CaissesReseau from '../../components/dealer/CaissesReseau'
@@ -119,28 +118,26 @@ function DealerDashboard() {
     dehorsLu: Boolean(dehors),
   })
 
-  const sousTitre = chargement
-    ? 'Chargement du réseau…'
-    : erreur
-      ? 'Réseau indisponible'
-      : `${reseau?.total ?? 0} boutique${(reseau?.total ?? 0) > 1 ? 's' : ''} en service · réseau ${DEALER_NETWORK}`
-
   return (
     <div data-testid="dealer-home" className="grid gap-6">
-      <PageHeader
-        title="Vue générale"
-        subtitle={sousTitre}
-        actions={
-          <button
-            type="button"
-            onClick={charger}
-            disabled={chargement}
-            className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-brand-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-          >
-            {chargement ? 'Chargement…' : 'Actualiser'}
-          </button>
-        }
-      />
+      {/*
+        L'EN-TÊTE A DISPARU, ET CE QU'IL PORTAIT A TROUVÉ SA PLACE.
+        ──────────────────────────────────────────────────────────
+        « Vue générale » nommait un écran qu'on vient d'atteindre par une entrée
+        de menu du même nom, sur le seul écran d'accueil de l'espace : le titre
+        répétait ce que la navigation venait de dire. Son sous-titre annonçait
+        « N boutiques en service · réseau Orange » — le compte est descendu dans
+        la section qui montre ces boutiques, et la mention du réseau est partie :
+        le profil est mono-réseau, elle ne distinguait rien.
+
+        ⚠ Le `h1` reste, en `sr-only`. Un écran porte exactement un `h1`
+          (cf. `PageHeader.jsx`), et qui navigue au clavier ou à la voix se
+          repère par les titres, pas par la mise en page.
+
+        « Actualiser » a rejoint la barre des caisses, à côté de Rechercher et
+        Trier — enfin à côté de ce qu'il recharge.
+      */}
+      <h1 className="sr-only">Vue générale</h1>
 
       <PositionDealer
         position={position}
@@ -157,6 +154,9 @@ function DealerDashboard() {
           illisibles={reseau?.illisibles ?? 0}
           loading={chargement}
           reseau={DEALER_NETWORK}
+          total={reseau?.total ?? 0}
+          onActualiser={charger}
+          actualisation={chargement}
         />
       )}
     </div>

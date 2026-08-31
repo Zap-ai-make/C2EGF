@@ -25,6 +25,14 @@ import { ETATS, RAISONS } from '../../utils/positionDealer'
  * leur différence vaut — ou refuse de le dire.
  */
 
+/**
+ * Les deux gabarits, écrits une seule fois — le rendu ET le squelette les
+ * partagent. Recopiés, ils divergeraient au premier oubli, et la divergence se
+ * verrait pendant le chargement, c'est-à-dire jamais en relecture.
+ */
+const GRILLE = 'grid gap-4 sm:grid-cols-[1fr_1px_1fr]'
+const PANNEAU = 'rounded-lg bg-canvas p-4'
+
 /** Une ligne de la petite comptabilité, en chiffres tabulaires alignés. */
 function Terme({ operation, libelle, montant, fort = false }) {
   return (
@@ -43,9 +51,21 @@ function Terme({ operation, libelle, montant, fort = false }) {
   )
 }
 
+/**
+ * Une colonne devient un PANNEAU, et c'est tout le point de ce lot.
+ *
+ * Les deux comptes flottaient côte à côte sur le même fond, séparés par un
+ * simple espace. Quatre lignes de chiffres alignées se lisent alors comme un
+ * seul tableau à deux colonnes — alors que ce sont deux comptes DISTINCTS,
+ * dont l'intérêt est précisément de se regarder l'un l'autre. L'écran ne se
+ * comprenait pas seul : il a fallu l'expliquer pour qu'il se lise.
+ *
+ * Le fond `canvas` est volontairement à peine distinct de `surface` : il ne
+ * décore rien, il délimite. La ligne entre les deux fait le reste.
+ */
 function Colonne({ titre, montant, children, pied, testId }) {
   return (
-    <div className="min-w-0 flex-1 basis-64">
+    <div className={`min-w-0 ${PANNEAU}`}>
       <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted">{titre}</h3>
       <p className="mt-1 text-2xl font-bold tabular-nums text-ink sm:text-3xl" data-testid={testId}>
         {formatCurrency(montant)}
@@ -161,7 +181,7 @@ function Rapprochement({ position }) {
         data-testid="rapprochement"
       >
         <span className="font-semibold">Les deux colonnes concordent</span> au franc
-        près, transit compris.
+        près, les attentes comprises.
       </p>
     )
   }
@@ -183,8 +203,9 @@ function Rapprochement({ position }) {
         {anomalie ? (
           <>
             Aucun fonds d’ouverture n’explique un écart de ce sens : les compteurs
-            ont enregistré plus de sorties que les caisses et le transit n’en
-            contiennent. À signaler au gérant avant d’y voir une erreur de saisie.
+            ont enregistré plus de sorties que les caisses et les retours en
+            attente n’en contiennent. À signaler au gérant avant d’y voir une
+            erreur de saisie.
           </>
         ) : (
           <>
@@ -212,15 +233,23 @@ function PositionDealer({
         className="rounded-xl border border-line bg-surface p-4"
         aria-label="Ma position, en cours de chargement"
       >
-        <div className="flex flex-wrap gap-x-10 gap-y-6">
-          {[0, 1].map(i => (
-            <div key={i} className="min-w-0 flex-1 basis-64" aria-hidden="true">
-              <span className="block h-3 w-32 rounded bg-gray-200 motion-safe:animate-pulse" />
-              <span className="mt-2 block h-8 w-52 rounded bg-gray-200 motion-safe:animate-pulse" />
-              <span className="mt-3 block h-3 w-full rounded bg-gray-100 motion-safe:animate-pulse" />
-              <span className="mt-1.5 block h-3 w-full rounded bg-gray-100 motion-safe:animate-pulse" />
-            </div>
-          ))}
+        {/* Le squelette porte le MÊME gabarit et les MÊMES panneaux que le
+            rendu : sans cela la page saute d'une mise en page à l'autre à
+            l'arrivée des données, exactement là où on la regarde le moins. */}
+        <div className={GRILLE}>
+          <div className={`${PANNEAU} min-w-0`} aria-hidden="true">
+            <span className="block h-3 w-32 rounded bg-gray-200 motion-safe:animate-pulse" />
+            <span className="mt-2 block h-8 w-52 rounded bg-gray-200 motion-safe:animate-pulse" />
+            <span className="mt-3 block h-3 w-full rounded bg-gray-100 motion-safe:animate-pulse" />
+            <span className="mt-1.5 block h-3 w-full rounded bg-gray-100 motion-safe:animate-pulse" />
+          </div>
+          <div className="hidden bg-line sm:block" aria-hidden="true" />
+          <div className={`${PANNEAU} min-w-0`} aria-hidden="true">
+            <span className="block h-3 w-32 rounded bg-gray-200 motion-safe:animate-pulse" />
+            <span className="mt-2 block h-8 w-52 rounded bg-gray-200 motion-safe:animate-pulse" />
+            <span className="mt-3 block h-3 w-full rounded bg-gray-100 motion-safe:animate-pulse" />
+            <span className="mt-1.5 block h-3 w-full rounded bg-gray-100 motion-safe:animate-pulse" />
+          </div>
         </div>
         <span className="mt-4 block h-8 w-full rounded-lg bg-gray-100 motion-safe:animate-pulse" aria-hidden="true" />
       </section>
@@ -231,7 +260,13 @@ function PositionDealer({
     <section className="rounded-xl border border-line bg-surface p-4" aria-labelledby="position-titre">
       <h2 id="position-titre" className="sr-only">Ma position</h2>
 
-      <div className="flex flex-wrap gap-x-10 gap-y-6">
+      {/* ⚠ UNE GRILLE, PAS UN `flex-wrap`. Mesuré à la capture : en flex, les
+          deux panneaux prenaient 478 px et 415 px — deux comptes qu'on demande
+          de comparer, servis à deux largeurs différentes. Et le filet du milieu
+          y recevait une largeur de ZÉRO : il était dans le DOM et invisible à
+          l'écran. `1fr 1px 1fr` donne deux panneaux égaux et un trait qui
+          existe. */}
+      <div className={GRILLE}>
         {/* Les deux lignes de chaque colonne font EXACTEMENT le grand nombre
             au-dessus d'elles. Aucun terme décoratif ne se glisse dans une
             addition qui ne tombe pas juste : c'est la première chose qu'un
@@ -262,6 +297,8 @@ function PositionDealer({
           <Terme operation="" libelle="Ravitaillements confirmés" montant={position.envoye} />
           <Terme operation="−" libelle="Retours confirmés" montant={position.revenu} />
         </Colonne>
+
+        <div className="hidden bg-line sm:block" aria-hidden="true" />
 
         <Colonne
           titre="Dans les caisses"

@@ -255,6 +255,9 @@ function CaissesReseau({
   illisibles = 0,
   loading = false,
   reseau = 'Orange',
+  total = null,
+  onActualiser = null,
+  actualisation = false,
 }) {
   const [terme, setTerme] = useState('')
   const [triId, setTriId] = useState(TRI_DEFAUT)
@@ -288,6 +291,16 @@ function CaissesReseau({
             Caisses des boutiques
           </h2>
           <p className="mt-0.5 text-xs text-ink-muted">
+            {/* Le compte des boutiques vient de l'en-tête de page, qui a
+                disparu. Il est mieux ici : à côté de la liste qu'il dénombre,
+                et non deux blocs plus haut. La mention du réseau, elle, n'a pas
+                suivi — le profil est mono-réseau, elle ne distinguait rien. */}
+            {total !== null && (
+              <>
+                {total} boutique{total > 1 ? 's' : ''}
+                {' · '}
+              </>
+            )}
             Échelle commune 0 – {formatCurrency(echelle.plafond)} · seuil bas{' '}
             {formatCurrency(echelle.seuil)}
             {sousLeSeuil > 0 && (
@@ -302,6 +315,20 @@ function CaissesReseau({
         </div>
 
         <div className="flex flex-wrap items-end gap-3">
+          {/* « Actualiser » vient de l'en-tête de page, et il est enfin à côté
+              de ce qu'il recharge : ces caisses ne sont pas en temps réel, ce
+              bouton est le seul moyen de les revoir sans recharger la page. */}
+          {onActualiser && (
+            <button
+              type="button"
+              onClick={onActualiser}
+              disabled={actualisation}
+              data-testid="caisses-actualiser"
+              className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-brand-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+            >
+              {actualisation ? 'Chargement…' : 'Actualiser'}
+            </button>
+          )}
           <div>
             <label htmlFor={idRecherche} className="block text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
               Rechercher

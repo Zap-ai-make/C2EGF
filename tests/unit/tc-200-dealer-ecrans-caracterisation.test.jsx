@@ -323,10 +323,18 @@ describe('TC-200-A — DealerDashboard : l’accueil, les caisses et la position
     // Le défaut : l'accueil affichait la longueur de la PREMIÈRE PAGE suivie
     // d'un « + » — donc « 20+ » en permanence sur un réseau de 84 boutiques.
     // La requête unique de S2 rend le total ; il n'y a plus de page à compter.
+    //
+    // ⚠ Le compte a DÉMÉNAGÉ le 31/08/2026, il n'a pas disparu : l'en-tête de
+    //   page est supprimé, et le nombre est descendu dans le sous-titre de la
+    //   section qui montre ces boutiques. Ce que ce test tient — le total
+    //   exact, jamais « 20+ » — n'a pas changé d'un pouce.
     renderDealer(<DealerDashboard />)
 
-    expect(await screen.findByText(/84 boutiques en service/)).toBeTruthy()
+    await screen.findByTestId('caisses-liste')
+    expect(txt(screen.getByTestId('dealer-home'))).toContain('84 boutiques')
     expect(screen.queryByText(/\d+\+/)).toBeNull()
+    // Et l'en-tête, lui, est bien parti — le titre ne subsiste qu'à la voix.
+    expect(screen.queryByText('Vue générale', { ignore: '.sr-only' })).toBeNull()
   })
 
   it('CORRIGÉ (figé en S1) — ni tuiles d’indicateurs, ni table des demandes récentes', async () => {
@@ -335,7 +343,11 @@ describe('TC-200-A — DealerDashboard : l’accueil, les caisses et la position
     // tuiles sont parties avec lui, et la table qu'elles surmontaient —
     // l'accueil ne redouble plus l'écran « Ravitaillements ».
     renderDealer(<DealerDashboard />)
-    await screen.findByText(/84 boutiques en service/)
+    // ⚠ Le point d'attente n'est plus un TEXTE mais la liste elle-même. Il
+    //   l'était, et le texte a changé le 31/08/2026 avec la suppression de
+    //   l'en-tête : deux tests attendaient alors une phrase qui n'existait
+    //   plus, et échouaient avant même d'arriver à leur propre assertion.
+    await screen.findByTestId('caisses-liste')
 
     expect(screen.queryByText('Mes demandes récentes')).toBeNull()
     expect(screen.queryByText('Boutiques partenaires')).toBeNull()
@@ -349,7 +361,7 @@ describe('TC-200-A — DealerDashboard : l’accueil, les caisses et la position
     // stock ». Elle est partie avec la table de demandes qui la portait.
     // ⚠ Les trois écrans ADMIN gardent chacun leur copie : hors de ce chantier.
     renderDealer(<DealerDashboard />)
-    await screen.findByText(/84 boutiques en service/)
+    await screen.findByTestId('caisses-liste')
 
     expect(screen.queryByText('Ajout stock')).toBeNull()
     expect(screen.queryByText('Ajout liquidité')).toBeNull()
@@ -415,6 +427,32 @@ describe('TC-200-A — DealerDashboard : l’accueil, les caisses et la position
     const bandeau = await screen.findByTestId('rapprochement')
     await waitFor(() => expect(txt(bandeau)).toContain('43 150 000 FCFA de plus dans les caisses'))
     expect(txt(bandeau)).toContain('doit rester stable')
+  })
+
+  it('le mot « transit » ne revient par AUCUN des quatre bandeaux', async () => {
+    // ⚠ DÉFAUT ATTRAPÉ À LA CAPTURE, pas par un test. En retirant le jargon des
+    //   deux lignes d'attente, je l'avais laissé dans deux bandeaux de
+    //   rapprochement — « transit compris » (concordance) et « les caisses et le
+    //   transit » (anomalie). Le test précédent ne voyait rien : le jeu par
+    //   défaut ne produit qu'un seul des quatre états.
+    const etats = [
+      // concordance : caisses + attente = dehors, au franc près
+      { envoyeCumul: 443150000, revenuCumul: 0 },
+      // anomalie : les compteurs ont suivi plus que les caisses n'en contiennent
+      { envoyeCumul: 900000000, revenuCumul: 0 },
+      // antériorité : le cas ordinaire
+      { envoyeCumul: 500000000, revenuCumul: 100000000 },
+    ]
+    for (const flux of etats) {
+      mocks.subscribeDealerBalance.mockImplementation(pushOnce({
+        ...inventaire(),
+        flux: { ...flux, dehors: flux.envoyeCumul - flux.revenuCumul, amorce: true },
+      }))
+      const vue = renderDealer(<DealerDashboard />)
+      await screen.findByTestId('rapprochement')
+      expect(txt(screen.getByTestId('dealer-home'))).not.toMatch(/transit/i)
+      vue.unmount()
+    }
   })
 
   it('dit « — » et non « 0 » quand la lecture du réseau échoue', async () => {
