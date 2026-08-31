@@ -287,34 +287,44 @@ quitté le float du dealer et n'est pas dans la caisse de la boutique. Il est
 dehors, au sens propre — et le CRM était le seul à ne pas le savoir.
 
 L'identité passe donc à cinq termes, et le nouveau figure dans **les deux
-membres** :
+membres** — donc il s'annule dans l'écart :
 
     stock + liquidité + dehors boutiques + en route + en attente
         = fonds d'ouverture + envoyé + en route − revenu
-
-| Ce qui change | Ce qui ne change pas |
-|---|---|
-| Les **deux totaux** affichés montent du montant en route. | **L'écart**, au franc près. Un terme des deux membres s'annule. |
-| La note de pied gauche devient une **ligne** de l'addition. | La note de droite (`enTransit`) reste une note : cet argent a quitté la caisse, il n'est pas dans le total au-dessus. |
-
-**Vérifié au banc, pas seulement en test** : l'écart y vaut **87 250 787 FCFA**,
-sa valeur exacte d'avant le changement.
-
-**Pas de cinquième refus, et c'est un choix.** Si ce terme manque, l'écart reste
-juste — il s'annule des deux côtés. C'est ce qui le sépare de `sommeDehors`, qui
-n'entre que d'un côté et dont l'absence fait donc refuser le rapprochement. Un
-« en route » manquant coûte deux totaux sous-estimés, pas un écart faux : payer
-un écran muet pour ce risque-là serait plus cher que le risque.
-
-**Le même montant s'affiche deux fois, un par panneau, et c'est délibéré.** C'est
-ce qui rend *lisible* le fait qu'il s'annule. N'en montrer qu'un rendrait le
-total de l'autre inexplicable.
 
 **Un commentaire du dépôt disait le contraire** — « asymétrie voulue », le
 ravitaillement en attente reste hors du rapprochement. Il était vrai du CRM et
 faux du monde. Réécrit plutôt que laissé mentir.
 
-Deux commits : la règle (`positionDealer.js`, tc-203 : 25 → 35), puis le dessin.
+#### Puis le dealer a corrigé la mise en page, et il avait raison trois fois
+
+Premier jet : le montant en attente devenait une **ligne** dans chacun des deux
+totaux, le même chiffre affiché deux fois. Sa réponse, sur capture, a tenu en
+trois points qui s'imposent l'un l'autre.
+
+| Sa remarque | Pourquoi elle est juste |
+|---|---|
+| Chaque attente **du côté où l'argent va** | Un retour revient vers lui → sous « Mon argent dehors ». Un envoi part vers les caisses → sous « Dans les caisses ». J'avais raisonné sur l'origine. |
+| Les deux **sous le même filet**, aucune en ligne d'addition | À gauche, un retour en attente n'a pas fait avancer `revenuCumul` : il est **déjà** dans « envoyé − revenu », l'ajouter le compterait deux fois. À droite, un envoi en attente n'est pas dans une caisse. |
+| « Dans les caisses » = **stock + liquidité**, sans « Dehors » | Cet argent est chez les clients. Il n'est dans aucune caisse. Le total ne peut pas prétendre le contenir. |
+
+**Le prix, payé sciemment** : les deux panneaux ne sont plus les deux membres de
+l'identité. Trois termes réconciliateurs — `dehors boutiques`, `en route`,
+`en attente` — vivent désormais **hors** des totaux, sous le filet. L'écart reste
+juste, mais il n'est plus dérivable à l'œil des deux nombres affichés. `[ER-11]`
+fige ce fait pour que personne ne le « corrige » en additionnant ce qu'il voit.
+
+**Vérifié au banc à chaque étape, pas seulement en test** : l'écart y vaut
+**87 250 787 FCFA** — sa valeur exacte d'avant tout ce lot, à travers deux
+refontes du calcul.
+
+**Un gain non demandé, tombé de l'arbitrage** : un « dehors » illisible ne met
+plus le total des caisses à « — ». Tant que ce total valait
+stock + liquidité + dehors, une lecture refusée le rendait incalculable et
+l'écran taisait un chiffre qu'il connaissait. Il ne vaut plus que ses deux
+lignes : il reste juste. C'est `[RA-12]`.
+
+Trois commits : la règle, le dessin, puis les trois corrections.
 **2 391 unitaires (84 fichiers)** · 297 composants (18) · lint et build propres ·
 rien ne déborde à 390 px.
 
