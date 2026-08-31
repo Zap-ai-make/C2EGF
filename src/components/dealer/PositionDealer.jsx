@@ -1,5 +1,8 @@
+import { Link } from 'react-router-dom'
+import { useState } from 'react'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { ETATS, RAISONS } from '../../utils/positionDealer'
+import DehorsParBoutique from './DehorsParBoutique'
 
 /**
  * La position — « combien de mon argent est dehors », et son rapprochement.
@@ -33,12 +36,39 @@ import { ETATS, RAISONS } from '../../utils/positionDealer'
 const GRILLE = 'grid gap-4 sm:grid-cols-[1fr_1px_1fr]'
 const PANNEAU = 'rounded-lg bg-canvas p-4'
 
-/** Une ligne de la petite comptabilité, en chiffres tabulaires alignés. */
-function Terme({ operation, libelle, montant, fort = false }) {
-  return (
-    <p className={`flex items-baseline gap-2 text-sm ${fort ? 'text-ink' : 'text-ink-muted'}`}>
+/**
+ * Une ligne de la petite comptabilité — et, depuis le 31/08/2026, une cible.
+ *
+ * CHAQUE CHIFFRE MÈNE QUELQUE PART
+ * ────────────────────────────────
+ * L'écran énonçait cinq nombres et n'ouvrait sur rien. « 341 200 000 FCFA de
+ * ravitaillements confirmés » posait aussitôt la question « lesquels ? », et il
+ * fallait retrouver la file par le menu.
+ *
+ * ⚠ LA LIGNE ENTIÈRE EST LA CIBLE, PAS LE CHIFFRE. Un nombre est une cible
+ *   étroite, difficile à viser à la souris comme au doigt, et son nom
+ *   accessible seul (« 341 200 000 FCFA ») ne dit pas où il mène. La ligne
+ *   porte le libellé ET le montant : son nom accessible peut les dire tous les
+ *   deux, plus la destination.
+ *
+ * ⚠ UN LIEN POUR NAVIGUER, UN BOUTON POUR OUVRIR UN CALQUE. Même règle que les
+ *   lignes de `CaissesReseau` : un lien s'ouvre dans un onglet, se copie,
+ *   s'annonce comme « lien ». « Dehors » n'est pas une navigation — il déplie
+ *   un détail sur place, c'est donc un bouton.
+ *
+ * Le soulignement discret est l'affordance, comme sur les liens de ligne des
+ * caisses : les cinq libellés ne passent PAS en bleu, ce qui ferait cinq
+ * accents dans un bloc qui doit se lire d'un coup d'œil.
+ */
+const TERME_ACTIF =
+  '-mx-2 rounded px-2 underline decoration-line decoration-1 underline-offset-2 transition-colors hover:bg-brand-50 hover:decoration-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400'
+
+function Terme({ operation, libelle, montant, fort = false, vers, surClic, indice, testId }) {
+  const dessin = `flex items-baseline gap-2 text-sm ${fort ? 'text-ink' : 'text-ink-muted'}`
+  const contenu = (
+    <>
       <span aria-hidden="true" className="w-3 shrink-0 text-right text-ink-muted">{operation}</span>
-      <span className="min-w-0 flex-1">{libelle}</span>
+      <span className="min-w-0 flex-1 text-left">{libelle}</span>
       {/* Le deux-points n'existe que pour l'oreille : entre deux enfants de
           flex, `textContent` ne met aucun espace, et « Retours confirmés »
           suivi de son montant s'annoncerait d'un seul tenant. `sr-only` étant
@@ -47,8 +77,35 @@ function Terme({ operation, libelle, montant, fort = false }) {
       <span className={`shrink-0 tabular-nums ${fort ? 'font-semibold text-ink' : ''}`}>
         {formatCurrency(montant)}
       </span>
-    </p>
+    </>
   )
+
+  // Le nom accessible porte le libellé, le montant ET la destination. Sans lui,
+  // cinq cibles s'annonceraient par leur seul texte visible, et « Stock » ne
+  // dirait pas qu'il mène à la liste des boutiques.
+  const nom = `${libelle} : ${formatCurrency(montant)}${indice ? ` — ${indice}` : ''}`
+
+  if (vers) {
+    return (
+      <Link to={vers} aria-label={nom} data-testid={testId} className={`${dessin} ${TERME_ACTIF}`}>
+        {contenu}
+      </Link>
+    )
+  }
+  if (surClic) {
+    return (
+      <button
+        type="button"
+        onClick={surClic}
+        aria-label={nom}
+        data-testid={testId}
+        className={`w-full ${dessin} ${TERME_ACTIF}`}
+      >
+        {contenu}
+      </button>
+    )
+  }
+  return <p className={dessin}>{contenu}</p>
 }
 
 /**
@@ -225,8 +282,10 @@ function PositionDealer({
   position,
   retoursEnAttente = 0,
   envoisEnAttente = { nombre: 0, montant: 0 },
+  dehors = null,
   loading = false,
 }) {
+  const [detailOuvert, setDetailOuvert] = useState(false)
   if (loading || !position) {
     return (
       <section
@@ -294,8 +353,22 @@ function PositionDealer({
             />
           }
         >
-          <Terme operation="" libelle="Ravitaillements confirmés" montant={position.envoye} />
-          <Terme operation="−" libelle="Retours confirmés" montant={position.revenu} />
+          <Terme
+            operation=""
+            libelle="Ravitaillements confirmés"
+            montant={position.envoye}
+            vers="/dealer/requests"
+            indice="voir la file des ravitaillements"
+            testId="ligne-ravitaillements"
+          />
+          <Terme
+            operation="−"
+            libelle="Retours confirmés"
+            montant={position.revenu}
+            vers="/dealer/transfers"
+            indice="voir la file des retours"
+            testId="ligne-retours"
+          />
         </Colonne>
 
         <div className="hidden bg-line sm:block" aria-hidden="true" />
@@ -315,19 +388,54 @@ function PositionDealer({
             />
           }
         >
-          <Terme operation="" libelle="Stock" montant={position.sommeStock} />
-          <Terme operation="+" libelle="Liquidité" montant={position.sommeLiquidite} />
+          <Terme
+            operation=""
+            libelle="Stock"
+            montant={position.sommeStock}
+            vers="/dealer/stores"
+            indice="voir le stock de chaque boutique"
+            testId="ligne-stock"
+          />
+          <Terme
+            operation="+"
+            libelle="Liquidité"
+            montant={position.sommeLiquidite}
+            vers="/dealer/stores"
+            indice="voir la liquidité de chaque boutique"
+            testId="ligne-liquidite"
+          />
           {/* ⚠ CE TERME N'EST PAS UN AJOUT DÉCORATIF. Une transaction client non
               terminée n'a fait passer qu'une de ses deux jambes : un dépôt en
               attente a baissé le stock sans monter la liquidité, un retrait en
               attente a fait l'inverse. Sans lui, les deux lignes du dessus ne
               font pas le total du dessus d'elles — et le rapprochement porte un
               trou qu'il ne sait pas nommer. */}
-          <Terme operation="+" libelle="Dehors" montant={position.sommeDehors} />
+          {/* Un BOUTON, pas un lien : il ne navigue pas, il déplie un détail
+              sur place. Et il ne s'active que s'il y a un détail à montrer —
+              une cible qui ouvrirait un calque vide serait une promesse non
+              tenue. */}
+          {dehors ? (
+            <Terme
+              operation="+"
+              libelle="Dehors"
+              montant={position.sommeDehors}
+              surClic={() => setDetailOuvert(true)}
+              indice="voir le détail par boutique"
+              testId="ligne-dehors"
+            />
+          ) : (
+            <Terme operation="+" libelle="Dehors" montant={position.sommeDehors} />
+          )}
         </Colonne>
       </div>
 
       <Rapprochement position={position} />
+
+      <DehorsParBoutique
+        open={detailOuvert}
+        onClose={() => setDetailOuvert(false)}
+        dehors={dehors}
+      />
     </section>
   )
 }

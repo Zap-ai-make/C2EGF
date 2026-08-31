@@ -36,7 +36,15 @@ const CIBLES_FOCUSABLES = [
   'select:not([disabled])', 'textarea:not([disabled])', '[tabindex]:not([tabindex="-1"])',
 ].join(',')
 
-function Dialog({ open, onClose, title, description, children, footer, testId }) {
+/**
+ * ⚠ `largeur` est OPTIONNELLE et vaut `max-w-md`, la valeur d'origine : les
+ *   deux écrans qui posaient déjà un `Dialog` ne bougent pas d'un pixel. Elle
+ *   existe parce qu'un dialogue de saisie (deux champs) et un dialogue de
+ *   lecture (un tableau de quatre colonnes) n'ont pas la même largeur utile —
+ *   à `max-w-md`, la dernière colonne du second sortait du cadre, et c'était
+ *   celle qu'on venait chercher.
+ */
+function Dialog({ open, onClose, title, description, children, footer, testId, largeur = 'max-w-md' }) {
   const panneau = useRef(null)
   const corps = useRef(null)
   const focusPrecedent = useRef(null)
@@ -105,7 +113,7 @@ function Dialog({ open, onClose, title, description, children, footer, testId })
         aria-modal="true"
         aria-label={title}
         data-testid={testId}
-        className="max-h-full w-full max-w-md overflow-y-auto rounded-xl border border-line bg-surface shadow-xl"
+        className={`max-h-full w-full ${largeur} overflow-y-auto rounded-xl border border-line bg-surface shadow-xl`}
       >
         <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
           <div className="min-w-0">

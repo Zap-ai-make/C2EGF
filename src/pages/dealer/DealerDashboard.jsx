@@ -143,6 +143,7 @@ function DealerDashboard() {
         position={position}
         retoursEnAttente={retours.nombre}
         envoisEnAttente={envois}
+        dehors={dehors}
         loading={chargement}
       />
 
