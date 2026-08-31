@@ -13,6 +13,10 @@ import { MemoryRouter } from 'react-router-dom'
 
 const mocks = vi.hoisted(() => ({
   listActiveStores: vi.fn(),
+  // Ajouté en S5 : `NewDealerRequest` est passé de la fonction PAGINÉE à celle
+  // qui rend tout le réseau (défaut figé par tc-205 — 20 boutiques sur 84).
+  // Seul le CÂBLAGE du mock change ici ; aucune assertion n'est touchée.
+  listAllActiveStores: vi.fn(),
   getStoreBalances: vi.fn(),
   listDealerRequests: vi.fn(),
   subscribeDealerRequests: vi.fn(),
@@ -77,6 +81,7 @@ vi.mock('../../src/config/firebase', () => ({
 
 vi.mock('../../src/services/dealerService', () => ({
   listActiveStores: mocks.listActiveStores,
+  listAllActiveStores: mocks.listAllActiveStores,
   getStoreBalances: mocks.getStoreBalances,
   listDealerRequests: mocks.listDealerRequests,
   subscribeDealerRequests: mocks.subscribeDealerRequests,
@@ -399,6 +404,9 @@ describe('TC-031-NEW — NewDealerRequest', () => {
   const STORE_LIST = [{ id: 'store-a', name: 'Boutique Alpha', active: true }]
 
   beforeEach(() => {
+    // Cet écran lit `listAllActiveStores` depuis S5 ; l'autre reste câblé pour
+    // les écrans paginés couverts plus haut dans ce fichier.
+    mocks.listAllActiveStores.mockResolvedValue({ stores: STORE_LIST })
     mocks.listActiveStores.mockResolvedValue(makeStoresResult(STORE_LIST))
   })
 
@@ -418,7 +426,7 @@ describe('TC-031-NEW — NewDealerRequest', () => {
   })
 
   it('[NEW-03] erreur chargement boutiques → message d\'erreur', async () => {
-    mocks.listActiveStores.mockRejectedValue(new Error('unavailable'))
+    mocks.listAllActiveStores.mockRejectedValue(new Error('unavailable'))
     renderWithRouter(NewDealerRequest, {}, '/dealer/requests/new')
     await waitFor(() => {
       expect(screen.getByTestId('new-dealer-request').textContent).toMatch(/erreur|indisponible|impossible/i)

@@ -15,6 +15,8 @@ import { MemoryRouter } from 'react-router-dom'
 
 const mocks = vi.hoisted(() => ({
   listActiveStores: vi.fn(),
+  // Depuis S5, `NewDealerRequest` lit tout le réseau et non une page de 20.
+  listAllActiveStores: vi.fn(),
   createDealerRequest: vi.fn(),
   parseDealerAmount: vi.fn(v => {
     const s = String(v ?? '').trim()
@@ -52,6 +54,7 @@ vi.mock('../../src/constants/dealerConstants', () => ({
 
 vi.mock('../../src/services/dealerService', () => ({
   listActiveStores: mocks.listActiveStores,
+  listAllActiveStores: mocks.listAllActiveStores,
   createDealerRequest: mocks.createDealerRequest,
   parseDealerAmount: mocks.parseDealerAmount,
 }))
@@ -83,6 +86,7 @@ beforeEach(() => vi.clearAllMocks())
 describe('TC-089-NEW — NewDealerRequest multi-réseaux', () => {
   beforeEach(() => {
     mocks.useAuth.mockReturnValue({ currentUser: { uid: 'dealer-1' }, userProfile: { role: 'dealer', email: 'd@t.test', name: 'D' } })
+    mocks.listAllActiveStores.mockResolvedValue({ stores: [{ id: 'store-a', name: 'Boutique Alpha', active: true }] })
     mocks.listActiveStores.mockResolvedValue({ stores: [{ id: 'store-a', name: 'Boutique Alpha', active: true }], lastDoc: null, hasMore: false })
     mocks.createDealerRequest.mockResolvedValue({ id: 'req-x' })
   })

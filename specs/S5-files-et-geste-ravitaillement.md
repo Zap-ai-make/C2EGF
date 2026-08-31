@@ -40,8 +40,8 @@ savait déjà.
 
 **Le geste**
 
-- [ ] **⚠ CORRECTION FONCTIONNELLE, trouvée en S4 — à faire AVANT le restyle et
-      dans un commit à part.** `NewDealerRequest` appelle `listActiveStores()`
+- [x] **⚠ CORRECTION FONCTIONNELLE, trouvée en S4 — faite AVANT le restyle, en
+      deux commits séparés (`fd8edc2` fige, le suivant corrige).** `NewDealerRequest` appelle `listActiveStores()`
       **une seule fois**, sans boucle de pagination
       (`DEALER_STORES_PAGE_SIZE = 20`). Son menu ne propose donc que **20
       boutiques sur 84**, et sa garde d'existence efface silencieusement un

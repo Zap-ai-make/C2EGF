@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { listActiveStores, createDealerRequest, parseDealerAmount } from '../../services/dealerService'
+import { listAllActiveStores, createDealerRequest, parseDealerAmount } from '../../services/dealerService'
 import { createPartnerDeposit } from '../../services/storeTransferService'
 import { formatCurrency } from '../../utils/formatCurrency'
 import {
@@ -52,19 +52,30 @@ function NewDealerRequest() {
   const [submitError, setSubmitError] = useState(null)
   const submitLockRef = useRef(false)
 
+  // ⚠ `listAllActiveStores`, et surtout PAS `listActiveStores` : cette
+  //   dernière pagine à 20, et c'est exactement ce que faisait cet écran — il
+  //   n'appelait le service qu'une fois, ignorait `hasMore` et `lastDoc`, et
+  //   n'offrait donc que 20 boutiques sur 84. Un menu déroulant amputé des deux
+  //   tiers de ses options n'est pas une liste partielle : c'est un geste
+  //   qu'on ne peut pas faire. Défaut figé par tc-205.
   useEffect(() => {
     let cancelled = false
-    listActiveStores()
+    listAllActiveStores()
       .then(result => { if (!cancelled) { setStores(result.stores); setStoresLoading(false) } })
       .catch(err => { if (!cancelled) { setStoresError(err.message); setStoresLoading(false) } })
     return () => { cancelled = true }
   }, [])
 
+  // La garde reste : un `?storeId=` peut désigner une boutique fermée depuis, ou
+  // n'avoir jamais existé. Mais elle ne se déclenche plus pour la seule raison
+  // que la boutique était à la 40e place — et quand elle se déclenche, elle le
+  // DIT, au lieu de vider le champ en silence.
+  const [preStoreIntrouvable, setPreStoreIntrouvable] = useState(false)
   useEffect(() => {
-    if (preStoreId && stores.length > 0) {
-      const exists = stores.some(s => s.id === preStoreId)
-      if (!exists) setSelectedStoreId('')
-    }
+    if (!preStoreId || stores.length === 0) return
+    const exists = stores.some(s => s.id === preStoreId)
+    setPreStoreIntrouvable(!exists)
+    if (!exists) setSelectedStoreId('')
   }, [stores, preStoreId])
 
   const selectedStore = stores.find(s => s.id === selectedStoreId) || null
@@ -319,7 +330,17 @@ function NewDealerRequest() {
                   <option value="">— Sélectionner une boutique —</option>
                   {stores.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
                 </select>
-                {!selectedStoreId && <p className="mt-1 text-xs text-gray-500">Seules les boutiques actives sont listées.</p>}
+                {preStoreIntrouvable ? (
+                  <p role="alert" className="mt-1 text-xs font-medium text-warn" data-testid="pre-store-introuvable">
+                    La boutique du lien n’est plus en service. Choisissez-en une dans la liste.
+                  </p>
+                ) : (
+                  !selectedStoreId && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      Les {stores.length} boutiques actives du réseau sont listées.
+                    </p>
+                  )
+                )}
               </div>
 
               <div className="mb-4">

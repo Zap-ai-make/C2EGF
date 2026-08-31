@@ -77,6 +77,19 @@ export async function listActiveStores({ lastDoc = null } = {}) {
   }
 }
 
+/**
+ * Le CHOIX complet, sans pagination — ce que lit le formulaire de
+ * ravitaillement depuis S5. La doublure doit exposer la même API que le
+ * service réel : un export manquant ici ne casserait pas les tests, seulement
+ * le banc, et bien plus tard.
+ */
+export async function listAllActiveStores() {
+  if (variante === 'erreur') throw new Error('Service temporairement indisponible. Réessayez.')
+  if (variante === 'vide') return { stores: [] }
+  const source = variante === 'clairseme' ? boutiques.slice(0, 1) : boutiques
+  return { stores: source.map(({ id, name, active }) => ({ id, name, active })) }
+}
+
 export async function getStoreBalances(storeId) {
   const b = boutiques.find(x => x.id === storeId)
   if (!b) return { balances: {} }

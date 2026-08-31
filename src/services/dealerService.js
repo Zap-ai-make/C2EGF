@@ -135,6 +135,40 @@ export async function listActiveStores({ lastDoc: cursor = null } = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// listAllActiveStores — TOUTES les boutiques actives, sans pagination
+//
+// POURQUOI UNE SECONDE FONCTION, ET PAS UN ARGUMENT DE LA PREMIÈRE
+// ────────────────────────────────────────────────────────────────
+// `listActiveStores` pagine, et c'est juste pour ce qu'elle sert : une LISTE
+// que l'on parcourt. Un formulaire, lui, a besoin du CHOIX COMPLET — un menu
+// déroulant amputé des deux tiers de ses options n'est pas une liste partielle,
+// c'est une capacité manquante.
+//
+// Deux fonctions plutôt qu'un drapeau parce que le drapeau se serait oublié :
+// c'est exactement ainsi que `NewDealerRequest` a fini par n'appeler qu'une
+// page en croyant tout charger (spec S5, défaut figé par tc-205).
+//
+// ⚠ Aucune limite. C'est délibéré, et borné par la nature de la donnée : le
+//   réseau compte 84 boutiques et une boutique ne se crée pas à la seconde. Le
+//   jour où ce nombre change d'ordre de grandeur, c'est le menu déroulant qui
+//   devient le mauvais dessin, pas cette requête — et on le remplacera par une
+//   recherche serveur, pas par une page de 20 muette.
+// ---------------------------------------------------------------------------
+
+export async function listAllActiveStores() {
+  try {
+    const snap = await getDocs(query(
+      collection(db, STORES_COLLECTION),
+      where('active', '==', true),
+      orderBy('name'),
+    ))
+    return { stores: snap.docs.map(d => ({ id: d.id, ...d.data() })) }
+  } catch (err) {
+    throw mapFirestoreError(err)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // getStoreBalances — soldes networkBalances/current d'une boutique
 // ---------------------------------------------------------------------------
 

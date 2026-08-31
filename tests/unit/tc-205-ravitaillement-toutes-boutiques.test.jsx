@@ -1,8 +1,8 @@
 /**
- * TC-205 — Le formulaire de ravitaillement voit-il tout le réseau ? (spec S5)
+ * TC-205 — Le formulaire de ravitaillement voit TOUT le réseau (spec S5)
  *
- * DÉFAUT FIGÉ, TROUVÉ EN S4
- * ─────────────────────────
+ * LE DÉFAUT QUE CE FICHIER A FIGÉ, PUIS CORRIGÉ
+ * ─────────────────────────────────────────────
  * `NewDealerRequest` appelle `listActiveStores()` UNE SEULE FOIS, sans boucle de
  * pagination. Or ce service pagine à `DEALER_STORES_PAGE_SIZE = 20`. Sur le
  * réseau réel de 84 boutiques, le menu du formulaire n'en propose donc que 20,
@@ -15,9 +15,13 @@
  * propre commit, avant tout changement d'apparence (AGENTS.md : jamais
  * refactoriser et changer le comportement métier dans le même lot).
  *
- * Ce fichier FIGE le défaut tel qu'il est aujourd'hui. Le commit suivant
- * retourne chaque assertion et nomme ce qu'elle remplace : c'est la seule
- * façon de prouver qu'un défaut a été corrigé, et non déplacé.
+ * Le commit `fd8edc2` a d'abord FIGÉ ce défaut : les cinq tests ci-dessous
+ * passaient au vert en décrivant le comportement fautif. Ce commit-ci les
+ * retourne un par un, et chacun nomme ce qu'il remplace — c'est la seule façon
+ * de prouver qu'un défaut a été corrigé, et non déplacé.
+ *
+ * `git show fd8edc2 -- tests/unit/tc-205-ravitaillement-toutes-boutiques.test.jsx`
+ * rend la version qui décrivait le défaut.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -26,6 +30,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 const mocks = vi.hoisted(() => ({
+  listAllActiveStores: vi.fn(),
   listActiveStores: vi.fn(),
   createDealerRequest: vi.fn(),
   parseDealerAmount: vi.fn(v => {
@@ -52,6 +57,7 @@ vi.mock('../../src/config/firebase', () => ({
 }))
 
 vi.mock('../../src/services/dealerService', () => ({
+  listAllActiveStores: mocks.listAllActiveStores,
   listActiveStores: mocks.listActiveStores,
   createDealerRequest: mocks.createDealerRequest,
   parseDealerAmount: mocks.parseDealerAmount,
@@ -77,9 +83,12 @@ const RESEAU = Array.from({ length: 84 }, (_, i) => ({
   active: true,
 }))
 
+/** Ce que `listAllActiveStores()` rend : le réseau entier, sans curseur. */
+const toutLeReseau = () => ({ stores: RESEAU })
+
 /**
- * Ce que `listActiveStores()` rend RÉELLEMENT : une page de 20, et `hasMore`.
- * Le composant ne rappelle jamais le service avec le curseur.
+ * Ce que rendait `listActiveStores()`, gardé pour l'assertion qui compte :
+ * une page de 20 et un `hasMore` que l'écran ignorait.
  */
 function premierePage() {
   const page = RESEAU.slice(0, DEALER_STORES_PAGE_SIZE)
@@ -99,59 +108,85 @@ beforeEach(() => {
     currentUser: { uid: 'dealer-1' },
     userProfile: { role: 'dealer', active: true, name: 'Ousmane', email: 'o@c2egf.bf' },
   })
+  mocks.listAllActiveStores.mockResolvedValue(toutLeReseau())
   mocks.listActiveStores.mockResolvedValue(premierePage())
   mocks.createDealerRequest.mockResolvedValue({ id: 'req-1' })
 })
 
 // ═══════════════════════════════════════════════════════════════════════════
-describe('TC-205 — DÉFAUT FIGÉ : le formulaire ne voit qu’une page du réseau', () => {
+describe('TC-205 — le formulaire de ravitaillement atteint tout le réseau', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
-  it('[RV-01] le menu ne propose que 20 boutiques sur 84', async () => {
+  it('[RV-01] CORRIGÉ — le menu propose les 84 boutiques, plus seulement 20', async () => {
+    // Figé : « le menu ne propose que 20 boutiques sur 84 ».
     renderFormulaire()
     await waitFor(() => screen.getByTestId('select-store'))
 
-    expect(optionsBoutique()).toHaveLength(DEALER_STORES_PAGE_SIZE)
-    expect(optionsBoutique()).not.toHaveLength(RESEAU.length)
+    expect(optionsBoutique()).toHaveLength(RESEAU.length)
+    expect(optionsBoutique()).not.toHaveLength(DEALER_STORES_PAGE_SIZE)
   })
 
-  it('[RV-02] la 21e boutique du réseau est absente du menu', async () => {
+  it('[RV-02] CORRIGÉ — la 21e et la 84e boutique sont dans le menu', async () => {
+    // Figé : « la 21e boutique du réseau est absente du menu ».
     renderFormulaire()
     await waitFor(() => screen.getByTestId('select-store'))
 
     const noms = optionsBoutique().map(o => o.textContent)
     expect(noms).toContain('BOUTIQUE 20')
-    expect(noms).not.toContain('BOUTIQUE 21')
-    expect(noms).not.toContain('BOUTIQUE 84')
+    expect(noms).toContain('BOUTIQUE 21')
+    expect(noms).toContain('BOUTIQUE 84')
   })
 
-  it('[RV-03] le service n’est appelé QU’UNE FOIS : aucun curseur n’est suivi', async () => {
+  it('[RV-03] CORRIGÉ — l’écran n’appelle plus le service PAGINÉ du tout', async () => {
+    // Figé : « le service n'est appelé qu'une fois : aucun curseur n'est suivi ».
+    // La correction ne suit pas le curseur : elle change de requête. Boucler
+    // sur `lastDoc` aurait fait cinq allers-retours pour reconstruire une liste
+    // que Firestore rend en un seul — et aurait laissé en place le piège, qui
+    // est d'appeler une fonction paginée là où il faut un choix complet.
     renderFormulaire()
     await waitFor(() => screen.getByTestId('select-store'))
 
-    expect(mocks.listActiveStores).toHaveBeenCalledTimes(1)
-    // `hasMore` vaut pourtant `true`, et `lastDoc` est fourni : le composant les
-    // reçoit et n'en fait rien.
-    expect(mocks.listActiveStores).toHaveBeenCalledWith()
+    expect(mocks.listAllActiveStores).toHaveBeenCalledTimes(1)
+    expect(mocks.listActiveStores).not.toHaveBeenCalled()
   })
 
-  it('[RV-04] un ?storeId= au-delà de la page est SILENCIEUSEMENT effacé', async () => {
-    // Le pire cas : l'utilisateur arrive d'un lien qui désignait une boutique
-    // précise, et le formulaire s'ouvre vide sans rien dire. Il n'y a même pas
-    // de message — juste une sélection qui ne s'est pas faite.
+  it('[RV-04] CORRIGÉ — un ?storeId= au-delà de la 20e est pré-sélectionné', async () => {
+    // Figé : « un ?storeId= au-delà de la page est SILENCIEUSEMENT effacé ».
+    // C'est le cas qui bloquera l'action « ravitailler cette boutique » posée
+    // sur les lignes de l'accueil : 64 des 84 liens ouvraient un formulaire
+    // vide, sans un mot d'explication.
     renderFormulaire('/dealer/requests/new?storeId=store-40&type=stock_add')
     await waitFor(() => screen.getByTestId('select-store'))
 
-    await waitFor(() => expect(screen.getByTestId('select-store').value).toBe(''))
-    expect(screen.getByTestId('new-dealer-request').textContent).not.toMatch(/introuvable|indisponible/i)
+    expect(screen.getByTestId('select-store').value).toBe('store-40')
+    expect(screen.queryByTestId('pre-store-introuvable')).toBeNull()
   })
 
-  it('[RV-05] un ?storeId= DANS la page est bien pré-sélectionné', async () => {
-    // Le pré-remplissage fonctionne — c'est bien sa PORTÉE qui est le défaut,
-    // pas le mécanisme. Cette assertion doit rester vraie après correction.
+  it('[RV-05] INCHANGÉ — un ?storeId= de la première page marche toujours', async () => {
+    // Cette assertion était vraie AVANT la correction et doit le rester : le
+    // mécanisme de pré-remplissage n'était pas en cause, seulement sa portée.
+    // C'est elle qui prouve qu'on n'a pas « corrigé » ce qui marchait.
     renderFormulaire('/dealer/requests/new?storeId=store-5&type=stock_add')
     await waitFor(() => screen.getByTestId('select-store'))
 
     expect(screen.getByTestId('select-store').value).toBe('store-5')
+  })
+
+  it('[RV-06] une boutique vraiment introuvable le DIT, au lieu de vider en silence', async () => {
+    // La garde d'existence reste nécessaire — un lien peut désigner une
+    // boutique fermée depuis. Ce qui change, c'est qu'elle ne se déclenche plus
+    // par accident de pagination, et que lorsqu'elle se déclenche, elle parle.
+    renderFormulaire('/dealer/requests/new?storeId=store-inexistante&type=stock_add')
+    await waitFor(() => screen.getByTestId('select-store'))
+
+    expect(await screen.findByTestId('pre-store-introuvable')).toBeTruthy()
+    expect(screen.getByTestId('select-store').value).toBe('')
+  })
+
+  it('[RV-07] le compte annoncé sous le menu est celui du réseau entier', async () => {
+    renderFormulaire()
+    await waitFor(() => screen.getByTestId('select-store'))
+
+    expect(screen.getByText(/84 boutiques actives du réseau sont listées/)).toBeTruthy()
   })
 })

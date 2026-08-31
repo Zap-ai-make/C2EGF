@@ -50,6 +50,7 @@ vi.mock('../../src/config/firebase', () => ({
 import {
   createDealerRequest,
   listActiveStores,
+  listAllActiveStores,
   getStoreBalances,
   listDealerRequests,
   listNetworkCaisses,
@@ -481,6 +482,61 @@ describe('TC-030-LST — listActiveStores (paginée, limit N+1)', () => {
     const fsError = Object.assign(new Error('permission denied'), { code: 'permission-denied' })
     mocks.getDocs.mockRejectedValue(fsError)
     await expect(listActiveStores()).rejects.toThrow('Accès refusé')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// §7 bis — listAllActiveStores (NON paginée) — spec S5
+//
+// Les deux fonctions coexistent volontairement : l'une sert les listes qu'on
+// parcourt, l'autre les CHOIX qui doivent être complets. Les tests ci-dessous
+// tiennent surtout la différence — c'est elle qui a manqué, et qui a laissé le
+// formulaire de ravitaillement n'offrir que 20 boutiques sur 84 (tc-205).
+// ---------------------------------------------------------------------------
+
+describe('TC-030-ALL — listAllActiveStores (sans pagination)', () => {
+  it('[ALL-01] rend TOUTES les boutiques, bien au-delà de la taille de page', async () => {
+    const docs = Array.from({ length: 84 }, (_, i) => ({ name: `Store ${i}`, active: true }))
+    mocks.getDocs.mockResolvedValue(makeQuerySnap(docs))
+
+    const result = await listAllActiveStores()
+
+    expect(result.stores).toHaveLength(84)
+    expect(result.stores[83].name).toBe('Store 83')
+  })
+
+  it('[ALL-02] n’applique NI limite NI curseur', async () => {
+    // C'est l'assertion qui empêche la régression : le jour où quelqu'un
+    // « harmonise » les deux fonctions en ajoutant une limite ici, le
+    // formulaire redevient aveugle aux trois quarts du réseau, en silence.
+    mocks.getDocs.mockResolvedValue(makeQuerySnap([{ name: 'A', active: true }]))
+
+    await listAllActiveStores()
+
+    expect(mocks.limit).not.toHaveBeenCalled()
+    expect(mocks.startAfter).not.toHaveBeenCalled()
+    expect(mocks.where).toHaveBeenCalledWith('active', '==', true)
+    expect(mocks.orderBy).toHaveBeenCalledWith('name')
+  })
+
+  it('[ALL-03] n’expose ni lastDoc ni hasMore : il n’y a pas de suite', async () => {
+    mocks.getDocs.mockResolvedValue(makeQuerySnap([{ name: 'A', active: true }]))
+
+    const result = await listAllActiveStores()
+
+    expect(result).not.toHaveProperty('lastDoc')
+    expect(result).not.toHaveProperty('hasMore')
+  })
+
+  it('[ALL-04] réseau vide → liste vide, pas une erreur', async () => {
+    mocks.getDocs.mockResolvedValue(makeQuerySnap([]))
+    await expect(listAllActiveStores()).resolves.toEqual({ stores: [] })
+  })
+
+  it('[ALL-05] permission-denied → message mappé, comme la version paginée', async () => {
+    const fsError = Object.assign(new Error('permission denied'), { code: 'permission-denied' })
+    mocks.getDocs.mockRejectedValue(fsError)
+    await expect(listAllActiveStores()).rejects.toThrow('Accès refusé')
   })
 })
 
