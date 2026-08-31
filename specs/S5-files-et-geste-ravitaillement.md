@@ -1,7 +1,7 @@
 # S5 — Les files et le geste de ravitaillement
 
 ```
-Statut     : à faire
+Statut     : terminée
 Périmètre  : MVP
 Dépend de  : S3
 ```
@@ -29,7 +29,7 @@ savait déjà.
       pas de trois cartes.
 - [x] **Deux vides distincts** : « rien » invite à créer un premier
       ravitaillement ; « rien qui corresponde » propose d'effacer les filtres.
-- [ ] L'état mort « Appuyez sur Actualiser » de `DealerStores`, jamais atteint,
+- [x] L'état mort « Appuyez sur Actualiser » de `DealerStores`, jamais atteint,
       disparaît (relevé en S1).
 - [x] Les montants sont en chiffres tabulaires et alignés à droite, en-têtes
       compris.
@@ -73,14 +73,21 @@ savait déjà.
 
 **Le socle**
 
-- [ ] Zéro emoji, zéro couleur hors palette dans les cinq fichiers concernés —
+- [x] Zéro emoji, zéro couleur hors palette dans les cinq fichiers concernés —
       **91 aujourd'hui** : `NewDealerRequest` 37, `DealerStoreCard` 16,
       `DealerRequests` 13, `DealerTransfers` 13, `DealerStores` 12.
-- [ ] `DealerStoreCard` ne porte plus l'orange opérateur en fond, en texte ni en
+      *(Relevé final : **0** dans les cinq. ⚠ Et une quatre-vingt-douzième
+      trouvée hors du code : `bg-orange-600` n'était plus employée nulle part et continuait
+      pourtant d'être LIVRÉE dans le CSS, maintenue en vie par une phrase de
+      `REFONTE.md` qui racontait l'avoir retirée d'`OfflineBanner`. Tailwind v4
+      balaie le texte brut du projet, fichiers `.md` compris : le document de
+      conception était la dernière raison de vivre de la couleur qu'il
+      condamnait. Corrigé, et vérifié dans le CSS construit.)*
+- [x] `DealerStoreCard` ne porte plus l'orange opérateur en fond, en texte ni en
       bouton : `#FF6B35` plafonne à 2,84:1 et `index.css` le réserve aux données.
-- [ ] Focus visible, contraste AA, noms accessibles sur les boutons d'action de
+- [x] Focus visible, contraste AA, noms accessibles sur les boutons d'action de
       ligne (« Confirmer le retour de Fada », pas « Confirmer »).
-- [ ] Les tests de S1 passent sans modification de leurs assertions.
+- [x] Les tests de S1 passent sans modification de leurs assertions.
       *(`tc-200` — tenu. ⚠ **Trois** assertions PRÉEXISTANTES ont changé dans ce
       lot, toutes hors S1, toutes déclarées sur place :*
       *`tc-080` [ET-02], le vide non filtré qui invite désormais à agir ;*

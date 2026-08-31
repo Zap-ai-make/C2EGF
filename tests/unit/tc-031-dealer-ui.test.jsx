@@ -288,6 +288,20 @@ describe('TC-031-STORES — DealerStores', () => {
     expect(screen.getByTestId('dealer-stores')).toBeInTheDocument()
   })
 
+  // AJOUTÉ en S5 — aucune assertion existante n'est touchée ici.
+  it('[STORES-11] l’état mort « Appuyez sur Actualiser » a disparu', async () => {
+    // Il n'était pas seulement inatteignable : il était FAUX. `loadStores()`
+    // part au montage, si bien que la phrase demandait un geste inutile
+    // pendant la seule frame où elle pouvait s'afficher. Relevé en S1,
+    // supprimé en S5.
+    mocks.listActiveStores.mockResolvedValue(makeStoresResult(STORES))
+    mocks.getStoreBalances.mockResolvedValue({ balances: {} })
+    renderWithRouter(DealerStores)
+    expect(screen.queryByText(/appuyez sur/i)).toBeNull()
+    await waitFor(() => screen.getByTestId('store-card-store-a'))
+    expect(screen.queryByText(/appuyez sur/i)).toBeNull()
+  })
+
   it('[STORES-02] chargement réussi → affiche les boutiques', async () => {
     mocks.listActiveStores.mockResolvedValue(makeStoresResult(STORES))
     mocks.getStoreBalances

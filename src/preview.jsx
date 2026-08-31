@@ -36,6 +36,7 @@ import DealerRequests from './pages/dealer/DealerRequests.jsx'
 import DealerTransfers from './pages/dealer/DealerTransfers.jsx'
 import DealerHistory from './pages/dealer/DealerHistory.jsx'
 import NewDealerRequest from './pages/dealer/NewDealerRequest.jsx'
+import DealerStores from './pages/dealer/DealerStores.jsx'
 import Balance from './components/dashboard/Balance.jsx'
 import ReseauCards from './components/dashboard/ReseauCards.jsx'
 import FluxChart from './components/dashboard/FluxChart.jsx'
@@ -370,7 +371,7 @@ function Preview() {
  *   &cuves=basses|vides                  l'état des CUVES du dealer
  *   &caisses=vide|erreur|erreur-partielle|clairseme   l'état du RÉSEAU
  *   &position=neufs|anomalie             l'état du RAPPROCHEMENT
- *   &ecran=ravitaillements|retours|historique|ravitailler  l'écran monté
+ *   &ecran=ravitaillements|retours|historique|ravitailler|boutiques  l'écran monté
  *   &file=vide                           les files, sans rien à traiter
  *   &storeId=…&type=stock_add            le formulaire tel qu'il ARRIVE depuis
  *                                        une ligne : boutique et ressource déjà
@@ -392,6 +393,7 @@ const ECRANS = {
   retours: DealerTransfers,
   historique: DealerHistory,
   ravitailler: NewDealerRequest,
+  boutiques: DealerStores,
 }
 
 /**
@@ -405,6 +407,7 @@ const ECRANS = {
 const PAR_CHEMIN = {
   '/dealer/requests': DealerRequests,
   '/dealer/requests/new': NewDealerRequest,
+  '/dealer/stores': DealerStores,
   '/dealer/transfers': DealerTransfers,
   '/dealer/history': DealerHistory,
 }

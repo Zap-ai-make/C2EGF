@@ -242,8 +242,13 @@ dépôt. C'est la vérification qui manquait, pas l'attention.
 - **La teinte de ligne** — introduite puis retirée dans ce même lot, après
   l'avoir vue à la capture : à quarante lignes, l'historique devenait un aplat
   rose et vert où la couleur ne distinguait plus rien.
-- **`OfflineBanner`** — `bg-orange-600`, alors que l'orange est le jeton de
-  l'opérateur, réservé aux données.
+- **`OfflineBanner`** — l'orange plein de l'opérateur en fond, alors que cette
+  teinte est le jeton de l'OPÉRATEUR, réservé aux données.
+  *(⚠ La classe n'est plus nommée ici, et c'est délibéré. Tailwind v4 balaie le
+  texte brut du projet — ce fichier COMPRIS. Tant qu'elle était écrite dans
+  cette ligne, la règle continuait d'être émise dans le CSS livré : ce document
+  était, à lui seul, la dernière raison de vivre d'une couleur morte, hors
+  palette et sous le seuil de contraste. Relevé en S5.)*
 - **Un `sr-only` qui élargissait la page de 645 px.** À 390 px, le document
   défilait horizontalement alors qu'aucun élément visible ne dépassait. Le
   coupable : `<span className="sr-only">Détail</span>` dans un `<th>`. `sr-only`

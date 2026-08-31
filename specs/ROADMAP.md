@@ -16,7 +16,7 @@ Réseau réel : **84 boutiques**. Contrats applicables : `DESIGN.md`, `SECURITY.
 | S2 | Les caisses en une requête, et l'argent dehors| S1        | MVP       | **terminée** |
 | S3 | Le poste — shell de l'espace dealer           | S1        | MVP       | **terminée** |
 | S4 | L'accueil — les caisses et la position        | S2, S3    | MVP       | **terminée** |
-| S5 | Les files et le geste de ravitaillement       | S3        | MVP       | à faire |
+| S5 | Les files et le geste de ravitaillement       | S3        | MVP       | **terminée** |
 | S6 | Le vocabulaire — « ravitaillement »           | S5        | MVP       | à faire |
 | S7 | La règle qui empêche l'arc-en-ciel de revenir | S6        | post-MVP  | à faire |
 
@@ -50,6 +50,8 @@ elle était posée avant. Elle vient après le dernier lot de restyle
 | Lint · build | propre · passant | propre · passant |
 
 Après S4 : **2 255 unitaires (78 fichiers)** · 297 composants (18) · 285
+functions (11) · lint propre · build passant.
+Après S5 : **2 301 unitaires (81 fichiers)** · 297 composants (18) · 285
 functions (11) · lint propre · build passant.
 
 ⚠ **Le premier relevé de baseline était faux et a été corrigé.** Il annonçait
@@ -165,6 +167,47 @@ posée sur les lignes de l'accueil.
 mêmes caisses en 20-par-page, avec une requête de solde par boutique et une
 recherche limitée à la page. Il n'est pas supprimé : rien dans S4 ne le
 demandait, et supprimer un écran routé se décide avec le client.
+
+**S5 — terminée**, en cinq commits, dont deux de comportement et un de peinture
+— la séparation qu'AGENTS.md exige.
+
+| Commit | Nature | Ce qu'il fait |
+|---|---|---|
+| `fd8edc2` | test | fige le défaut : le formulaire ne voit que 20 boutiques sur 84 |
+| `202f385` | métier | `listAllActiveStores()` — les 84 sont atteignables |
+| `c6a915f` | peinture | un seul dessin de tableau pour les trois files |
+| `de1dac5` | métier | le geste : arriver pré-rempli, les cuves, le mot après l'action |
+| *(celui-ci)* | peinture | le socle : 91 couleurs hors palette → **0** |
+
+**Le raccourci retenu en S4 est livré.** Chaque ligne de l'accueil porte
+« Stock · Liquidité » : le lien emmène au formulaire avec la boutique ET la
+ressource déjà choisies, curseur dans le champ Montant. Il n'était pas
+livrable tant que le formulaire ne voyait qu'un quart du réseau.
+
+**Trois choses que seule une vérification pouvait montrer :**
+
+| Trouvé | Leçon |
+|---|---|
+| Le bloc des cuves annonçait « 8 420 000 → **-580 000 FCFA** ». Une cuve ne devient pas négative : le serveur REFUSE et le solde ne bouge pas. | Ne jamais chiffrer un « après » que l'opération ne produira pas. Trouvé à la capture, dans du code écrit une heure plus tôt. |
+| Cuve vide et inventaire non amorcé sont **indiscernables** dans l'UI, et mènent à des issues opposées côté serveur (refus / débit sauté). | L'écran dit qu'il ne sait pas. `flux.amorce` les sépare quand il vaut vrai — les compteurs ne s'écrivent que sur un document existant. |
+| `bg-orange-600` n'était plus employée **nulle part** et continuait d'être livrée dans le CSS. Elle survivait par une **phrase de `REFONTE.md`** racontant l'avoir retirée d'`OfflineBanner`. | Tailwind v4 balaie le texte brut du projet, fichiers `.md` **compris**. Le document de conception était la dernière raison de vivre de la couleur qu'il condamnait. |
+
+**Un piège d'accessibilité créé puis fermé.** Les lignes de l'accueil étaient
+entièrement `aria-hidden` — un lien y aurait été atteignable au clavier tout en
+étant absent de l'arbre d'accessibilité. Le masque est descendu sur les trois
+cellules visuelles. Mesuré : 168 liens, **0** élément focusable sous
+`aria-hidden`, filet du seuil toujours à **0,00 px** d'amplitude sur 168 pistes
+malgré la quatrième colonne.
+
+**Le banc peut désormais suivre une navigation.** Les écrans y sont indexés par
+leur vraie route, et `capture-ecran.mjs` accepte `--champ`/`--valeur` et
+plusieurs `--clic`. Sans cela, l'écran d'arrivée du message de retour — le seul
+endroit où ce message existe — n'était pas regardable, et l'ouvrir aurait
+demandé une porte dérobée dans le formulaire livré.
+
+**⚠ `DealerStores` est repeint, pas tranché.** Il fait double emploi avec
+l'accueil depuis S4 (20 par page, une requête de solde par boutique, recherche
+limitée à la page). Supprimer un écran routé reste une décision client.
 
 ---
 

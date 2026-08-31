@@ -1,7 +1,24 @@
 import { useState, useCallback, useEffect } from 'react'
 import DealerStoreCard from '../../components/dealer/DealerStoreCard'
 import { listActiveStores, getStoreBalances } from '../../services/dealerService'
+import { BTN_SECOND } from '../../constants/workspaceTheme'
 
+/**
+ * Les boutiques partenaires — repeintes, et débarrassées d'un état mort.
+ *
+ * ⚠ UNE SUPPRESSION DANS UN LOT DE PEINTURE, DÉCLARÉE COMME TELLE.
+ *   L'écran ouvrait sur « Appuyez sur **Actualiser** pour charger les
+ *   boutiques. » Or `loadStores()` part au montage : cette phrase n'est vraie à
+ *   aucun moment où on peut la lire. Elle n'est pas seulement morte — elle est
+ *   FAUSSE, et elle demande un geste inutile pendant la seule frame où elle
+ *   s'affiche. La spec S5 la nomme explicitement (relevé en S1) ; c'est la
+ *   seule ligne de ce lot qui ne soit pas une valeur de `className`.
+ *
+ * ⚠ Cet écran fait double emploi avec l'accueil depuis S4 — 20 boutiques par
+ *   page, une requête de solde par boutique, recherche limitée à la page
+ *   courante. Son sort est une décision client : supprimer un écran routé ne se
+ *   décide pas au motif qu'un autre le couvre mieux.
+ */
 function DealerStores() {
   const [stores, setStores] = useState([])
   const [balancesMap, setBalancesMap] = useState({})
@@ -85,12 +102,12 @@ function DealerStores() {
     <div className="max-w-5xl mx-auto" data-testid="dealer-stores">
       {/* Titre + Actualiser */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-        <h1 className="text-xl font-bold text-gray-800">Boutiques partenaires</h1>
+        <h1 className="text-xl font-bold text-ink">Boutiques partenaires</h1>
         <button
           type="button"
           onClick={loadStores}
           disabled={loading}
-          className="rounded bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600 transition-colors"
+          className={BTN_SECOND}
           aria-label="Actualiser la liste des boutiques"
         >
           {loading ? 'Chargement…' : 'Actualiser'}
@@ -100,7 +117,7 @@ function DealerStores() {
       {/* Recherche */}
       {hasLoaded && !error && stores.length > 0 && (
         <div className="mb-5">
-          <label htmlFor="store-search" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="store-search" className="mb-1 block text-sm font-medium text-ink">
             Rechercher sur cette page
           </label>
           <input
@@ -109,19 +126,13 @@ function DealerStores() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Nom de la boutique…"
-            className="w-full max-w-xs rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
+            className="w-full max-w-xs rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
             aria-label="Rechercher une boutique par nom"
           />
         </div>
       )}
 
       {/* États */}
-      {!hasLoaded && !loading && (
-        <div className="bg-white rounded-lg shadow p-10 text-center text-gray-500">
-          <p className="mb-4">Appuyez sur <strong>Actualiser</strong> pour charger les boutiques.</p>
-        </div>
-      )}
-
       {loading && (
         <div
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
@@ -129,15 +140,15 @@ function DealerStores() {
           aria-label="Chargement des boutiques"
         >
           {[1, 2, 3].map(n => (
-            <div key={n} className="bg-white rounded-lg shadow p-5 motion-safe:animate-pulse">
-              <div className="h-5 w-32 bg-gray-200 rounded mb-3" />
+            <div key={n} className="rounded-2xl bg-surface p-5 shadow-sm ring-1 ring-gray-100 motion-safe:animate-pulse">
+              <div className="mb-3 h-5 w-32 rounded bg-gray-200" />
               <div className="flex gap-3 mb-4">
-                <div className="flex-1 h-14 bg-orange-100 rounded" />
-                <div className="flex-1 h-14 bg-blue-100 rounded" />
+                <div className="h-14 flex-1 rounded bg-gray-200" />
+                <div className="h-14 flex-1 rounded bg-gray-200" />
               </div>
               <div className="flex gap-2">
-                <div className="flex-1 h-9 bg-gray-200 rounded" />
-                <div className="flex-1 h-9 bg-gray-200 rounded" />
+                <div className="h-9 flex-1 rounded bg-gray-200" />
+                <div className="h-9 flex-1 rounded bg-gray-200" />
               </div>
             </div>
           ))}
@@ -147,14 +158,14 @@ function DealerStores() {
       {error && (
         <div
           role="alert"
-          className="rounded-lg bg-red-50 border border-red-200 p-5 text-red-700"
+          className="rounded-xl border border-danger/30 bg-danger-soft p-5 text-danger"
         >
           <p className="font-medium mb-1">Erreur de chargement</p>
           <p className="text-sm">{error}</p>
           <button
             type="button"
             onClick={loadStores}
-            className="mt-3 rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+            className="mt-3 rounded-lg bg-danger px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-danger/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
           >
             Réessayer
           </button>
@@ -162,13 +173,13 @@ function DealerStores() {
       )}
 
       {hasLoaded && !loading && !error && stores.length === 0 && (
-        <div className="bg-white rounded-lg shadow p-10 text-center text-gray-500">
+        <div className="rounded-xl border border-dashed border-line bg-surface p-10 text-center text-ink-muted">
           Aucune boutique active disponible.
         </div>
       )}
 
       {hasLoaded && !loading && !error && stores.length > 0 && filtered.length === 0 && (
-        <div className="bg-white rounded-lg shadow p-10 text-center text-gray-500">
+        <div className="rounded-xl border border-dashed border-line bg-surface p-10 text-center text-ink-muted">
           Aucune boutique ne correspond à « {search} ».
         </div>
       )}
@@ -193,7 +204,7 @@ function DealerStores() {
                 type="button"
                 onClick={loadMore}
                 disabled={loadingMore}
-                className="rounded bg-gray-100 border border-gray-300 px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 transition-colors"
+                className={BTN_SECOND}
                 data-testid="btn-load-more-stores"
               >
                 {loadingMore ? 'Chargement…' : 'Charger plus'}

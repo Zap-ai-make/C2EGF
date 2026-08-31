@@ -201,14 +201,14 @@ function NewDealerRequest() {
   if (storesLoading) {
     return (
       <div className="max-w-xl mx-auto" data-testid="new-dealer-request">
-        <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500 motion-safe:animate-pulse">Chargement…</div>
+        <div className="rounded-2xl bg-surface p-8 text-center text-ink-muted shadow-sm ring-1 ring-gray-100 motion-safe:animate-pulse">Chargement…</div>
       </div>
     )
   }
   if (storesError) {
     return (
       <div className="max-w-xl mx-auto" data-testid="new-dealer-request">
-        <div role="alert" className="rounded-lg bg-red-50 border border-red-200 p-5 text-red-700">
+        <div role="alert" className="rounded-xl border border-danger/30 bg-danger-soft p-5 text-danger">
           <p className="font-medium">Impossible de charger les boutiques</p>
           <p className="text-sm mt-1">{storesError}</p>
         </div>
@@ -221,20 +221,20 @@ function NewDealerRequest() {
     const parsedAmt = parseDealerAmount(amountRaw)
     return (
       <div className="max-w-xl mx-auto" data-testid="new-dealer-request">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h1 className="text-lg font-bold text-gray-800 mb-5">
+        <div className="rounded-2xl bg-surface p-6 shadow-sm ring-1 ring-gray-100">
+          <h1 className="text-lg font-bold text-ink mb-5">
             {isPartner ? 'Confirmer l\'opération partenaire' : 'Confirmer la demande'}
           </h1>
-          <dl className="divide-y divide-gray-100 mb-6">
+          <dl className="mb-6 divide-y divide-line/60">
             {isPartner ? (
               <>
                 <div className="flex py-3">
-                  <dt className="w-36 flex-shrink-0 text-sm text-gray-500">Partenaire</dt>
-                  <dd className="text-sm font-medium text-gray-800" data-testid="confirm-partner">{partnerLabel(selectedPartner)}</dd>
+                  <dt className="w-36 flex-shrink-0 text-sm text-ink-muted">Partenaire</dt>
+                  <dd className="text-sm font-medium text-ink" data-testid="confirm-partner">{partnerLabel(selectedPartner)}</dd>
                 </div>
                 <div className="flex py-3">
-                  <dt className="w-36 flex-shrink-0 text-sm text-gray-500">Opération</dt>
-                  <dd className="text-sm font-medium text-gray-800" data-testid="confirm-operation">
+                  <dt className="w-36 flex-shrink-0 text-sm text-ink-muted">Opération</dt>
+                  <dd className="text-sm font-medium text-ink" data-testid="confirm-operation">
                     {partnerOperation === 'withdrawal'
                       ? `Retrait — stock +${formatCurrency(parsedAmt)}, liquidité −${formatCurrency(parsedAmt)}`
                       : `Dépôt — stock −${formatCurrency(parsedAmt)}, liquidité +${formatCurrency(parsedAmt)}`}
@@ -244,29 +244,29 @@ function NewDealerRequest() {
             ) : (
               <>
                 <div className="flex py-3">
-                  <dt className="w-36 flex-shrink-0 text-sm text-gray-500">Boutique</dt>
-                  <dd className="text-sm font-medium text-gray-800" data-testid="confirm-store">{selectedStore?.name ?? selectedStoreId}</dd>
+                  <dt className="w-36 flex-shrink-0 text-sm text-ink-muted">Boutique</dt>
+                  <dd className="text-sm font-medium text-ink" data-testid="confirm-store">{selectedStore?.name ?? selectedStoreId}</dd>
                 </div>
                 <div className="flex py-3">
-                  <dt className="w-36 flex-shrink-0 text-sm text-gray-500">Type</dt>
-                  <dd className="text-sm font-medium text-gray-800" data-testid="confirm-type">{DEALER_REQUEST_TYPE_LABELS[requestType]}</dd>
+                  <dt className="w-36 flex-shrink-0 text-sm text-ink-muted">Type</dt>
+                  <dd className="text-sm font-medium text-ink" data-testid="confirm-type">{DEALER_REQUEST_TYPE_LABELS[requestType]}</dd>
                 </div>
               </>
             )}
             <div className="flex py-3">
-              <dt className="w-36 flex-shrink-0 text-sm text-gray-500">Montant</dt>
-              <dd className="text-sm font-semibold text-gray-800" data-testid="confirm-amount">{formatCurrency(parsedAmt)}</dd>
+              <dt className="w-36 flex-shrink-0 text-sm text-ink-muted">Montant</dt>
+              <dd className="text-sm font-semibold text-ink" data-testid="confirm-amount">{formatCurrency(parsedAmt)}</dd>
             </div>
             <div className="flex py-3">
-              <dt className="w-36 flex-shrink-0 text-sm text-gray-500">Réseau</dt>
-              <dd className="text-sm font-medium text-gray-800" data-testid="confirm-network">{network}</dd>
+              <dt className="w-36 flex-shrink-0 text-sm text-ink-muted">Réseau</dt>
+              <dd className="text-sm font-medium text-ink" data-testid="confirm-network">{network}</dd>
             </div>
           </dl>
 
           <CuvesApresEnvoi projection={projectionCuves} />
 
           {submitError && (
-            <div role="alert" className="mb-4 rounded bg-red-50 border border-red-200 p-3 text-sm text-red-700">{submitError}</div>
+            <div role="alert" className="mb-4 rounded-lg border border-danger/30 bg-danger-soft p-3 text-sm text-danger">{submitError}</div>
           )}
 
           <div className="flex gap-3">
@@ -274,7 +274,7 @@ function NewDealerRequest() {
               type="button"
               onClick={() => { setStep('form'); setSubmitError(null) }}
               disabled={isSubmitting}
-              className="flex-1 rounded border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 transition-colors"
+              className="flex-1 rounded-xl border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-brand-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
               data-testid="btn-cancel-confirm"
             >
               Annuler
@@ -283,7 +283,7 @@ function NewDealerRequest() {
               type="button"
               onClick={handleSubmit}
               disabled={isSubmitting}
-              className="flex-1 rounded bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800 disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600 transition-colors"
+              className="flex-1 rounded-xl bg-brand-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
               aria-busy={isSubmitting}
               data-testid="btn-submit-confirm"
             >
@@ -298,14 +298,14 @@ function NewDealerRequest() {
   // ── Formulaire ────────────────────────────────────────────────────────────
   const canReview = amountRaw.trim() !== '' && (isPartner ? !!selectedPartnerId : (selectedStoreId && requestType))
   const tabClass = (active) =>
-    `flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500 ${
-      active ? 'bg-green-600 text-white' : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+    `flex-1 rounded-xl px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${
+      active ? 'bg-brand-500 text-white' : 'border border-line bg-surface text-ink hover:bg-brand-50'
     }`
 
   return (
     <div className="max-w-xl mx-auto" data-testid="new-dealer-request">
-      <div className="bg-white rounded-lg shadow p-6">
-        <h1 className="text-lg font-bold text-gray-800 mb-4">Nouvelle demande</h1>
+      <div className="rounded-2xl bg-surface p-6 shadow-sm ring-1 ring-gray-100">
+        <h1 className="text-lg font-bold text-ink mb-4">Nouvelle demande</h1>
 
         {/* Bascule destinataire */}
         <div className="mb-5 flex gap-2">
@@ -314,7 +314,7 @@ function NewDealerRequest() {
         </div>
 
         {submitError && (
-          <div role="alert" className="mb-4 rounded bg-red-50 border border-red-200 p-3 text-sm text-red-700">{submitError}</div>
+          <div role="alert" className="mb-4 rounded-lg border border-danger/30 bg-danger-soft p-3 text-sm text-danger">{submitError}</div>
         )}
 
         {/* Ce que le lien a déjà répondu — et pourquoi le curseur a sauté au
@@ -331,15 +331,15 @@ function NewDealerRequest() {
         <form onSubmit={e => { e.preventDefault(); handleReview() }} noValidate>
           {isPartner ? (
             <div className="mb-4">
-              <label htmlFor="partner-select" className="block text-sm font-medium text-gray-700 mb-1">
-                Partenaire <span aria-hidden="true" className="text-red-500">*</span>
+              <label htmlFor="partner-select" className="mb-1 block text-sm font-medium text-ink">
+                Partenaire <span aria-hidden="true" className="text-danger">*</span>
               </label>
               <select
                 id="partner-select"
                 value={selectedPartnerId}
                 onChange={e => setSelectedPartnerId(e.target.value)}
                 required
-                className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
                 data-testid="select-partner"
               >
                 <option value="">— Sélectionner un partenaire —</option>
@@ -349,10 +349,10 @@ function NewDealerRequest() {
               </select>
 
               <fieldset className="mt-4">
-                <legend className="block text-sm font-medium text-gray-700 mb-2">
-                  Opération <span aria-hidden="true" className="text-red-500">*</span>
+                <legend className="mb-2 block text-sm font-medium text-ink">
+                  Opération <span aria-hidden="true" className="text-danger">*</span>
                 </legend>
-                <div role="radiogroup" aria-label="Opération partenaire" className="inline-flex rounded-lg bg-gray-100 p-1">
+                <div role="radiogroup" aria-label="Opération partenaire" className="inline-flex rounded-xl bg-canvas p-1">
                   {[
                     { value: 'deposit', label: 'Dépôt' },
                     { value: 'withdrawal', label: 'Retrait' },
@@ -365,8 +365,8 @@ function NewDealerRequest() {
                         role="radio"
                         aria-checked={active}
                         onClick={() => setPartnerOperation(op.value)}
-                        className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-400 ${
-                          active ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                        className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${
+                          active ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
                         }`}
                         data-testid={`partner-op-${op.value}`}
                       >
@@ -377,7 +377,7 @@ function NewDealerRequest() {
                 </div>
               </fieldset>
 
-              <p className="mt-3 text-xs text-gray-500">
+              <p className="mt-3 text-xs text-ink-muted">
                 {partnerOperation === 'withdrawal'
                   ? 'Retrait immédiat, sans notification : votre inventaire fait stock +montant et liquidité −montant.'
                   : 'Dépôt immédiat, sans notification : votre inventaire fait stock −montant et liquidité +montant.'}
@@ -386,15 +386,15 @@ function NewDealerRequest() {
           ) : (
             <>
               <div className="mb-4">
-                <label htmlFor="store-select" className="block text-sm font-medium text-gray-700 mb-1">
-                  Boutique <span aria-hidden="true" className="text-red-500">*</span>
+                <label htmlFor="store-select" className="mb-1 block text-sm font-medium text-ink">
+                  Boutique <span aria-hidden="true" className="text-danger">*</span>
                 </label>
                 <select
                   id="store-select"
                   value={selectedStoreId}
                   onChange={e => setSelectedStoreId(e.target.value)}
                   required
-                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                  className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
                   data-testid="select-store"
                 >
                   <option value="">— Sélectionner une boutique —</option>
@@ -406,7 +406,7 @@ function NewDealerRequest() {
                   </p>
                 ) : (
                   !selectedStoreId && (
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="mt-1 text-xs text-ink-muted">
                       Les {stores.length} boutiques actives du réseau sont listées.
                     </p>
                   )
@@ -415,8 +415,8 @@ function NewDealerRequest() {
 
               <div className="mb-4">
                 <fieldset>
-                  <legend className="block text-sm font-medium text-gray-700 mb-2">
-                    Type de demande <span aria-hidden="true" className="text-red-500">*</span>
+                  <legend className="mb-2 block text-sm font-medium text-ink">
+                    Type de demande <span aria-hidden="true" className="text-danger">*</span>
                   </legend>
                   <div className="flex flex-wrap gap-4">
                     {Object.entries(DEALER_REQUEST_TYPE_LABELS).map(([value, label]) => (
@@ -427,7 +427,7 @@ function NewDealerRequest() {
                           value={value}
                           checked={requestType === value}
                           onChange={() => setRequestType(value)}
-                          className="h-4 w-4 text-green-600 border-gray-300 focus:ring-green-500"
+                          className="h-4 w-4 accent-brand-500 focus:ring-brand-400"
                         />
                         {label}
                       </label>
@@ -456,12 +456,12 @@ function NewDealerRequest() {
           */}
           {IS_DEALER_MULTI_NETWORK && (
             <div className="mb-4">
-              <label htmlFor="network-select" className="block text-sm font-medium text-gray-700 mb-1">Réseau</label>
+              <label htmlFor="network-select" className="mb-1 block text-sm font-medium text-ink">Réseau</label>
               <select
                 id="network-select"
                 value={network}
                 onChange={e => setNetwork(e.target.value)}
-                className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-400"
                 data-testid="select-network"
               >
                 {DEALER_NETWORKS.map(n => (<option key={n} value={n}>{NETWORK_CONFIG[n]?.name ?? n}</option>))}
@@ -471,8 +471,8 @@ function NewDealerRequest() {
 
           {/* Montant */}
           <div className="mb-6">
-            <label htmlFor="amount-input" className="block text-sm font-medium text-gray-700 mb-1">
-              Montant (FCFA) <span aria-hidden="true" className="text-red-500">*</span>
+            <label htmlFor="amount-input" className="mb-1 block text-sm font-medium text-ink">
+              Montant (FCFA) <span aria-hidden="true" className="text-danger">*</span>
             </label>
             <input
               id="amount-input" type="text" inputMode="numeric" pattern="[0-9]*"
@@ -480,16 +480,16 @@ function NewDealerRequest() {
               value={amountRaw}
               onChange={e => { setAmountRaw(e.target.value); if (amountError) setAmountError(null) }}
               placeholder="Ex : 50000" required
-              className={`w-full rounded border px-3 py-2 text-sm focus:outline-none focus:ring-1 ${
-                amountError ? 'border-red-400 focus:border-red-500 focus:ring-red-400' : 'border-gray-300 focus:border-green-500 focus:ring-green-500'
+              className={`w-full rounded-lg border bg-surface px-3 py-2 text-sm text-ink focus:outline-none focus:ring-1 ${
+                amountError ? 'border-danger focus:border-danger focus:ring-danger' : 'border-line focus:border-brand-400 focus:ring-brand-400'
               }`}
               aria-invalid={amountError ? 'true' : undefined}
               data-testid="input-amount"
             />
             {amountError ? (
-              <p role="alert" className="mt-1 text-xs text-red-600">{amountError}</p>
+              <p role="alert" className="mt-1 text-xs text-danger">{amountError}</p>
             ) : (
-              <p className="mt-1 text-xs text-gray-500">Entier positif uniquement, sans virgule ni point.</p>
+              <p className="mt-1 text-xs text-ink-muted">Entier positif uniquement, sans virgule ni point.</p>
             )}
           </div>
 
@@ -497,7 +497,7 @@ function NewDealerRequest() {
             <button
               type="button"
               onClick={() => navigate('/dealer/requests')}
-              className="flex-1 rounded border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 transition-colors"
+              className="flex-1 rounded-xl border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
               data-testid="btn-cancel-form"
             >
               Annuler
@@ -505,7 +505,7 @@ function NewDealerRequest() {
             <button
               type="submit"
               disabled={!canReview}
-              className="flex-1 rounded bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600 transition-colors"
+              className="flex-1 rounded-xl bg-brand-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
               data-testid="btn-review"
             >
               Vérifier
