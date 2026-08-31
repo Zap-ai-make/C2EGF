@@ -55,6 +55,8 @@ Après S5 : **2 301 unitaires (81 fichiers)** · 297 composants (18) · 285
 functions (11) · lint propre · build passant.
 Après S6 : **2 316 unitaires (82 fichiers)** · 297 composants (18) · 285
 functions (11) · lint propre · build passant.
+Après le repli du poste : **2 328 unitaires (83 fichiers)**, mêmes autres
+chiffres.
 
 ⚠ **Le premier relevé de baseline était faux et a été corrigé.** Il annonçait
 1 858 tests sur 67 fichiers. Cette exécution s'était terminée sur
@@ -239,6 +241,35 @@ est un mot que personne ne relit.
 mettre à jour l'**export Excel**. Il n'y en a pas : `excelUtils.js` est
 l'import/export des **clients**, et aucun écran de l'espace dealer ne propose
 de téléchargement. Le critère supposait un export qui n'a jamais été écrit.
+
+**Hors specs — le poste se replie.** Demande directe du client, après le MVP.
+La barre latérale passe en rail de 3,5 rem et rend 10 rem au contenu ; le choix
+est mémorisé. Ce qui en profite est identifiable : la liste des 84 caisses, dont
+les deux pistes se partagent la largeur restante.
+
+Trois règles ont cadré le lot, parce qu'un repli mal fait échange de la place
+contre de l'information :
+
+| Règle | Ce qu'elle a imposé |
+|---|---|
+| Il ne cache **jamais une alerte** | Les cuves quittent le rail, mais un marqueur reste, et son nom accessible porte **les deux montants** en toutes lettres, plus le mot « bas ». |
+| Il ne coûte rien **au clavier ni à la voix** | Chaque cible garde son nom complet, compteur compris (« Ravitaillements — 4 ravitaillements en attente ») ; les intertitres de groupe passent en `sr-only`, ils ne sont pas supprimés. |
+| Il **se souvient** | `localStorage`. Replier sa barre à chaque page serait un réglage qui ne se règle jamais. |
+
+Les icônes n'existaient pas : la navigation était textuelle. Un rail sans icône
+est une colonne de cases vides, donc elles arrivent — et sont affichées **aussi**
+en mode déplié, pour que la cible ne change pas de dessin en se repliant,
+seulement de largeur. Une assertion de développement refuse une destination sans
+icône, sur le modèle d'`assertCompteurDealerAutorise`.
+
+**Un défaut trouvé à la mesure, dans le rail que je venais d'écrire.** La
+pastille « quelque chose à traiter ici » était en `danger` plein : **1,91:1** sur
+le marine de la barre — un signal qu'on ne voit pas. Le jeton clair y est à
+12,99:1. Troisième occurrence de la même leçon dans ce chantier (l'anneau des
+cuves en S3, le filet de seuil sur les barres de liquidité en S4) : *un jeton
+n'est jamais neutre au fond qui le porte*. La pastille **dépliée** garde son
+rouge plein — ce qui la rend lisible là-bas n'est pas son fond mais le chiffre
+blanc dedans.
 
 ---
 
