@@ -6,7 +6,8 @@
  *   create   : document `pending`, AUCUN solde ne bouge, AUCUNE dette. Noms client
  *              et boutiques dénormalisés depuis la lecture SERVEUR.
  *   confirm  : seule la fournisseuse ; stock fournisseur −montant (dépôt) /
- *              +montant (retrait) ; dette créée dans le sens miroir ; terminal.
+ *              (dépôt) ou la LIQUIDITÉ (retrait) ; dette toujours de la
+ *              demandeuse vers la fournisseuse ; terminal.
  *   reject   : seule la fournisseuse ; motif 3–500 ; aucun mouvement, aucune dette.
  *   providers: annuaire = boutiques ACTIVES sauf soi (le SDK Admin contourne les
  *              règles qui interdisent de lire la fiche d'une autre boutique).
@@ -354,27 +355,88 @@ describe('TC-112-CO — confirmStoreCollaboration : dépôt', () => {
   })
 })
 
-describe('TC-112-CO — confirmStoreCollaboration : retrait (le sens inverse)', () => {
-  it('[CO-20] stock fournisseur +montant, dette FOURNISSEUSE → DEMANDEUSE', async () => {
+describe('TC-112-CO — confirmStoreCollaboration : retrait (l’autre ressource)', () => {
+  it('[CO-20] LIQUIDITÉ fournisseur −montant, dette DEMANDEUSE → FOURNISSEUSE', async () => {
+    // ⚠ RENVERSEMENT DE RÈGLE. Avant, un retrait faisait MONTER le stock de la
+    //   fournisseuse et la dette pointait vers la demandeuse. La fournisseuse
+    //   avance désormais le CASH remis au client : elle cède, donc on lui doit.
     const id = await createAs(ADMIN_A, { operationType: 'withdrawal', amount: 15000 })
     const res = await confirmStoreCollaborationHandler(makeRequest(ADMIN_B, { collaborationId: id }), deps())
 
-    expect(await stockOf(STORE_B)).toBe(65000)
+    expect(await liquiditeOf(STORE_B)).toBe(15000)   // 30 000 − 15 000
+    expect(await stockOf(STORE_B)).toBe(50000)       // le stock ne bouge PAS
+    expect(res.resourceField).toBe('liquidite')
 
     const debt = (await db.doc(`internalDebts/${res.debtId}`).get()).data()
-    expect(debt.debtorStoreId).toBe(STORE_B)
-    expect(debt.creditorStoreId).toBe(STORE_A)
-    expect(debt.debtorStoreName).toBe('Boutique B')
-    expect(debt.creditorStoreName).toBe('Boutique A')
+    expect(debt.debtorStoreId).toBe(STORE_A)
+    expect(debt.creditorStoreId).toBe(STORE_B)
+    expect(debt.debtorStoreName).toBe('Boutique A')
+    expect(debt.creditorStoreName).toBe('Boutique B')
     expect(debt.originalAmount).toBe(15000)
+    expect(debt.resourceField).toBe('liquidite')
   })
 
-  it('[CO-21] un retrait ne subit AUCUN contrôle de suffisance', async () => {
-    await clearFirestoreEmulator()
-    await seedBase({ stockB: 0 })
-    const id = await createAs(ADMIN_A, { operationType: 'withdrawal', amount: 15000 })
+  it('[CO-21] un retrait SUBIT désormais le contrôle de suffisance', async () => {
+    // Le cas qui rendait 15 000 sans le moindre contrôle sous l’ancienne règle.
+    const id = await createAs(ADMIN_A, { operationType: 'withdrawal', amount: 40000 })
+    await expectError(
+      confirmStoreCollaborationHandler(makeRequest(ADMIN_B, { collaborationId: id }), deps()),
+      'INSUFFICIENT_SUPPLIER_LIQUIDITY',
+    )
+    expect(await liquiditeOf(STORE_B)).toBe(30000)
+    expect((await db.collection('internalDebts').get()).size).toBe(0)
+    expect((await db.doc(`storeCollaborations/${id}`).get()).data().status).toBe('pending')
+  })
+})
+
+describe('TC-112-HI — la trace laissée chez la demandeuse', () => {
+  const historyOf = async (storeId) =>
+    (await db.collection(`clients/${storeId}/history`).get()).docs.map((d) => d.data())
+
+  it('[HI-01] la collaboration confirmée écrit l’opération du client chez la DEMANDEUSE', async () => {
+    // Le client s’est présenté chez elle : c’est là qu’il ira chercher sa preuve.
+    const id = await createAs()
+    const res = await confirmStoreCollaborationHandler(makeRequest(ADMIN_B, { collaborationId: id }), deps())
+
+    const lignes = await historyOf(STORE_A)
+    expect(lignes).toHaveLength(1)
+    expect(lignes[0].type).toBe('Dépôt')
+    expect(lignes[0].montant).toBe(20000)
+    expect(lignes[0].collaborationId).toBe(id)
+    expect(lignes[0].supplierStoreId).toBe(STORE_B)
+    expect(res.historyId).toBeTruthy()
+  })
+
+  it('[HI-02] la trace est TERMINALE — sinon elle fausserait l’argent dehors', async () => {
+    // `argentDehors` ne somme que les non terminées. Une trace « en attente »
+    // ferait croire à une jambe manquante qui n’existe pas : la contrepartie
+    // de la demandeuse est portée par la dette, pas par un reste à encaisser.
+    const id = await createAs()
     await confirmStoreCollaborationHandler(makeRequest(ADMIN_B, { collaborationId: id }), deps())
-    expect(await stockOf(STORE_B)).toBe(15000)
+    expect((await historyOf(STORE_A))[0].statut).toBe('Validée')
+  })
+
+  it('[HI-03] la trace ne déplace AUCUN solde chez la demandeuse', async () => {
+    const id = await createAs()
+    await confirmStoreCollaborationHandler(makeRequest(ADMIN_B, { collaborationId: id }), deps())
+    expect(await stockOf(STORE_A)).toBe(1000)
+    expect(await liquiditeOf(STORE_A)).toBe(80000)
+  })
+
+  it('[HI-04] la fournisseuse n’écrit rien dans SON historique', async () => {
+    // L’opération n’est pas la sienne : elle a prêté une ressource, pas servi
+    // un client. Une ligne chez elle la compterait deux fois dans le réseau.
+    const id = await createAs()
+    await confirmStoreCollaborationHandler(makeRequest(ADMIN_B, { collaborationId: id }), deps())
+    expect(await historyOf(STORE_B)).toEqual([])
+  })
+
+  it('[HI-05] une demande refusée ne laisse aucune trace', async () => {
+    const id = await createAs()
+    await rejectStoreCollaborationHandler(
+      makeRequest(ADMIN_B, { collaborationId: id, rejectionReason: 'Pas de stock ce matin.' }), deps(),
+    )
+    expect(await historyOf(STORE_A)).toEqual([])
   })
 })
 
@@ -490,17 +552,34 @@ describe('TC-112-PR — listStoreCollaborationProviders', () => {
 
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe('TC-112-NR — non-régression : ce module ne touche que le stock', () => {
-  it('[NR-01] la liquidité des deux boutiques est intacte après un cycle complet', async () => {
+describe('TC-112-NR — non-régression : ce module ne touche que la FOURNISSEUSE', () => {
+  it('[NR-01] un cycle complet ne bouge QUE les soldes de la fournisseuse', async () => {
     const depot = await createAs()
     await confirmStoreCollaborationHandler(makeRequest(ADMIN_B, { collaborationId: depot }), deps())
     const retrait = await createAs(ADMIN_A, { operationType: 'withdrawal', amount: 5000 })
     await confirmStoreCollaborationHandler(makeRequest(ADMIN_B, { collaborationId: retrait }), deps())
 
+    // La demandeuse est INTACTE des deux côtés : sa contrepartie est la dette.
     expect(await liquiditeOf(STORE_A)).toBe(80000)
-    expect(await liquiditeOf(STORE_B)).toBe(30000)
     expect(await stockOf(STORE_A)).toBe(1000)
-    expect(await stockOf(STORE_B)).toBe(35000) // 50000 − 20000 + 5000
+
+    // La fournisseuse cède sur les deux champs, chacun selon son opération.
+    expect(await stockOf(STORE_B)).toBe(30000)      // 50 000 − 20 000 (dépôt)
+    expect(await liquiditeOf(STORE_B)).toBe(25000)  // 30 000 − 5 000 (retrait)
+  })
+
+  it('[NR-01 bis] les deux dettes vont dans le MÊME sens', async () => {
+    // C’est l’invariant que le gérant énonce : quand on demande, on doit.
+    const depot = await createAs()
+    const d1 = await confirmStoreCollaborationHandler(makeRequest(ADMIN_B, { collaborationId: depot }), deps())
+    const retrait = await createAs(ADMIN_A, { operationType: 'withdrawal', amount: 5000 })
+    const d2 = await confirmStoreCollaborationHandler(makeRequest(ADMIN_B, { collaborationId: retrait }), deps())
+
+    for (const debtId of [d1.debtId, d2.debtId]) {
+      const debt = (await db.doc(`internalDebts/${debtId}`).get()).data()
+      expect(debt.debtorStoreId).toBe(STORE_A)
+      expect(debt.creditorStoreId).toBe(STORE_B)
+    }
   })
 
   it('[NR-02] les autres réseaux ne sont jamais écrasés par le merge', async () => {

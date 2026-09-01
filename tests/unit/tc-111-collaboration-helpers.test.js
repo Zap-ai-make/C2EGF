@@ -3,13 +3,20 @@
  *
  * Testés sans Firestore : ce sont eux qui portent la règle financière, et une
  * erreur ici se paie en argent réel. Le cœur du fichier est la TABLE DE VÉRITÉ
- * complète `debtDirection` × `supplierStockDelta` : les deux règles sont miroir
- * l'une de l'autre, et les confondre inverserait le sens d'une dette.
+ * `supplierResourceField` × `debtDirection` : quelle ressource la fournisseuse
+ * cède, et vers qui la dette pointe.
  *
- * Rappel de la sémantique (mono-réseau : la demandeuse est à court de STOCK,
- * pas privée de SIM) :
- *   dépôt   → stock fournisseur −montant ; DEMANDEUSE doit à FOURNISSEUSE
- *   retrait → stock fournisseur +montant ; FOURNISSEUSE doit à DEMANDEUSE
+ * Sémantique — LA FOURNISSEUSE SE DÉPOUILLE DANS LES DEUX SENS :
+ *   dépôt   → elle cède du STOCK (elle envoie l'e-float depuis sa SIM)
+ *   retrait → elle cède de la LIQUIDITÉ (elle avance le cash remis au client)
+ *   et, dans les deux cas, LA DEMANDEUSE DOIT.
+ *
+ * ⚠ CE FICHIER A CHANGÉ DE RÈGLE (chantier collaborations, 09/2026).
+ *   Avant, un retrait faisait MONTER le stock du fournisseur et la dette
+ *   pointait de la fournisseuse vers la demandeuse. Ce modèle ne coûtait rien
+ *   au fournisseur sur un retrait — donc rien à exiger de lui, donc rien à
+ *   filtrer — et laissait la demandeuse créancière d'une opération qu'elle
+ *   avait sollicitée. Aucune dette n'existait en base au changement.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -21,11 +28,12 @@ import {
   validateCollaborationId,
   validateStoreRef,
   validateClientId,
-  supplierStockDelta,
+  supplierResourceField,
+  supplierBalanceDelta,
   debtDirection,
-  requiresSupplierBalanceCheck,
   nextSupplierBalance,
   readStoreStock,
+  readStoreBalance,
 } from '../../functions/src/collaborations/shared.js'
 import { COLLABORATIONS_ENABLED } from '../../functions/src/config/storeProfile.js'
 
@@ -44,57 +52,47 @@ const expectCode = (fn, code) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('TC-111-A — Table de vérité : delta de stock × sens de la dette', () => {
-  // L'invariant du module tient en quatre lignes. Les voir ensemble est le but.
+describe('TC-111-A — Table de vérité : ressource cédée × sens de la dette', () => {
+  // L'invariant du module tient en deux lignes. Les voir ensemble est le but.
   const TRUTH_TABLE = [
     {
       operationType: 'deposit',
       amount: 20000,
-      delta: -20000,
-      debtorStoreId: A,
-      creditorStoreId: B,
-      pourquoi: 'la demandeuse a encaissé le cash, la fournisseuse a dépensé son float',
+      resourceField: 'stock',
+      pourquoi: 'elle envoie l’e-float depuis sa SIM ; la demandeuse encaisse le cash',
     },
     {
       operationType: 'withdrawal',
       amount: 15000,
-      delta: 15000,
-      debtorStoreId: B,
-      creditorStoreId: A,
-      pourquoi: 'la demandeuse a sorti le cash de sa caisse, la fournisseuse a reçu le float',
+      resourceField: 'liquidite',
+      pourquoi: 'elle avance le cash remis au client ; la demandeuse recoit le float',
     },
   ]
 
   for (const row of TRUTH_TABLE) {
-    it(`${row.operationType} : stock fournisseur ${row.delta > 0 ? '+' : ''}${row.delta} — ${row.pourquoi}`, () => {
-      expect(supplierStockDelta(row.operationType, row.amount)).toBe(row.delta)
+    it(`${row.operationType} : la fournisseuse cede ${row.resourceField} — ${row.pourquoi}`, () => {
+      expect(supplierResourceField(row.operationType)).toBe(row.resourceField)
+      // Toujours négatif : elle cède, elle ne reçoit jamais.
+      expect(supplierBalanceDelta(row.operationType, row.amount)).toBe(-row.amount)
       expect(debtDirection(row.operationType, { requestingStoreId: A, supplierStoreId: B })).toEqual({
-        debtorStoreId: row.debtorStoreId,
-        creditorStoreId: row.creditorStoreId,
+        debtorStoreId: A,
+        creditorStoreId: B,
       })
     })
   }
 
-  it('le débiteur est TOUJOURS le côté opposé au signe du delta', () => {
-    // Formulation indépendante : si le stock du fournisseur baisse, c'est lui le
-    // créancier ; s'il monte, c'est lui le débiteur. Un futur refactor qui
-    // inverserait l'une des deux règles casserait ici.
+  it('la DEMANDEUSE doit, quelle que soit l’opération', () => {
+    // Formulation indépendante de la table : c'est LA règle que le gérant
+    // énonce, et celle qu'un refactor ne doit jamais retourner.
     for (const operationType of ['deposit', 'withdrawal']) {
-      const delta = supplierStockDelta(operationType, 1000)
-      const { creditorStoreId } = debtDirection(operationType, { requestingStoreId: A, supplierStoreId: B })
-      expect(creditorStoreId).toBe(delta < 0 ? B : A)
+      expect(debtDirection(operationType, { requestingStoreId: A, supplierStoreId: B }))
+        .toEqual({ debtorStoreId: A, creditorStoreId: B })
     }
   })
 
-  it('les deux sens sont bien opposés l’un de l’autre', () => {
-    const dep = debtDirection('deposit', { requestingStoreId: A, supplierStoreId: B })
-    const wit = debtDirection('withdrawal', { requestingStoreId: A, supplierStoreId: B })
-    expect(dep.debtorStoreId).toBe(wit.creditorStoreId)
-    expect(dep.creditorStoreId).toBe(wit.debtorStoreId)
-  })
-
   it('le sens ne dépend pas de l’ordre des arguments, mais des rôles', () => {
-    // Inverser demandeuse et fournisseuse inverse la dette : le rôle décide, pas la position.
+    // Inverser demandeuse et fournisseuse inverse la dette : le rôle décide,
+    // pas la position dans l'objet.
     expect(debtDirection('deposit', { requestingStoreId: B, supplierStoreId: A }))
       .toEqual({ debtorStoreId: B, creditorStoreId: A })
   })
@@ -104,21 +102,19 @@ describe('TC-111-A — Table de vérité : delta de stock × sens de la dette', 
   })
 
   it('debtDirection valide ses entrées', () => {
+    // Le sens ne dépend plus du type d'opération, mais un type inconnu reste
+    // refusé : il ne doit jamais produire une dette silencieuse.
     expectCode(() => debtDirection('transfer', { requestingStoreId: A, supplierStoreId: B }), 'INVALID_OPERATION_TYPE')
     expectCode(() => debtDirection('deposit', { requestingStoreId: '', supplierStoreId: B }), 'INVALID_STORE_ID')
     expectCode(() => debtDirection('deposit'), 'INVALID_STORE_ID')
   })
+
+  it('supplierResourceField refuse un type inconnu', () => {
+    expectCode(() => supplierResourceField('transfer'), 'INVALID_OPERATION_TYPE')
+  })
 })
 
-describe('TC-111-B — Contrôle de suffisance : le dépôt seulement', () => {
-  it('un dépôt exige que le fournisseur ait le stock', () => {
-    expect(requiresSupplierBalanceCheck('deposit')).toBe(true)
-  })
-
-  it('un retrait n’exige rien : le stock fournisseur MONTE', () => {
-    expect(requiresSupplierBalanceCheck('withdrawal')).toBe(false)
-  })
-
+describe('TC-111-B — Contrôle de suffisance : les DEUX sens', () => {
   it('dépôt de 20 000 sur un stock de 50 000 → 30 000', () => {
     expect(nextSupplierBalance('deposit', 20000, 50000)).toBe(30000)
   })
@@ -131,12 +127,21 @@ describe('TC-111-B — Contrôle de suffisance : le dépôt seulement', () => {
     expect(nextSupplierBalance('deposit', 20000, 20000)).toBe(0)
   })
 
-  it('retrait de 15 000 sur un stock de 0 → 15 000 (aucun contrôle)', () => {
-    expect(nextSupplierBalance('withdrawal', 15000, 0)).toBe(15000)
+  it('retrait de 15 000 sur une liquidité de 40 000 → 25 000', () => {
+    // Le retrait DÉBITE désormais lui aussi. C'est le renversement de règle.
+    expect(nextSupplierBalance('withdrawal', 15000, 40000)).toBe(25000)
   })
 
-  it('un retrait qui dépasserait l’entier sûr est refusé', () => {
-    expectCode(() => nextSupplierBalance('withdrawal', 1000, Number.MAX_SAFE_INTEGER), 'BALANCE_OVERFLOW')
+  it('retrait de 15 000 sur une liquidité de 0 → refus', () => {
+    // Sous l'ancienne règle, ce cas rendait 15 000 sans le moindre contrôle.
+    expectCode(() => nextSupplierBalance('withdrawal', 15000, 0), 'INSUFFICIENT_SUPPLIER_LIQUIDITY')
+  })
+
+  it('le code d’erreur nomme la ressource qui manque', () => {
+    // « Stock insuffisant » affiché pour une caisse vide enverrait le gérant
+    // chercher au mauvais endroit.
+    expectCode(() => nextSupplierBalance('deposit', 100, 0), 'INSUFFICIENT_SUPPLIER_BALANCE')
+    expectCode(() => nextSupplierBalance('withdrawal', 100, 0), 'INSUFFICIENT_SUPPLIER_LIQUIDITY')
   })
 
   it('un solde de départ corrompu n’est jamais « réparé » en silence', () => {
@@ -144,6 +149,32 @@ describe('TC-111-B — Contrôle de suffisance : le dépôt seulement', () => {
     expectCode(() => nextSupplierBalance('deposit', 100, 12.5), 'INVALID_BALANCE_DATA')
     expectCode(() => nextSupplierBalance('deposit', 100, NaN), 'INVALID_BALANCE_DATA')
     expectCode(() => nextSupplierBalance('deposit', 100, undefined), 'INVALID_BALANCE_DATA')
+  })
+
+  it('un type d’opération inconnu est refusé avant tout calcul', () => {
+    expectCode(() => nextSupplierBalance('transfer', 100, 1000), 'INVALID_OPERATION_TYPE')
+  })
+})
+
+describe('TC-111-B bis — readStoreBalance lit le champ qu’on lui nomme', () => {
+  const doc = { balances: { Orange: { stock: 50000, liquidite: 12000 } } }
+
+  it('sépare bien les deux champs du même réseau', () => {
+    expect(readStoreBalance(doc, 'Orange', 'stock')).toBe(50000)
+    expect(readStoreBalance(doc, 'Orange', 'liquidite')).toBe(12000)
+  })
+
+  it('par défaut c’est le stock, et readStoreStock en est l’alias', () => {
+    expect(readStoreBalance(doc, 'Orange')).toBe(50000)
+    expect(readStoreStock(doc, 'Orange')).toBe(50000)
+  })
+
+  it('un champ absent vaut 0, une valeur corrompue est refusée', () => {
+    expect(readStoreBalance({ balances: { Orange: { stock: 10 } } }, 'Orange', 'liquidite')).toBe(0)
+    expectCode(
+      () => readStoreBalance({ balances: { Orange: { liquidite: -5 } } }, 'Orange', 'liquidite'),
+      'INVALID_BALANCE_DATA',
+    )
   })
 })
 

@@ -6,9 +6,15 @@
  *   le servir. Une boutique FOURNISSEUSE, qui en a, exécute réellement l'opération
  *   Mobile Money. La contrepartie devient une dette interne entre les deux.
  *
- *   ⚠ Seul le stock de la FOURNISSEUSE bouge. Le stock de la demandeuse ne bouge
- *   JAMAIS, la liquidité (caisse cash) non plus : la contrepartie est portée par
- *   la dette, pas par un second mouvement de solde.
+ *   ⚠ Seuls les soldes de la FOURNISSEUSE bougent. Ceux de la demandeuse ne
+ *   bougent JAMAIS : la contrepartie est portée par la dette, pas par un second
+ *   mouvement de solde.
+ *
+ *   LA FOURNISSEUSE SE DÉPOUILLE, TOUJOURS — ET C'EST CE QUI FIXE LE SENS.
+ *   Un dépôt lui prend du STOCK (elle envoie l'e-float depuis sa SIM) ; un
+ *   retrait lui prend de la LIQUIDITÉ (elle avance le cash remis au client).
+ *   Dans les deux cas elle cède, dans les deux cas la demandeuse encaisse la
+ *   contrepartie du client : la DEMANDEUSE DOIT, toujours.
  *
  * Conventions maison (cf. dealerRequests/shared.js, storeTransfers/shared.js) :
  *   - les validations retournent la valeur normalisée, ou lancent DealerRequestError ;
@@ -142,7 +148,7 @@ export function validateClientId(clientId) {
  * enverrait l'exploitant chercher au mauvais endroit. À unifier dans un lot de
  * refactorisation dédié, jamais en même temps qu'un changement de comportement.
  */
-export function readStoreStock(balanceData, network) {
+export function readStoreBalance(balanceData, network, field = 'stock') {
   if (balanceData === undefined || balanceData === null) return 0
   if (typeof balanceData !== 'object') {
     throw new DealerRequestError('INVALID_BALANCE_DATA', 'Document de soldes boutique invalide.')
@@ -152,15 +158,23 @@ export function readStoreStock(balanceData, network) {
   if (typeof networkBalance !== 'object') {
     throw new DealerRequestError('INVALID_BALANCE_DATA', `Solde boutique ${network} invalide.`)
   }
-  const value = networkBalance.stock
+  const value = networkBalance[field]
   if (value === undefined || value === null) return 0
   if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isSafeInteger(value) || value < 0) {
     throw new DealerRequestError(
       'INVALID_BALANCE_DATA',
-      `Solde boutique ${network}.stock invalide : entier sûr non négatif requis.`,
+      `Solde boutique ${network}.${field} invalide : entier sûr non négatif requis.`,
     )
   }
   return value
+}
+
+/**
+ * Le stock, cas particulier de `readStoreBalance`. Conservé parce que c'est le
+ * champ le plus lu et que l'appeler par son nom se lit mieux qu'un littéral.
+ */
+export function readStoreStock(balanceData, network) {
+  return readStoreBalance(balanceData, network, 'stock')
 }
 
 // ---------------------------------------------------------------------------
@@ -168,26 +182,46 @@ export function readStoreStock(balanceData, network) {
 // ---------------------------------------------------------------------------
 
 /**
- * Delta appliqué au stock de la boutique FOURNISSEUSE.
+ * LE champ de solde que la fournisseuse cède, selon l'opération.
  *
- *   deposit    → −amount : le client dépose du cash chez la DEMANDEUSE, et c'est la
- *                fournisseuse qui envoie le float depuis SA SIM. Son stock baisse.
- *   withdrawal → +amount : le client envoie son float vers la SIM de la fournisseuse
- *                et reçoit du cash chez la demandeuse. Le stock fournisseur monte.
+ *   deposit    → 'stock'     : elle envoie l'e-float depuis SA SIM.
+ *   withdrawal → 'liquidite' : elle avance le CASH remis au client.
+ *
+ * ⚠ C'est ce choix qui rend le filtre d'annuaire possible. Tant qu'un retrait
+ *   faisait MONTER le stock du fournisseur, il ne lui coûtait rien et « les
+ *   boutiques qui disposent de la ressource » n'avait aucun sens à filtrer.
  */
-export function supplierStockDelta(operationType, amount) {
-  validateOperationType(operationType)
-  validateCollaborationAmount(amount)
-  return operationType === 'deposit' ? -amount : amount
+export function supplierResourceField(operationType) {
+  return validateOperationType(operationType) === 'deposit' ? 'stock' : 'liquidite'
 }
 
 /**
- * Sens de la dette née de la collaboration — c'est le miroir exact du delta.
+ * Delta appliqué au solde cédé par la FOURNISSEUSE. TOUJOURS négatif : dans les
+ * deux sens, c'est elle qui se dépouille — seul le champ touché change.
+ */
+export function supplierBalanceDelta(operationType, amount) {
+  validateOperationType(operationType)
+  validateCollaborationAmount(amount)
+  return -amount
+}
+
+/**
+ * Sens de la dette née de la collaboration : LA DEMANDEUSE DOIT, TOUJOURS.
  *
- *   deposit    → la demandeuse a encaissé le cash du client, la fournisseuse a
- *                dépensé son float : DEMANDEUSE doit à FOURNISSEUSE.
- *   withdrawal → la demandeuse a sorti le cash de sa caisse, la fournisseuse a
- *                reçu le float : FOURNISSEUSE doit à DEMANDEUSE.
+ *   deposit    → la fournisseuse a dépensé son float, la demandeuse a encaissé
+ *                le cash du client.
+ *   withdrawal → la fournisseuse a avancé le cash, la demandeuse a reçu le
+ *                float du client sur sa SIM.
+ *
+ * Dans les deux cas la fournisseuse cède et la demandeuse reçoit : le sens ne
+ * dépend donc PAS du type d'opération. `operationType` reste exigé et validé —
+ * une opération inconnue ne doit pas produire une dette silencieuse.
+ *
+ * ⚠ CE SENS A ÉTÉ INVERSÉ AU RETRAIT (chantier collaborations, 09/2026).
+ *   L'ancienne règle rendait `FOURNISSEUSE doit à DEMANDEUSE` sur un retrait,
+ *   parce qu'elle modélisait un float atterrissant sur la SIM de la
+ *   fournisseuse. Aucune dette n'existait alors en base ; le changement n'a
+ *   donc rien réécrit.
  */
 export function debtDirection(operationType, { requestingStoreId, supplierStoreId } = {}) {
   validateOperationType(operationType)
@@ -199,38 +233,35 @@ export function debtDirection(operationType, { requestingStoreId, supplierStoreI
       'La boutique fournisseuse doit être différente de la vôtre.',
     )
   }
-  return operationType === 'deposit'
-    ? { debtorStoreId: requestingStoreId, creditorStoreId: supplierStoreId }
-    : { debtorStoreId: supplierStoreId, creditorStoreId: requestingStoreId }
+  return { debtorStoreId: requestingStoreId, creditorStoreId: supplierStoreId }
 }
 
 /**
- * Le contrôle de suffisance ne s'applique qu'au dépôt : c'est le seul cas où le
- * stock fournisseur BAISSE. Sur un retrait il monte — rien à vérifier en amont,
- * seul le plafond d'entier sûr est contrôlé ensuite.
- */
-export function requiresSupplierBalanceCheck(operationType) {
-  return validateOperationType(operationType) === 'deposit'
-}
-
-/**
- * Nouveau solde de stock du fournisseur, avec les deux garde-fous du §6.2.1 :
- * suffisance (dépôt seulement) puis entier sûr ≥ 0.
+ * Le contrôle de suffisance est désormais INCONDITIONNEL.
+ *
+ * Il ne portait que sur le dépôt, du temps où un retrait faisait monter le
+ * stock du fournisseur. Maintenant que la fournisseuse cède dans les deux sens
+ * — stock au dépôt, liquidité au retrait — les deux cas peuvent la mettre à
+ * découvert, et les deux se vérifient.
+ *
+ * ⚠ Plus de garde d'overflow : `previousBalance` est un entier sûr ≥ 0 et
+ *   `amount` ne le dépasse pas, donc le résultat vit dans [0, previousBalance].
+ *   Un garde qui ne peut pas se déclencher n'est pas une sécurité, c'est du
+ *   bruit qu'aucun test ne peut couvrir.
  */
 export function nextSupplierBalance(operationType, amount, previousBalance) {
+  validateOperationType(operationType)
   validateCollaborationAmount(amount)
   if (typeof previousBalance !== 'number' || !Number.isSafeInteger(previousBalance) || previousBalance < 0) {
     throw new DealerRequestError('INVALID_BALANCE_DATA', 'Solde fournisseur invalide : entier sûr non négatif requis.')
   }
-  if (requiresSupplierBalanceCheck(operationType) && previousBalance < amount) {
+  if (previousBalance < amount) {
     throw new DealerRequestError(
-      'INSUFFICIENT_SUPPLIER_BALANCE',
-      'Stock insuffisant pour exécuter cette collaboration.',
+      supplierResourceField(operationType) === 'stock'
+        ? 'INSUFFICIENT_SUPPLIER_BALANCE'
+        : 'INSUFFICIENT_SUPPLIER_LIQUIDITY',
+      'Ressource insuffisante pour exécuter cette collaboration.',
     )
   }
-  const next = previousBalance + supplierStockDelta(operationType, amount)
-  if (!Number.isSafeInteger(next) || next < 0) {
-    throw new DealerRequestError('BALANCE_OVERFLOW', 'Le solde résultant est invalide.')
-  }
-  return next
+  return previousBalance + supplierBalanceDelta(operationType, amount)
 }

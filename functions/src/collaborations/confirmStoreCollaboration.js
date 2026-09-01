@@ -6,13 +6,17 @@
  * Money depuis sa SIM.
  *
  * En une seule transaction :
- *   • le stock de la fournisseuse bouge (−montant sur un dépôt, +montant sur un retrait) ;
- *   • une dette interne est créée, dans le sens miroir du mouvement ;
+ *   • le solde CÉDÉ par la fournisseuse baisse — son stock sur un dépôt, sa
+ *     liquidité sur un retrait ;
+ *   • une dette interne naît, toujours de la DEMANDEUSE vers la FOURNISSEUSE ;
  *   • la collaboration passe `confirmed` ;
+ *   • une trace de l'opération est écrite dans l'historique de la demandeuse ;
  *   • la piste d'audit est écrite.
  *
- * ⚠ Le stock de la DEMANDEUSE ne bouge jamais. La liquidité (caisse cash) non
- *   plus. La contrepartie est portée par la dette, pas par un second mouvement.
+ * ⚠ Les soldes de la DEMANDEUSE ne bougent jamais — ni stock, ni liquidité. La
+ *   contrepartie est portée par la dette, pas par un second mouvement. La trace
+ *   d'historique est donc une TRACE : elle est écrite `Validée`, et rien dans le
+ *   rapprochement ne la rejoue (`argentDehors` ne compte que les non terminées).
  *
  * db et FieldValue injectés (testabilité sans émulateur Functions).
  */
@@ -26,7 +30,8 @@ import {
   validateCollaborationAmount,
   validateOperationType,
   validateStoreRef,
-  readStoreStock,
+  readStoreBalance,
+  supplierResourceField,
   nextSupplierBalance,
   debtDirection,
   COLLABORATION_STATUSES,
@@ -113,12 +118,16 @@ export async function confirmStoreCollaborationHandler(
         throw new DealerRequestError('STORE_INACTIVE', "Votre boutique n'est plus active.")
       }
 
-      // g. Stock de la fournisseuse (tolérant à l'absence, strict sur la valeur).
+      // g. Le solde que la fournisseuse va céder : son STOCK sur un dépôt, sa
+      //    LIQUIDITÉ sur un retrait. Tolérant à l'absence, strict sur la valeur.
+      const resourceField = supplierResourceField(operationType)
       const balRef = db.doc(`clients/${actorStoreId}/networkBalances/current`)
       const balSnap = await t.get(balRef)
-      const previousSupplierBalance = readStoreStock(balSnap.exists ? balSnap.data() : null, network)
+      const previousSupplierBalance = readStoreBalance(
+        balSnap.exists ? balSnap.data() : null, network, resourceField,
+      )
 
-      // h. Les deux règles : delta + suffisance + plafond d'entier sûr.
+      // h. Suffisance, puis nouveau solde. La fournisseuse cède dans les deux sens.
       const newSupplierBalance = nextSupplierBalance(operationType, amount, previousSupplierBalance)
       const { debtorStoreId, creditorStoreId } = debtDirection(operationType, {
         requestingStoreId,
@@ -128,11 +137,11 @@ export async function confirmStoreCollaborationHandler(
       // ── Fin des lectures. Écritures à partir d'ici. ──────────────────────────
       const now = FieldValue.serverTimestamp()
 
-      // i. Solde : merge imbriqué sur le SEUL champ stock du SEUL réseau concerné,
-      //    pour ne jamais écraser les autres réseaux ni la liquidité.
+      // i. Solde : merge imbriqué sur le SEUL champ cédé du SEUL réseau concerné,
+      //    pour ne jamais écraser les autres réseaux ni l'autre champ.
       t.set(
         balRef,
-        { balances: { [network]: { stock: newSupplierBalance } }, updatedAt: now },
+        { balances: { [network]: { [resourceField]: newSupplierBalance } }, updatedAt: now },
         { merge: true },
       )
 
@@ -153,6 +162,7 @@ export async function confirmStoreCollaborationHandler(
         creditorStoreName,
         network,
         operationType,
+        resourceField,
         originalAmount: amount,
         settledAmount: 0,
         remainingAmount: amount,
@@ -161,12 +171,41 @@ export async function confirmStoreCollaborationHandler(
         updatedAt: now,
       })
 
+      // j bis. LA TRACE CHEZ LA DEMANDEUSE.
+      //
+      // Le client s'est présenté chez ELLE : son opération doit se retrouver là
+      // où il ira la chercher. Elle est écrite `Validée` — donc terminale, donc
+      // ignorée d'`argentDehors`, qui ne somme que les non terminées.
+      //
+      // ⚠ Elle ne déplace AUCUN solde. C'est un enregistrement, pas un
+      //   mouvement : la contrepartie de la demandeuse est portée par la dette.
+      //   `collaborationId` la rattache à son origine, et empêche de la prendre
+      //   pour une opération que la boutique aurait servie sur ses propres fonds.
+      const historyRef = db.collection(`clients/${requestingStoreId}/history`).doc()
+      t.set(historyRef, {
+        type: operationType === 'deposit' ? 'Dépôt' : 'Retrait',
+        statut: 'Validée',
+        montant: amount,
+        reseau: network,
+        clientId: collab.clientId ?? null,
+        clientNom: collab.clientNom ?? null,
+        clientPrenom: collab.clientPrenom ?? null,
+        collaborationId,
+        supplierStoreId: actorStoreId,
+        supplierStoreName: collab.supplierStoreName ?? null,
+        operatorName: collab.requestingStoreName ?? null,
+        operatorEmail: null,
+        createdAt: now,
+        date: now,
+      })
+
       // k. La collaboration devient terminale, et garde la trace de sa filiation.
       t.update(collabRef, {
         status: COLLABORATION_STATUSES.CONFIRMED,
         previousSupplierBalance,
         newSupplierBalance,
         debtId: debtRef.id,
+        historyId: historyRef.id,
         confirmedBy: actorUid,
         confirmedAt: now,
         updatedAt: now,
@@ -188,6 +227,7 @@ export async function confirmStoreCollaborationHandler(
         clientId: collab.clientId ?? null,
         network,
         operationType,
+        resourceField,
         amount,
         previousBalance: previousSupplierBalance,
         newBalance: newSupplierBalance,
@@ -196,6 +236,8 @@ export async function confirmStoreCollaborationHandler(
 
       return {
         debtId: debtRef.id,
+        historyId: historyRef.id,
+        resourceField,
         previousSupplierBalance,
         newSupplierBalance,
         debtorStoreId,
@@ -211,6 +253,8 @@ export async function confirmStoreCollaborationHandler(
     success: true,
     collaborationId,
     debtId: result.debtId,
+    historyId: result.historyId,
+    resourceField: result.resourceField,
     previousSupplierBalance: result.previousSupplierBalance,
     newSupplierBalance: result.newSupplierBalance,
     debtorStoreId: result.debtorStoreId,

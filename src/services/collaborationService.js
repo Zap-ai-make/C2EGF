@@ -36,6 +36,14 @@ export const ERROR_MESSAGES = Object.freeze({
   PROFILE_NOT_FOUND: 'Votre profil est introuvable.',
   PROFILE_INACTIVE: 'Votre compte est inactif.',
   ROLE_FORBIDDEN: 'Action réservée aux boutiques.',
+
+  // Le serveur a refusé la FORME du payload — allow-list stricte côté callable.
+  // En pratique, c'est un décalage de version : un front déployé qui envoie un
+  // champ que la fonction en ligne ne connaît pas encore. Sans cette entrée, le
+  // gérant lisait « Une erreur inattendue s'est produite » et n'avait aucune
+  // piste, alors que la cause est nommable et l'action claire.
+  INVALID_REQUEST_ID:
+    "Cette demande n'a pas la forme attendue par le serveur. C'est une mise à jour à déployer : signalez-le au gérant.",
   COLLABORATIONS_DISABLED: "Les collaborations entre boutiques ne sont pas activées.",
 
   INVALID_OPERATION_TYPE: "Type d'opération invalide (dépôt ou retrait).",
@@ -49,6 +57,7 @@ export const ERROR_MESSAGES = Object.freeze({
   SUPPLIER_STORE_NOT_FOUND: 'Boutique fournisseuse introuvable.',
   SUPPLIER_STORE_INACTIVE: "Cette boutique n'est plus active.",
   INSUFFICIENT_SUPPLIER_BALANCE: 'Stock insuffisant pour exécuter cette collaboration.',
+  INSUFFICIENT_SUPPLIER_LIQUIDITY: 'Liquidité insuffisante pour exécuter cette collaboration.',
   COLLABORATION_NOT_FOUND: 'Collaboration introuvable.',
   COLLABORATION_NOT_PENDING: 'Cette collaboration a déjà été traitée.',
   COLLABORATION_STORE_MISMATCH: 'Cette collaboration ne vous est pas destinée.',
@@ -203,8 +212,25 @@ export async function rejectStoreCollaboration({ collaborationId, rejectionReaso
   return callFunction('rejectStoreCollaboration', { collaborationId, rejectionReason })
 }
 
-export async function listStoreCollaborationProviders({ network } = {}) {
-  const data = await callFunction('listStoreCollaborationProviders', network ? { network } : {})
+/**
+ * L'annuaire des consœurs sollicitables.
+ *
+ * `operationType` et `amount` ne sont pas décoratifs : ils décident du champ
+ * contrôlé côté serveur (stock sur un dépôt, liquidité sur un retrait) et du
+ * seuil. Sans eux, le serveur rend l'annuaire entier — un menu vide se lirait
+ * comme une panne, jamais comme « personne ne peut servir ».
+ *
+ * ⚠ Le montant n'est transmis que s'il est exploitable. Envoyer la saisie brute
+ *   ferait rejeter l'appel entier sur une frappe intermédiaire, et le menu
+ *   clignoterait en erreur pendant qu'on tape.
+ */
+export async function listStoreCollaborationProviders({ network, operationType, amount } = {}) {
+  const payload = {}
+  if (network) payload.network = network
+  if (operationType) payload.operationType = operationType
+  const montant = parseAmount(amount)
+  if (montant !== null) payload.amount = montant
+  const data = await callFunction('listStoreCollaborationProviders', payload)
   return data?.providers ?? []
 }
 
