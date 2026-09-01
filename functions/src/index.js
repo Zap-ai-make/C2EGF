@@ -60,8 +60,24 @@ const deps = { db, FieldValue }
  * Mais la vraie raison n'est pas le quota, c'est LA FACTURE. Sur un plan Blaze,
  * un plafond absent signifie qu'un bug, une boucle de réessai côté client ou un
  * appel répété peuvent ouvrir cent conteneurs et les faire payer. Ce produit sert
- * une poignée de boutiques : dix instances simultanées par callable sont déjà
+ * une poignée de boutiques : trois instances simultanées par callable sont déjà
  * très au-dessus du besoin, et bornent le pire des cas.
+ *
+ * POURQUOI TROIS, ET PLUS DIX (09/2026)
+ * ─────────────────────────────────────
+ * À dix, les 23 callables réservaient 230 vCPU dans la région. Mettre à jour un
+ * seul service fait COEXISTER l'ancienne révision et la neuve le temps du
+ * basculement : le pic montait à 240, au-dessus du quota du projet. Le
+ * déploiement est devenu impossible — y compris function par function, y compris
+ * une seule à la fois. Le plafond n'était plus une protection, c'était un mur.
+ *
+ * À trois, la réserve tombe à 69 vCPU et le pic d'un basculement à 72. La marge
+ * redevient large, et chaque service redéployé en libère sept au passage.
+ *
+ * ⚠ Ce n'est PAS la vraie réponse si le nombre de callables doit encore croître.
+ *   La vraie réponse est une augmentation du quota Cloud Run
+ *   (« Total CPU allocation, per project per region », europe-west1). Baisser le
+ *   plafond achète de la marge ; il ne repousse pas le mur indéfiniment.
  *
  * Un seul objet plutôt que la même accolade recopiée vingt-trois fois : le jour
  * où la région ou le plafond change, il change à UN endroit. TC-036 [WRA-08] et
@@ -70,7 +86,7 @@ const deps = { db, FieldValue }
 const CALLABLE = Object.freeze({
   region: 'europe-west1',
   enforceAppCheck: false,
-  maxInstances: 10,
+  maxInstances: 3,
 })
 
 export const confirmDealerRequest = onCall(
