@@ -114,6 +114,7 @@ function Transactions() {
         <ErrorBoundary>
           <CollaborationsPanel
             storeId={storeId}
+            clients={clients}
             sousOnglet={sousOnglet}
             onChangeSousOnglet={(prochain) => allerA('collaborations', prochain)}
             compteurRecues={compteurRecues}

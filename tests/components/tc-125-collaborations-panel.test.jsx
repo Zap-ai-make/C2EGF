@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, within, fireEvent, act } from '@testing-library/react'
+import { render, screen, within, fireEvent, act, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 const srv = vi.hoisted(() => ({
@@ -64,10 +64,47 @@ const collab = (id, extra = {}) => ({
   ...extra,
 })
 
+/**
+ * L'annuaire clients de la boutique. Il vient du contexte, déjà en mémoire :
+ * le panneau ne relit rien à Firestore, il reçoit la même liste que l'écran
+ * « Clients ».
+ */
+const CLIENTS = [
+  { id: 'cli-1', nom: 'Ouédraogo', prenom: 'Aminata', orange: '70112233' },
+  { id: 'cli-2', nom: 'Sawadogo', prenom: 'Boureima', orange: '76445566' },
+  { id: 'cli-3', nom: 'Kaboré', prenom: 'Salif', numeroPersonnel: '65778899' },
+]
+
+/**
+ * ⚠ La portée n'est pas un confort : les `<select>` « Opération » et
+ *   « Boutique » exposent eux aussi le rôle `option`. Une requête globale
+ *   les ramasserait et compterait des lignes qui ne sont pas des clients.
+ */
+const optionsClient = () =>
+  within(screen.getByRole('listbox', { name: 'Clients' })).getAllByRole('option')
+
+const listeClientsAbsente = () =>
+  screen.queryByRole('listbox', { name: 'Clients' }) === null
+
+/** Le geste qui déroule l'annuaire. Au repos, un champ n'est qu'un champ. */
+const ouvrirAnnuaire = () => fireEvent.click(screen.getByLabelText('Client'))
+
+/**
+ * L'annuaire des consoeurs n'arrive plus a l'ouverture : il DEPEND de
+ * l'operation et du montant, donc il se recharge, donc il est differe. Attendre
+ * explicitement vaut mieux qu'un delai devine — un test qui dort est un test
+ * qui deviendra intermittent.
+ */
+const attendreAnnuaire = (fois = 1) => waitFor(
+  () => expect(srv.listStoreCollaborationProviders).toHaveBeenCalledTimes(fois),
+)
+
+const boutonEnvoyer = () => screen.getByRole('button', { name: 'Envoyer la demande' })
+
 const poser = (props = {}) =>
   render(
     <MemoryRouter>
-      <CollaborationsPanel storeId="store-a" {...props} />
+      <CollaborationsPanel storeId="store-a" clients={CLIENTS} {...props} />
     </MemoryRouter>,
   )
 
@@ -225,12 +262,44 @@ describe('TC-125-D — demander à une consœur', () => {
     poser()
     expect(srv.listStoreCollaborationProviders).not.toHaveBeenCalled()
     await act(async () => { fireEvent.click(screen.getByTestId('ouvrir-creation')) })
-    expect(srv.listStoreCollaborationProviders).toHaveBeenCalledTimes(1)
+    await attendreAnnuaire(1)
+  })
+
+  it('[CP-16 bis] l’annuaire est interrogé POUR une opération et un montant', async () => {
+    // Le serveur ne peut filtrer sur la ressource disponible que s'il sait
+    // laquelle et combien. Sans ces deux-là, il rendrait l'annuaire entier et
+    // proposerait des consœurs incapables de servir.
+    poser()
+    await act(async () => { fireEvent.click(screen.getByTestId('ouvrir-creation')) })
+    await attendreAnnuaire(1)
+    expect(srv.listStoreCollaborationProviders).toHaveBeenLastCalledWith({
+      operationType: 'deposit', amount: '',
+    })
+
+    fireEvent.change(screen.getByLabelText('Opération'), { target: { value: 'withdrawal' } })
+    fireEvent.change(screen.getByLabelText('Montant'), { target: { value: '75000' } })
+    await attendreAnnuaire(2)
+    expect(srv.listStoreCollaborationProviders).toHaveBeenLastCalledWith({
+      operationType: 'withdrawal', amount: '75000',
+    })
+  })
+
+  it('[CP-16 ter] aucune consœur capable ne se dit, et bloque l’envoi', async () => {
+    // Un menu vide se lit comme une panne. La phrase nomme la ressource qui
+    // manque, parce que « personne » n'apprend rien au gérant.
+    srv.listStoreCollaborationProviders.mockResolvedValue([])
+    poser()
+    await act(async () => { fireEvent.click(screen.getByTestId('ouvrir-creation')) })
+    fireEvent.change(screen.getByLabelText('Montant'), { target: { value: '75000' } })
+    await waitFor(() => expect(screen.getByTestId('annuaire-vide')).toBeInTheDocument())
+    expect(screen.getByTestId('annuaire-vide')).toHaveTextContent('ce stock')
+    expect(boutonEnvoyer()).toBeDisabled()
   })
 
   it('[CP-17] les boutiques proposées viennent du callable', async () => {
     poser()
     await act(async () => { fireEvent.click(screen.getByTestId('ouvrir-creation')) })
+    await attendreAnnuaire(1)
     const options = within(screen.getByLabelText('Boutique')).getAllByRole('option')
     expect(options.map((o) => o.textContent)).toEqual(['Zogona', 'Patte d’Oie'])
   })
@@ -238,16 +307,26 @@ describe('TC-125-D — demander à une consœur', () => {
   it('[CP-18] la demande part avec les quatre champs, et SANS réseau', async () => {
     // Le réseau est résolu par le serveur depuis le profil : l'accepter du
     // client permettrait de le lui dicter.
+    //
+    // ⚠ Le client est CHOISI dans la liste, et c'est son identifiant de document
+    //   qui part. Le champ était un texte libre : il fallait connaître l'ID
+    //   Firestore, qu'aucun écran n'affiche, et toute demande finissait en
+    //   CLIENT_NOT_FOUND.
     poser()
     await act(async () => { fireEvent.click(screen.getByTestId('ouvrir-creation')) })
-    fireEvent.change(screen.getByLabelText('Client'), { target: { value: 'cli-42' } })
+    ouvrirAnnuaire()
+    fireEvent.change(screen.getByLabelText('Client'), { target: { value: 'sawadogo' } })
+    fireEvent.mouseDown(optionsClient().find((o) => /Sawadogo Boureima/.test(o.textContent)))
     fireEvent.change(screen.getByLabelText('Montant'), { target: { value: '75000' } })
     fireEvent.change(screen.getByLabelText('Opération'), { target: { value: 'withdrawal' } })
+    // On n'envoie qu'une fois l'annuaire revenu : la boutique choisie doit
+    // figurer dans la liste RECHARGÉE, pas dans une liste périmée.
+    await waitFor(() => expect(boutonEnvoyer()).toBeEnabled())
     fireEvent.change(screen.getByLabelText('Boutique'), { target: { value: 'store-c' } })
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Envoyer la demande' })) })
+    await act(async () => { fireEvent.click(boutonEnvoyer()) })
 
     expect(srv.createStoreCollaboration).toHaveBeenCalledWith({
-      clientId: 'cli-42',
+      clientId: 'cli-2',
       operationType: 'withdrawal',
       amount: '75000',
       supplierStoreId: 'store-c',
@@ -261,11 +340,84 @@ describe('TC-125-D — demander à une consœur', () => {
     expect(screen.getByRole('button', { name: 'Envoyer la demande' })).toBeDisabled()
   })
 
+  it('[CP-25] au repos la liste est fermée, au clic elle donne tout l’annuaire', async () => {
+    // ⚠ `Dialog` pose le focus sur ce champ à l'ouverture. Sans le garde
+    //   `pretAOuvrir`, la modale s'afficherait déjà déroulée et le formulaire
+    //   naîtrait enseveli sous une liste que personne n'a réclamée.
+    poser()
+    await act(async () => { fireEvent.click(screen.getByTestId('ouvrir-creation')) })
+    expect(listeClientsAbsente()).toBe(true)
+
+    ouvrirAnnuaire()
+    const options = optionsClient()
+    expect(options).toHaveLength(3)
+    expect(options[0]).toHaveTextContent('Ouédraogo Aminata')
+    expect(options[0]).toHaveTextContent('Code agent 70112233')
+    expect(options[2]).toHaveTextContent('Kaboré Salif')
+  })
+
+  it('[CP-26] la recherche ignore les accents et couvre le code agent', async () => {
+    poser()
+    await act(async () => { fireEvent.click(screen.getByTestId('ouvrir-creation')) })
+
+    fireEvent.change(screen.getByLabelText('Client'), { target: { value: 'ouedraogo' } })
+    expect(optionsClient()).toHaveLength(1)
+    expect(optionsClient()[0]).toHaveTextContent('Ouédraogo')
+
+    fireEvent.change(screen.getByLabelText('Client'), { target: { value: '76445566' } })
+    expect(optionsClient()[0]).toHaveTextContent('Sawadogo')
+
+    fireEvent.change(screen.getByLabelText('Client'), { target: { value: '65778899' } })
+    expect(optionsClient()[0]).toHaveTextContent('Kaboré')
+  })
+
+  it('[CP-27] le clavier seul suffit à choisir', async () => {
+    // DESIGN.md §11 : tout parcours doit être réalisable au clavier.
+    poser()
+    await act(async () => { fireEvent.click(screen.getByTestId('ouvrir-creation')) })
+    const champ = screen.getByLabelText('Client')
+    fireEvent.keyDown(champ, { key: 'ArrowDown' })   // ouvre
+    expect(optionsClient()).toHaveLength(3)
+    fireEvent.keyDown(champ, { key: 'ArrowDown' })   // descend d'un cran
+    fireEvent.keyDown(champ, { key: 'Enter' })
+    expect(screen.getByTestId('client-choisi')).toHaveTextContent('Sawadogo Boureima')
+  })
+
+  it('[CP-28] un choix se défait, et le champ reprend la main', async () => {
+    poser()
+    await act(async () => { fireEvent.click(screen.getByTestId('ouvrir-creation')) })
+    ouvrirAnnuaire()
+    fireEvent.mouseDown(optionsClient().find((o) => /Kaboré Salif/.test(o.textContent)))
+    expect(screen.getByTestId('client-choisi')).toHaveTextContent('Kaboré Salif')
+    expect(listeClientsAbsente()).toBe(true)
+
+    fireEvent.click(screen.getByTestId('changer-client'))
+    expect(screen.getByLabelText('Client')).toHaveFocus()
+    ouvrirAnnuaire()
+    expect(optionsClient()).toHaveLength(3)
+  })
+
+  it('[CP-29] une recherche sans réponse le dit, au lieu d’une liste vide', async () => {
+    poser()
+    await act(async () => { fireEvent.click(screen.getByTestId('ouvrir-creation')) })
+    fireEvent.change(screen.getByLabelText('Client'), { target: { value: 'zzzz' } })
+    expect(screen.getByTestId('clients-sans-resultat')).toHaveTextContent('zzzz')
+    expect(listeClientsAbsente()).toBe(true)
+  })
+
+  it('[CP-30] sans aucun client, l’écran dit où aller', async () => {
+    poser({ clients: [] })
+    await act(async () => { fireEvent.click(screen.getByTestId('ouvrir-creation')) })
+    ouvrirAnnuaire()
+    expect(screen.getByTestId('clients-vides')).toHaveTextContent('Clients')
+    expect(screen.getByRole('button', { name: 'Envoyer la demande' })).toBeDisabled()
+  })
+
   it('[CP-20] un annuaire indisponible le dit, au lieu d’un menu vide', async () => {
     srv.listStoreCollaborationProviders.mockRejectedValue(new Error('Action réservée aux boutiques.'))
     poser()
     await act(async () => { fireEvent.click(screen.getByTestId('ouvrir-creation')) })
-    expect(screen.getByRole('alert')).toHaveTextContent('Action réservée aux boutiques.')
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Action réservée aux boutiques.'))
   })
 })
 
