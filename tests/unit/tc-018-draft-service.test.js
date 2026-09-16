@@ -27,6 +27,19 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
+const commandMocks = vi.hoisted(() => ({
+  run: vi.fn(async payload => ({
+    ...payload.transaction,
+    id: 'server-id',
+    deleted: true,
+    validated: true,
+  })),
+}))
+
+vi.mock('../../src/services/storeTransactionCommandService.js', () => ({
+  runStoreTransactionCommand: commandMocks.run,
+}))
+
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn(),
   doc: vi.fn((_db, ...segments) => ({ _path: segments.join('/'), _isMockDoc: true })),
@@ -382,6 +395,16 @@ describe('TC-018-C — updateDraft', () => {
 
 describe('TC-018-D — deleteDraft', () => {
   beforeEach(() => { vi.mocked(runTransaction).mockClear() })
+
+  it('refuse la suppression d’un brouillon partiellement réglé sans écriture', async () => {
+    const { service } = makeDraftService()
+    const { capturedWrites } = makeTxMock({
+      draftData: { ...depositDraft, paidAmount: 40, remainingAmount: 960, settlementStatus: 'partial' },
+      balanceData: seedBalances,
+    })
+    await expect(service.deleteDraft('partial')).rejects.toThrow('ayant engagé un règlement')
+    expect(capturedWrites).toHaveLength(0)
+  })
 
   it('[D-N1] supprime le draft et inverse l impact financier', async () => {
     const { service } = makeDraftService()
@@ -744,13 +767,14 @@ describe('TC-018-H — Isolation par storeId', () => {
 // TC-018-I : Façade FirestoreService — délégation
 // ---------------------------------------------------------------------------
 
-describe('TC-018-I — Façade FirestoreService : délégation à DraftService', () => {
+describe('TC-018-I — Façade FirestoreService : lectures locales et écritures serveur', () => {
   let firestoreSvc
   let mockDraftSvc
 
   beforeEach(() => {
     vi.mocked(runTransaction).mockClear()
     vi.mocked(getDoc).mockClear()
+    commandMocks.run.mockClear()
 
     firestoreSvc = new FirestoreService()
     firestoreSvc.setActiveStore({ id: 'store-facade', name: 'Boutique Façade' })
@@ -773,19 +797,19 @@ describe('TC-018-I — Façade FirestoreService : délégation à DraftService',
     expect(mockDraftSvc.getDrafts).toHaveBeenCalledOnce()
   })
 
-  it('addDraft délègue à draftService.addDraft avec les données', async () => {
+  it('addDraft passe par la commande serveur', async () => {
     await firestoreSvc.addDraft(depositDraft)
-    expect(mockDraftSvc.addDraft).toHaveBeenCalledWith(depositDraft)
+    expect(commandMocks.run).toHaveBeenCalledWith({ action: 'add', transaction: { ...depositDraft, statut: 'Non Terminées' } })
   })
 
   it('updateDraft délègue à draftService.updateDraft avec id et updates', async () => {
     await firestoreSvc.updateDraft('draft-001', { montant: 500 })
-    expect(mockDraftSvc.updateDraft).toHaveBeenCalledWith('draft-001', { montant: 500 })
+    expect(commandMocks.run).toHaveBeenCalledWith({ action: 'updateDraft', draftId: 'draft-001', updates: { montant: 500 } })
   })
 
   it('deleteDraft délègue à draftService.deleteDraft avec id', async () => {
     await firestoreSvc.deleteDraft('draft-002')
-    expect(mockDraftSvc.deleteDraft).toHaveBeenCalledWith('draft-002')
+    expect(commandMocks.run).toHaveBeenCalledWith({ action: 'deleteDraft', draftId: 'draft-002' })
   })
 
   it('subscribeToDrafts délègue à draftService.subscribeToDrafts avec le callback', () => {
@@ -794,14 +818,14 @@ describe('TC-018-I — Façade FirestoreService : délégation à DraftService',
     expect(mockDraftSvc.subscribeToDrafts).toHaveBeenCalledWith(cb)
   })
 
-  it('addTransaction délègue à draftService.addTransaction avec les données', async () => {
+  it('addTransaction passe par la commande serveur', async () => {
     await firestoreSvc.addTransaction(depositDraft)
-    expect(mockDraftSvc.addTransaction).toHaveBeenCalledWith(depositDraft)
+    expect(commandMocks.run).toHaveBeenCalledWith({ action: 'add', transaction: depositDraft })
   })
 
   it('validateTransaction délègue à draftService.validateTransaction avec les 4 paramètres', async () => {
     await firestoreSvc.validateTransaction('draft-001', 'Payé par Cash', 'Cash', 5000)
-    expect(mockDraftSvc.validateTransaction).toHaveBeenCalledWith('draft-001', 'Payé par Cash', 'Cash', 5000)
+    expect(commandMocks.run).toHaveBeenCalledWith({ action: 'validateDraft', draftId: 'draft-001', paymentMethod: 'Cash', amount: 5000 })
   })
 
   it('les méthodes non-draft ne sont pas impactées (addClient toujours fonctionnel)', async () => {

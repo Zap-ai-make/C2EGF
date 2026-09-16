@@ -281,7 +281,7 @@ describe('TC-015-D — addTransaction : runTransaction bloqué si montant invali
     }
 
     try {
-      await svc.addTransaction(transactionData)
+      await svc._draftService.addTransaction(transactionData)
     } catch {
       // Ignorer les erreurs liées au mock Firestore incomplet
     }
@@ -298,7 +298,7 @@ describe('TC-015-D — addTransaction : runTransaction bloqué si montant invali
       clientId: 'client-001',
     }
 
-    await expect(svc.addTransaction(transactionData)).rejects.toThrow()
+    await expect(svc._draftService.addTransaction(transactionData)).rejects.toThrow()
     expect(runTransaction).not.toHaveBeenCalled()
   })
 
@@ -311,7 +311,7 @@ describe('TC-015-D — addTransaction : runTransaction bloqué si montant invali
       clientId: 'client-001',
     }
 
-    await expect(svc.addTransaction(transactionData)).rejects.toThrow()
+    await expect(svc._draftService.addTransaction(transactionData)).rejects.toThrow()
     expect(runTransaction).not.toHaveBeenCalled()
   })
 
@@ -324,7 +324,7 @@ describe('TC-015-D — addTransaction : runTransaction bloqué si montant invali
       clientId: 'client-001',
     }
 
-    await expect(svc.addTransaction(transactionData)).rejects.toThrow()
+    await expect(svc._draftService.addTransaction(transactionData)).rejects.toThrow()
     expect(runTransaction).not.toHaveBeenCalled()
   })
 
@@ -337,7 +337,7 @@ describe('TC-015-D — addTransaction : runTransaction bloqué si montant invali
       clientId: 'client-001',
     }
 
-    await expect(svc.addTransaction(transactionData)).rejects.toThrow()
+    await expect(svc._draftService.addTransaction(transactionData)).rejects.toThrow()
     expect(runTransaction).not.toHaveBeenCalled()
   })
 
@@ -350,7 +350,7 @@ describe('TC-015-D — addTransaction : runTransaction bloqué si montant invali
       clientId: 'client-001',
     }
 
-    await expect(svc.addTransaction(transactionData)).rejects.toThrow()
+    await expect(svc._draftService.addTransaction(transactionData)).rejects.toThrow()
     expect(runTransaction).not.toHaveBeenCalled()
   })
 })
@@ -369,7 +369,7 @@ describe('TC-015-E — updateDraft : runTransaction bloqué si montant invalide 
     vi.mocked(runTransaction).mockResolvedValueOnce({ id: 'draft-001', montant: 500 })
 
     try {
-      await svc.updateDraft('draft-001', { montant: 500, reseau: 'Orange', type: 'Dépôt' })
+      await svc._draftService.updateDraft('draft-001', { montant: 500, reseau: 'Orange', type: 'Dépôt' })
     } catch {
       // Ignorer les erreurs liées au mock Firestore incomplet
     }
@@ -379,7 +379,7 @@ describe('TC-015-E — updateDraft : runTransaction bloqué si montant invalide 
 
   it('[TC-015-E2] updates.montant 500.5 (décimal) — erreur avant runTransaction', async () => {
     await expect(
-      svc.updateDraft('draft-001', { montant: 500.5, reseau: 'Orange', type: 'Dépôt' })
+      svc._draftService.updateDraft('draft-001', { montant: 500.5, reseau: 'Orange', type: 'Dépôt' })
     ).rejects.toThrow('Montant FCFA invalide')
 
     expect(runTransaction).not.toHaveBeenCalled()
@@ -387,7 +387,7 @@ describe('TC-015-E — updateDraft : runTransaction bloqué si montant invalide 
 
   it('[TC-015-E3] updates.montant "abc" — erreur avant runTransaction', async () => {
     await expect(
-      svc.updateDraft('draft-001', { montant: 'abc', reseau: 'Orange', type: 'Dépôt' })
+      svc._draftService.updateDraft('draft-001', { montant: 'abc', reseau: 'Orange', type: 'Dépôt' })
     ).rejects.toThrow('Montant FCFA invalide')
 
     expect(runTransaction).not.toHaveBeenCalled()
@@ -395,7 +395,7 @@ describe('TC-015-E — updateDraft : runTransaction bloqué si montant invalide 
 
   it('[TC-015-E4] updates.montant 0 — erreur avant runTransaction', async () => {
     await expect(
-      svc.updateDraft('draft-001', { montant: 0, reseau: 'Orange', type: 'Dépôt' })
+      svc._draftService.updateDraft('draft-001', { montant: 0, reseau: 'Orange', type: 'Dépôt' })
     ).rejects.toThrow('Montant FCFA invalide')
 
     expect(runTransaction).not.toHaveBeenCalled()
@@ -403,7 +403,7 @@ describe('TC-015-E — updateDraft : runTransaction bloqué si montant invalide 
 
   it('[TC-015-E5] updates.montant -200 — erreur avant runTransaction', async () => {
     await expect(
-      svc.updateDraft('draft-001', { montant: -200, reseau: 'Orange', type: 'Dépôt' })
+      svc._draftService.updateDraft('draft-001', { montant: -200, reseau: 'Orange', type: 'Dépôt' })
     ).rejects.toThrow('Montant FCFA invalide')
 
     expect(runTransaction).not.toHaveBeenCalled()
@@ -414,7 +414,7 @@ describe('TC-015-E — updateDraft : runTransaction bloqué si montant invalide 
     vi.mocked(runTransaction).mockResolvedValueOnce({ id: 'draft-001' })
 
     try {
-      await svc.updateDraft('draft-001', { statut: 'Non Terminées' })
+      await svc._draftService.updateDraft('draft-001', { statut: 'Non Terminées' })
     } catch {
       // Ignorer les erreurs liées au mock Firestore incomplet
     }
@@ -450,7 +450,7 @@ describe('TC-015-F — addToHistory : écriture bloquée si montant invalide', (
       clientId: 'client-001',
     }
 
-    await expect(svc.addToHistory(transactionData)).rejects.toThrow('Montant FCFA invalide')
+    await expect(svc._historyService.addToHistory(transactionData)).rejects.toThrow('Montant FCFA invalide')
     expect(addDoc).not.toHaveBeenCalled()
   })
 
@@ -463,7 +463,7 @@ describe('TC-015-F — addToHistory : écriture bloquée si montant invalide', (
       clientId: 'client-001',
     }
 
-    await expect(svc.addToHistory(transactionData)).rejects.toThrow('Montant FCFA invalide')
+    await expect(svc._historyService.addToHistory(transactionData)).rejects.toThrow('Montant FCFA invalide')
     expect(addDoc).not.toHaveBeenCalled()
   })
 
@@ -476,7 +476,7 @@ describe('TC-015-F — addToHistory : écriture bloquée si montant invalide', (
       clientId: 'client-001',
     }
 
-    await expect(svc.addToHistory(transactionData)).rejects.toThrow('Montant FCFA invalide')
+    await expect(svc._historyService.addToHistory(transactionData)).rejects.toThrow('Montant FCFA invalide')
     expect(addDoc).not.toHaveBeenCalled()
   })
 
@@ -489,7 +489,7 @@ describe('TC-015-F — addToHistory : écriture bloquée si montant invalide', (
       clientId: 'client-001',
     }
 
-    await expect(svc.addToHistory(transactionData)).rejects.toThrow('Montant FCFA invalide')
+    await expect(svc._historyService.addToHistory(transactionData)).rejects.toThrow('Montant FCFA invalide')
     expect(addDoc).not.toHaveBeenCalled()
   })
 
@@ -502,7 +502,7 @@ describe('TC-015-F — addToHistory : écriture bloquée si montant invalide', (
       clientId: 'client-001',
     }
 
-    await expect(svc.addToHistory(transactionData)).rejects.toThrow('Montant FCFA invalide')
+    await expect(svc._historyService.addToHistory(transactionData)).rejects.toThrow('Montant FCFA invalide')
     expect(addDoc).not.toHaveBeenCalled()
   })
 })

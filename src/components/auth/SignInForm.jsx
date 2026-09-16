@@ -7,7 +7,7 @@ import { AUTH_STYLES } from '../../constants/authStyles'
 import { getDefaultRouteForRole } from '../../utils/roleRouting'
 import ForgotPasswordModal from './ForgotPasswordModal'
 
-function SignInForm({ onToggle }) {
+function SignInForm({ canSignUp = true, onToggle }) {
   const [showForgotPassword, setShowForgotPassword] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
 
@@ -164,16 +164,22 @@ function SignInForm({ onToggle }) {
       </form>
 
       <div className="mt-8 text-center">
-        <p className={AUTH_STYLES.text.body}>
-          Nouvelle boutique ?{' '}
-          <button
-            onClick={onToggle}
-            className={AUTH_STYLES.button.link}
-            aria-label="Créer un compte boutique"
-          >
-            Créer un compte boutique
-          </button>
-        </p>
+        {canSignUp ? (
+          <p className={AUTH_STYLES.text.body}>
+            Nouvelle boutique ?{' '}
+            <button
+              onClick={onToggle}
+              className={AUTH_STYLES.button.link}
+              aria-label="Créer un compte boutique"
+            >
+              Créer un compte boutique
+            </button>
+          </p>
+        ) : (
+          <p className={AUTH_STYLES.text.body}>
+            Besoin d’un accès ? Contactez le gérant C2EGF.
+          </p>
+        )}
         <p className={`${AUTH_STYLES.text.body} mt-3`}>
           Chaque boutique utilise son propre compte pour travailler.
         </p>

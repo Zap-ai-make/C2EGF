@@ -19,6 +19,10 @@ export const HTTP_CODES = {
   INVALID_BALANCE_DATA:     'internal',
   BALANCE_OVERFLOW:         'failed-precondition',
   TRANSACTION_FAILED:       'internal',
+  STORE_TRANSACTION_INVALID: 'invalid-argument',
+  STORE_TRANSACTION_NOT_FOUND: 'not-found',
+  SETTLED_DRAFT_IMMUTABLE: 'failed-precondition',
+  BALANCE_EDIT_FORBIDDEN: 'permission-denied',
   // Clôtures Dealer
   STORE_NOT_FOUND:              'not-found',
   STORE_INACTIVE:               'failed-precondition',

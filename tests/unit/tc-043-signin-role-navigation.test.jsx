@@ -267,6 +267,18 @@ describe('TC-043-N — Navigation post-login (SignInForm)', () => {
 
     expect(screen.getByTestId('location').textContent).toBe('/auth')
   })
+
+  it('N-5 : l’inscription désactivée ne propose aucun lien de création de boutique', () => {
+    setupFormMock(vi.fn())
+    render(
+      <MemoryRouter>
+        <SignInForm canSignUp={false} onToggle={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    expect(screen.queryByRole('button', { name: /créer un compte boutique/i })).not.toBeInTheDocument()
+    expect(screen.getByText(/contactez le gérant/i)).toBeInTheDocument()
+  })
 })
 
 // ---------------------------------------------------------------------------

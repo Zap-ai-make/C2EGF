@@ -29,7 +29,7 @@ describe('TC-084 — Génération des règles depuis le profil (axe dealer)', ()
   })
 
   it('profil multi-réseaux → liste élargie', () => {
-    const block = generateProfileRulesBlock({ dealer: { networks: ['Orange', 'Moov', 'Telecel', 'Coris', 'Sank'] } })
+    const block = generateProfileRulesBlock({ dealer: { networks: ['Orange', 'Moov', 'Telecel', 'Coris', 'Sank'] }, onboarding: { selfRegistration: false } })
     expect(block).toContain("return ['Orange', 'Moov', 'Telecel', 'Coris', 'Sank']")
   })
 
@@ -42,9 +42,9 @@ describe('TC-084 — Génération des règles depuis le profil (axe dealer)', ()
     expect(() => generateProfileRulesBlock({ dealer: { networks: [] } })).toThrow(/liste non vide/)
   })
 
-  it('ANTI-DÉRIVE : firestore.rules contient le bloc généré pour TAOFIC', () => {
+  it('ANTI-DÉRIVE : firestore.rules contient le bloc généré pour C2EGF', () => {
     const rules = readFileSync(rulesPath, 'utf8').replace(/\r\n/g, '\n')
-    const block = generateProfileRulesBlock(resolveProfile('taofic_ajagbe'))
+    const block = generateProfileRulesBlock(resolveProfile('c2egf_burkina'))
     expect(rules).toContain(block)
   })
 })

@@ -25,6 +25,11 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
+const commandMocks = vi.hoisted(() => ({ run: vi.fn() }))
+vi.mock('../../src/services/storeTransactionCommandService.js', () => ({
+  runStoreTransactionCommand: commandMocks.run,
+}))
+
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn(),
   doc: vi.fn((_db, ...segments) => ({ _path: segments.join('/'), _isMockDoc: true })),
@@ -810,11 +815,12 @@ describe('TC-019-R — getHistory préserve mapping et ordre', () => {
 // TC-019-S : facade FirestoreService — délégation complète
 // ---------------------------------------------------------------------------
 
-describe('TC-019-S — facade FirestoreService délègue à HistoryService', () => {
+describe('TC-019-S — facade FirestoreService réserve les écritures à la commande serveur', () => {
   let fs
 
   beforeEach(() => {
     vi.mocked(runTransaction).mockClear()
+    commandMocks.run.mockReset()
     fs = new FirestoreService()
     fs.setActiveStore({ id: 'facade-store', name: 'Boutique Facade' })
   })
@@ -829,26 +835,33 @@ describe('TC-019-S — facade FirestoreService délègue à HistoryService', () 
     expect(result).toStrictEqual(mockDocs)
   })
 
-  it('TC-019-19b : addToHistory délègue et retourne le résultat', async () => {
+  it('TC-019-19b : addToHistory appelle la commande serveur et retourne le résultat', async () => {
     const fakeResult = { id: 'fh2', type: 'Dépôt', montant: 1000, date: '19/06/2026' }
-    vi.spyOn(fs._historyService, 'addToHistory').mockResolvedValueOnce(fakeResult)
+    commandMocks.run.mockResolvedValueOnce(fakeResult)
 
     const txData = { type: 'Dépôt', montant: 1000, clientId: 'c1', reseau: 'Orange', statut: 'Validée' }
     const result = await fs.addToHistory(txData)
     expect(result).toStrictEqual(fakeResult)
-    expect(fs._historyService.addToHistory).toHaveBeenCalledWith(txData)
+    expect(commandMocks.run).toHaveBeenCalledWith({
+      action: 'add',
+      transaction: { ...txData, statut: 'Validée' },
+    })
   })
 
-  it('TC-019-19c : deleteFromHistory délègue et propage false', async () => {
-    vi.spyOn(fs._historyService, 'deleteFromHistory').mockResolvedValueOnce(false)
+  it('TC-019-19c : deleteFromHistory appelle la commande serveur et propage false', async () => {
+    commandMocks.run.mockResolvedValueOnce({ cancelled: false })
 
     const result = await fs.deleteFromHistory('already-cancelled')
     expect(result).toBe(false)
+    expect(commandMocks.run).toHaveBeenCalledWith({
+      action: 'cancelHistory',
+      historyId: 'already-cancelled',
+    })
   })
 
   it('TC-019-19d : deleteFromHistory propage les erreurs', async () => {
     const boom = new Error('Transaction introuvable')
-    vi.spyOn(fs._historyService, 'deleteFromHistory').mockRejectedValueOnce(boom)
+    commandMocks.run.mockRejectedValueOnce(boom)
 
     await expect(fs.deleteFromHistory('missing')).rejects.toThrow('introuvable')
   })

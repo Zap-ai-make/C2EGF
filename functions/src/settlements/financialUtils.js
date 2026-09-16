@@ -44,6 +44,8 @@ function normalizeType(type) {
 }
 
 function isRetrait(type) { return normalizeType(type) === 'retrait' }
+function isDepot(type) { return normalizeType(type) === 'depot' }
+function isCredit(type) { return normalizeType(type) === 'credit' }
 
 /**
  * Normalise les soldes réseau (valeurs manquantes → 0, négatives → 0).
@@ -116,6 +118,58 @@ function applyLiquidityDelta(balances, delta) {
   }
 
   return next
+}
+
+export function applyInitialTransactionImpact(balances, transaction) {
+  const amount = transaction.montant
+  const pending = ['non terminees'].includes(normalizeType(transaction.statut))
+  const validated = ['validee'].includes(normalizeType(transaction.statut))
+  if (pending) {
+    if (isDepot(transaction.type) || isCredit(transaction.type)) return adjustBalanceValue(balances, transaction.reseau, 'stock', -amount)
+    if (isRetrait(transaction.type)) return adjustBalanceValue(balances, transaction.reseau, 'stock', amount)
+  }
+  if (validated) {
+    if (isCredit(transaction.type)) throw new Error('Les crédits doivent être remboursés via une méthode de paiement.')
+    if (isDepot(transaction.type)) return applyLiquidityDelta(adjustBalanceValue(balances, transaction.reseau, 'stock', -amount), amount)
+    if (isRetrait(transaction.type)) return adjustBalanceValue(applyLiquidityDelta(balances, -amount), transaction.reseau, 'stock', amount)
+  }
+  return balances
+}
+
+export function reversePendingOnlyImpact(balances, type, network, amount) {
+  if (isDepot(type) || isCredit(type)) return adjustBalanceValue(balances, network, 'stock', amount)
+  if (isRetrait(type)) return adjustBalanceValue(balances, network, 'stock', -amount)
+  throw new Error('Type de transaction non reconnu.')
+}
+
+export function reverseInitialTransactionImpact(balances, transaction) {
+  return reversePendingOnlyImpact(balances, transaction.type, transaction.reseau, transaction.montant)
+}
+
+export function reverseHistoryTransactionImpact(balances, history) {
+  if (normalizeType(history.statut) === 'annulee') throw new Error('Cette transaction est déjà annulée.')
+  const { type, reseau, montant } = history
+  if (!type || !reseau || !Number.isSafeInteger(montant) || montant <= 0) throw new Error('Historique financier incomplet.')
+  let next = { ...balances }
+  const summary = history.settlementSummary?.netByNetwork
+  if (summary && Object.keys(summary).length) {
+    for (const [network, values] of Object.entries(summary)) {
+      const net = (values.paid || 0) - (values.refunded || 0)
+      const delta = isRetrait(type) ? -net : net
+      next = network === 'Liquidite' ? applyLiquidityDelta(next, -delta) : adjustBalanceValue(next, network, 'stock', -delta)
+    }
+    return reversePendingOnlyImpact(next, type, reseau, montant)
+  }
+  if (history.paymentMethod) {
+    const network = history.effectiveNetwork || mapPaymentMethodToNetwork(history.paymentMethod)
+    const delta = isRetrait(type) ? -montant : montant
+    next = network === 'Liquidite' ? applyLiquidityDelta(next, -delta) : adjustBalanceValue(next, network, 'stock', -delta)
+    return reversePendingOnlyImpact(next, type, reseau, montant)
+  }
+  if (history.validatedAt) return reversePendingOnlyImpact(next, type, reseau, montant)
+  if (isDepot(type)) return applyLiquidityDelta(adjustBalanceValue(next, reseau, 'stock', montant), -montant)
+  if (isRetrait(type)) throw new Error("L'annulation automatique de ce retrait historique n'est pas sûre.")
+  return adjustBalanceValue(next, reseau, 'stock', montant)
 }
 
 /**

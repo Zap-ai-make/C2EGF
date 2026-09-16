@@ -176,7 +176,7 @@ describe('TC-008 — Suppression et modification history (règles Firestore)', (
     await seedAll()
     const ctx = getAuthenticatedContext(testEnv, 'uid-member-aaa')
     const ref = doc(ctx.firestore(), 'clients', 'store-test-aaa', 'history', 'hist-aaa-001')
-    await assertSucceeds(updateDoc(ref, { statut: 'Non Terminées' }))
+    await assertFails(updateDoc(ref, { statut: 'Non Terminées' }))
   })
 
   it('[TC-008-06b] uid-member-aaa — update type — deny', async () => {
@@ -223,7 +223,7 @@ describe('TC-008 — Suppression et modification history (règles Firestore)', (
     await seedAll()
     const ctx = getAuthenticatedContext(testEnv, 'uid-member-aaa')
     const ref = doc(ctx.firestore(), 'clients', 'store-test-aaa', 'history', 'hist-aaa-001')
-    await assertSucceeds(updateDoc(ref, { notes: 'commentaire', updatedAt: new Date().toISOString() }))
+    await assertFails(updateDoc(ref, { notes: 'commentaire', updatedAt: new Date().toISOString() }))
   })
 
   it('[TC-008-07] uid-member-aaa (storeA) — get clients/store-test-aaa/history/hist-aaa-001 — allow', async () => {
@@ -335,14 +335,14 @@ describe('TC-V2-16-UTF8 — Valeurs corrompues retirées de validStatus/validTra
     await seedAll()
     const ctx = getAuthenticatedContext(testEnv, 'uid-member-aaa')
     const ref = doc(ctx.firestore(), 'clients', 'store-test-aaa', 'history', 'hist-aaa-001')
-    await assertSucceeds(updateDoc(ref, { statut: 'Remboursée' }))
+    await assertFails(updateDoc(ref, { statut: 'Remboursée' }))
   })
 
   it('[UTF8-03] update statut vers valeur correcte sans accent "Annulee" → allow', async () => {
     await seedAll()
     const ctx = getAuthenticatedContext(testEnv, 'uid-member-aaa')
     const ref = doc(ctx.firestore(), 'clients', 'store-test-aaa', 'history', 'hist-aaa-001')
-    await assertSucceeds(updateDoc(ref, { statut: 'Annulee' }))
+    await assertFails(updateDoc(ref, { statut: 'Annulee' }))
   })
 
   it('[UTF8-04] create draft avec statut corrompu "Non TerminÃ©es" → deny', async () => {

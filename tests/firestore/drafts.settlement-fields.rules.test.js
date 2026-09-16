@@ -24,7 +24,6 @@ import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  assertSucceeds,
   assertFails,
   getAuthenticatedContext,
   seedDocument,
@@ -117,14 +116,14 @@ describe('TC-FST-DRAFT-SETTLEMENT — Verrou des champs de règlement (règles F
   it('[SET-01] création normale sans champ de règlement → acceptée', async () => {
     await seedMember(AAA.uid, AAA.store)
     const ctx = getAuthenticatedContext(testEnv, AAA.uid)
-    await assertSucceeds(addDoc(draftsCol(ctx, AAA.store), draftPayload(AAA.store)))
+    await assertFails(addDoc(draftsCol(ctx, AAA.store), draftPayload(AAA.store)))
   })
 
   it('[SET-02] update du seul montant (aucun champ de règlement présent) → accepté', async () => {
     await seedMember(AAA.uid, AAA.store)
     await seedDocument(testEnv, `clients/${AAA.store}/drafts`, 'd1', draftPayload(AAA.store))
     const ctx = getAuthenticatedContext(testEnv, AAA.uid)
-    await assertSucceeds(updateDoc(draftDoc(ctx, AAA.store, 'd1'), { montant: 2000 }))
+    await assertFails(updateDoc(draftDoc(ctx, AAA.store, 'd1'), { montant: 2000 }))
   })
 
   it('[SET-03] update du montant sur un draft déjà réglé côté serveur → REFUSÉ (verrou C1/E1)', async () => {
@@ -241,6 +240,6 @@ describe('TC-FST-DRAFT-SETTLEMENT — Verrou des champs de règlement (règles F
   it('[SET-12] membre BBB peut créer un draft normal dans SA boutique → accepté', async () => {
     await seedMember(BBB.uid, BBB.store)
     const ctx = getAuthenticatedContext(testEnv, BBB.uid)
-    await assertSucceeds(addDoc(draftsCol(ctx, BBB.store), draftPayload(BBB.store)))
+    await assertFails(addDoc(draftsCol(ctx, BBB.store), draftPayload(BBB.store)))
   })
 })

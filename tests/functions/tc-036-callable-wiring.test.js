@@ -63,7 +63,7 @@ describe('TC-036-WRA — exports callable de index.js', () => {
   }, 60_000)
   // ⚠ 60 s, et ce n'est PAS un délai gonflé pour masquer une lenteur.
   //
-  //   Ce hook charge le graphe complet des 23 callables. À chaud il prend moins
+  //   Ce hook charge le graphe complet des 24 callables. À chaud il prend moins
   //   d'une seconde ; à froid, cache disque vide, il a dépassé les 10 s par
   //   défaut de Vitest — la suite tombait alors sans qu'aucune assertion soit en
   //   cause, ce qui envoie chercher un bug là où il n'y en a pas.
@@ -102,6 +102,7 @@ describe('TC-036-WRA — exports callable de index.js', () => {
       'rejectDealerClosure',
       'addTransactionPayment',
       'addTransactionRefund',
+      'storeTransactionCommand',
       'createStoreDealerTransfer',
       'confirmStoreDealerTransfer',
       'rejectStoreDealerTransfer',
@@ -163,7 +164,7 @@ describe('TC-036-WRA — exports callable de index.js', () => {
     // ou un appel répété les ouvrent — et les font payer. Le plafond est la
     // seule chose qui borne le pire des cas.
     //
-    // Il a aussi une conséquence immédiate au déploiement : 23 callables sans
+    // Il a aussi une conséquence immédiate au déploiement : 24 callables sans
     // plafond réservent 2 300 vCPU dans la région, au-delà du quota d'un projet
     // neuf. Trois functions ont échoué à se créer pour cette raison, avec un
     // message qui ne parle que de CPU et jamais d'instances — la formulation

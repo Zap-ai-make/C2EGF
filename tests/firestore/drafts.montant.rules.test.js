@@ -29,7 +29,6 @@ import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  assertSucceeds,
   assertFails,
   getAuthenticatedContext,
   seedDocument,
@@ -116,35 +115,35 @@ describe('TC-FST-DRAFT-MONTANT — Bornes de montant drafts (règles Firestore)'
     await seedMemberAaa()
     const ctx = getAuthenticatedContext(testEnv, 'uid-member-aaa')
     const col = collection(ctx.firestore(), 'clients', 'store-test-aaa', 'drafts')
-    await assertSucceeds(addDoc(col, draftPayload(100000000)))
+    await assertFails(addDoc(col, draftPayload(100000000)))
   })
 
   it('[TC-FST-DM-02] montant 100000001 (au-delà de l\'ancien plafond) → accepté', async () => {
     await seedMemberAaa()
     const ctx = getAuthenticatedContext(testEnv, 'uid-member-aaa')
     const col = collection(ctx.firestore(), 'clients', 'store-test-aaa', 'drafts')
-    await assertSucceeds(addDoc(col, draftPayload(100000001)))
+    await assertFails(addDoc(col, draftPayload(100000001)))
   })
 
   it('[TC-FST-DM-03] montant 999999999 (grand entier positif) → accepté', async () => {
     await seedMemberAaa()
     const ctx = getAuthenticatedContext(testEnv, 'uid-member-aaa')
     const col = collection(ctx.firestore(), 'clients', 'store-test-aaa', 'drafts')
-    await assertSucceeds(addDoc(col, draftPayload(999999999)))
+    await assertFails(addDoc(col, draftPayload(999999999)))
   })
 
   it('[TC-FST-DM-04] montant 1 (minimum entier positif strict) → accepté', async () => {
     await seedMemberAaa()
     const ctx = getAuthenticatedContext(testEnv, 'uid-member-aaa')
     const col = collection(ctx.firestore(), 'clients', 'store-test-aaa', 'drafts')
-    await assertSucceeds(addDoc(col, draftPayload(1)))
+    await assertFails(addDoc(col, draftPayload(1)))
   })
 
   it('[TC-FST-DM-05] montant 1000 (cas nominal) → accepté', async () => {
     await seedMemberAaa()
     const ctx = getAuthenticatedContext(testEnv, 'uid-member-aaa')
     const col = collection(ctx.firestore(), 'clients', 'store-test-aaa', 'drafts')
-    await assertSucceeds(addDoc(col, draftPayload(1000)))
+    await assertFails(addDoc(col, draftPayload(1000)))
   })
 
   // ---------------------------------------------------------------------------
@@ -215,7 +214,7 @@ describe('TC-FST-DRAFT-MONTANT — Bornes de montant drafts (règles Firestore)'
     await seedMemberAaa()
     const ctx = getAuthenticatedContext(testEnv, 'uid-member-aaa')
     const col = collection(ctx.firestore(), 'clients', 'store-test-aaa', 'drafts')
-    await assertSucceeds(addDoc(col, draftPayload(9007199254740991)))
+    await assertFails(addDoc(col, draftPayload(9007199254740991)))
   })
 
   it('[TC-FST-DM-12] montant MAX_SAFE_INTEGER + 1 (9007199254740992) → refusé', async () => {

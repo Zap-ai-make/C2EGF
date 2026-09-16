@@ -21,6 +21,7 @@ import cacheManager, { cacheUtils } from '../utils/cacheManager'
 import { FIRESTORE_CONFIG } from '../constants/firestoreConstants'
 import { CLIENT_ID, getFirestoreCollectionPath } from '../config/clientIsolation'
 import { parseFcfaAmount } from '../utils/fcfaAmount.js'
+import { runStoreTransactionCommand } from './storeTransactionCommandService.js'
 import {
   validateFcfaAmount as _validateFcfaAmountFn,
   normalizeNetworkBalances as _normalizeNetworkBalancesFn,
@@ -748,15 +749,19 @@ export class FirestoreService {
   }
 
   async setNetworkBalances(balances) {
-    return this._balanceService.setNetworkBalances(balances)
+    const result = await runStoreTransactionCommand({ action: 'setBalances', balances })
+    return result.balances
   }
 
   async ensureNetworkBalances(initialBalances) {
-    return this._balanceService.ensureNetworkBalances(initialBalances)
+    void initialBalances
+    const result = await runStoreTransactionCommand({ action: 'ensureBalances' })
+    return result.balances
   }
 
   async setNetworkBalance(network, type, amount) {
-    return this._balanceService.setNetworkBalance(network, type, amount)
+    const result = await runStoreTransactionCommand({ action: 'setBalance', network, balanceType: type, balanceAmount: Number(amount) })
+    return result.balances
   }
 
   subscribeToNetworkBalances(callback) {
@@ -901,15 +906,16 @@ export class FirestoreService {
   }
 
   async addDraft(transactionData) {
-    return this._draftService.addDraft(transactionData)
+    return runStoreTransactionCommand({ action: 'add', transaction: { ...transactionData, statut: 'Non Terminées' } })
   }
 
   async updateDraft(draftId, updates) {
-    return this._draftService.updateDraft(draftId, updates)
+    return runStoreTransactionCommand({ action: 'updateDraft', draftId, updates })
   }
 
   async deleteDraft(draftId) {
-    return this._draftService.deleteDraft(draftId)
+    const result = await runStoreTransactionCommand({ action: 'deleteDraft', draftId })
+    return result.deleted
   }
 
   subscribeToDrafts(callback) {
@@ -923,15 +929,16 @@ export class FirestoreService {
   }
 
   async addToHistory(transactionData) {
-    return this._historyService.addToHistory(transactionData)
+    return runStoreTransactionCommand({ action: 'add', transaction: { ...transactionData, statut: 'Validée' } })
   }
 
   async addTransaction(transactionData) {
-    return this._draftService.addTransaction(transactionData)
+    return runStoreTransactionCommand({ action: 'add', transaction: transactionData })
   }
 
   async deleteFromHistory(historyId) {
-    return this._historyService.deleteFromHistory(historyId)
+    const result = await runStoreTransactionCommand({ action: 'cancelHistory', historyId })
+    return result.cancelled
   }
 
   subscribeToHistory(callback, filters = {}) {
@@ -945,7 +952,9 @@ export class FirestoreService {
 
   // VALIDATION DE TRANSACTION (Drafts → History) — délègue à DraftService
   async validateTransaction(draftId, customStatus = 'Validée', selectedPaymentMethod = null, amountOverride = null) {
-    return this._draftService.validateTransaction(draftId, customStatus, selectedPaymentMethod, amountOverride)
+    void customStatus
+    const result = await runStoreTransactionCommand({ action: 'validateDraft', draftId, paymentMethod: selectedPaymentMethod, amount: amountOverride })
+    return result.validated
   }
 
   // MIGRATION DES DONNÉES LOCALSTORAGE

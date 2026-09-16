@@ -18,6 +18,12 @@
  */
 export const STORE_NETWORKS = ['Orange']
 
+export const STORE_TRANSACTION_TYPES = ['Dépôt', 'Retrait']
+
+export const STORE_PAYMENT_METHODS = ['Orange Money', 'Cash']
+
+export const CASHIER_CAN_EDIT_BALANCES = false
+
 export const COLLABORATIONS_ENABLED = true
 
 export const DEBT_SETTLEMENT_METHODS = ['Orange Money', 'Cash', 'Banque']

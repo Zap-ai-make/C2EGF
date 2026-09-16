@@ -744,7 +744,7 @@ describe('TC-V24-SC — Création boutique : rôles globaux refusés, batch atom
     }))
   })
 
-  it('[SC-05] nouveau propriétaire batch(boutique + profil store_admin) → allow', async () => {
+  it('[SEC-02] nouveau propriétaire ne peut pas auto-enrôler une boutique C2EGF', async () => {
     const ctx = getAuthenticatedContext(testEnv, 'new-owner-uid')
     const db = ctx.firestore()
     const batch = writeBatch(db)
@@ -754,7 +754,7 @@ describe('TC-V24-SC — Création boutique : rôles globaux refusés, batch atom
     batch.set(doc(db, 'users', 'new-owner-uid'), {
       role: 'store_admin', active: true, storeId: 'store-new-owner', storeName: 'Ma Boutique',
     })
-    await assertSucceeds(batch.commit())
+    await assertFails(batch.commit())
   })
 })
 

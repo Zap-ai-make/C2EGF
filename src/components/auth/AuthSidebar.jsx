@@ -29,7 +29,7 @@ import { AUTH_LABELS } from '../../constants/authMessages'
  *    et le bouton porte ici LE MÊME MOT que celui du formulaire d'en face —
  *    DESIGN.md §12 : un mot d'action garde son nom dans tout le flux.
  */
-function AuthSidebar({ isSignUp, onToggle }) {
+function AuthSidebar({ isSignUp, canSignUp, onToggle }) {
   return (
     <div className="panneau-auth relative flex h-full min-h-[220px] flex-col items-center justify-between overflow-hidden p-6 text-white sm:p-8 lg:min-h-[560px] lg:p-12">
       <div className="flex flex-1 flex-col items-center justify-center text-center">
@@ -49,20 +49,20 @@ function AuthSidebar({ isSignUp, onToggle }) {
               Une boutique existe déjà ?<br />
               Connectez-vous avec ses accès
             </>
-          ) : (
+          ) : canSignUp ? (
             <>
               Créez un compte boutique,<br />
               puis gérez vos opérations
             </>
-          )}
+          ) : 'Les accès sont créés par le gérant C2EGF.'}
         </p>
 
-        <button
+        {canSignUp && <button
           onClick={onToggle}
           className="rounded-full border-2 border-white px-6 py-2.5 font-semibold text-white transition-colors duration-200 hover:bg-white hover:text-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-brand-500 lg:px-8 lg:py-3"
         >
           {isSignUp ? AUTH_LABELS.SUBMIT_SIGNIN : 'Créer une boutique'}
-        </button>
+        </button>}
       </div>
 
       <p className="mt-8 text-xs font-semibold uppercase tracking-[0.2em] text-brand-200">

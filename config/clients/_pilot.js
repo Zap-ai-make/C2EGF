@@ -38,6 +38,13 @@ export const pilotProfile = Object.freeze({
     theme: 'green',
   }),
 
+  // ── Admission des boutiques ───────────────────────────────────────────────
+  // true  = création publique d'une boutique et de son store_admin.
+  // false = comptes provisionnés par un gérant via les scripts administratifs.
+  onboarding: Object.freeze({
+    selfRegistration: true,
+  }),
+
   // ── Réseaux boutique (cartes réseau + choix dans le formulaire) ────────────
   // Superset = les 5 réseaux. Un client mono-réseau met p. ex. ['Orange'].
   networks: Object.freeze({

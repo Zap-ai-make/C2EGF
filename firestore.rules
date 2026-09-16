@@ -5,6 +5,8 @@ service cloud.firestore {
     // <<< PROFIL-GÉNÉRÉ — DÉBUT (généré par scripts/generate-rules.mjs, ne pas éditer à la main) >>>
     // Réseaux du circuit dealer autorisés pour ce client (depuis profil.dealer.networks).
     function profileDealerNetworks() { return ['Orange']; }
+    // Admission publique des boutiques (depuis profil.onboarding.selfRegistration).
+    function profileAllowsSelfRegistration() { return false; }
     // <<< PROFIL-GÉNÉRÉ — FIN >>>
 
     // ─────────────────────────────────────────────────────────────
@@ -295,6 +297,7 @@ service cloud.firestore {
       allow read: if isStoreMember(storeId) || isSystemManager() || isDealer();
       // Création uniquement dans le writeBatch atomique boutique + store_admin
       allow create: if signedIn() &&
+        profileAllowsSelfRegistration() &&
         request.resource.data.adminUid == request.auth.uid &&
         request.resource.data.active == true &&
         request.resource.data.name is string &&
@@ -324,6 +327,7 @@ service cloud.firestore {
 
       // Création profil boutique uniquement (writeBatch atomique store + user)
       allow create: if signedIn() &&
+        profileAllowsSelfRegistration() &&
         request.auth.uid == userId &&
         request.resource.data.role == 'store_admin' &&
         request.resource.data.active == true &&
@@ -508,15 +512,8 @@ service cloud.firestore {
         // Le dealer LIT (élargissement du 31/08/2026, cf. § Demandes Dealer) ;
         // il n'écrit rien : les trois clauses ci-dessous restent `isStoreMember`.
         allow read: if isStoreMember(storeId) || isDealer();
-        allow create: if isStoreMember(storeId) &&
-          validStoreScopedTransaction(request.resource.data, storeId) &&
-          isPendingStatus(request.resource.data.statut) &&
-          draftHasNoSettlementFields(request.resource.data);
-        allow update: if isStoreMember(storeId) &&
-          validStoreScopedTransaction(request.resource.data, storeId) &&
-          draftSettlementFieldsUnchanged(request.resource.data, resource.data) &&
-          draftCoreFieldsFrozenIfSettling(request.resource.data, resource.data);
-        allow delete: if isStoreMember(storeId);
+        // Écritures exclusivement via storeTransactionCommand / callables de règlement.
+        allow create, update, delete: if false;
 
         // Règlements (paiements et remboursements par tranche)
         // Écriture exclusivement par les Cloud Functions (Admin SDK).
@@ -528,15 +525,7 @@ service cloud.firestore {
 
       match /history/{historyId} {
         allow read: if isStoreMember(storeId) || isSystemManager();
-        allow create: if isStoreMember(storeId) &&
-          validStoreScopedTransaction(request.resource.data, storeId) &&
-          validStatus(request.resource.data.statut) &&
-          !isPendingStatus(request.resource.data.statut) &&
-          validClientHistorySettlement(request.resource.data);
-        allow update: if isStoreMember(storeId) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statut', 'updatedAt', 'notes']) &&
-          validStatus(request.resource.data.statut);
-        allow delete: if false;
+        allow create, update, delete: if false;
 
         // Règlements archivés (copiés depuis drafts lors du paiement final)
         // Écriture exclusivement par les Cloud Functions (Admin SDK).
@@ -547,18 +536,9 @@ service cloud.firestore {
       }
 
       match /networkBalances/{balanceId} {
-        // EXCEPTION HÉRITÉE V1 (assumée) : les membres boutique écrivent DIRECTEMENT
-        // leurs soldes réseau (pas via Cloud Function), contrairement au circuit V2
-        // dealer/settlements qui est serveur-autoritatif et audité. La validation ci-
-        // dessous est STRUCTURELLE uniquement (entiers sûrs >= 0, réseaux figés) : un
-        // compte boutique compromis peut fixer un solde arbitraire SANS piste d'audit.
-        // Risque connu, documenté dans docs/audit/claude/AUDIT_ESPACES_DEALER_GERANT.md
-        // (§1.1). Migration éventuelle vers une Cloud Function auditée = chantier séparé.
         allow read: if isStoreMember(storeId) || isDealer() || isSystemManager();
-        allow create, update: if isStoreMember(storeId) &&
-          balanceId == 'current' &&
-          validNetworkBalancesDoc(request.resource.data);
-        allow delete: if false;
+        // Le serveur initialise à zéro et applique chaque mouvement avec son audit.
+        allow create, update, delete: if false;
       }
 
       match /sessions/{sessionId} {

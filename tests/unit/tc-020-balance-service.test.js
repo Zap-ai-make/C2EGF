@@ -57,6 +57,11 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+const commandMocks = vi.hoisted(() => ({ run: vi.fn() }))
+vi.mock('../../src/services/storeTransactionCommandService.js', () => ({
+  runStoreTransactionCommand: commandMocks.run,
+}))
+
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn(),
   doc: vi.fn((_db, ...segments) => ({ _path: segments.join('/'), _isMockDoc: true })),
@@ -562,13 +567,14 @@ describe('TC-020-15 — subscribeToNetworkBalances erreur loggée sans propagati
 // TC-020-16 — Façade FirestoreService : délégation complète
 // ---------------------------------------------------------------------------
 
-describe('TC-020-16 — Façade FirestoreService délègue à BalanceService', () => {
+describe('TC-020-16 — Façade FirestoreService route les écritures vers le serveur', () => {
   let fs
 
   beforeEach(() => {
     vi.mocked(runTransaction).mockClear()
     vi.mocked(setDoc).mockClear()
     vi.mocked(onSnapshot).mockClear()
+    commandMocks.run.mockReset()
     fs = new FirestoreService()
     fs.setActiveStore({ id: 'facade-store-020', name: 'Boutique Façade' })
   })
@@ -579,22 +585,22 @@ describe('TC-020-16 — Façade FirestoreService délègue à BalanceService', (
     expect(spy).toHaveBeenCalledOnce()
   })
 
-  it('[16b] ensureNetworkBalances délègue et propage la Promise', async () => {
+  it('[16b] ensureNetworkBalances initialise via la commande serveur', async () => {
     const fakeResult = { Orange: { stock: 1000, liquidite: 0 } }
-    vi.spyOn(fs._balanceService, 'ensureNetworkBalances').mockResolvedValueOnce(fakeResult)
+    commandMocks.run.mockResolvedValueOnce({ balances: fakeResult })
 
     const result = await fs.ensureNetworkBalances({})
     expect(result).toStrictEqual(fakeResult)
-    expect(fs._balanceService.ensureNetworkBalances).toHaveBeenCalledOnce()
+    expect(commandMocks.run).toHaveBeenCalledWith({ action: 'ensureBalances' })
   })
 
   it('[16c] setNetworkBalance délègue et propage la Promise', async () => {
     const fakeResult = { Orange: { stock: 2000, liquidite: 500 } }
-    vi.spyOn(fs._balanceService, 'setNetworkBalance').mockResolvedValueOnce(fakeResult)
+    commandMocks.run.mockResolvedValueOnce({ balances: fakeResult })
 
     const result = await fs.setNetworkBalance('Orange', 'stock', 2000)
     expect(result).toStrictEqual(fakeResult)
-    expect(fs._balanceService.setNetworkBalance).toHaveBeenCalledWith('Orange', 'stock', 2000)
+    expect(commandMocks.run).toHaveBeenCalledWith({ action: 'setBalance', network: 'Orange', balanceType: 'stock', balanceAmount: 2000 })
   })
 
   it('[16d] subscribeToNetworkBalances délègue et retourne l\'unsubscribe', () => {
@@ -608,17 +614,17 @@ describe('TC-020-16 — Façade FirestoreService délègue à BalanceService', (
     expect(unsub).toBe(mockUnsub)
   })
 
-  it('[16e] setNetworkBalances délègue et propage la Promise', async () => {
+  it('[16e] setNetworkBalances route le lot atomique vers le serveur', async () => {
     const fakeResult = { Orange: { stock: 500, liquidite: 0 } }
-    vi.spyOn(fs._balanceService, 'setNetworkBalances').mockResolvedValueOnce(fakeResult)
+    commandMocks.run.mockResolvedValue({ balances: fakeResult })
 
     const result = await fs.setNetworkBalances({ Orange: { stock: 500, liquidite: 0 } })
     expect(result).toStrictEqual(fakeResult)
+    expect(commandMocks.run).toHaveBeenCalledWith({ action: 'setBalances', balances: { Orange: { stock: 500, liquidite: 0 } } })
   })
 
   it('[16f] erreur de balanceService propagée par la façade', async () => {
-    const boom = new Error('permission-denied')
-    vi.spyOn(fs._balanceService, 'setNetworkBalance').mockRejectedValueOnce(boom)
+    commandMocks.run.mockRejectedValueOnce(new Error('permission-denied'))
 
     await expect(fs.setNetworkBalance('Orange', 'stock', 100)).rejects.toThrow('permission-denied')
   })

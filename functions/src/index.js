@@ -39,6 +39,7 @@ import { rejectInternalDebtSettlementHandler } from './collaborations/rejectInte
 import { declareInternalDebtCompensationHandler } from './collaborations/declareInternalDebtCompensation.js'
 import { confirmInternalDebtCompensationHandler } from './collaborations/confirmInternalDebtCompensation.js'
 import { rejectInternalDebtCompensationHandler } from './collaborations/rejectInternalDebtCompensation.js'
+import { storeTransactionCommandHandler } from './storeTransactions/storeTransactionCommand.js'
 
 // Garde idempotente : évite "App named '[DEFAULT]' already exists" lors des imports
 // dans les tests d'intégration (TC-036) qui s'exécutent après TC-035 dans le même processus.
@@ -122,6 +123,11 @@ export const addTransactionPayment = onCall(
 export const addTransactionRefund = onCall(
   CALLABLE,
   wrapCallable(addTransactionRefundHandler, deps)
+)
+
+export const storeTransactionCommand = onCall(
+  CALLABLE,
+  wrapCallable(storeTransactionCommandHandler, deps)
 )
 
 export const createStoreDealerTransfer = onCall(

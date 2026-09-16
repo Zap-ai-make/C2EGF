@@ -53,6 +53,14 @@ export function generateStoreProfileFile(profile) {
 
   // Dédoublonne : un profil qui listerait déjà « Banque » ne doit pas la voir deux fois.
   const settlementMethods = [...new Set([...methods, DEBT_ONLY_SETTLEMENT_METHOD])]
+  const types = profile?.transactions?.types
+  if (!Array.isArray(types) || types.length === 0) {
+    throw new Error('Profil invalide : transactions.types doit être une liste non vide.')
+  }
+  const canEditBalances = profile?.cashier?.canEditBalances
+  if (typeof canEditBalances !== 'boolean') {
+    throw new Error('Profil invalide : cashier.canEditBalances doit être un booléen.')
+  }
 
   return `/**
  * storeProfile.js — axes BOUTIQUE du profil client, côté Cloud Functions.
@@ -73,6 +81,12 @@ export function generateStoreProfileFile(profile) {
  * confirmation : une tranche portant un ancien code doit rester confirmable.
  */
 export const STORE_NETWORKS = [${quoteList(networks)}]
+
+export const STORE_TRANSACTION_TYPES = [${quoteList(types)}]
+
+export const STORE_PAYMENT_METHODS = [${quoteList(methods)}]
+
+export const CASHIER_CAN_EDIT_BALANCES = ${canEditBalances}
 
 export const COLLABORATIONS_ENABLED = ${collaborationsEnabled}
 

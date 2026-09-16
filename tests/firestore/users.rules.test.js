@@ -31,7 +31,6 @@ import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  assertSucceeds,
   assertFails,
   getAuthenticatedContext,
   getUnauthenticatedContext,
@@ -136,7 +135,7 @@ describe('TC-009 — Création et modification profil users (MASTER-SEC-001 corr
     await assertFails(getDoc(histRef))
   })
 
-  it('[TC-009-03] propriétaire légitime uidA crée users/uidA avec son propre storeId — allow', async () => {
+  it('[SEC-02] même le propriétaire apparent ne peut pas auto-créer son profil C2EGF', async () => {
     /**
      * Parcours nominal d'inscription (writeBatch atomique).
      *
@@ -159,7 +158,7 @@ describe('TC-009 — Création et modification profil users (MASTER-SEC-001 corr
 
     const ctxA = getAuthenticatedContext(testEnv, 'uidA')
     const ref = doc(ctxA.firestore(), 'users', 'uidA')
-    await assertSucceeds(setDoc(ref, {
+    await assertFails(setDoc(ref, {
       active: true,
       storeId: 'store-uidA-abc123',
       role: 'store_admin',

@@ -103,6 +103,7 @@ import {
 } from '../../src/utils/financialImpact.js'
 
 import { FirestoreService } from '../../src/services/firestore.js'
+import { DraftService } from '../../src/services/draftService.js'
 import { runTransaction } from 'firebase/firestore'
 
 // ---------------------------------------------------------------------------
@@ -425,22 +426,24 @@ describe('TC-017-DL2 — FirestoreService.updateDraft : vrai callback transactio
   }
 
   let svc
+  let ctx
   let capturedWrites
 
   beforeEach(() => {
-    svc = new FirestoreService()
-    svc.setActiveStore({ id: 'store-dl2', name: 'Boutique DL2' })
+    ctx = new FirestoreService()
+    ctx.setActiveStore({ id: 'store-dl2', name: 'Boutique DL2' })
+    svc = new DraftService({ ctx })
     capturedWrites = []
 
     vi.mocked(runTransaction).mockClear()
 
     // Espionner docRef et getNetworkBalanceDocRef pour des refs identifiables
-    vi.spyOn(svc, 'docRef').mockImplementation((collectionName, id) => ({
+    vi.spyOn(ctx, 'docRef').mockImplementation((collectionName, id) => ({
       _type: 'draft',
       _collectionName: collectionName,
       id,
     }))
-    vi.spyOn(svc, 'getNetworkBalanceDocRef').mockReturnValue({ _type: 'balance' })
+    vi.spyOn(ctx, 'getNetworkBalanceDocRef').mockReturnValue({ _type: 'balance' })
 
     // Mock runTransaction qui exécute réellement le callback
     vi.mocked(runTransaction).mockImplementation(async (_db, callback) => {

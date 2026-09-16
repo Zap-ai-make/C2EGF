@@ -155,6 +155,17 @@ export class DraftService {
         return false
       }
 
+      // Même garde que les règles : un parent de règlement ne se supprime pas,
+      // y compris après remboursement complet (les tranches restent auditées).
+      const settlementFields = [
+        'originalAmount', 'paidAmount', 'refundedAmount', 'remainingAmount',
+        'settlementStatus', 'settlementSummary', 'settlementUpdatedAt',
+        'settlementAmount', 'settlementType',
+      ]
+      if (settlementFields.some(field => Object.hasOwn(draftSnap.data(), field))) {
+        throw new Error('Impossible de supprimer une transaction ayant engagé un règlement.')
+      }
+
       const balanceRef = this._getNetworkBalanceDocRef()
       const balanceSnap = await tx.get(balanceRef)
       const currentBalances = normalizeNetworkBalances(balanceSnap.exists() ? balanceSnap.data() : {})

@@ -4,8 +4,7 @@
 > entre clients est de la **donnée (un profil)**, jamais du code dupliqué. On améliore
 > une fois sur `main`, on déploie partout.
 >
-> État : **Phase 0** (fondations). Les fichiers de profil existent mais ne sont encore
-> câblés à aucune couche. Voir « Plan par phases » en bas.
+> État : profils câblés au front, aux règles générées et aux Functions. Voir « Plan par phases ».
 
 ## 1. Le modèle en une phrase
 
@@ -41,10 +40,11 @@ la résolution **stricte** (qui lève) est réservée à la génération de règ
 | Champ | Varie | Couche(s) qui en dérive(nt) |
 |---|---|---|
 | `branding` | nom / thème / PWA | Front |
+| `onboarding.selfRegistration` | inscription publique ou provisioning gérant | Front + **Règles** |
 | `networks.enabled` | 1 → 5 réseaux boutique | Front + **Règles** + **Functions** |
 | `transactions.types` | avec / sans `Crédit` | Front + **Règles** |
 | `transactions.paymentMethods` | 2 → 6 méthodes | Front + **Functions** |
-| `cashier.canEditBalances` | édition soldes par la boutique on/off | **Règles** + Front |
+| `cashier.canEditBalances` | édition soldes par la boutique on/off | Front + **Functions** |
 | `dealer.enabled` / `dealer.networks` | dealer absent / mono / multi-réseaux | Front + **Règles** + **Functions** |
 | `collaborations.enabled` | collaborations inter-boutiques + dettes internes on/off | Front + **Functions** |
 | `regional.timezone` | fuseau horaire d'affichage des dates | Front |
@@ -67,7 +67,7 @@ seulement masquée dans l'UI. Deux artefacts sont **générés depuis le profil*
 |---|---|---|
 | Règles | bloc `profileDealerNetworks()` dans `firestore.rules` | `scripts/generate-rules.mjs --client <id>` |
 | Functions | `functions/src/config/dealerProfile.js` (`DEALER_NETWORKS`) | `scripts/generate-functions-config.mjs --client <id>` |
-| Functions | `functions/src/config/storeProfile.js` (`STORE_NETWORKS`, `COLLABORATIONS_ENABLED`, `DEBT_SETTLEMENT_METHODS`) | idem — le même script écrit les deux |
+| Functions | `functions/src/config/storeProfile.js` (réseaux, types, méthodes, édition de soldes, collaborations) | idem — le même script écrit les deux |
 
 `storeProfile.js` porte les axes **boutique** dont dépendent les collaborations et les dettes
 internes. Il n'a **pas** de pendant côté règles : toutes les écritures de `storeCollaborations` et
@@ -86,17 +86,12 @@ l'opération (validé ∈ profil, `balances[network]`). Mono-réseau (TAOFIC) st
 branches multi gardées par `IS_DEALER_MULTI_NETWORK` (code mort chez un client mono) + envoi `network`
 **deploy-safe** (omis en mono pour les callables → compatible functions non redéployées).
 
-### Dépendance `canEditBalances`
-État actuel de TAOFIC = `false` : l'affordance d'édition est **masquée dans l'UI**, mais les
-règles Firestore restent **permissives** (legacy V1, non encore durci). Le flag pilote donc
-aujourd'hui uniquement le **masquage UI** (Phase 1).
-
-`cashier.canEditBalances: false` **avec enforcement serveur strict** (Phase 3) implique de
-router toutes les écritures de solde (y compris celles des flux de transaction) via des
-**callables auditées** : une règle Firestore ne distingue pas le chemin de code, donc tant
-qu'un writer client subsiste, la règle doit rester permissive. Passer TAOFIC à un enforcement
-strict serait un **changement serveur délibéré** (hors « extraire sans changer »), à décider
-séparément — ça fermerait au passage la faille networkBalances direct-write.
+### Autorité serveur sur les soldes
+Les règles refusent toute écriture client dans `drafts`, `history` et `networkBalances`.
+`storeTransactionCommand` relit le profil et la boutique, puis écrit le document métier,
+les soldes et l'audit dans une transaction atomique. L'initialisation crée exclusivement
+des soldes à zéro. `cashier.canEditBalances` est imposé par la Function pour toute saisie
+manuelle ; il vaut `false` pour C2EGF.
 
 ## 5. Commits & mise à jour de tous les clients
 
@@ -174,11 +169,9 @@ ce qui était figé — on ne modifie jamais le runtime d'un client en productio
 | **0** | Schéma de profil + `_pilot` + `taofic_ajagbe` + résolveur | Aucun | ✅ Fait |
 | **1** | Front : `NETWORK_OPTIONS`, `TRANSACTION_TYPES`, `PAYMENT_METHODS`, `VISIBLE_NETWORK_CARDS`, `DEALER_NETWORK` dérivent du profil (UI TAOFIC identique, prouvé par tc-083) | Front | ✅ Fait |
 | **2** | Générateur `firestore.rules` depuis le profil (diff nul pour TAOFIC) | Aucun | ✅ Fait |
-| **3** | Dealer multi-réseaux du profil (règles + functions + front) | Règles+functions, nouveau projet | ✅ Dealer multi-réseaux **complet** (serveur + front). **Reste hors dealer** : enforcement serveur `canEditBalances:false` + migration |
+| **3** | Dealer multi-réseaux + autorité serveur des mouvements boutique | Règles+functions, nouveau projet | ✅ Complet : écritures financières directes fermées, mouvements audités par callable |
 | **4** | Branding paramétré + script `deploy-client` + checklist onboarding | Front | 🔶 Checklist onboarding faite (§6). **Branding paramétré ✅** (`src/constants/branding.js` runtime + `vite.config.js` build-time dérivent de `profile.branding` ; défaut AKAYIS ⇒ TAOFIC identique, prouvé par tc-092). **Reste** : script `deploy-client` |
 
-> Reste **non encore câblé** (rattaché à des phases dédiées, car touchant plusieurs couches) :
-> le **masquage UI de l'édition des soldes** (`cashier.canEditBalances`, à traiter avec son
-> enforcement Phase 3). Le **branding** (`branding`) est désormais câblé (runtime + build-time) ;
+> Le **branding** (`branding`) est désormais câblé (runtime + build-time) ;
 > il ne reste qu'à **remplacer les images de logo** par client (`public/akayis-*.svg|png` — actifs,
 > pas du texte) lors de l'onboarding.

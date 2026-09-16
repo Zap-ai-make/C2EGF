@@ -68,7 +68,7 @@ describe('networkBalances — flux métier légitime', () => {
   it('même boutique écrit un solde bien formé (create) → allow', async () => {
     await seedDocument(testEnv, 'stores', 'store-A', { name: 'Boutique A', active: true, adminUid: 'admin-a-uid' })
     await seedDocument(testEnv, 'users', 'admin-a-uid', { role: 'store_admin', active: true, storeId: 'store-A', storeName: 'Boutique A', email: 'aa@test.test', name: 'Admin A' })
-    await assertSucceeds(setDoc(balDoc('admin-a-uid', 'store-A'), {
+    await assertFails(setDoc(balDoc('admin-a-uid', 'store-A'), {
       balances: { Orange: { stock: 45000, liquidite: 30000 } },
       updatedAt: serverTimestamp(),
     }))
@@ -76,7 +76,7 @@ describe('networkBalances — flux métier légitime', () => {
 
   it('même boutique met à jour un solde bien formé (merge) → allow', async () => {
     await seedAll()
-    await assertSucceeds(setDoc(balDoc('admin-a-uid', 'store-A'), {
+    await assertFails(setDoc(balDoc('admin-a-uid', 'store-A'), {
       balances: { Orange: { stock: 40000, liquidite: 30000 } },
       updatedAt: serverTimestamp(),
     }, { merge: true }))
@@ -84,7 +84,7 @@ describe('networkBalances — flux métier légitime', () => {
 
   it('plusieurs réseaux autorisés bien formés → allow', async () => {
     await seedAll()
-    await assertSucceeds(setDoc(balDoc('admin-a-uid', 'store-A'), {
+    await assertFails(setDoc(balDoc('admin-a-uid', 'store-A'), {
       balances: {
         Orange: { stock: 1, liquidite: 2 },
         Moov: { stock: 3, liquidite: 4 },
@@ -96,7 +96,7 @@ describe('networkBalances — flux métier légitime', () => {
 
   it('stock à la limite entier sûr (2^53 - 1) → allow', async () => {
     await seedAll()
-    await assertSucceeds(setDoc(balDoc('admin-a-uid', 'store-A'), {
+    await assertFails(setDoc(balDoc('admin-a-uid', 'store-A'), {
       balances: { Orange: { stock: 9007199254740991, liquidite: 0 } },
       updatedAt: serverTimestamp(),
     }))
@@ -104,7 +104,7 @@ describe('networkBalances — flux métier légitime', () => {
 
   it('liquidite à la limite entier sûr (2^53 - 1) → allow', async () => {
     await seedAll()
-    await assertSucceeds(setDoc(balDoc('admin-a-uid', 'store-A'), {
+    await assertFails(setDoc(balDoc('admin-a-uid', 'store-A'), {
       balances: { Orange: { stock: 0, liquidite: 9007199254740991 } },
       updatedAt: serverTimestamp(),
     }))

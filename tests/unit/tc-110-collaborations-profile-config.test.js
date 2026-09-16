@@ -32,7 +32,8 @@ const storeProfilePath = resolve(__dirname, '../../functions/src/config/storePro
 // qu'un seul axe à la fois.
 const validProfile = {
   networks: { enabled: ['Orange'] },
-  transactions: { paymentMethods: ['Orange Money', 'Cash'] },
+  transactions: { types: ['Dépôt', 'Retrait'], paymentMethods: ['Orange Money', 'Cash'] },
+  cashier: { canEditBalances: false },
   collaborations: { enabled: true },
 }
 
@@ -78,7 +79,7 @@ describe('TC-110b — Méthodes de règlement des dettes', () => {
   it('Banque n’est ajoutée qu’une fois si le profil la liste déjà', () => {
     const withBank = {
       ...validProfile,
-      transactions: { paymentMethods: ['Orange Money', 'Banque'] },
+      transactions: { types: ['Dépôt', 'Retrait'], paymentMethods: ['Orange Money', 'Banque'] },
     }
     expect(generateStoreProfileFile(withBank))
       .toContain("export const DEBT_SETTLEMENT_METHODS = ['Orange Money', 'Banque']")

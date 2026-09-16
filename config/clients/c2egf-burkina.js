@@ -33,6 +33,12 @@ export const c2egfProfile = Object.freeze({
     theme: 'c2egf',
   }),
 
+  // Les boutiques C2EGF sont admises par le gérant ; aucun internaute ne peut
+  // s'auto-enrôler et obtenir accès au répertoire clients partagé.
+  onboarding: Object.freeze({
+    selfRegistration: false,
+  }),
+
   // ── Réseaux boutique : 1 seul (Orange) ─────────────────────────────────────
   networks: Object.freeze({
     enabled: ['Orange'],

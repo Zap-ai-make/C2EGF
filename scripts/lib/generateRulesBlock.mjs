@@ -27,11 +27,17 @@ export function generateProfileRulesBlock(profile, indent = '    ') {
   }
   // Réseaux échappés en littéraux de règles (ex. ['Orange', 'Moov']).
   const list = networks.map((n) => `'${String(n)}'`).join(', ')
+  const selfRegistration = profile?.onboarding?.selfRegistration
+  if (typeof selfRegistration !== 'boolean') {
+    throw new Error('Profil invalide : onboarding.selfRegistration doit être un booléen.')
+  }
 
   return [
     `${indent}${RULES_BLOCK_START}`,
     `${indent}// Réseaux du circuit dealer autorisés pour ce client (depuis profil.dealer.networks).`,
     `${indent}function profileDealerNetworks() { return [${list}]; }`,
+    `${indent}// Admission publique des boutiques (depuis profil.onboarding.selfRegistration).`,
+    `${indent}function profileAllowsSelfRegistration() { return ${selfRegistration}; }`,
     `${indent}${RULES_BLOCK_END}`,
   ].join('\n')
 }

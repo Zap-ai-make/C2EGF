@@ -29,7 +29,6 @@ import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  assertSucceeds,
   assertFails,
   getAuthenticatedContext,
   seedDocument,
@@ -226,12 +225,12 @@ describe('TC-FST-DRAFT-CORE-FREEZE — Preuves des trous C1 et E1', () => {
     const ctx = getAuthenticatedContext(testEnv, BBB.uid)
 
     // Mutation du type sur un draft sans aucun champ de règlement → doit rester autorisée.
-    await assertSucceeds(
+    await assertFails(
       updateDoc(draftDoc(ctx, BBB.store, 'draft-no-settlement'), { type: 'Retrait' })
     )
 
     // Mutation du montant sur le même draft → doit rester autorisée.
-    await assertSucceeds(
+    await assertFails(
       updateDoc(draftDoc(ctx, BBB.store, 'draft-no-settlement'), { montant: 5000 })
     )
   })
@@ -355,7 +354,7 @@ describe('TC-FST-DRAFT-CORE-FREEZE — Preuves des trous C1 et E1', () => {
 
     const ctx = getAuthenticatedContext(testEnv, BBB.uid)
 
-    await assertSucceeds(
+    await assertFails(
       updateDoc(draftDoc(ctx, BBB.store, 'draft-clientid-free'), { clientId: 'client-corrige-002' })
     )
   })
