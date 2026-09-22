@@ -6,16 +6,18 @@
 
 Trois constats étaient classés **CRITIQUES** : soldes boutique arbitraires sans audit, auto-enrôlement donnant accès au fichier clients global, et suppression/recréation de brouillons partiellement réglés. Ils ont été corrigés et leurs six reproductions sur émulateur sont devenues des assertions de refus. Aucune exploitation d'un système distant n'a été effectuée.
 
-Un défaut fonctionnel concret s'y ajoute : l'historique créé par une collaboration ne porte pas `storeId`, alors que l'abonnement de la boutique filtre sur ce champ. Autre défaut confirmé : un approvisionnement dealer envoyé deux fois est comptabilisé deux fois. Les tests existants passent malgré ces scénarios.
+Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de collaboration est désormais visible par la requête filtrée de la boutique, et les quatre commandes de mouvement dealer résistent aux répétitions réseau grâce à une clé d'intention atomique.
 
 **La meilleure évolution est progressive : rendre le serveur seul responsable des mouvements financiers, terminer le pilotage par profil, puis simplifier les couches existantes.** Une réécriture globale ou une migration massive vers TypeScript n'est pas justifiée par cet audit.
 
-### État de remédiation — lot 1 terminé le 16 septembre 2026
+### État de remédiation — lots 1 et 3A terminés
 
 - **SEC-01 corrigé** : la nouvelle Function `storeTransactionCommand` relit l'acteur et la boutique, valide le profil C2EGF, puis écrit soldes, mouvement et audit dans une transaction. L'initialisation reste limitée à zéro et l'édition manuelle est refusée par le profil C2EGF.
 - **SEC-02 corrigé** : `onboarding.selfRegistration` est un axe de profil. Il vaut `false` pour C2EGF ; les règles refusent l'auto-création de boutique/profil et l'interface ne propose plus l'inscription. Les accès passent par le gérant.
 - **SEC-03 corrigé** : les écritures directes sur brouillons, historiques et soldes sont refusées. La suppression locale d'un brouillon portant des champs de règlement est aussi bloquée. L'annulation serveur est terminale, auditée et n'applique la contre-écriture qu'une fois.
-- Branche locale : `codex/audit-critical-remediation`. Correctifs : commit `99e25b5`. Aucun déploiement, accès à un projet réel, script administrateur destructif ou push distant.
+- **BUG-01 / BUG-02 corrigés** : schéma d'historique canonique pour les collaborations et idempotence transactionnelle des mouvements dealer.
+- **SEC-04 / SEC-05 corrigés** : profil C2EGF imposé au serveur et activité de la boutique exigée dans les règles et commandes sensibles.
+- Branches locales : `codex/audit-critical-remediation` (commit `99e25b5`) puis `codex/audit-important-business` (commit `a66250e`). Aucun déploiement, accès à un projet réel, script administrateur destructif ou push distant.
 
 ## Périmètre, méthode et limites
 
@@ -34,12 +36,12 @@ Un défaut fonctionnel concret s'y ajoute : l'historique créé par une collabor
 | `npm run lint` | Réussi après remédiation ; attention à son périmètre, QUA-02 |
 | `npm run test:unit` | **84 fichiers, 2 398 tests réussis** |
 | `npm run test:components` | **18 fichiers, 305 tests réussis** |
-| Suite `vitest.firestore.config.js`, émulateur `demo-akayis-test` | **20 fichiers, 432 tests réussis** |
-| Suite `vitest.functions.config.js`, émulateur `demo-akayis-test` | **12 fichiers, 297 tests réussis** |
-| `npm run build` | Réussi ; bundle principal 1 609,98 kB, gzip 430,02 kB ; chunk xlsx 429,49 kB ; précache PWA 2 147,98 KiB |
+| Suite `vitest.firestore.config.js`, émulateur `demo-akayis-test` | **20 fichiers, 433 tests réussis** |
+| Suite `vitest.functions.config.js`, émulateur `demo-akayis-test` | **12 fichiers, 304 tests réussis** |
+| `npm run build` | Réussi ; bundle principal 1 610,90 kB, gzip 430,28 kB ; chunk xlsx 429,49 kB ; précache PWA 2 148,88 KiB |
 | Générateurs règles et Functions, `--client c2egf_burkina --check` | Les trois artefacts générés correspondent au profil |
 | `node audit/reproduce-rules.mjs` | **6 scénarios fermés** : écritures directes et auto-enrôlement refusés |
-| `node audit/reproduce-backend.mjs` | **3 scénarios confirmés** : historique invisible, méthode hors profil, double approvisionnement |
+| `audit/reproduce-backend.mjs` | Preuve d'exposition initiale conservée ; fermeture vérifiée par `tc-060`, `tc-067`, `tc-070`, `tc-072` et `tc-112` |
 | `node audit/scan-secrets.mjs` | **907 blobs texte Git examinés ; aucune signature détectée** |
 | `node audit/visual-check.mjs` | Authentification, boutique et dealer capturés après remédiation ; vues inspectées en **1 440 px et 390 px**. Aucun lien d'auto-inscription C2EGF ne subsiste |
 | `npm audit --json` | Zéro alerte renvoyée par l'environnement ; **insuffisant pour conclure**, voir SEC-06 et les avis officiels SheetJS |
@@ -82,21 +84,23 @@ Le scan de secrets couvre des signatures de clés privées et jetons connus dans
 
 ### SEC-04 — Profil C2EGF partiellement imposé côté serveur
 
-**IMPORTANT · confirmé sur émulateur et handler · effort M.**
+**IMPORTANT · CORRIGÉ le 22 septembre 2026 · profil imposé par règles et handlers.**
 
 - Localisation : [firestore.rules:102](../firestore.rules#L102), [firestore.rules:227](../firestore.rules#L227), [addTransactionPayment.js:30](../functions/src/settlements/addTransactionPayment.js#L30), `addTransactionRefund.js`, `config/clients/c2egf-burkina.js`.
 - Les règles acceptent encore `Crédit` et des réseaux hors Orange. Les règlements utilisent une liste fixe de six méthodes. Une demande `Moov Money` est acceptée par le handler C2EGF et crédite le stock Moov, invisible dans les cartes du client. Les générateurs sont à jour : c'est leur couverture qui est incomplète, pas une dérive des fichiers générés.
 - Correction : dériver types, réseaux et méthodes serveur du profil central. Prévoir explicitement le traitement des opérations historiques d'un réseau ensuite désactivé ; ne pas les rendre impossibles à solder.
 - Test cible : nouvelle opération hors profil refusée sur API directe ; opérations autorisées et régularisation historique testées séparément.
+- Résultat : le bloc de règles généré expose les réseaux, types et méthodes du profil C2EGF ; `validTransaction` refuse les types et réseaux désactivés. Les nouveaux paiements utilisent `STORE_PAYMENT_METHODS`. Un remboursement sur une méthode retirée reste possible uniquement si le récapitulatif historique contient encore un net suffisant sur ce réseau.
 
 ### SEC-05 — Désactiver une boutique ne révoque pas ses accès serveur
 
-**IMPORTANT · confirmé sur émulateur · effort M.**
+**IMPORTANT · CORRIGÉ le 22 septembre 2026 · révocation testée sur émulateur.**
 
 - Localisation : [firestore.rules:24](../firestore.rules#L24), [firestore.rules:49](../firestore.rules#L49), [AuthContext.jsx:43](../src/context/AuthContext.jsx#L43), [dealerRequests/shared.js:173](../functions/src/dealerRequests/shared.js#L173).
 - Le front vérifie `stores/{id}.active` à la connexion ; les helpers d'autorisation utilisent surtout `users/{uid}.active`. Avec une boutique inactive mais un utilisateur encore actif, une session/API directe peut toujours écrire ses soldes. Certains flux vérifient l'activité de la boutique cible, ce qui ne constitue pas une révocation globale.
 - Correction : définir la sémantique de désactivation et l'imposer dans les règles et commandes sensibles, ou désactiver atomiquement tous les comptes concernés via un workflow contrôlé. Ne pas compter sur le seul blocage de l'écran de connexion.
 - Test cible : token existant après désactivation, lectures et écritures A/B, règlements en cours selon politique explicite.
+- Résultat : `isStoreMember` et `isStoreAdmin` exigent désormais un document boutique actif. Les commandes de transaction, règlement et transfert boutique relisent aussi cet état côté serveur. Un profil utilisateur encore actif ne conserve donc aucun accès aux données de sa boutique désactivée et ne peut plus initier de mouvement sensible.
 
 ### SEC-06 — Import Excel sur une version vulnérable et sans limite de taille
 
@@ -143,21 +147,23 @@ Le scan de secrets couvre des signatures de clés privées et jetons connus dans
 
 ### BUG-01 — La collaboration confirmée est absente de l'historique boutique
 
-**IMPORTANT · reproduit avec le vrai handler sur émulateur · effort S/M.**
+**IMPORTANT · CORRIGÉ le 22 septembre 2026 · requête réelle vérifiée sur émulateur.**
 
 - Localisation : [confirmStoreCollaboration.js:184](../functions/src/collaborations/confirmStoreCollaboration.js#L184), [historyService.js:151](../src/services/historyService.js#L151).
 - La Function écrit sous `clients/{requestingStoreId}/history` mais omet `storeId`. L'abonnement exige `where('storeId','==',activeStore.id)` : le document existe, mais la requête renvoie zéro résultat dans la reproduction.
 - Correction : établir le schéma canonique d'historique et l'appliquer à cette écriture. Prévoir une reprise contrôlée des documents déjà créés. **Avant de rendre ces lignes visibles**, empêcher leur annulation financière générique : une trace de collaboration n'a pas déplacé les soldes de la demandeuse, alors que `reverseHistoryTransactionImpact` ne distingue pas `collaborationId`.
 - Test cible : créer → confirmer → lire avec la requête réelle du front ; date et identité visibles ; aucune contre-écriture boutique pour une simple trace de collaboration.
+- Résultat : la confirmation écrit `storeId` et `storeName`, et le test interroge réellement l'historique avec `where('storeId', '==', storeId)`. La garde serveur du lot critique refuse déjà l'annulation d'une trace portant `collaborationId`.
 
 ### BUG-02 — Reprise réseau pouvant doubler un mouvement dealer
 
-**IMPORTANT · approvisionnement reproduit sur émulateur · effort M.**
+**IMPORTANT · CORRIGÉ le 22 septembre 2026 · répétition et concurrence vérifiées.**
 
 - Localisation : [replenishDealerInventory.js:28](../functions/src/storeTransfers/replenishDealerInventory.js#L28), `decreaseDealerInventory.js:30`, `createStoreDealerTransfer.js:29`, `createPartnerDeposit.js`.
 - Une même requête d'approvisionnement de 100, appliquée deux fois, produit 200. La transaction garantit l'atomicité de chaque appel, pas l'unicité de l'intention. Si la réponse est perdue après commit, une nouvelle tentative peut doubler le mouvement. Les autres commandes citées présentent la même absence de clé à la lecture ; elles n'ont pas toutes été rejouées dynamiquement.
 - Correction : identifiant stable par intention, enregistré avec acteur/payload/résultat dans la transaction. Même clé et même payload renvoient le résultat ; payload différent produit un conflit. Réutiliser le principe déjà présent pour règlements et dettes.
 - Test cible : réponse perdue après commit, appels concurrents, payload modifié, nouvelle intention distincte.
+- Résultat : les quatre commandes citées exigent une clé stable et écrivent un reçu atomique avec le mouvement. Une répétition identique renvoie le résultat initial, une réutilisation avec un autre payload produit `IDEMPOTENCY_CONFLICT`, et deux appels concurrents ne créent qu'un débit et une trace. Les formulaires conservent la clé après une erreur réseau tant que l'intention ne change pas.
 
 ### BUG-03 — Rapports plafonnés et historique sans ordre chronologique global
 
@@ -303,14 +309,14 @@ Les thèmes et composants sémantiques existants constituent un socle utile. Que
 |---|---|---|
 | 1 — sécurité critique | SEC-01, SEC-02, SEC-03 ; caractériser avant modification, fermer les admissions non autorisées et la suppression/recréation ; migration serveur des mouvements par sous-lots | Reproductions d'exposition transformées en tests de refus ; parcours légitimes A/B conservés ; audit et concurrence vérifiés |
 | 2 — autres critiques | Aucun autre critique confirmé dans ce bilan | Revoir ce lot si les vérifications d'exploitation révèlent un critique |
-| 3A — importants métier | BUG-01 avec garde anti-annulation de trace, BUG-02, SEC-04, SEC-05 | Scénarios end-to-end des requêtes réelles et reprises réseau |
+| 3A — importants métier | BUG-01 avec garde anti-annulation de trace, BUG-02, SEC-04, SEC-05 | ✅ Terminé : requêtes réelles, reprise réseau, concurrence, profil et révocation testés |
 | 3B — importants sécurité/fiabilité | SEC-06 à SEC-09, QUA-01, BUG-04, UI-01 | Imports bornés, isolation navigateur, erreurs visibles, modales utilisables au clavier |
 | 3C — importants données/exploitation | BUG-03, BUG-05, PERF-01/02, QUA-02, DOC-01 | Totaux complets, journée métier stable, mesures avant/après, contrôles automatisés et contrats cohérents |
 | Backlog — mineurs | QUA-03/04/05, cohérence des tokens | Petits refactors sans changement métier ; suppression démontrée et réversible |
 
 Une correction de sécurité et un refactor esthétique ne doivent pas partager un lot. Toute restriction variable par client doit être nommée dans `_pilot.js`, dérivée pour les couches concernées et testée avec au moins le pilote et C2EGF. Le typage progressif/JSDoc peut renforcer les payloads et documents aux frontières ; éviter de migrer tout le dépôt avant d'avoir fermé les failles.
 
-**Point d'arrêt ADOPTION.md : le lot 1 critique est terminé et vérifié. Le lot 3A reste soumis à validation avant exécution.**
+**Point d'arrêt ADOPTION.md : les lots 1 et 3A sont terminés et vérifiés. Le lot 3B reste soumis à validation avant exécution.**
 
 ## 8. Reproduction et pièces de travail
 
