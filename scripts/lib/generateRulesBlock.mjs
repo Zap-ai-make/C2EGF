@@ -3,11 +3,7 @@
  * à partir d'un profil client. PUR (aucune I/O) → testable et réutilisé par le CLI
  * scripts/generate-rules.mjs.
  *
- * Phase 2 (règles seules) : seul l'axe DEALER est paramétré pour l'instant
- *   • profileDealerNetworks() = réseaux du circuit dealer (profil.dealer.networks)
- * Les autres axes des règles (types de transaction, réseaux des soldes, édition des
- * soldes) restent volontairement permissifs (surensemble) — un resserrement est une
- * décision opt-in par client, hors de ce générateur. Voir docs/client-profiles.md.
+ * Les axes métier utilisés dans les règles sont tous dérivés du profil actif.
  */
 
 export const RULES_BLOCK_START =
@@ -27,6 +23,15 @@ export function generateProfileRulesBlock(profile, indent = '    ') {
   }
   // Réseaux échappés en littéraux de règles (ex. ['Orange', 'Moov']).
   const list = networks.map((n) => `'${String(n)}'`).join(', ')
+  const storeNetworks = profile?.networks?.enabled
+  const transactionTypes = profile?.transactions?.types
+  const paymentMethods = profile?.transactions?.paymentMethods
+  for (const [name, values] of Object.entries({ storeNetworks, transactionTypes, paymentMethods })) {
+    if (!Array.isArray(values) || values.length === 0) {
+      throw new Error(`Profil invalide : ${name} doit être une liste non vide.`)
+    }
+  }
+  const quote = values => values.map(value => `'${String(value)}'`).join(', ')
   const selfRegistration = profile?.onboarding?.selfRegistration
   if (typeof selfRegistration !== 'boolean') {
     throw new Error('Profil invalide : onboarding.selfRegistration doit être un booléen.')
@@ -36,6 +41,10 @@ export function generateProfileRulesBlock(profile, indent = '    ') {
     `${indent}${RULES_BLOCK_START}`,
     `${indent}// Réseaux du circuit dealer autorisés pour ce client (depuis profil.dealer.networks).`,
     `${indent}function profileDealerNetworks() { return [${list}]; }`,
+    `${indent}// Axes boutique autorisés pour ce client.`,
+    `${indent}function profileStoreNetworks() { return [${quote(storeNetworks)}]; }`,
+    `${indent}function profileTransactionTypes() { return [${quote(transactionTypes)}]; }`,
+    `${indent}function profilePaymentMethods() { return [${quote(paymentMethods)}]; }`,
     `${indent}// Admission publique des boutiques (depuis profil.onboarding.selfRegistration).`,
     `${indent}function profileAllowsSelfRegistration() { return ${selfRegistration}; }`,
     `${indent}${RULES_BLOCK_END}`,

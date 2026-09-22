@@ -33,6 +33,7 @@ async function clearFirestoreEmulator() {
   if (!res.ok) throw new Error(`Impossible de vider l'émulateur : HTTP ${res.status}`)
 }
 beforeEach(async () => { await clearFirestoreEmulator() })
+let intentSequence = 0
 
 const DEALER_UID = 'dealer-uid'
 const STORE_ADMIN_UID = 'store-admin-uid'
@@ -42,8 +43,34 @@ const STORE_ADMIN_PROFILE = { role: 'store_admin', active: true, storeId: 'store
 const PARTNER = { partnerId: '54525263', partnerNom: 'KABORE', partnerPrenom: 'HAMIDOU', partnerNumeroDA: '54525263', partnerLocalite: 'OUAGA' }
 const seedUser = (uid, p) => db.doc(`users/${uid}`).set(p)
 const seedDealerBal = (orange) => db.doc(`dealerBalances/${DEALER_UID}`).set({ balances: { Orange: orange } })
-const req = (uid, data) => ({ auth: { uid, token: {} }, data })
+const req = (uid, data) => ({
+  auth: { uid, token: {} },
+  data: data && 'partnerId' in data && !('idempotencyKey' in data)
+    ? { ...data, idempotencyKey: `intent_070_${++intentSequence}` }
+    : data,
+})
 async function expectError(promise, code) { await expect(promise).rejects.toMatchObject({ code }) }
+
+describe('TC-070-ID — idempotence partenaire', () => {
+  it('un dépôt partenaire rejoué ne déplace les cuves qu’une fois', async () => {
+    await seedUser(DEALER_UID, DEALER_PROFILE)
+    await seedDealerBal({ stock: 40000, liquidite: 10000 })
+    const request = req(DEALER_UID, { ...PARTNER, amount: 15000, idempotencyKey: 'same_partner_deposit' })
+    const first = await createPartnerDepositHandler(request, { db, FieldValue })
+    const replay = await createPartnerDepositHandler(request, { db, FieldValue })
+    expect(replay).toMatchObject({ depositId: first.depositId, newStock: 25000, newLiquidite: 25000, idempotent: true })
+    expect((await db.collection('dealerPartnerDeposits').get()).size).toBe(1)
+    expect((await db.collection(`dealerBalances/${DEALER_UID}/auditLogs`).get()).size).toBe(1)
+  })
+
+  it('la même intention partenaire avec un autre montant est refusée', async () => {
+    await seedUser(DEALER_UID, DEALER_PROFILE)
+    await seedDealerBal({ stock: 40000, liquidite: 10000 })
+    const key = 'conflict_partner_deposit'
+    await createPartnerDepositHandler(req(DEALER_UID, { ...PARTNER, amount: 1000, idempotencyKey: key }), { db, FieldValue })
+    await expectError(createPartnerDepositHandler(req(DEALER_UID, { ...PARTNER, amount: 2000, idempotencyKey: key }), { db, FieldValue }), 'IDEMPOTENCY_CONFLICT')
+  })
+})
 
 describe('TC-070 — createPartnerDeposit', () => {
   it('[PD-01] succès : stock −M, liquidité +M, dépôt confirmé, audit', async () => {

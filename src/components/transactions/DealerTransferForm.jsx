@@ -22,6 +22,7 @@ import StatusBadge from '../ui/StatusBadge'
 import RejectionRemarkButton from '../ui/RejectionRemarkButton'
 import Toast from '../Toast'
 import { formatDateTime as formatDate } from '../../utils/formatters'
+import { createIdempotencyKey } from '../../utils/idempotencyKey'
 
 /**
  * Chemin dealer du formulaire de transactions boutique.
@@ -70,7 +71,7 @@ function DealerTransferForm() {
 
   const openConfirm = useCallback(() => {
     if (!validation.ok) { showToast(validation.reason, 'error'); return }
-    setPending({ transferType, amount: validation.value, network: activeNetwork })
+    setPending({ transferType, amount: validation.value, network: activeNetwork, idempotencyKey: createIdempotencyKey() })
   }, [validation, transferType, activeNetwork, showToast])
 
   const confirmSubmit = useCallback(async () => {
@@ -81,7 +82,12 @@ function DealerTransferForm() {
     setIsSubmitting(true)
     try {
       // network omis en mono (deploy-safe : le serveur applique le défaut mono-réseau).
-      await createStoreDealerTransfer({ transferType: pending.transferType, amount: pending.amount, network: IS_DEALER_MULTI_NETWORK ? pending.network : undefined })
+      await createStoreDealerTransfer({
+        transferType: pending.transferType,
+        amount: pending.amount,
+        network: IS_DEALER_MULTI_NETWORK ? pending.network : undefined,
+        idempotencyKey: pending.idempotencyKey,
+      })
       showToast('Envoi au dealer effectué. En attente de validation.', 'success')
       setAmount('')
       setPending(null)

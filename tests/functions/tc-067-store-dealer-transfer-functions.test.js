@@ -42,6 +42,7 @@ async function clearFirestoreEmulator() {
   if (!res.ok) throw new Error(`Impossible de vider l'émulateur : HTTP ${res.status}`)
 }
 
+let intentSequence = 0
 beforeEach(async () => { await clearFirestoreEmulator() })
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -85,13 +86,80 @@ function basePendingTransfer(overrides = {}) {
 }
 
 const seedUser = (uid, data) => db.doc(`users/${uid}`).set(data)
-const seedBalance = (storeId, data) => db.doc(`clients/${storeId}/networkBalances/current`).set(data)
+const seedBalance = (storeId, data) => Promise.all([
+  db.doc(`stores/${storeId}`).set({ name: 'Boutique A', active: true }),
+  db.doc(`clients/${storeId}/networkBalances/current`).set(data),
+])
 const seedTransfer = (id, data) => db.doc(`storeDealerTransfers/${id}`).set(data)
-const makeRequest = (uid, data) => ({ auth: uid ? { uid, token: {} } : null, data: data ?? {} })
+const makeRequest = (uid, data) => {
+  const payload = data ?? {}
+  const financial = ('transferType' in payload || 'resource' in payload) && !('idempotencyKey' in payload)
+  return {
+    auth: uid ? { uid, token: {} } : null,
+    data: financial ? { ...payload, idempotencyKey: `intent_067_${++intentSequence}` } : payload,
+  }
+}
 
 async function expectError(promise, code) {
   await expect(promise).rejects.toMatchObject({ code })
 }
+
+describe('TC-067-ID — idempotence des mouvements dealer', () => {
+  it('deux créations concurrentes avec la même intention ne débitent la boutique qu’une fois', async () => {
+    await seedUser(STORE_ADMIN_UID, STORE_ADMIN_PROFILE)
+    await seedUser(DEALER_UID, DEALER_PROFILE)
+    await seedBalance(STORE_A, BASE_BALANCE)
+    const request = makeRequest(STORE_ADMIN_UID, {
+      transferType: 'return_stock', amount: 5000, idempotencyKey: 'same_store_transfer',
+    })
+
+    const results = await Promise.all([
+      createStoreDealerTransferHandler(request, { db, FieldValue }),
+      createStoreDealerTransferHandler(request, { db, FieldValue }),
+    ])
+
+    expect(results[0].transferId).toBe(results[1].transferId)
+    expect(results.some(result => result.idempotent)).toBe(true)
+    expect((await db.doc(`clients/${STORE_A}/networkBalances/current`).get()).data().balances.Orange.stock).toBe(45000)
+    expect((await db.collection('storeDealerTransfers').get()).size).toBe(1)
+    expect((await db.collection(`clients/${STORE_A}/auditLogs`).get()).size).toBe(1)
+  })
+
+  it('une intention de transfert réutilisée avec un autre montant est refusée', async () => {
+    await seedUser(STORE_ADMIN_UID, STORE_ADMIN_PROFILE)
+    await seedUser(DEALER_UID, DEALER_PROFILE)
+    await seedBalance(STORE_A, BASE_BALANCE)
+    const key = 'conflict_store_transfer'
+    await createStoreDealerTransferHandler(makeRequest(STORE_ADMIN_UID, {
+      transferType: 'return_stock', amount: 5000, idempotencyKey: key,
+    }), { db, FieldValue })
+    await expectError(createStoreDealerTransferHandler(makeRequest(STORE_ADMIN_UID, {
+      transferType: 'return_stock', amount: 6000, idempotencyKey: key,
+    }), { db, FieldValue }), 'IDEMPOTENCY_CONFLICT')
+  })
+
+  it('une boutique désactivée ne peut plus initier de transfert', async () => {
+    await seedUser(STORE_ADMIN_UID, STORE_ADMIN_PROFILE)
+    await seedUser(DEALER_UID, DEALER_PROFILE)
+    await seedBalance(STORE_A, BASE_BALANCE)
+    await db.doc(`stores/${STORE_A}`).update({ active: false })
+    await expectError(createStoreDealerTransferHandler(makeRequest(STORE_ADMIN_UID, {
+      transferType: 'return_stock', amount: 5000,
+    }), { db, FieldValue }), 'STORE_INACTIVE')
+  })
+
+  it('un approvisionnement rejoué conserve le même solde et une seule trace', async () => {
+    await seedUser(DEALER_UID, DEALER_PROFILE)
+    const request = makeRequest(DEALER_UID, {
+      resource: 'stock', amount: 4000, idempotencyKey: 'same_replenishment',
+    })
+    const first = await replenishDealerInventoryHandler(request, { db, FieldValue })
+    const replay = await replenishDealerInventoryHandler(request, { db, FieldValue })
+    expect(first.newBalance).toBe(4000)
+    expect(replay).toMatchObject({ newBalance: 4000, idempotent: true })
+    expect((await db.collection(`dealerBalances/${DEALER_UID}/auditLogs`).get()).size).toBe(1)
+  })
+})
 
 // ── §CR — createStoreDealerTransferHandler ───────────────────────────────────
 describe('TC-067-CR — create', () => {

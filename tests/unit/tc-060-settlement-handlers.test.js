@@ -51,7 +51,7 @@ function makeRequest(data, uid = ACTOR_UID) {
   return { auth: { uid }, data }
 }
 
-function makeDb({ draftData = BASE_DRAFT, profileData = PROFILE_ADMIN, balanceData = BASE_BALANCES, settlementExists = false, settlementData = null } = {}) {
+function makeDb({ draftData = BASE_DRAFT, profileData = PROFILE_ADMIN, storeData = { active: true }, balanceData = BASE_BALANCES, settlementExists = false, settlementData = null } = {}) {
   const written = []
 
   const makeTxSnap = (data, exists = true) => ({ exists: !!data && exists, data: () => data })
@@ -73,6 +73,7 @@ function makeDb({ draftData = BASE_DRAFT, profileData = PROFILE_ADMIN, balanceDa
     get:    vi.fn(async (ref) => {
       // Relecture du profil dans la transaction
       if (ref._path && ref._path.startsWith('users/')) return makeTxSnap(profileData)
+      if (ref._path && ref._path.startsWith('stores/')) return makeTxSnap(storeData)
       return makeTxSnap(null, false)
     }),
     getAll: txGetAll,
@@ -85,6 +86,7 @@ function makeDb({ draftData = BASE_DRAFT, profileData = PROFILE_ADMIN, balanceDa
     _path: path,
     get:   async () => {
       if (path.startsWith('users/')) return makeTxSnap(profileData)
+      if (path.startsWith('stores/')) return makeTxSnap(storeData)
       return makeTxSnap(null, false)
     },
   })
@@ -146,6 +148,26 @@ describe('TC-060-A — addTransactionPayment : validation entrées', () => {
         { db, FieldValue }
       )
     ).rejects.toMatchObject({ code: 'INVALID_PAYMENT_METHOD' })
+  })
+
+  it('rejette une méthode connue mais absente du profil C2EGF', async () => {
+    const { db } = makeDb()
+    await expect(
+      addTransactionPaymentHandler(
+        makeRequest({ draftId: DRAFT_ID, amount: 5000, paymentMethod: 'Moov Money', idempotencyKey: 'profile-method' }),
+        { db, FieldValue }
+      )
+    ).rejects.toMatchObject({ code: 'INVALID_PAYMENT_METHOD' })
+  })
+
+  it('rejette un token existant lorsque la boutique est inactive', async () => {
+    const { db } = makeDb({ storeData: { active: false } })
+    await expect(
+      addTransactionPaymentHandler(
+        makeRequest({ draftId: DRAFT_ID, amount: 5000, paymentMethod: 'Cash', idempotencyKey: 'inactive-store' }),
+        { db, FieldValue }
+      )
+    ).rejects.toMatchObject({ code: 'STORE_INACTIVE' })
   })
 
   it('rejette si profil inactif', async () => {
@@ -300,6 +322,23 @@ describe('TC-060-D — addTransactionPayment : idempotence', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('TC-060-E — addTransactionRefund : validation', () => {
+  it('autorise le remboursement d’une ancienne tranche sur un réseau retiré du profil', async () => {
+    const { db } = makeDb({
+      draftData: {
+        ...BASE_DRAFT,
+        originalAmount: 5000,
+        paidAmount: 5000,
+        refundedAmount: 0,
+        remainingAmount: 0,
+        settlementSummary: { netByNetwork: { Moov: { paid: 5000, refunded: 0 } } },
+      },
+    })
+
+    await expect(addTransactionRefundHandler(
+      makeRequest({ draftId: DRAFT_ID, amount: 1000, paymentMethod: 'Moov Money', idempotencyKey: 'legacy-moov' }),
+      { db, FieldValue },
+    )).resolves.toMatchObject({ success: true })
+  })
   it('rejette si montant dépasse le net payé', async () => {
     const { db } = makeDb({
       draftData: {

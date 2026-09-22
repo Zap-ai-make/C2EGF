@@ -70,6 +70,31 @@ export function validateTransferId(transferId) {
   return transferId.trim()
 }
 
+// Une clé représente une intention utilisateur. Elle devient une partie d'un
+// identifiant Firestore, donc son alphabet et sa taille sont strictement bornés.
+export function validateFinancialCommandKey(value) {
+  if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{8,120}$/.test(value.trim())) {
+    throw new DealerRequestError('INVALID_IDEMPOTENCY_KEY', "Clé d'idempotence invalide.")
+  }
+  return value.trim()
+}
+
+export function financialCommandReceiptRef(db, actorUid, action, key) {
+  return db.doc(`financialCommandReceipts/${actorUid}_${action}_${key}`)
+}
+
+export function replayFinancialCommand(existing, expected) {
+  for (const [field, value] of Object.entries(expected)) {
+    if (existing[field] !== value) {
+      throw new DealerRequestError(
+        'IDEMPOTENCY_CONFLICT',
+        'Cette intention a déjà été utilisée avec des paramètres différents.',
+      )
+    }
+  }
+  return { ...existing.result, idempotent: true }
+}
+
 // ── Partenaire (dénormalisé, sans impact financier) ──────────────────────────
 // On valide juste des chaînes non vides et bornées : l'identité du partenaire
 // n'affecte pas les soldes (seul l'inventaire du dealer bouge).

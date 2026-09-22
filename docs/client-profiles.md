@@ -43,7 +43,7 @@ la résolution **stricte** (qui lève) est réservée à la génération de règ
 | `onboarding.selfRegistration` | inscription publique ou provisioning gérant | Front + **Règles** |
 | `networks.enabled` | 1 → 5 réseaux boutique | Front + **Règles** + **Functions** |
 | `transactions.types` | avec / sans `Crédit` | Front + **Règles** |
-| `transactions.paymentMethods` | 2 → 6 méthodes | Front + **Functions** |
+| `transactions.paymentMethods` | 2 → 6 méthodes | Front + **Règles** + **Functions** |
 | `cashier.canEditBalances` | édition soldes par la boutique on/off | Front + **Functions** |
 | `dealer.enabled` / `dealer.networks` | dealer absent / mono / multi-réseaux | Front + **Règles** + **Functions** |
 | `collaborations.enabled` | collaborations inter-boutiques + dettes internes on/off | Front + **Functions** |
@@ -65,14 +65,15 @@ seulement masquée dans l'UI. Deux artefacts sont **générés depuis le profil*
 
 | Couche | Généré | Script |
 |---|---|---|
-| Règles | bloc `profileDealerNetworks()` dans `firestore.rules` | `scripts/generate-rules.mjs --client <id>` |
+| Règles | bloc `profile*()` dans `firestore.rules` (réseaux dealer/boutique, types, méthodes, inscription) | `scripts/generate-rules.mjs --client <id>` |
 | Functions | `functions/src/config/dealerProfile.js` (`DEALER_NETWORKS`) | `scripts/generate-functions-config.mjs --client <id>` |
 | Functions | `functions/src/config/storeProfile.js` (réseaux, types, méthodes, édition de soldes, collaborations) | idem — le même script écrit les deux |
 
-`storeProfile.js` porte les axes **boutique** dont dépendent les collaborations et les dettes
-internes. Il n'a **pas** de pendant côté règles : toutes les écritures de `storeCollaborations` et
-`internalDebts` sont déjà `if false` (CF-only), donc un client qui n'a pas souscrit au module ne
-peut rien y écrire de toute façon — l'enforcement qui compte est celui des callables.
+`storeProfile.js` porte les axes **boutique** dont dépendent les règlements, les collaborations et
+les dettes internes. Les règles dérivent aussi les réseaux, types et méthodes du profil ; les
+collections financières restent CF-only et les callables imposent les mêmes listes. Une méthode
+retirée ne peut plus recevoir de nouveau paiement, mais une tranche historique reste remboursable
+à hauteur du net déjà enregistré sur son réseau.
 `DEBT_SETTLEMENT_METHODS` = `transactions.paymentMethods` + `Banque` : une dette peut se solder par
 virement bancaire, une transaction client non.
 
@@ -120,13 +121,13 @@ manuelle ; il vaut `false` pour C2EGF.
    (garantit qu'un futur changement ne dérive pas son comportement).
 
 ### B. Génération serveur (dérivée du profil)
-4. `node scripts/generate-rules.mjs --client <id>` → régénère le bloc `profileDealerNetworks()`
-   de `firestore.rules`.
+4. `node scripts/generate-rules.mjs --client <id>` → régénère le bloc `profile*()`
+   de `firestore.rules` (réseaux, types, méthodes et inscription).
 5. `node scripts/generate-functions-config.mjs --client <id>` → régénère
-   `functions/src/config/dealerProfile.js` (`DEALER_NETWORKS`).
+   `functions/src/config/dealerProfile.js` et `functions/src/config/storeProfile.js`.
 6. Vérifier (`npm run test:unit` anti-dérive tc-084/085 + `npm run test:functions`) puis commiter.
 
-> ⚠ Les artefacts générés (`firestore.rules`, `dealerProfile.js`) sont **partagés** : ils portent
+> ⚠ Les artefacts générés (`firestore.rules`, `dealerProfile.js`, `storeProfile.js`) sont **partagés** : ils portent
 > le profil du **dernier** client généré. Avant tout déploiement, **toujours** relancer les deux
 > générateurs pour le client cible (le futur script `deploy-client` automatisera cet enchaînement).
 

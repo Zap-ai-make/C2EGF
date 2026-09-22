@@ -1,10 +1,8 @@
- # État des lieux — Adaptation du CRM au nouveau client
+# Adaptation du CRM à un nouveau client
 
-> Document de synthèse établi le 2026-07-31, à partir d'une analyse complète du code et de
-> l'historique git. **Aucune modification de code n'a été effectuée** : ce document recense ce
-> qui existe, ce qui est désactivé, et ce qu'il faudra réactiver/configurer pour le nouveau
-> client. Le client actuel (TAOFIC AJAGBE) utilise l'application en production et n'est pas
-> impacté (le nouveau client aura son propre projet Firebase).
+> Document initial établi le 2026-07-31, actualisé après la mise en place des profils clients.
+> La variation passe désormais par `config/clients/` et ses artefacts générés ; elle ne se fait
+> plus en modifiant des constantes dispersées.
 
 ## Contexte
 
@@ -21,16 +19,16 @@ réactivation se fait donc en avant, pas par retour git.
 
 ---
 
-## 1. Désactivations côté boutique — réactivation triviale (4 constantes UI)
+## 1. Axes boutique — profil central et enforcement serveur
 
-Aucun déploiement Firebase requis : ce sont des listes de données front.
+Modifier `networks.enabled`, `transactions.types` ou `transactions.paymentMethods` exige de
+régénérer les règles et la configuration Functions, puis de redéployer les couches concernées.
 
 | Fonctionnalité désactivée | Verrou | Ce qui existe derrière |
 |---|---|---|
-| Cartes réseau (Moov, Telecel, Coris, Sank masquées) | `VISIBLE_NETWORK_CARDS = ['Orange', 'Liquidite']` — `src/components/network/NetworkCardsDrawer.jsx:4` (+ grille CSS pensée pour 2 cartes, ligne 26) | Styles/couleurs des 5 réseaux (`src/constants/networkConfig.js`), soldes initialisés à 0 pour les 5 (`src/context/NetworkConfigContext.jsx:9`), règles prod acceptant les 5 (`firestore.rules:138`) |
-| Choix du réseau dans le formulaire de transaction | `NETWORK_OPTIONS = ['Orange']` — `src/utils/constants.js:12` (commentaire d'origine : « peuvent être réactivés ») | Codes agents des 5 réseaux conservés (`NETWORK_CODES` : Orange 000001, Moov 000626, Telecel 000002, Coris 000003, Sank 000004) |
-| Méthodes de règlement (remboursements) | `PAYMENT_METHODS = ['Orange Money', 'Cash']` — `src/utils/constants.js:21` | Le backend accepte déjà les 6 : `ALLOWED_METHODS` dans `functions/src/settlements/addTransactionPayment.js:28` et `addTransactionRefund.js:26` |
-| Type de transaction **Crédit** | `TRANSACTION_TYPES = [Dépôt, Retrait]` — `src/utils/constants.js:15` | Règles prod acceptent `'Crédit'` (`firestore.rules:81`) ; cycle complet : statut « Remboursé par X », paiements partiels, remboursements, annulations |
+| Cartes et choix du réseau | `networks.enabled` | Front, règles `profileStoreNetworks()`, Functions `STORE_NETWORKS` |
+| Méthodes de règlement | `transactions.paymentMethods` | Front et Functions `STORE_PAYMENT_METHODS` ; une méthode retirée reste utilisable uniquement pour rembourser une tranche historique existante |
+| Type de transaction **Crédit** | `transactions.types` | Front et règles `profileTransactionTypes()` |
 
 ## 2. Logique de remboursement inter-réseaux — complète, rien à implémenter
 

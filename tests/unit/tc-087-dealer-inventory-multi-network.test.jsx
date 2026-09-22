@@ -80,7 +80,7 @@ describe('TC-087 — DealerInventoryBar multi-réseaux', () => {
     fireEvent.change(screen.getByLabelText('Montant'), { target: { value: '4000' } })
     fireEvent.click(screen.getByTestId('dealer-adjust-submit'))
     await waitFor(() => {
-      expect(mocks.replenishDealerInventory).toHaveBeenCalledWith({ resource: 'stock', amount: '4000', network: 'Moov' })
+      expect(mocks.replenishDealerInventory).toHaveBeenCalledWith(expect.objectContaining({ resource: 'stock', amount: '4000', network: 'Moov', idempotencyKey: expect.any(String) }))
     })
     expect(mocks.decreaseDealerInventory).not.toHaveBeenCalled()
   })

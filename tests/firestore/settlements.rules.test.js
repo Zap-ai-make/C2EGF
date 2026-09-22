@@ -106,6 +106,8 @@ const SETTLEMENT_DOC = {
 }
 
 async function seedAll() {
+  await seedDocument(testEnv, 'stores', STORE_A, { name: 'Store 062 A', active: true })
+  await seedDocument(testEnv, 'stores', STORE_B, { name: 'Store 062 B', active: true })
   // Profils boutique A
   await seedDocument(testEnv, 'users', 'uid-member-062-aaa', {
     active: true, role: 'member', storeId: STORE_A, storeName: 'Store 062 A',

@@ -633,6 +633,18 @@ describe('TC-V24-NB — networkBalances V2', () => {
     const ctx = getAuthenticatedContext(testEnv, 'store-admin-b-uid')
     await assertFails(updateDoc(doc(ctx.firestore(), 'clients', 'store-A', 'networkBalances', 'current'), { balances: { Orange: 0 } }))
   })
+
+  it('[NB-09] profil actif mais boutique désactivée → lecture de son solde refusée', async () => {
+    await seedAll()
+    await seedDocument(testEnv, 'users', 'store-admin-c-uid', {
+      role: 'store_admin', active: true, storeId: 'store-inactive', name: 'Admin C', email: 'c@test.test',
+    })
+    await seedDocument(testEnv, 'clients/store-inactive/networkBalances', 'current', {
+      balances: { Orange: { stock: 1000, liquidite: 1000 } },
+    })
+    const ctx = getAuthenticatedContext(testEnv, 'store-admin-c-uid')
+    await assertFails(getDoc(doc(ctx.firestore(), 'clients', 'store-inactive', 'networkBalances', 'current')))
+  })
 })
 
 // ─────────────────────────────────────────────────────────────

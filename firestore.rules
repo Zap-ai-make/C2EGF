@@ -5,6 +5,10 @@ service cloud.firestore {
     // <<< PROFIL-GÉNÉRÉ — DÉBUT (généré par scripts/generate-rules.mjs, ne pas éditer à la main) >>>
     // Réseaux du circuit dealer autorisés pour ce client (depuis profil.dealer.networks).
     function profileDealerNetworks() { return ['Orange']; }
+    // Axes boutique autorisés pour ce client.
+    function profileStoreNetworks() { return ['Orange']; }
+    function profileTransactionTypes() { return ['Dépôt', 'Retrait']; }
+    function profilePaymentMethods() { return ['Orange Money', 'Cash']; }
     // Admission publique des boutiques (depuis profil.onboarding.selfRegistration).
     function profileAllowsSelfRegistration() { return false; }
     // <<< PROFIL-GÉNÉRÉ — FIN >>>
@@ -32,7 +36,10 @@ service cloud.firestore {
     }
 
     function isStoreMember(storeId) {
-      return hasProfile() && profile().storeId == storeId;
+      return hasProfile() &&
+        profile().storeId == storeId &&
+        exists(/databases/$(database)/documents/stores/$(storeId)) &&
+        get(/databases/$(database)/documents/stores/$(storeId)).data.active == true;
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -52,7 +59,9 @@ service cloud.firestore {
       return isActiveUser() &&
         profile().role == 'store_admin' &&
         profile().storeId is string &&
-        profile().storeId == storeId;
+        profile().storeId == storeId &&
+        exists(/databases/$(database)/documents/stores/$(storeId)) &&
+        get(/databases/$(database)/documents/stores/$(storeId)).data.active == true;
     }
 
     function isSystemManager() {
@@ -103,7 +112,8 @@ service cloud.firestore {
 
     function validTransaction(data) {
       return data.keys().hasAll(['type', 'montant', 'clientId']) &&
-             data.type in ['Dépôt', 'Depot', 'Retrait', 'Crédit', 'Credit'] &&
+             data.type in profileTransactionTypes() &&
+             (!data.keys().hasAny(['reseau']) || data.reseau in profileStoreNetworks()) &&
              data.montant is number && data.montant > 0 && data.montant == math.floor(data.montant) && data.montant <= 9007199254740991 &&
              data.clientId is string && data.clientId.size() > 0;
     }

@@ -37,6 +37,7 @@ async function clearFirestoreEmulator() {
   if (!res.ok) throw new Error(`Impossible de vider l'émulateur : HTTP ${res.status}`)
 }
 beforeEach(async () => { await clearFirestoreEmulator() })
+let intentSequence = 0
 
 const DEALER_UID = 'dealer-uid'
 const STORE_ADMIN_UID = 'store-admin-uid'
@@ -45,11 +46,34 @@ const STORE_ADMIN_PROFILE = { role: 'store_admin', active: true, storeId: 'store
 
 const seedUser = (uid, data) => db.doc(`users/${uid}`).set(data)
 const seedDealerBalance = (uid, orange) => db.doc(`dealerBalances/${uid}`).set({ balances: { Orange: orange } })
-const makeRequest = (uid, data) => ({ auth: uid ? { uid, token: {} } : null, data: data ?? {} })
+const makeRequest = (uid, data) => {
+  const payload = data ?? {}
+  return {
+    auth: uid ? { uid, token: {} } : null,
+    data: 'resource' in payload && !('idempotencyKey' in payload)
+      ? { ...payload, idempotencyKey: `intent_072_${++intentSequence}` }
+      : payload,
+  }
+}
 
 async function expectError(promise, code) {
   await expect(promise).rejects.toMatchObject({ code })
 }
+
+describe('TC-072-ID — idempotence diminution', () => {
+  it('une diminution rejouée ne débite le dealer qu’une fois', async () => {
+    await seedUser(DEALER_UID, DEALER_PROFILE)
+    await seedDealerBalance(DEALER_UID, { stock: 20000, liquidite: 5000 })
+    const request = makeRequest(DEALER_UID, {
+      resource: 'stock', amount: 5000, idempotencyKey: 'same_inventory_decrease',
+    })
+    const first = await decreaseDealerInventoryHandler(request, { db, FieldValue })
+    const replay = await decreaseDealerInventoryHandler(request, { db, FieldValue })
+    expect(first.newBalance).toBe(15000)
+    expect(replay).toMatchObject({ newBalance: 15000, idempotent: true })
+    expect((await db.collection(`dealerBalances/${DEALER_UID}/auditLogs`).get()).size).toBe(1)
+  })
+})
 
 describe('TC-072 — decreaseDealerInventory', () => {
   it('[DE-01] succès stock : débit correct, liquidité préservée, audit', async () => {

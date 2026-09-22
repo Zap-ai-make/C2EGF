@@ -15,6 +15,7 @@ import { DEALER_PARTNERS, partnerLabel, findPartner } from '../../constants/deal
 import { useDealerInventory } from '../../hooks/useDealerInventory'
 import { projeterRavitaillement, projeterOperationPartenaire } from '../../utils/cuvesApresEnvoi'
 import CuvesApresEnvoi from '../../components/dealer/CuvesApresEnvoi'
+import { createIdempotencyKey } from '../../utils/idempotencyKey'
 
 function validateAmount(raw) {
   const s = String(raw ?? '').trim()
@@ -54,6 +55,7 @@ function NewDealerRequest() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
   const submitLockRef = useRef(false)
+  const partnerIntentRef = useRef(null)
 
   // ⚠ `listAllActiveStores`, et surtout PAS `listActiveStores` : cette
   //   dernière pagine à 20, et c'est exactement ce que faisait cet écran — il
@@ -143,12 +145,17 @@ function NewDealerRequest() {
 
     try {
       if (isPartner) {
+        const partnerFingerprint = `${selectedPartnerId}:${partnerOperation}:${network}:${amountRaw.trim()}`
+        if (partnerIntentRef.current?.fingerprint !== partnerFingerprint) {
+          partnerIntentRef.current = { fingerprint: partnerFingerprint, key: createIdempotencyKey() }
+        }
         // callable → network omis en mono (deploy-safe : le serveur applique le défaut).
         await createPartnerDeposit({
           partner: findPartner(selectedPartnerId),
           amount: parseDealerAmount(amountRaw),
           operation: partnerOperation,
           network: IS_DEALER_MULTI_NETWORK ? network : undefined,
+          idempotencyKey: partnerIntentRef.current.key,
         })
         // Le message porte le MÊME MOT que le bouton (« Confirmer » →
         // « confirmée ») et voyage dans l'état du routeur : c'est à l'arrivée

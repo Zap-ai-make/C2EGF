@@ -132,6 +132,7 @@ async function clearAuth() {
 async function seed() {
   await adminAuth.createUser({ uid: ADMIN_UID, email: ADMIN_EMAIL, password: ADMIN_PASSWORD })
   await adminDb.doc(`users/${ADMIN_UID}`).set(ADMIN_PROFILE)
+  await adminDb.doc(`stores/${STORE_ID}`).set({ name: 'Boutique 061', active: true, adminUid: ADMIN_UID })
   await adminDb.doc(`clients/${STORE_ID}/drafts/${DRAFT_ID}`).set(BASE_DRAFT)
   await adminDb.doc(`clients/${STORE_ID}/networkBalances/current`).set(INITIAL_BALANCES)
 }

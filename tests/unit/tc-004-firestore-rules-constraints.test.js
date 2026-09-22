@@ -14,7 +14,7 @@
  * Source : firestore.rules
  *   function validTransaction(data) {
  *     return data.keys().hasAll(['type', 'montant', 'clientId']) &&
- *            data.type in ['Dépôt', 'Depot', 'Retrait', 'Crédit', 'Credit'] &&
+ *            data.type in profileTransactionTypes() &&
  *            data.montant is number && data.montant > 0 && data.montant == math.floor(data.montant) &&
  *            data.clientId is string && data.clientId.size() > 0;
  *   }
@@ -68,11 +68,8 @@ const rulesContent = readFileSync(resolve(__dirname, '../../firestore.rules'), '
  * VERBATIM depuis le fichier rules, caractères accentués inclus.
  */
 const VALID_TYPES_FROM_RULES = [
-  'Dépôt',    // forme correcte avec accent
-  'Depot',    // forme sans accent (variante de compatibilité)
-  'Retrait',  // pas d'accent
-  'Crédit',   // forme correcte avec accent
-  'Credit',   // forme sans accent (variante de compatibilité)
+  'Dépôt',
+  'Retrait',
 ]
 
 /**
@@ -143,24 +140,20 @@ describe('TC-004 [firestore.rules] — Champs requis par validTransaction()', ()
 
 describe('TC-004 [firestore.rules vs helpers.js] — Types valides', () => {
   describe('firestore.rules — validTransaction() : liste des types acceptés', () => {
-    it('la liste contient exactement 5 valeurs', () => {
-      expect(VALID_TYPES_FROM_RULES).toHaveLength(5)
+    it('la liste C2EGF contient exactement les 2 types activés par le profil', () => {
+      expect(VALID_TYPES_FROM_RULES).toEqual(['Dépôt', 'Retrait'])
     })
 
-    it('contient les formes correctes avec accents', () => {
+    it('contient Dépôt et Retrait', () => {
       expect(VALID_TYPES_FROM_RULES).toContain('Dépôt')
-      expect(VALID_TYPES_FROM_RULES).toContain('Crédit')
-    })
-
-    it('contient les formes sans accent (variantes de compatibilité)', () => {
-      expect(VALID_TYPES_FROM_RULES).toContain('Depot')
-      expect(VALID_TYPES_FROM_RULES).toContain('Credit')
-    })
-
-    it('contient "Retrait" (pas de variante sans accent dans les règles)', () => {
       expect(VALID_TYPES_FROM_RULES).toContain('Retrait')
-      // Fige : 'retrait' (minuscule) n'est PAS dans la liste
       expect(VALID_TYPES_FROM_RULES).not.toContain('retrait')
+    })
+
+    it('exclut les types désactivés et les anciennes variantes de compatibilité', () => {
+      expect(VALID_TYPES_FROM_RULES).not.toContain('Crédit')
+      expect(VALID_TYPES_FROM_RULES).not.toContain('Credit')
+      expect(VALID_TYPES_FROM_RULES).not.toContain('Depot')
     })
 
     it('ne contient plus les formes UTF-8 corrompues — MASTER-SEC-007 corrigé (V2-16)', () => {
@@ -189,18 +182,18 @@ describe('TC-004 [firestore.rules vs helpers.js] — Types valides', () => {
       expect(VALID_TYPES_FROM_RULES).not.toContain('Dépot')
     })
 
-    it('"Crédit" composé NFD n\'est PAS identique à "Crédit" NFC — documenter le risque de normalisation Unicode', () => {
-      // 'Crédit' NFC (form C, U+00E9) vs forme décomposée NFD (e + U+0301)
+    it('"Dépôt" composé NFD n\'est PAS identique à "Dépôt" NFC — documenter le risque de normalisation Unicode', () => {
+      // 'Dépôt' NFC vs forme décomposée NFD.
       // En JavaScript, ces deux représentations sont des chaînes DIFFÉRENTES.
       // firestore.rules opère des comparaisons de chaînes — le comportement
       // exact dépend de la normalisation côté Firestore.
       // Ce test fige la connaissance actuelle : la forme décomposée ≠ NFC.
-      const creditNFC = 'Crédit'    // U+00E9 (forme précomposée)
-      const creditNFD = 'Crédit' // e + combining acute accent
-      expect(creditNFC).not.toBe(creditNFD)
+      const depotNFC = 'Dépôt'
+      const depotNFD = 'Dépôt'
+      expect(depotNFC).not.toBe(depotNFD)
       // La forme NFC est dans la liste ; la forme NFD ne l'est pas explicitement.
-      expect(VALID_TYPES_FROM_RULES.includes(creditNFC)).toBe(true)
-      expect(VALID_TYPES_FROM_RULES.includes(creditNFD)).toBe(false)
+      expect(VALID_TYPES_FROM_RULES.includes(depotNFC)).toBe(true)
+      expect(VALID_TYPES_FROM_RULES.includes(depotNFD)).toBe(false)
     })
   })
 

@@ -19,6 +19,9 @@ import {
   validateDealerProfile,
   readDealerBalanceAmount,
   resolveTransferNetwork,
+  validateFinancialCommandKey,
+  financialCommandReceiptRef,
+  replayFinancialCommand,
 } from './shared.js'
 import { DEALER_NETWORKS } from '../config/dealerProfile.js'
 
@@ -28,12 +31,13 @@ export async function createPartnerDepositHandler(request, { db, FieldValue, dea
 
   // ── 2. Payload ─────────────────────────────────────────────────────────────
   const payload = validateInputPayload(request.data, [
-    'partnerId', 'partnerNom', 'partnerPrenom', 'partnerNumeroDA', 'partnerLocalite', 'amount', 'operation', 'network',
+    'partnerId', 'partnerNom', 'partnerPrenom', 'partnerNumeroDA', 'partnerLocalite', 'amount', 'operation', 'network', 'idempotencyKey',
   ])
   const amount = validateTransferAmount(payload.amount)
   const operation = validatePartnerOperation(payload.operation) // 'deposit' | 'withdrawal'
   const partner = validatePartnerInput(payload)
   const network = resolveTransferNetwork(payload.network, dealerNetworks)
+  const idempotencyKey = validateFinancialCommandKey(payload.idempotencyKey)
   const isWithdrawal = operation === 'withdrawal'
 
   // ── 3. Prévalidation profil dealer ─────────────────────────────────────────
@@ -55,7 +59,17 @@ export async function createPartnerDepositHandler(request, { db, FieldValue, dea
       validateDealerProfile(txProfile)
 
       const balRef = db.doc(`dealerBalances/${actorUid}`)
-      const balSnap = await t.get(balRef)
+      const receiptRef = financialCommandReceiptRef(db, actorUid, 'partnerDeposit', idempotencyKey)
+      const [balSnap, receiptSnap] = await t.getAll(balRef, receiptRef)
+      const expected = {
+        action: 'partnerDeposit', actorUid, network, operation, amount,
+        partnerId: partner.partnerId,
+        partnerNom: partner.partnerNom,
+        partnerPrenom: partner.partnerPrenom,
+        partnerNumeroDA: partner.partnerNumeroDA,
+        partnerLocalite: partner.partnerLocalite,
+      }
+      if (receiptSnap.exists) return replayFinancialCommand(receiptSnap.data(), expected)
       const balData = balSnap.exists ? balSnap.data() : null
       const previousStock = readDealerBalanceAmount(balData, 'stock', network)
       const previousLiquidite = readDealerBalanceAmount(balData, 'liquidite', network)
@@ -97,6 +111,7 @@ export async function createPartnerDepositHandler(request, { db, FieldValue, dea
         operation,
         network,
         amount,
+        idempotencyKey,
         previousStock,
         newStock,
         previousLiquidite,
@@ -119,12 +134,15 @@ export async function createPartnerDepositHandler(request, { db, FieldValue, dea
         partnerNom: partner.partnerNom,
         network,
         amount,
+        idempotencyKey,
         previousStock, newStock,
         previousLiquidite, newLiquidite,
         createdAt: now,
       })
 
-      return { depositId: depositRef.id, operation, newStock, newLiquidite }
+      const commandResult = { depositId: depositRef.id, operation, newStock, newLiquidite }
+      t.set(receiptRef, { ...expected, result: commandResult, createdAt: now })
+      return commandResult
     })
   } catch (err) {
     if (err instanceof DealerRequestError) throw err

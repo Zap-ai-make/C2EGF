@@ -60,6 +60,9 @@ beforeEach(async () => {
 })
 
 async function seedAll() {
+  await seedDocument(testEnv, 'stores', 'store-A', { name: 'Boutique A', active: true })
+  await seedDocument(testEnv, 'stores', 'store-B', { name: 'Boutique B', active: true })
+  await seedDocument(testEnv, 'stores', 'store-C', { name: 'Boutique C', active: true })
   await seedDocument(testEnv, 'users', 'store-admin-a-uid', { role: 'store_admin', active: true, storeId: 'store-A', email: 'a@test.test', name: 'Admin A' })
   await seedDocument(testEnv, 'users', 'store-admin-b-uid', { role: 'store_admin', active: true, storeId: 'store-B', email: 'b@test.test', name: 'Admin B' })
   await seedDocument(testEnv, 'users', 'store-admin-c-uid', { role: 'store_admin', active: true, storeId: 'store-C', email: 'c@test.test', name: 'Admin C' })

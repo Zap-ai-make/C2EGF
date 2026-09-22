@@ -183,6 +183,8 @@ export async function confirmStoreCollaborationHandler(
       //   pour une opération que la boutique aurait servie sur ses propres fonds.
       const historyRef = db.collection(`clients/${requestingStoreId}/history`).doc()
       t.set(historyRef, {
+        storeId: requestingStoreId,
+        storeName: collab.requestingStoreName ?? null,
         type: operationType === 'deposit' ? 'Dépôt' : 'Retrait',
         statut: 'Validée',
         montant: amount,

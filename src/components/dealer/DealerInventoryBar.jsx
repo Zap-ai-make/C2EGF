@@ -7,6 +7,7 @@ import { formatCurrency } from '../../utils/formatCurrency'
 import { DEALER_NETWORKS, IS_DEALER_MULTI_NETWORK, estSousSeuil } from '../../constants/dealerConstants'
 import { NETWORK_CONFIG } from '../../constants/networkConfig'
 import Toast from '../Toast'
+import { createIdempotencyKey } from '../../utils/idempotencyKey'
 
 /**
  * Les cuves du dealer — stock et liquidité — et le seul endroit où on les ajuste.
@@ -123,6 +124,7 @@ function DealerInventoryBar() {
   const [amount, setAmount]         = useState('')
   const [submitting, setSubmitting] = useState(false)
   const submittingRef = useRef(false)
+  const intentRef = useRef(null)
   const dialogRef = useRef(null)
 
   const closeModal = useCallback(() => {
@@ -131,6 +133,7 @@ function DealerInventoryBar() {
     setResource('stock')
     setMode('increase')
     setNetwork(DEALER_NETWORKS[0])
+    intentRef.current = null
   }, [])
 
   // Échap referme, comme tout calque (DESIGN.md §11).
@@ -153,7 +156,13 @@ function DealerInventoryBar() {
     submittingRef.current = true
     setSubmitting(true)
     const isDecrease = mode === 'decrease'
-    const args = IS_DEALER_MULTI_NETWORK ? { resource, amount, network } : { resource, amount }
+    const fingerprint = `${mode}:${resource}:${network}:${amount.trim()}`
+    if (intentRef.current?.fingerprint !== fingerprint) {
+      intentRef.current = { fingerprint, key: createIdempotencyKey() }
+    }
+    const args = IS_DEALER_MULTI_NETWORK
+      ? { resource, amount, network, idempotencyKey: intentRef.current.key }
+      : { resource, amount, idempotencyKey: intentRef.current.key }
     try {
       if (isDecrease) await decreaseDealerInventory(args)
       else await replenishDealerInventory(args)

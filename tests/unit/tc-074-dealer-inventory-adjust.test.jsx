@@ -72,7 +72,7 @@ describe('TC-074 — DealerInventoryBar : modale d\'ajustement', () => {
     typeAmount('5000')
     fireEvent.click(screen.getByTestId('dealer-adjust-submit'))
     await waitFor(() => {
-      expect(mocks.replenishDealerInventory).toHaveBeenCalledWith({ resource: 'stock', amount: '5000' })
+      expect(mocks.replenishDealerInventory).toHaveBeenCalledWith(expect.objectContaining({ resource: 'stock', amount: '5000', idempotencyKey: expect.any(String) }))
     })
     expect(mocks.decreaseDealerInventory).not.toHaveBeenCalled()
   })
@@ -85,7 +85,7 @@ describe('TC-074 — DealerInventoryBar : modale d\'ajustement', () => {
     typeAmount('3000')
     fireEvent.click(screen.getByTestId('dealer-adjust-submit'))
     await waitFor(() => {
-      expect(mocks.decreaseDealerInventory).toHaveBeenCalledWith({ resource: 'liquidite', amount: '3000' })
+      expect(mocks.decreaseDealerInventory).toHaveBeenCalledWith(expect.objectContaining({ resource: 'liquidite', amount: '3000', idempotencyKey: expect.any(String) }))
     })
     expect(mocks.replenishDealerInventory).not.toHaveBeenCalled()
   })

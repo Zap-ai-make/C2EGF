@@ -82,6 +82,7 @@ function makeDb({ draftData, balanceData = BALANCES_INITIAL, settlementExists = 
   const mockTx = {
     get:    vi.fn(async (ref) => {
       if (ref._path?.startsWith('users/')) return makeTxSnap(PROFILE)
+      if (ref._path === `stores/${STORE_ID}`) return makeTxSnap({ active: true })
       return makeTxSnap(null, false)
     }),
     getAll: txGetAll,

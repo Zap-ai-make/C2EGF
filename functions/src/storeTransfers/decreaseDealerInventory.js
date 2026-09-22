@@ -19,6 +19,9 @@ import {
   validateTransferAmount,
   readDealerBalanceAmount,
   resolveTransferNetwork,
+  validateFinancialCommandKey,
+  financialCommandReceiptRef,
+  replayFinancialCommand,
 } from './shared.js'
 import { DEALER_NETWORKS } from '../config/dealerProfile.js'
 
@@ -27,10 +30,11 @@ export async function decreaseDealerInventoryHandler(request, { db, FieldValue, 
   const actorUid = validateAuthUid(request.auth?.uid)
 
   // ── 2. Payload ─────────────────────────────────────────────────────────────
-  const payload = validateInputPayload(request.data, ['resource', 'amount', 'network'])
+  const payload = validateInputPayload(request.data, ['resource', 'amount', 'network', 'idempotencyKey'])
   const resource = validateInventoryResource(payload.resource) // 'stock' | 'liquidite'
   const amount = validateTransferAmount(payload.amount)
   const network = resolveTransferNetwork(payload.network, dealerNetworks)
+  const idempotencyKey = validateFinancialCommandKey(payload.idempotencyKey)
 
   // ── 3. Prévalidation profil dealer ─────────────────────────────────────────
   const profileSnap = await db.doc(`users/${actorUid}`).get()
@@ -51,7 +55,10 @@ export async function decreaseDealerInventoryHandler(request, { db, FieldValue, 
       validateDealerProfile(txProfile)
 
       const balRef = db.doc(`dealerBalances/${actorUid}`)
-      const balSnap = await t.get(balRef)
+      const receiptRef = financialCommandReceiptRef(db, actorUid, 'decrease', idempotencyKey)
+      const [balSnap, receiptSnap] = await t.getAll(balRef, receiptRef)
+      const expected = { action: 'decrease', actorUid, network, resource, amount }
+      if (receiptSnap.exists) return replayFinancialCommand(receiptSnap.data(), expected)
       const previousBalance = readDealerBalanceAmount(balSnap.exists ? balSnap.data() : null, resource, network)
       const newBalance = previousBalance - amount
       if (newBalance < 0) {
@@ -75,17 +82,21 @@ export async function decreaseDealerInventoryHandler(request, { db, FieldValue, 
         network,
         resource,
         amount,
+        idempotencyKey,
         previousBalance,
         newBalance,
         createdAt: now,
       })
 
-      return { previousBalance, newBalance }
+      const commandResult = { previousBalance, newBalance }
+      t.set(receiptRef, { ...expected, result: commandResult, createdAt: now })
+
+      return commandResult
     })
   } catch (err) {
     if (err instanceof DealerRequestError) throw err
     throw new DealerRequestError('TRANSACTION_FAILED', 'La transaction a échoué. Veuillez réessayer.')
   }
 
-  return { success: true, resource, previousBalance: result.previousBalance, newBalance: result.newBalance }
+  return { success: true, resource, previousBalance: result.previousBalance, newBalance: result.newBalance, idempotent: result.idempotent ?? false }
 }

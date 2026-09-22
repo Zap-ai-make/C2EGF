@@ -78,6 +78,8 @@ beforeEach(async () => {
  *   - clients/store-test-aaa/history/hist-aaa-001 : transaction Validée, boutique A
  */
 async function seedAll() {
+  await seedDocument(testEnv, 'stores', 'store-test-aaa', { name: 'Store A', active: true })
+  await seedDocument(testEnv, 'stores', 'store-test-bbb', { name: 'Store B', active: true })
   await seedDocument(testEnv, 'users', 'uid-member-aaa', {
     active: true,
     storeId: 'store-test-aaa',
@@ -269,6 +271,7 @@ describe('TC-010 — Lecture non paginée history (règles Firestore)', () => {
       role: 'member',
       storeName: 'Store A',
     })
+    await seedDocument(testEnv, 'stores', 'store-test-aaa', { name: 'Store A', active: true })
     for (let i = 1; i <= 5; i++) {
       await seedDocument(testEnv, 'clients/store-test-aaa/history', `hist-${i}`, {
         montant: i * 100,

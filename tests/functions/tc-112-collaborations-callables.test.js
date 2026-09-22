@@ -245,6 +245,10 @@ describe('TC-112-CO — confirmStoreCollaboration : dépôt', () => {
     expect(debt.settledAmount).toBe(0)
     expect(debt.status).toBe('open')
     expect(debt.collaborationId).toBe(id)
+
+    const history = (await db.doc(`clients/${STORE_A}/history/${res.historyId}`).get()).data()
+    expect(history).toMatchObject({ storeId: STORE_A, storeName: 'Boutique A', collaborationId: id })
+    expect((await db.collection(`clients/${STORE_A}/history`).where('storeId', '==', STORE_A).get()).size).toBe(1)
   })
 
   it('[CO-02] le stock de la DEMANDEUSE ne bouge jamais, la liquidité non plus', async () => {

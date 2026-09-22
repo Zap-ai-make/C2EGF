@@ -24,15 +24,7 @@ import {
   mapPaymentMethodToNetwork,
   reverseSettlementImpact,
 } from './financialUtils.js'
-
-const ALLOWED_METHODS = [
-  'Orange Money',
-  'Moov Money',
-  'Telecel Money',
-  'Coris Money',
-  'Sank Money',
-  'Cash',
-]
+import { STORE_PAYMENT_METHODS } from '../config/storeProfile.js'
 
 /**
  * Met à jour le settlementSummary du draft pour un remboursement.
@@ -62,7 +54,7 @@ export async function addTransactionRefundHandler(request, { db, FieldValue, log
   if (!Number.isSafeInteger(amount) || amount <= 0) {
     throw new DealerRequestError('INVALID_SETTLEMENT_AMOUNT', 'Montant invalide (entier strictement positif requis).')
   }
-  if (!ALLOWED_METHODS.includes(paymentMethod)) {
+  if (typeof paymentMethod !== 'string' || !paymentMethod.trim()) {
     throw new DealerRequestError('INVALID_PAYMENT_METHOD', `Méthode non autorisée : ${paymentMethod}`)
   }
   if (typeof idempotencyKey !== 'string' || !idempotencyKey.trim()) {
@@ -110,6 +102,10 @@ export async function addTransactionRefundHandler(request, { db, FieldValue, log
       const storeId = typeof txProfile.storeId === 'string' ? txProfile.storeId.trim() : ''
       if (!storeId || storeId !== preStoreId) {
         throw new DealerRequestError('SETTLEMENT_STORE_MISMATCH', 'Boutique modifiée entre les lectures.')
+      }
+      const storeSnap = await t.get(db.doc(`stores/${storeId}`))
+      if (!storeSnap.exists || storeSnap.data().active !== true) {
+        throw new DealerRequestError('STORE_INACTIVE', 'Boutique désactivée.')
       }
 
       const draftRef      = db.doc(`clients/${storeId}/drafts/${draftId}`)
@@ -172,9 +168,17 @@ export async function addTransactionRefundHandler(request, { db, FieldValue, log
         )
       }
 
+      // Une méthode retirée du profil ne peut plus recevoir de nouveau paiement,
+      // mais doit rester remboursable si une tranche historique l'a utilisée.
+      const affectedNetwork = mapPaymentMethodToNetwork(paymentMethod)
+      const historical = draft.settlementSummary?.netByNetwork?.[affectedNetwork]
+      const historicalNet = (historical?.paid ?? 0) - (historical?.refunded ?? 0)
+      if (!STORE_PAYMENT_METHODS.includes(paymentMethod) && historicalNet < amount) {
+        throw new DealerRequestError('INVALID_PAYMENT_METHOD', `Méthode non autorisée : ${paymentMethod}`)
+      }
+
       // ── Impact financier inverse ──────────────────────────────────────────
       const currentBalances = normalizeNetworkBalances(balanceSnap.exists ? balanceSnap.data() : {})
-      const affectedNetwork = mapPaymentMethodToNetwork(paymentMethod)
       const nextBalances    = reverseSettlementImpact(currentBalances, { type: effectiveType, montant: amount }, paymentMethod)
 
       const previousBalanceEntry = currentBalances[affectedNetwork] ?? { stock: 0, liquidite: 0 }

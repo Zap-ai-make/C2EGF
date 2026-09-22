@@ -58,6 +58,8 @@ beforeEach(async () => { await testEnv.clearFirestore() })
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function seedUsers() {
+  await seedDocument(testEnv, 'stores', 'store-A', { name: 'Boutique A', active: true, adminUid: 'store-admin-a-uid' })
+  await seedDocument(testEnv, 'stores', 'store-B', { name: 'Boutique B', active: true, adminUid: 'store-admin-b-uid' })
   await seedDocument(testEnv, 'users', 'dealer-a-uid',       { role: 'dealer',          active: true,  email: 'da@t.t', name: 'DA' })
   await seedDocument(testEnv, 'users', 'dealer-b-uid',       { role: 'dealer',          active: true,  email: 'db@t.t', name: 'DB' })
   await seedDocument(testEnv, 'users', 'system-mgr-uid',     { role: 'system_manager',  active: true,  email: 'mgr@t.t', name: 'Mgr' })

@@ -26,15 +26,7 @@ import {
   mapPaymentMethodToNetwork,
   applySettlementImpact,
 } from './financialUtils.js'
-
-const ALLOWED_METHODS = [
-  'Orange Money',
-  'Moov Money',
-  'Telecel Money',
-  'Coris Money',
-  'Sank Money',
-  'Cash',
-]
+import { STORE_PAYMENT_METHODS } from '../config/storeProfile.js'
 
 function buildFinalStatus(type, paymentMethod) {
   const t = String(type || '').trim().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
@@ -73,7 +65,7 @@ export async function addTransactionPaymentHandler(request, { db, FieldValue, lo
   if (!Number.isSafeInteger(amount) || amount <= 0) {
     throw new DealerRequestError('INVALID_SETTLEMENT_AMOUNT', 'Montant invalide (entier strictement positif requis).')
   }
-  if (!ALLOWED_METHODS.includes(paymentMethod)) {
+  if (!STORE_PAYMENT_METHODS.includes(paymentMethod)) {
     throw new DealerRequestError('INVALID_PAYMENT_METHOD', `Méthode non autorisée : ${paymentMethod}`)
   }
   if (typeof idempotencyKey !== 'string' || !idempotencyKey.trim()) {
@@ -121,6 +113,11 @@ export async function addTransactionPaymentHandler(request, { db, FieldValue, lo
       const storeId = typeof txProfile.storeId === 'string' ? txProfile.storeId.trim() : ''
       if (!storeId || storeId !== preStoreId) {
         throw new DealerRequestError('SETTLEMENT_STORE_MISMATCH', 'Boutique modifiée entre les lectures.')
+      }
+
+      const storeSnap = await t.get(db.doc(`stores/${storeId}`))
+      if (!storeSnap.exists || storeSnap.data().active !== true) {
+        throw new DealerRequestError('STORE_INACTIVE', 'Boutique désactivée.')
       }
 
       const draftRef      = db.doc(`clients/${storeId}/drafts/${draftId}`)

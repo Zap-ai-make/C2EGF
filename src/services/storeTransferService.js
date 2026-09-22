@@ -23,6 +23,7 @@ import { functions, db } from '../config/firebase'
 import { STORE_TRANSFERS_PAGE_SIZE } from '../constants/dealerConstants'
 import { parseStrictInteger as parseAmountLocal } from '../utils/parseStrictInteger'
 import { shapeDealerInventory, emptyDealerInventory } from '../utils/dealerInventory'
+import { createIdempotencyKey } from '../utils/idempotencyKey'
 
 const TRANSFERS_COLLECTION = 'storeDealerTransfers'
 
@@ -31,6 +32,7 @@ const ERROR_MESSAGES = {
   UNAUTHENTICATED:            'Votre session a expiré. Reconnectez-vous.',
   PROFILE_NOT_FOUND:          'Votre profil est introuvable.',
   PROFILE_INACTIVE:           'Votre compte est inactif.',
+  STORE_INACTIVE:             'Cette boutique est inactive.',
   ROLE_FORBIDDEN:             "Vous n'avez pas l'autorisation d'effectuer cette action.",
   STORE_ID_REQUIRED:          'Identifiant de boutique manquant dans votre profil.',
   INVALID_TRANSFER_TYPE:      'Type de transfert invalide.',
@@ -38,6 +40,8 @@ const ERROR_MESSAGES = {
   INVALID_TRANSFER_ID:        'Identifiant de transfert invalide.',
   INVALID_TRANSFER_NETWORK:   'Réseau invalide pour ce profil.',
   INVALID_INVENTORY_RESOURCE: 'Ressource invalide (stock ou liquidité).',
+  INVALID_IDEMPOTENCY_KEY:    "La clé de reprise de l'opération est invalide.",
+  IDEMPOTENCY_CONFLICT:       'Cette opération a déjà été envoyée avec des données différentes.',
   INVALID_PARTNER:            'Partenaire invalide.',
   INVALID_TRANSFER_DATA:      'Les données de ce transfert sont invalides.',
   INVALID_REJECTION_REASON:   'Le motif de rejet est invalide.',
@@ -83,14 +87,14 @@ export function mapTransferError(err) {
 // ── Commandes (callable) ─────────────────────────────────────────────────────
 
 /** Boutique : initie un retour (débit immédiat côté serveur). */
-export async function createStoreDealerTransfer({ transferType, amount, network } = {}) {
+export async function createStoreDealerTransfer({ transferType, amount, network, idempotencyKey } = {}) {
   const parsed = parseAmountLocal(amount)
   if (parsed === null) throw new Error(ERROR_MESSAGES.INVALID_TRANSFER_AMOUNT)
   const callable = httpsCallable(functions, 'createStoreDealerTransfer')
   try {
     // network transmis uniquement s'il est fourni (multi-réseaux) — deploy-safe :
     // en mono le payload reste { transferType, amount }, inchangé.
-    const payload = { transferType, amount: parsed }
+    const payload = { transferType, amount: parsed, idempotencyKey: idempotencyKey ?? createIdempotencyKey() }
     if (network) payload.network = network
     const result = await callable(payload)
     return result.data
@@ -116,20 +120,20 @@ export async function confirmStoreDealerTransfer(transferId) {
 // En mono-réseau, le payload reste { resource, amount } — strictement inchangé et
 // compatible avec des functions non encore déployées (le serveur applique alors
 // le défaut mono-réseau via resolveTransferNetwork).
-function buildInventoryPayload(resource, parsed, network) {
-  const payload = { resource, amount: parsed }
+function buildInventoryPayload(resource, parsed, network, idempotencyKey) {
+  const payload = { resource, amount: parsed, idempotencyKey: idempotencyKey ?? createIdempotencyKey() }
   if (network) payload.network = network
   return payload
 }
 
 /** Dealer : approvisionne son inventaire (crédit stock ou liquidité). */
-export async function replenishDealerInventory({ resource, amount, network } = {}) {
+export async function replenishDealerInventory({ resource, amount, network, idempotencyKey } = {}) {
   if (resource !== 'stock' && resource !== 'liquidite') throw new Error('Ressource invalide (stock ou liquidité).')
   const parsed = parseAmountLocal(amount)
   if (parsed === null) throw new Error(ERROR_MESSAGES.INVALID_TRANSFER_AMOUNT)
   const callable = httpsCallable(functions, 'replenishDealerInventory')
   try {
-    const result = await callable(buildInventoryPayload(resource, parsed, network))
+    const result = await callable(buildInventoryPayload(resource, parsed, network, idempotencyKey))
     return result.data
   } catch (err) {
     throw mapTransferError(err)
@@ -137,13 +141,13 @@ export async function replenishDealerInventory({ resource, amount, network } = {
 }
 
 /** Dealer : diminue son inventaire (débit stock ou liquidité, bloqué sous zéro). */
-export async function decreaseDealerInventory({ resource, amount, network } = {}) {
+export async function decreaseDealerInventory({ resource, amount, network, idempotencyKey } = {}) {
   if (resource !== 'stock' && resource !== 'liquidite') throw new Error('Ressource invalide (stock ou liquidité).')
   const parsed = parseAmountLocal(amount)
   if (parsed === null) throw new Error(ERROR_MESSAGES.INVALID_TRANSFER_AMOUNT)
   const callable = httpsCallable(functions, 'decreaseDealerInventory')
   try {
-    const result = await callable(buildInventoryPayload(resource, parsed, network))
+    const result = await callable(buildInventoryPayload(resource, parsed, network, idempotencyKey))
     return result.data
   } catch (err) {
     throw mapTransferError(err)
@@ -171,7 +175,7 @@ export async function rejectStoreDealerTransfer(transferId, rejectionReason) {
  *   - 'deposit'    (dépôt)  : −stock +liquidité
  *   - 'withdrawal' (retrait): +stock −liquidité
  */
-export async function createPartnerDeposit({ partner, amount, operation = 'deposit', network } = {}) {
+export async function createPartnerDeposit({ partner, amount, operation = 'deposit', network, idempotencyKey } = {}) {
   if (!partner || !partner.id) throw new Error(ERROR_MESSAGES.INVALID_PARTNER)
   if (operation !== 'deposit' && operation !== 'withdrawal') throw new Error(ERROR_MESSAGES.INVALID_PARTNER)
   const parsed = parseAmountLocal(amount)
@@ -186,6 +190,7 @@ export async function createPartnerDeposit({ partner, amount, operation = 'depos
       partnerLocalite: partner.localite ?? '',
       amount: parsed,
       operation,
+      idempotencyKey: idempotencyKey ?? createIdempotencyKey(),
     }
     // network transmis uniquement s'il est fourni (multi-réseaux) — deploy-safe.
     if (network) callablePayload.network = network

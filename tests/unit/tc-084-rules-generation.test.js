@@ -21,6 +21,12 @@ import { generateDealerProfileFile } from '../../scripts/lib/generateDealerProfi
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const rulesPath = resolve(__dirname, '../../firestore.rules')
 const dealerProfilePath = resolve(__dirname, '../../functions/src/config/dealerProfile.js')
+const minimalRulesProfile = networks => ({
+  dealer: { networks },
+  networks: { enabled: networks },
+  transactions: { types: ['Dépôt'], paymentMethods: ['Cash'] },
+  onboarding: { selfRegistration: false },
+})
 
 describe('TC-084 — Génération des règles depuis le profil (axe dealer)', () => {
   it('TAOFIC → un seul réseau dealer (Orange), équivalent au comportement historique', () => {
@@ -29,7 +35,7 @@ describe('TC-084 — Génération des règles depuis le profil (axe dealer)', ()
   })
 
   it('profil multi-réseaux → liste élargie', () => {
-    const block = generateProfileRulesBlock({ dealer: { networks: ['Orange', 'Moov', 'Telecel', 'Coris', 'Sank'] }, onboarding: { selfRegistration: false } })
+    const block = generateProfileRulesBlock(minimalRulesProfile(['Orange', 'Moov', 'Telecel', 'Coris', 'Sank']))
     expect(block).toContain("return ['Orange', 'Moov', 'Telecel', 'Coris', 'Sank']")
   })
 
@@ -40,6 +46,13 @@ describe('TC-084 — Génération des règles depuis le profil (axe dealer)', ()
 
   it('dealer.networks vide → erreur explicite (pas de règle réseau vide)', () => {
     expect(() => generateProfileRulesBlock({ dealer: { networks: [] } })).toThrow(/liste non vide/)
+  })
+
+  it('axes boutique → types, réseaux et moyens de règlement dérivés du profil', () => {
+    const block = generateProfileRulesBlock(minimalRulesProfile(['Orange', 'Moov']))
+    expect(block).toContain("function profileStoreNetworks() { return ['Orange', 'Moov']; }")
+    expect(block).toContain("function profileTransactionTypes() { return ['Dépôt']; }")
+    expect(block).toContain("function profilePaymentMethods() { return ['Cash']; }")
   })
 
   it('ANTI-DÉRIVE : firestore.rules contient le bloc généré pour C2EGF', () => {
