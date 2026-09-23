@@ -9,6 +9,7 @@ import {
 } from 'firebase/firestore'
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions'
 import { setLogLevel } from 'firebase/app'
+import { resolveFirebaseRuntime } from './firebaseRuntime'
 
 // Désactiver les logs Firebase en production pour éviter le spam dans la console
 if (import.meta.env.PROD) {
@@ -64,6 +65,7 @@ let functions
 
 try {
   const firebaseConfig = createFirebaseConfig()
+  const runtime = resolveFirebaseRuntime(import.meta.env)
   app = initializeApp(firebaseConfig)
 
   // Init Authentication - pour gérer les connexions utilisateurs
@@ -71,10 +73,7 @@ try {
 
   // Init Firestore avec persistence IndexedDB multi-onglets en prod (API Firebase v9+)
   // En dev/émulateur : client standard sans persistence pour éviter les conflits de cache
-  const isDev = import.meta.env.DEV
-  const useEmulators = import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true'
-
-  if (!isDev && import.meta.env.VITE_FIRESTORE_OFFLINE_PERSISTENCE === 'true') {
+  if (runtime.production && import.meta.env.VITE_FIRESTORE_OFFLINE_PERSISTENCE === 'true') {
     db = initializeFirestore(app, {
       localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
     })
@@ -85,15 +84,10 @@ try {
   // Init Functions — région europe-west1 (proximité Afrique de l'Ouest)
   functions = getFunctions(app, 'europe-west1')
 
-  // Configuration dev : utiliser les émulateurs Firebase si activés
-  if (isDev && useEmulators) {
-    try {
-      connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true })
-      connectFirestoreEmulator(db, 'localhost', 8080)
-      connectFunctionsEmulator(functions, 'localhost', 5001)
-    } catch {
-      // Ignorer si les émulateurs ne sont pas lancés
-    }
+  if (runtime.useEmulators) {
+    connectAuthEmulator(auth, `http://${runtime.hosts.auth}:${runtime.ports.auth}`, { disableWarnings: true })
+    connectFirestoreEmulator(db, runtime.hosts.firestore, runtime.ports.firestore)
+    connectFunctionsEmulator(functions, runtime.hosts.functions, runtime.ports.functions)
   }
 
 } catch (error) {
@@ -106,7 +100,8 @@ export const firebaseInfo = {
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
   isDev: import.meta.env.DEV,
-  useEmulators: import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true'
+  runtimeMode: import.meta.env.VITE_FIREBASE_RUNTIME_MODE || (import.meta.env.DEV ? 'development' : 'production'),
+  useEmulators: (import.meta.env.VITE_FIREBASE_RUNTIME_MODE || (import.meta.env.DEV ? 'development' : 'production')) !== 'production'
 }
 
 export { auth, db, functions }

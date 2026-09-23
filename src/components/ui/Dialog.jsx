@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useId } from 'react'
 import { X } from 'lucide-react'
 
 /**
@@ -48,6 +48,9 @@ function Dialog({ open, onClose, title, description, children, footer, testId, l
   const panneau = useRef(null)
   const corps = useRef(null)
   const focusPrecedent = useRef(null)
+  const restoreBackground = useRef(null)
+  const titleId = useId()
+  const descriptionId = useId()
 
   const cibles = useCallback(
     () => [...(panneau.current?.querySelectorAll(CIBLES_FOCUSABLES) ?? [])],
@@ -69,6 +72,7 @@ function Dialog({ open, onClose, title, description, children, footer, testId, l
       ?? panneau.current
     premiere?.focus?.()
     return () => {
+      restoreBackground.current?.()
       // Rendre le focus est la moitié du contrat : sans ça, refermer renvoie en
       // haut du document et le parcours au clavier est perdu.
       focusPrecedent.current?.focus?.()
@@ -103,6 +107,43 @@ function Dialog({ open, onClose, title, description, children, footer, testId, l
     return () => document.removeEventListener('keydown', surTouche)
   }, [open, onClose, cibles])
 
+  useEffect(() => {
+    if (!open || !panneau.current) return undefined
+    const restored = []
+    let activeBranch = panneau.current.parentElement
+
+    while (activeBranch?.parentElement && activeBranch.parentElement !== document.documentElement) {
+      for (const sibling of activeBranch.parentElement.children) {
+        if (sibling === activeBranch) continue
+        restored.push({
+          element: sibling,
+          inert: sibling.inert,
+          inertAttribute: sibling.hasAttribute('inert'),
+          ariaHidden: sibling.getAttribute('aria-hidden'),
+        })
+        sibling.inert = true
+        sibling.setAttribute('inert', '')
+        sibling.setAttribute('aria-hidden', 'true')
+      }
+      activeBranch = activeBranch.parentElement
+      if (activeBranch === document.body) break
+    }
+
+    const restore = () => {
+      restored.forEach(({ element, inert, inertAttribute, ariaHidden }) => {
+        element.inert = inert
+        if (!inertAttribute) element.removeAttribute('inert')
+        if (ariaHidden === null) element.removeAttribute('aria-hidden')
+        else element.setAttribute('aria-hidden', ariaHidden)
+      })
+    }
+    restoreBackground.current = restore
+    return () => {
+      restore()
+      if (restoreBackground.current === restore) restoreBackground.current = null
+    }
+  }, [open])
+
   if (!open) return null
 
   return (
@@ -111,14 +152,15 @@ function Dialog({ open, onClose, title, description, children, footer, testId, l
         ref={panneau}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={titleId}
+        aria-describedby={description ? descriptionId : undefined}
         data-testid={testId}
         className={`max-h-full w-full ${largeur} overflow-y-auto rounded-xl border border-line bg-surface shadow-xl`}
       >
         <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
           <div className="min-w-0">
-            <h2 className="text-base font-semibold text-ink">{title}</h2>
-            {description && <p className="mt-0.5 text-sm text-ink-muted">{description}</p>}
+            <h2 id={titleId} className="text-base font-semibold text-ink">{title}</h2>
+            {description && <p id={descriptionId} className="mt-0.5 text-sm text-ink-muted">{description}</p>}
           </div>
           <button
             type="button"

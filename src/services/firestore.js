@@ -46,6 +46,7 @@ import {
 import { DraftService } from './draftService.js'
 import { HistoryService } from './historyService.js'
 import { BalanceService } from './balanceService.js'
+import { normalizeSubscriptionObserver, notifySubscriptionError } from './subscriptionObserver.js'
 
 // Service Firestore modulaire avec cache, gestion d'erreurs et optimisations
 
@@ -495,14 +496,16 @@ export class FirestoreService {
    * Écouter les changements d'une collection en temps réel avec optimisations
    */
   subscribeToCollection(collectionName, callback, queryOptions = {}) {
+    let observer
     try {
+      observer = normalizeSubscriptionObserver(callback)
       const subscriptionKey = `${this.resolveCollectionPath(collectionName)}_${JSON.stringify(queryOptions)}`
 
       // Vérifier si on a déjà un listener pour cette requête exacte
       if (this.connectionPool.has(subscriptionKey)) {
         const existingListener = this.connectionPool.get(subscriptionKey)
-        existingListener.callbacks.add(callback)
-        return () => this.unsubscribeCallback(subscriptionKey, callback)
+        existingListener.callbacks.add(observer)
+        return () => this.unsubscribeCallback(subscriptionKey, observer)
       }
 
       // Construire la query optimisée
@@ -514,7 +517,11 @@ export class FirestoreService {
       // Timeout pour éviter les listeners bloqués
       const timeoutId = setTimeout(() => {
         console.warn('Firestore listener timeout for subscription:', subscriptionKey)
-        this.unsubscribeFromCollection(subscriptionKey)
+        const error = new Error('Le chargement temps réel Firestore a expiré.')
+        const listenerInfo = this.connectionPool.get(subscriptionKey)
+        listenerInfo?.callbacks.forEach(item => notifySubscriptionError(item, error, 'Firestore listener timeout'))
+        listenerInfo?.unsubscribe()
+        this.connectionPool.delete(subscriptionKey)
       }, FIRESTORE_CONFIG.LIMITS.LISTENER_TIMEOUT)
 
       const unsubscribe = onSnapshot(q,
@@ -538,9 +545,9 @@ export class FirestoreService {
             // Notifier tous les callbacks enregistrés
             const listenerInfo = this.connectionPool.get(subscriptionKey)
             if (listenerInfo) {
-              listenerInfo.callbacks.forEach(cb => {
+              listenerInfo.callbacks.forEach(item => {
                 try {
-                  cb(documents, changes) // Passer aussi les changements pour optimisation
+                  item.onNext(documents, changes) // Passer aussi les changements pour optimisation
                 } catch (error) {
                   console.error('Firestore subscription callback error:', error)
                 }
@@ -549,6 +556,8 @@ export class FirestoreService {
 
           } catch (error) {
             console.error('Firestore snapshot processing error:', error)
+            const listenerInfo = this.connectionPool.get(subscriptionKey)
+            listenerInfo?.callbacks.forEach(item => notifySubscriptionError(item, error, 'Firestore snapshot processing error'))
           }
         },
         (error) => {
@@ -559,11 +568,9 @@ export class FirestoreService {
           // Notifier les callbacks de l'erreur
           const listenerInfo = this.connectionPool.get(subscriptionKey)
           if (listenerInfo) {
-            listenerInfo.callbacks.forEach(cb => {
-              if (cb.onError) {
-                cb.onError(error)
-              }
-            })
+            listenerInfo.callbacks.forEach(item => notifySubscriptionError(item, error, 'Firestore listener error'))
+            listenerInfo.unsubscribe()
+            this.connectionPool.delete(subscriptionKey)
           }
         }
       )
@@ -571,20 +578,18 @@ export class FirestoreService {
       // Enregistrer dans le pool de connexions
       this.connectionPool.set(subscriptionKey, {
         unsubscribe,
-        callbacks: new Set([callback]),
+        callbacks: new Set([observer]),
         createdAt: Date.now(),
         collection: collectionName
       })
 
       // Retourner une fonction pour se désabonner
-      return () => this.unsubscribeCallback(subscriptionKey, callback)
+      return () => this.unsubscribeCallback(subscriptionKey, observer)
     } catch (error) {
       this.metrics.errors++
       console.error(`Error in subscribeToCollection(${collectionName}):`, error)
 
-      if (callback?.onError) {
-        callback.onError(error)
-      }
+      if (observer) notifySubscriptionError(observer, error, `Error in subscribeToCollection(${collectionName})`)
 
       return () => {}
     }
@@ -880,6 +885,7 @@ export class FirestoreService {
     this.requireActiveStore()
     const collectionRef = this.collectionRef(FIRESTORE_CONFIG.COLLECTIONS.CLIENTS)
 
+    const observer = normalizeSubscriptionObserver(callback)
     return onSnapshot(collectionRef,
       (snapshot) => {
         try {
@@ -888,13 +894,13 @@ export class FirestoreService {
             ...doc.data()
           }))
 
-          callback(documents)
+          observer.onNext(documents)
         } catch (error) {
-          console.error('Clients snapshot processing error:', error)
+          notifySubscriptionError(observer, error, 'Clients snapshot processing error')
         }
       },
       (error) => {
-        console.error('Clients subscription error:', error)
+        notifySubscriptionError(observer, error, 'Clients subscription error')
       }
     )
   }

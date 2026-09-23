@@ -1,10 +1,10 @@
 import { useState, useCallback } from 'react'
-import { X } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useFormValidation } from '../../hooks/useFormValidation'
 import { AUTH_LABELS, AUTH_PLACEHOLDERS, AUTH_SUCCESS, AUTH_CONFIG } from '../../constants/authMessages'
 import { AUTH_STYLES } from '../../constants/authStyles'
 import { createTimeoutWithCleanup } from '../../utils/authHelpers'
+import Dialog from '../ui/Dialog'
 
 function ChangePasswordModal({ isOpen, onClose }) {
   const [message, setMessage] = useState('')
@@ -89,39 +89,26 @@ function ChangePasswordModal({ isOpen, onClose }) {
   const confirmPasswordProps = getFieldProps('confirmPassword')
 
   return (
-    <div className={AUTH_STYLES.modal.overlay}>
-      <div className={AUTH_STYLES.modal.container}>
-        <div className={AUTH_STYLES.modal.header}>
-          <h3 className={AUTH_STYLES.modal.title}>
-            {AUTH_LABELS.CHANGE_PASSWORD}
-          </h3>
-          <button
-            onClick={handleClose}
-            className={AUTH_STYLES.modal.closeButton}
-            aria-label="Fermer"
-          >
-            <X className="h-5 w-5" aria-hidden="true" />
-          </button>
-        </div>
-
+    <Dialog open={isOpen} onClose={handleClose} title={AUTH_LABELS.CHANGE_PASSWORD} testId="change-password-dialog">
         {shouldShowErrors && (errors.submit || Object.values(errors).some(error => error)) && (
-          <div className={`${AUTH_STYLES.message.error} ${AUTH_STYLES.spacing.modal}`}>
+          <div role="alert" className={`${AUTH_STYLES.message.error} ${AUTH_STYLES.spacing.modal}`}>
             {errors.submit || Object.values(errors).find(error => error)}
           </div>
         )}
 
         {message && (
-          <div className={`${AUTH_STYLES.message.success} ${AUTH_STYLES.spacing.modal}`}>
+          <div role="status" className={`${AUTH_STYLES.message.success} ${AUTH_STYLES.spacing.modal}`}>
             {message}
           </div>
         )}
 
         <form onSubmit={handleSubmit}>
           <div className={AUTH_STYLES.spacing.modal}>
-            <label className={AUTH_STYLES.profile.label}>
+            <label htmlFor="current-password" className={AUTH_STYLES.profile.label}>
               Mot de passe actuel
             </label>
             <input
+              id="current-password"
               type="password"
               placeholder={AUTH_PLACEHOLDERS.CURRENT_PASSWORD}
               {...currentPasswordProps}
@@ -135,10 +122,11 @@ function ChangePasswordModal({ isOpen, onClose }) {
           </div>
 
           <div className={AUTH_STYLES.spacing.modal}>
-            <label className={AUTH_STYLES.profile.label}>
+            <label htmlFor="new-password" className={AUTH_STYLES.profile.label}>
               Nouveau mot de passe
             </label>
             <input
+              id="new-password"
               type="password"
               placeholder={AUTH_PLACEHOLDERS.NEW_PASSWORD}
               {...newPasswordProps}
@@ -152,10 +140,11 @@ function ChangePasswordModal({ isOpen, onClose }) {
           </div>
 
           <div className="mb-6">
-            <label className={AUTH_STYLES.profile.label}>
+            <label htmlFor="confirm-password" className={AUTH_STYLES.profile.label}>
               Confirmer le nouveau mot de passe
             </label>
             <input
+              id="confirm-password"
               type="password"
               placeholder={AUTH_PLACEHOLDERS.CONFIRM_PASSWORD}
               {...confirmPasswordProps}
@@ -187,8 +176,7 @@ function ChangePasswordModal({ isOpen, onClose }) {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Dialog>
   )
 }
 

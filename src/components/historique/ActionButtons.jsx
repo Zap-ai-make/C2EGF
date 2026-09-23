@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useTransactions } from '../../context/transactions.jsx'
 import { EXPORT_CONFIG, MESSAGES } from '../../utils/constants.js'
 import { createExportData, generateExportFilename } from '../../utils/helpers.js'
+import { parseHistoryImportRows, readExcelFile } from '../../utils/excelUtils.js'
 
 function ActionButtons({ filteredTransactions = [], resetFilters }) {
   const { addTransaction } = useTransactions()
@@ -32,46 +33,16 @@ function ActionButtons({ filteredTransactions = [], resetFilters }) {
     fileInputRef.current?.click()
   }
 
-  const handleFileSelect = (event) => {
+  const handleFileSelect = async (event) => {
     const file = event.target.files?.[0]
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = async (e) => {
-      try {
-        const XLSX = await import('xlsx')
-        const data = new Uint8Array(e.target.result)
-        const workbook = XLSX.read(data, { type: 'array' })
-        
-        // Prendre la première feuille
-        const sheetName = workbook.SheetNames[0]
-        const worksheet = workbook.Sheets[sheetName]
-        
-        // Convertir en JSON
-        const jsonData = XLSX.utils.sheet_to_json(worksheet)
-        
-        const imports = []
-        const importBatchId = Date.now()
-        
-        // Traiter chaque ligne
-        jsonData.forEach((row, index) => {
-          // Mapper les données importées vers le format de transaction
-          if (row['Client'] && row['Type'] && row['Montant (FCFA)']) {
-            const clientName = String(row['Client'] || '').trim()
-            const transaction = {
-              client: clientName,
-              clientId: `import-${importBatchId}-${index}`,
-              type: row['Type'],
-              reseau: row['Réseau'] || 'Orange',
-              code: row['Code'] || '000000',
-              montant: parseFloat(row['Montant (FCFA)']) || 0,
-              statut: 'Validée', // Les imports sont toujours validés
-              userEmail: row['Email utilisateur'] || ''
-            }
-            
-            imports.push(addTransaction(transaction))
-          }
-        })
+    try {
+        const jsonData = await readExcelFile(file)
+        // Valider tout le fichier avant la première écriture : aucun import
+        // partiel si une ligne est mal formée.
+        const transactions = parseHistoryImportRows(jsonData)
+        const imports = transactions.map(transaction => addTransaction(transaction))
 
         const results = await Promise.allSettled(imports)
         const importedCount = results.filter(result => result.status === 'fulfilled').length
@@ -90,9 +61,6 @@ function ActionButtons({ filteredTransactions = [], resetFilters }) {
         console.error('Erreur lors de l\'import:', error)
         setMessage({ type: 'error', text: MESSAGES.ERRORS.IMPORT_ERROR })
       }
-    }
-    
-    reader.readAsArrayBuffer(file)
     
     // Réinitialiser l'input file
     event.target.value = ''

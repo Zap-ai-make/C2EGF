@@ -1,5 +1,107 @@
 import { EXCEL_HEADERS } from '../constants'
 import { CLIENT_ID } from '../config/clientIsolation'
+import { parseFcfaAmount } from './fcfaAmount.js'
+
+export const EXCEL_IMPORT_LIMITS = Object.freeze({
+  MAX_FILE_BYTES: 5 * 1024 * 1024,
+  MAX_UNCOMPRESSED_BYTES: 50 * 1024 * 1024,
+  MAX_ARCHIVE_ENTRIES: 1000,
+  MAX_ROWS: 1000,
+  MAX_COLUMNS: 32,
+})
+
+const EXCEL_MIME_TYPES = new Set([
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel.sheet.macroEnabled.12',
+  'application/vnd.ms-excel',
+])
+const EXCEL_EXTENSIONS = new Set(['.xlsx', '.xlsm', '.xls'])
+
+function hasExcelSignature(bytes) {
+  const zip = bytes[0] === 0x50 && bytes[1] === 0x4b
+  const compound = bytes.length >= 8 && [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]
+    .every((value, index) => bytes[index] === value)
+  return zip || compound
+}
+
+function readUint16(bytes, offset) {
+  return bytes[offset] | (bytes[offset + 1] << 8)
+}
+
+function readUint32(bytes, offset) {
+  return (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0
+}
+
+export function validateExcelContent(bytes) {
+  if (!hasExcelSignature(bytes)) {
+    throw new Error('Le contenu du fichier ne correspond pas à un classeur Excel.')
+  }
+  // Le vieux format XLS/CFB n'est pas compressé : la limite du fichier borne
+  // déjà son volume. Pour XLSX/XLSM, lire le répertoire central avant SheetJS
+  // évite de décompresser une archive dont le volume annoncé est démesuré.
+  if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) return
+
+  let eocd = -1
+  const searchStart = Math.max(0, bytes.length - 65_557)
+  for (let i = bytes.length - 22; i >= searchStart; i--) {
+    if (readUint32(bytes, i) === 0x06054b50) {
+      eocd = i
+      break
+    }
+  }
+  if (eocd < 0) throw new Error('Archive Excel incomplète ou corrompue.')
+
+  const entries = readUint16(bytes, eocd + 10)
+  const centralSize = readUint32(bytes, eocd + 12)
+  const centralOffset = readUint32(bytes, eocd + 16)
+  if (entries === 0xffff || centralSize === 0xffffffff || centralOffset === 0xffffffff) {
+    throw new Error('Les archives Excel ZIP64 ne sont pas acceptées.')
+  }
+  if (entries > EXCEL_IMPORT_LIMITS.MAX_ARCHIVE_ENTRIES || centralOffset + centralSize > bytes.length) {
+    throw new Error('L’archive Excel dépasse les limites autorisées.')
+  }
+
+  let offset = centralOffset
+  let uncompressedBytes = 0
+  for (let index = 0; index < entries; index++) {
+    if (readUint32(bytes, offset) !== 0x02014b50) throw new Error('Répertoire Excel corrompu.')
+    uncompressedBytes += readUint32(bytes, offset + 24)
+    if (uncompressedBytes > EXCEL_IMPORT_LIMITS.MAX_UNCOMPRESSED_BYTES) {
+      throw new Error('Le contenu décompressé du fichier Excel est trop volumineux.')
+    }
+    offset += 46 + readUint16(bytes, offset + 28) + readUint16(bytes, offset + 30) + readUint16(bytes, offset + 32)
+  }
+}
+
+function assertWorksheetBounds(XLSX, worksheet) {
+  if (!worksheet?.['!ref']) return
+  const range = XLSX.utils.decode_range(worksheet['!ref'])
+  const rows = range.e.r - range.s.r + 1
+  const columns = range.e.c - range.s.c + 1
+  if (rows > EXCEL_IMPORT_LIMITS.MAX_ROWS + 1) {
+    throw new Error(`Le fichier dépasse la limite de ${EXCEL_IMPORT_LIMITS.MAX_ROWS} lignes.`)
+  }
+  if (columns > EXCEL_IMPORT_LIMITS.MAX_COLUMNS) {
+    throw new Error(`Le fichier dépasse la limite de ${EXCEL_IMPORT_LIMITS.MAX_COLUMNS} colonnes.`)
+  }
+}
+
+export async function readExcelFile(file, sheetOptions = {}) {
+  const validation = validateExcelFile(file)
+  if (!validation.isValid) throw new Error(validation.message)
+
+  const buffer = await file.arrayBuffer()
+  const bytes = new Uint8Array(buffer)
+  validateExcelContent(bytes)
+
+  const XLSX = await import('xlsx')
+  const workbook = XLSX.read(bytes, { type: 'array', sheetRows: EXCEL_IMPORT_LIMITS.MAX_ROWS + 2 })
+  const firstSheetName = workbook.SheetNames[0]
+  if (!firstSheetName) throw new Error('Le classeur ne contient aucune feuille.')
+  const worksheet = workbook.Sheets[firstSheetName]
+  assertWorksheetBounds(XLSX, worksheet)
+  return XLSX.utils.sheet_to_json(worksheet, sheetOptions)
+}
 
 // ---------------------------------------------------------------------------
 // Détection d'en-têtes — import robuste
@@ -123,6 +225,12 @@ export function parseWorksheetRows(jsonData) {
   }
 
   const rawHeaders = jsonData[0] || []
+  if (jsonData.length > EXCEL_IMPORT_LIMITS.MAX_ROWS + 1) {
+    return { success: false, error: `Le fichier dépasse la limite de ${EXCEL_IMPORT_LIMITS.MAX_ROWS} lignes.`, clients: [] }
+  }
+  if (rawHeaders.length > EXCEL_IMPORT_LIMITS.MAX_COLUMNS) {
+    return { success: false, error: `Le fichier dépasse la limite de ${EXCEL_IMPORT_LIMITS.MAX_COLUMNS} colonnes.`, clients: [] }
+  }
 
   // Construire la map : index colonne → champ canonique
   // Détection des doublons : deux colonnes mappées sur le même champ canonique
@@ -240,6 +348,34 @@ export function parseWorksheetRows(jsonData) {
   return { success: true, clients: validClients, count: validClients.length }
 }
 
+export function parseHistoryImportRows(rows, importBatchId = Date.now()) {
+  if (!Array.isArray(rows) || rows.length > EXCEL_IMPORT_LIMITS.MAX_ROWS) {
+    throw new Error(`Le fichier dépasse la limite de ${EXCEL_IMPORT_LIMITS.MAX_ROWS} lignes.`)
+  }
+
+  const transactions = []
+  rows.forEach((row, index) => {
+    if (!row || !Object.values(row).some(value => String(value ?? '').trim() !== '')) return
+    const clientName = String(row.Client || '').trim()
+    const type = String(row.Type || '').trim()
+    const amount = parseFcfaAmount(row['Montant (FCFA)'])
+    if (!clientName || !type || amount === null) {
+      throw new Error(`Ligne ${index + 2} invalide : Client, Type et Montant (FCFA) positif sont obligatoires.`)
+    }
+    transactions.push({
+      client: clientName,
+      clientId: `import-${importBatchId}-${index}`,
+      type,
+      reseau: String(row['Réseau'] || 'Orange').trim(),
+      code: String(row.Code || '000000').trim(),
+      montant: amount,
+      statut: 'Validée',
+      userEmail: String(row['Email utilisateur'] || '').trim(),
+    })
+  })
+  return transactions
+}
+
 /**
  * Résout le nom de la boutique pour un client.
  *
@@ -339,62 +475,29 @@ export const exportClientsToXLSM = async (clients, filename = `clients_${CLIENT_
 
 // Fonction pour importer des clients depuis un fichier XLSM/XLSX
 export const importClientsFromXLSM = (file) => {
-  return new Promise((resolve, reject) => {
-    try {
-      const reader = new FileReader()
-
-      reader.onload = async (e) => {
-        try {
-          const XLSX = await import('xlsx')
-          const data = new Uint8Array(e.target.result)
-          const workbook = XLSX.read(data, { type: 'array' })
-
-          // Prendre la première feuille
-          const firstSheetName = workbook.SheetNames[0]
-          const worksheet = workbook.Sheets[firstSheetName]
-
-          // Convertir en JSON (première ligne = en-têtes)
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 })
-
-          // Déléguer à parseWorksheetRows qui gère la détection par en-têtes
-          const result = parseWorksheetRows(jsonData)
-
-          if (result.success) {
-            resolve(result)
-          } else {
-            reject(result)
-          }
-        } catch (error) {
-          reject({ success: false, error: `Erreur de lecture du fichier: ${error.message}` })
-        }
-      }
-
-      reader.onerror = () => {
-        reject({ success: false, error: 'Erreur de lecture du fichier' })
-      }
-
-      reader.readAsArrayBuffer(file)
-    } catch (error) {
-      reject({ success: false, error: error.message })
-    }
-  })
+  return readExcelFile(file, { header: 1 })
+    .then((jsonData) => {
+      const result = parseWorksheetRows(jsonData)
+      if (!result.success) return Promise.reject(result)
+      return result
+    })
+    .catch((error) => Promise.reject({
+      success: false,
+      error: error?.error || `Erreur de lecture du fichier: ${error.message}`,
+    }))
 }
 
 // Fonction pour valider le format du fichier
 export const validateExcelFile = (file) => {
-  const validTypes = [
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
-    'application/vnd.ms-excel.sheet.macroEnabled.12', // .xlsm
-    'application/vnd.ms-excel' // .xls (legacy)
-  ]
-  
-  const validExtensions = ['.xlsx', '.xlsm', '.xls']
+  if (!file?.name || file.size > EXCEL_IMPORT_LIMITS.MAX_FILE_BYTES) {
+    return { isValid: false, message: `Le fichier Excel ne doit pas dépasser ${EXCEL_IMPORT_LIMITS.MAX_FILE_BYTES / 1024 / 1024} Mo.` }
+  }
   const fileExtension = file.name.toLowerCase().slice(file.name.lastIndexOf('.'))
-  
+  const validExtension = EXCEL_EXTENSIONS.has(fileExtension)
+  const validType = !file.type || EXCEL_MIME_TYPES.has(file.type)
+  const isValid = validExtension && validType
   return {
-    isValid: validTypes.includes(file.type) || validExtensions.includes(fileExtension),
-    message: validTypes.includes(file.type) || validExtensions.includes(fileExtension) 
-      ? 'Fichier valide' 
-      : 'Veuillez sélectionner un fichier Excel (.xlsx, .xlsm, ou .xls)'
+    isValid,
+    message: isValid ? 'Fichier valide' : 'Veuillez sélectionner un fichier Excel (.xlsx, .xlsm, ou .xls)',
   }
 }

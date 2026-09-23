@@ -54,6 +54,7 @@ const saveNetworkDataToStorage = (data) => {
 export function NetworkConfigProvider({ children }) {
   const { currentUser: user, userProfile, activeStore, loading: authLoading } = useContext(AuthContext)
   const [networkData, setNetworkData] = useState(() => loadNetworkDataFromStorage())
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     if (authLoading) return undefined
@@ -68,10 +69,13 @@ export function NetworkConfigProvider({ children }) {
         console.error('Erreur lors de l initialisation des soldes reseau:', error)
       })
 
-    const unsubscribe = firestoreService.subscribeToNetworkBalances((balances) => {
+    const onBalances = (balances) => {
       setNetworkData(balances)
       saveNetworkDataToStorage(balances)
-    })
+      setError(null)
+    }
+    onBalances.onError = (subscriptionError) => setError(subscriptionError.message)
+    const unsubscribe = firestoreService.subscribeToNetworkBalances(onBalances)
 
     return unsubscribe
   }, [user, userProfile?.storeId, activeStore?.id, authLoading])
@@ -123,6 +127,7 @@ export function NetworkConfigProvider({ children }) {
 
   const value = {
     networkData,
+    error,
     updateNetwork,
     resetToDefaults
   }

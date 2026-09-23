@@ -83,7 +83,7 @@ describe('TC-123-B — le focus entre, reste, et revient', () => {
     // focusable, et il ne doit jamais recevoir le focus tant que la modale est
     // ouverte.
     poser()
-    const derriere = screen.getByRole('button', { name: 'Derrière' })
+    const derriere = screen.getByText('Derrière')
     screen.getByRole('button', { name: 'Action' }).focus()
     fireEvent.keyDown(document, { key: 'Tab' })
     expect(derriere).not.toHaveFocus()
@@ -138,5 +138,23 @@ describe('TC-123-C — fermer', () => {
     rerender(<Dialog open={false} title="Titre" testId="dlg" onClose={onClose}><Contenu /></Dialog>)
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(onClose).not.toHaveBeenCalled()
+  })
+})
+
+describe('TC-123-D — arrière-plan inerte', () => {
+  it('[DG-13] rend le contenu derrière inerte puis restaure son état', () => {
+    const { rerender } = poser()
+    const derriere = screen.getByText('Derrière')
+    expect(derriere).toHaveAttribute('inert')
+    expect(derriere).toHaveAttribute('aria-hidden', 'true')
+
+    rerender(
+      <>
+        <button type="button">Derrière</button>
+        <Dialog open={false} title="Titre" testId="dlg" onClose={() => {}}><Contenu /></Dialog>
+      </>,
+    )
+    expect(screen.getByRole('button', { name: 'Derrière' })).not.toHaveAttribute('inert')
+    expect(screen.getByRole('button', { name: 'Derrière' })).not.toHaveAttribute('aria-hidden')
   })
 })

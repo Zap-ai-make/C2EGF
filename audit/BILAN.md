@@ -10,14 +10,16 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 
 **La meilleure évolution est progressive : rendre le serveur seul responsable des mouvements financiers, terminer le pilotage par profil, puis simplifier les couches existantes.** Une réécriture globale ou une migration massive vers TypeScript n'est pas justifiée par cet audit.
 
-### État de remédiation — lots 1 et 3A terminés
+### État de remédiation — lots 1, 3A et 3B terminés
 
 - **SEC-01 corrigé** : la nouvelle Function `storeTransactionCommand` relit l'acteur et la boutique, valide le profil C2EGF, puis écrit soldes, mouvement et audit dans une transaction. L'initialisation reste limitée à zéro et l'édition manuelle est refusée par le profil C2EGF.
 - **SEC-02 corrigé** : `onboarding.selfRegistration` est un axe de profil. Il vaut `false` pour C2EGF ; les règles refusent l'auto-création de boutique/profil et l'interface ne propose plus l'inscription. Les accès passent par le gérant.
 - **SEC-03 corrigé** : les écritures directes sur brouillons, historiques et soldes sont refusées. La suppression locale d'un brouillon portant des champs de règlement est aussi bloquée. L'annulation serveur est terminale, auditée et n'applique la contre-écriture qu'une fois.
 - **BUG-01 / BUG-02 corrigés** : schéma d'historique canonique pour les collaborations et idempotence transactionnelle des mouvements dealer.
 - **SEC-04 / SEC-05 corrigés** : profil C2EGF imposé au serveur et activité de la boutique exigée dans les règles et commandes sensibles.
-- Branches locales : `codex/audit-critical-remediation` (commit `99e25b5`) puis `codex/audit-important-business` (commit `a66250e`). Aucun déploiement, accès à un projet réel, script administrateur destructif ou push distant.
+- **SEC-06 à SEC-09 corrigés** : imports Excel bornés et validés, PII non persistées, en-têtes HTTP déclarés et environnements Firebase hors production fermés par défaut.
+- **QUA-01 / BUG-04 / UI-01 corrigés** : erreurs temps réel remontées, réponses obsolètes ignorées et formulaires/modales accessibles.
+- Branches locales : `codex/audit-critical-remediation` (commit `99e25b5`), `codex/audit-important-business` (commit `a66250e`) puis `codex/audit-important-security`. Aucun déploiement, accès à un projet réel, script administrateur destructif ou push distant.
 
 ## Périmètre, méthode et limites
 
@@ -25,7 +27,7 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 - Inventaire reproductible : **481 fichiers suivis ; 255 fichiers de code dans `src`, `functions/src`, `scripts`, `config` ; 40 638 lignes**, commentaires et lignes vides inclus. Commande : `node audit/inventory.mjs`. Détails : [INVENTORY.json](INVENTORY.json).
 - Couverture : inventaire et recherches transversales sur ces domaines ; lecture approfondie des frontières de confiance, services financiers, profils, abonnements, imports, scripts administratifs et écrans concernés. Ce n'est pas une certification de lecture ligne par ligne ni un pentest de production.
 - Référence méthodologique : `ADOPTION.md`, `SECURITY.md`, `ARCHITECTURE.md`, `DESIGN.md`, documentation des profils. Les anciens audits ont été confrontés au code, pas repris comme état actuel.
-- Seuls les fichiers du dossier `audit/` ont été ajoutés par cet audit. Aucun correctif de production, changement de dépendance, déploiement, script admin destructif, commit ou push.
+- L'audit initial n'ajoutait que ses pièces de travail sous `audit/`. Les lots de remédiation validés ont ensuite modifié le produit et ses dépendances. Aucun déploiement, script admin destructif ni push distant n'a été exécuté.
 - Les tests utilisent exclusivement des projets `demo-*`. Les scripts de reproduction vérifient explicitement un hôte local d'émulateur. Le navigateur de QA bloque les requêtes externes et emploie une configuration Firebase fictive.
 - Gravité : **CRITIQUE** = confidentialité/intégrité du CRM directement compromise ; **IMPORTANT** = défaut substantiel ou risque exploitable sous conditions ; **MINEUR** = dette sans incident actuel établi. Effort **S/M/L** relatif, pas un devis.
 
@@ -34,19 +36,20 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 | Contrôle | Résultat |
 |---|---|
 | `npm run lint` | Réussi après remédiation ; attention à son périmètre, QUA-02 |
-| `npm run test:unit` | **84 fichiers, 2 398 tests réussis** |
-| `npm run test:components` | **18 fichiers, 305 tests réussis** |
+| `npm run test:unit` | **85 fichiers, 2 405 tests réussis** |
+| `npm run test:components` | **20 fichiers, 308 tests réussis** |
 | Suite `vitest.firestore.config.js`, émulateur `demo-akayis-test` | **20 fichiers, 433 tests réussis** |
 | Suite `vitest.functions.config.js`, émulateur `demo-akayis-test` | **12 fichiers, 304 tests réussis** |
-| `npm run build` | Réussi ; bundle principal 1 610,90 kB, gzip 430,28 kB ; chunk xlsx 429,49 kB ; précache PWA 2 148,88 KiB |
+| Suite `vitest.integration.config.js`, émulateurs `demo-akayis-test` | **2 fichiers, 42 tests réussis** |
+| `npm run build` | Réussi ; bundle principal 1 837,22 kB, gzip 493,13 kB ; chunk xlsx 499,86 kB ; précache PWA 2 438,61 KiB |
 | Générateurs règles et Functions, `--client c2egf_burkina --check` | Les trois artefacts générés correspondent au profil |
 | `node audit/reproduce-rules.mjs` | **6 scénarios fermés** : écritures directes et auto-enrôlement refusés |
 | `audit/reproduce-backend.mjs` | Preuve d'exposition initiale conservée ; fermeture vérifiée par `tc-060`, `tc-067`, `tc-070`, `tc-072` et `tc-112` |
 | `node audit/scan-secrets.mjs` | **907 blobs texte Git examinés ; aucune signature détectée** |
 | `node audit/visual-check.mjs` | Authentification, boutique et dealer capturés après remédiation ; vues inspectées en **1 440 px et 390 px**. Aucun lien d'auto-inscription C2EGF ne subsiste |
-| `npm audit --json` | Zéro alerte renvoyée par l'environnement ; **insuffisant pour conclure**, voir SEC-06 et les avis officiels SheetJS |
+| `npm audit --omit=dev --audit-level=high` | **Zéro vulnérabilité connue dans le graphe de production** après mises à jour ciblées ; cela ne remplace pas les avis éditeur |
 
-La première exécution unitaire, concurrente avec d'autres contrôles, a rencontré un timeout ; la suite complète relancée avec un worker passe. L'émulateur Java a d'abord échoué sur une socket locale Windows ; l'option temporaire `JAVA_TOOL_OPTIONS=-Djdk.net.unixdomain.tmpdir=.` a permis l'exécution. Le scan Git a subi un refus temporaire du contrôle d'approbation pour limite d'usage, puis a pu être exécuté après la reprise demandée. La suite `test:integration` n'est pas comptée dans les résultats : sa tentative d'orchestration s'est arrêtée avec « No emulators to start ». Les suites de règles et de Functions qui en couvrent les deux frontières ont été exécutées séparément, mais cela ne remplace pas la validation de cette orchestration complète.
+La première exécution unitaire, concurrente avec d'autres contrôles, a rencontré un timeout ; deux relances complètes passent. L'émulateur Java a d'abord échoué sur une socket locale Windows ; l'option temporaire `JAVA_TOOL_OPTIONS=-Djdk.net.unixdomain.tmpdir=.` a permis l'exécution des suites Firestore et intégration. Le scan Git a subi un refus temporaire du contrôle d'approbation pour limite d'usage, puis a pu être exécuté après la reprise demandée.
 
 Le scan de secrets couvre des signatures de clés privées et jetons connus dans les blobs texte atteignables de Git. Il ne couvre pas tous les mots de passe possibles, les formats inconnus, les objets Git inatteignables ou tous les fichiers locaux ignorés/non suivis. Les clés de configuration web Firebase ne sont pas assimilées à des clés privées Admin.
 
@@ -104,40 +107,44 @@ Le scan de secrets couvre des signatures de clés privées et jetons connus dans
 
 ### SEC-06 — Import Excel sur une version vulnérable et sans limite de taille
 
-**IMPORTANT · version et chemin d'import confirmés ; pas de fichier malveillant exécuté · effort M.**
+**IMPORTANT · CORRIGÉ le 23 septembre 2026 · formats, limites et graphe npm vérifiés.**
 
 - Localisation : `package.json` (`xlsx:^0.18.5`), version installée **0.18.5**, [excelUtils.js:341](../src/utils/excelUtils.js#L341), [excelUtils.js:384](../src/utils/excelUtils.js#L384), [historique/ActionButtons.jsx:35](../src/components/historique/ActionButtons.jsx#L35).
 - Les deux imports appellent `XLSX.read()` sur le fichier fourni. La validation clients accepte extension **ou** type déclaré, sans taille maximale ; l'import historique n'applique pas cette validation. Parsing sur le thread UI et imports lancés en masse : un gros fichier peut bloquer l'interface, même sans exploiter une CVE.
 - L'éditeur indique que les versions jusqu'à 0.19.2 sont affectées par une pollution de prototype et jusqu'à 0.20.1 par un ReDoS. Sources : [avis SheetJS CVE-2023-30533](https://cdn.sheetjs.com/advisories/CVE-2023-30533), [avis SheetJS CVE-2024-22363](https://cdn.sheetjs.com/advisories/CVE-2024-22363). Le chemin d'import est concerné ; un usage exclusivement export ne suffirait pas à établir le premier risque.
 - Correction : choisir une version corrigée depuis une distribution officielle vérifiée, ou un remplacement ciblé ; borner taille, lignes, colonnes et volume décompressé ; valider le contenu et utiliser un worker pour le parsing si nécessaire. Ne pas lancer un `npm update` global.
 - Test cible : formats valides, mauvais type réel, fichier trop gros, limites de lignes, erreur partielle, conservation des zéros initiaux. L'import historique utilise aussi `parseFloat`, à remplacer par le parseur métier après caractérisation des anciens imports.
+- Résultat : SheetJS vient désormais de la distribution officielle en version 0.20.3. Les deux imports partagent la même validation : 5 Mo compressés, 50 Mo décompressés annoncés, 1 000 entrées d'archive, 1 000 lignes et 32 colonnes ; extension, MIME et signature réelle sont contrôlés avant parsing. L'import historique utilise `parseFcfaAmount` et valide toutes les lignes localement avant la première écriture ; une ligne localement invalide bloque donc le fichier entier. La vérification a aussi révélé des avis transitifs plus récents : React Router 7.18.4, Firebase 12.19.0 et deux surcharges transitives corrigées ont été appliqués séparément. `npm audit --omit=dev` retourne zéro vulnérabilité connue.
 
 ### SEC-07 — Brouillon client persistant partagé entre utilisateurs du navigateur
 
-**IMPORTANT · confirmé par lecture du flux · effort S.**
+**IMPORTANT · CORRIGÉ le 23 septembre 2026 · non-persistance et purge legacy testées.**
 
 - Localisation : [ClientForm.jsx:21](../src/components/ClientForm.jsx#L21), lignes 27 et 65 ; [clientIsolation.js:15](../src/config/clientIsolation.js#L15) ; [AuthContext.jsx:213](../src/context/AuthContext.jsx#L213).
 - La clé `client_form_draft` n'est préfixée que par l'instance client, pas par utilisateur/boutique. Elle conserve nom, téléphone et pièce d'identité ; la déconnexion ne la supprime pas. Sur un poste partagé, le prochain compte peut récupérer la saisie précédente. Le répertoire global ne justifie pas de partager une saisie non enregistrée.
 - Correction : éviter la persistance des champs sensibles, ou isoler par compte avec durée de vie et nettoyage explicites. Examiner aussi les migrations legacy `localStorage`, qui ne portent pas d'identité d'origine vérifiée.
 - Test cible : A saisit sans enregistrer, se déconnecte ; B ne récupère rien ; expiration et stockage indisponible gérés.
+- Résultat : le formulaire reste uniquement en mémoire React et supprime au montage l'ancienne clé persistante. Aucun nom, téléphone ou numéro d'identité saisi n'est restauré pour le compte suivant.
 
 ### SEC-08 — Durcissement HTTP absent de la configuration Vercel
 
-**IMPORTANT · configuration confirmée ; en-têtes du site distant non vérifiés · effort S/M.**
+**IMPORTANT · CORRIGÉ dans la configuration le 23 septembre 2026 · site distant non déployé ni interrogé.**
 
 - Localisation : `vercel.json`, `public/_headers`, `index.html`.
 - `vercel.json` ne contient que build, sortie et rewrite. Aucun CSP ni contrôle d'encadrement n'y est défini. `_headers` porte quelques protections, mais n'est pas la configuration native d'en-têtes Vercel ; il ne faut pas présumer qu'il protège cet hébergement. La CSP manque également à cet endroit.
 - Correction : configurer les en-têtes sur la cible réelle, avec les origines Firebase nécessaires et une CSP testée progressivement ; vérifier le résultat HTTP après déploiement humain. Le HTTPS/HSTS éventuellement fourni par l'hébergeur n'a pas été déclaré absent.
 - Source : [configuration Vercel](https://vercel.com/docs/project-configuration/vercel-json).
+- Résultat : `vercel.json` déclare CSP, HSTS, refus d'encadrement, `nosniff`, politique de référent et permissions minimales. La CSP autorise les origines Firebase nécessaires au client. Son effet distant devra être contrôlé après un déploiement humain.
 
 ### SEC-09 — Démarrage dev non fermé par défaut vis-à-vis de Firebase
 
-**IMPORTANT · confirmé par lecture · effort S/M.**
+**IMPORTANT · CORRIGÉ le 23 septembre 2026 · politique fail-closed testée.**
 
 - Localisation : [src/config/firebase.js:76](../src/config/firebase.js#L76), connexion aux émulateurs à la ligne 96.
 - En dev, un flag absent/faux laisse les SDK utiliser la configuration Firebase chargée ; aucun garde n'impose `demo-*`. En build preview, `isDev` vaut faux : même le flag d'émulation ne connecte pas les SDK aux émulateurs. Le commentaire du `catch` laisse entendre qu'un émulateur absent est ignoré ; ces connecteurs ne sont pas un test de disponibilité réseau.
 - Correction : mode de test explicite qui impose projet démo et hôtes locaux avant initialisation, erreur bloquante en cas d'incohérence. Distinguer preview de production et preview de QA.
 - Test cible : dev/QA avec projet réel ou sans flag doit refuser de démarrer ; configuration demo valide acceptée.
+- Résultat : `resolveFirebaseRuntime` bloque tout mode développement/QA sans émulateurs, tout projet ne commençant pas par `demo-` et tout hôte non local, avant l'initialisation Firebase. Les connecteurs ne masquent plus leurs erreurs. `.env.example` fournit une configuration locale cohérente et le build de production reste explicite.
 
 ### Durcissements à valider dans l'environnement réel
 
@@ -177,21 +184,23 @@ Le scan de secrets couvre des signatures de clés privées et jetons connus dans
 
 ### BUG-04 — Une réponse ancienne peut remplacer un filtre plus récent
 
-**IMPORTANT · scénario déduit du code, pas reproduit en navigateur · effort S.**
+**IMPORTANT · CORRIGÉ le 23 septembre 2026 · ordre inverse reproduit en test.**
 
 - Localisation : [AdminHistory.jsx:57](../src/pages/admin/AdminHistory.jsx#L57), effets à partir de la ligne 104.
 - `load` écrit `records`, curseur et état après sa promesse sans génération de requête. Si la requête A se termine après une requête B déclenchée par un nouveau filtre, les données de A peuvent s'afficher sous le filtre B. L'auth dispose déjà d'un compteur de génération pour un problème analogue.
 - Correction : garde de génération/annulation, remise à zéro cohérente et pagination liée à la requête courante ; partager un petit hook seulement si plusieurs pages ont exactement le même besoin.
 - Test cible : deux promesses résolues dans l'ordre inverse, puis changement de boutique pendant « Charger plus ».
+- Résultat : chaque remise à zéro incrémente une génération ; seules les données, erreurs, curseurs et indicateurs de la génération active peuvent modifier l'écran. Le test résout la réponse courante avant l'ancienne et vérifie que l'ancienne reste ignorée.
 
 ### QUA-01 — Erreurs d'abonnement non transmises aux écrans
 
-**IMPORTANT · confirmé par lecture du contrat callback · effort M.**
+**IMPORTANT · CORRIGÉ le 23 septembre 2026 · erreurs et timeout transmis explicitement.**
 
 - Localisation : [firestore.js:554](../src/services/firestore.js#L554), [ClientsContext.jsx:79](../src/context/ClientsContext.jsx#L79), [transactions.jsx:92](../src/context/transactions.jsx#L92), [draftService.js:181](../src/services/draftService.js#L181), [balanceService.js:153](../src/services/balanceService.js#L153).
 - Le service appelle une propriété `callback.onError` que les callbacks des contextes ne définissent pas. D'autres abonnements se contentent de logger. Un refus de permission ou une perte durable de connexion peut donc laisser un affichage vide/périmé sans état d'erreur pertinent. Le timeout du listener appelle par ailleurs `unsubscribeFromCollection(subscriptionKey)`, alors que cette méthode compare un nom de collection, pas cette clé.
 - Correction : contrat explicite `{onNext,onError}` ou adoption ciblée de `resilientOnSnapshot`, déjà présent ; conserver les dernières données avec indicateur périmé, au lieu de les présenter comme actuelles.
 - Test cible : snapshot refusé, reconnexion, démontage avant réponse, deuxième abonné et timeout.
+- Résultat : les abonnements normalisent désormais une fonction historique ou un observateur `{onNext,onError}`. Clients, transactions, brouillons et soldes remontent les refus Firestore sans effacer les dernières données. Le timeout ferme directement la souscription identifiée par sa clé et notifie ses observateurs, au lieu d'appeler l'API par nom de collection. Les tests couvrent la propagation des erreurs des soldes et brouillons ; le démontage et le partage de listener restent couverts par les suites existantes.
 
 ### BUG-05 — Fuseau métier déclaré mais non utilisé dans plusieurs calculs
 
@@ -271,12 +280,13 @@ Les composants `CollaborationsPanel` (676 lignes), `TransactionForm` (639) et `S
 
 ### UI-01 — Formulaire client sans labels associés, anciennes modales non accessibles
 
-**IMPORTANT · défauts DOM confirmés à la lecture · effort S/M.**
+**IMPORTANT · CORRIGÉ le 23 septembre 2026 · clavier, inertie et rendu mobile vérifiés.**
 
 - Localisation : [ClientForm.jsx:132](../src/components/ClientForm.jsx#L132), [ForgotPasswordModal.jsx:96](../src/components/auth/ForgotPasswordModal.jsx#L96), [ChangePasswordModal.jsx:105](../src/components/auth/ChangePasswordModal.jsx#L105), `components/ui/Dialog.jsx`.
 - Les labels du formulaire client ne portent pas de `htmlFor` et les inputs correspondants n'ont pas d'identifiant/nom accessible alternatif. Les deux anciennes modales Auth n'ont pas de rôle dialog, de piège/restauration du focus ni de gestion Échap. Le composant `Dialog` a déjà une partie de cette mécanique, mais son commentaire « fond inerte » n'est pas réalisé par un attribut `inert` : `aria-modal` ne bloque pas à lui seul les interactions DOM.
 - Correction : associer les labels, migrer ces modales vers le composant commun, vérifier focus et arrière-plan inerte. S'assurer que le focus reste visible après erreurs et fermeture.
 - Test cible : `getByRole`/`getByLabelText`, Tab/Shift+Tab, Échap, restauration du focus et capture mobile.
+- Résultat : tous les champs client sont associés à leurs labels. Les deux modales Auth utilisent `Dialog`, avec nom/description accessibles, piège et restauration du focus, Échap et arrière-plan réellement `inert`. Une capture Playwright à 390 px confirme le rendu de la récupération de mot de passe et le focus initial sur l'adresse email.
 
 Les thèmes et composants sémantiques existants constituent un socle utile. Quelques pages admin emploient encore des classes vertes/grises en dur plutôt que les tokens C2EGF : dette de cohérence, pas une raison de redessiner tout le CRM. Un avis sur tous les contrastes/états réels demanderait une matrice visuelle complète, distincte de quelques captures de référence.
 
@@ -310,13 +320,13 @@ Les thèmes et composants sémantiques existants constituent un socle utile. Que
 | 1 — sécurité critique | SEC-01, SEC-02, SEC-03 ; caractériser avant modification, fermer les admissions non autorisées et la suppression/recréation ; migration serveur des mouvements par sous-lots | Reproductions d'exposition transformées en tests de refus ; parcours légitimes A/B conservés ; audit et concurrence vérifiés |
 | 2 — autres critiques | Aucun autre critique confirmé dans ce bilan | Revoir ce lot si les vérifications d'exploitation révèlent un critique |
 | 3A — importants métier | BUG-01 avec garde anti-annulation de trace, BUG-02, SEC-04, SEC-05 | ✅ Terminé : requêtes réelles, reprise réseau, concurrence, profil et révocation testés |
-| 3B — importants sécurité/fiabilité | SEC-06 à SEC-09, QUA-01, BUG-04, UI-01 | Imports bornés, isolation navigateur, erreurs visibles, modales utilisables au clavier |
+| 3B — importants sécurité/fiabilité | SEC-06 à SEC-09, QUA-01, BUG-04, UI-01 | ✅ Terminé : imports bornés, isolation navigateur, erreurs visibles, concurrence et modales testées |
 | 3C — importants données/exploitation | BUG-03, BUG-05, PERF-01/02, QUA-02, DOC-01 | Totaux complets, journée métier stable, mesures avant/après, contrôles automatisés et contrats cohérents |
 | Backlog — mineurs | QUA-03/04/05, cohérence des tokens | Petits refactors sans changement métier ; suppression démontrée et réversible |
 
 Une correction de sécurité et un refactor esthétique ne doivent pas partager un lot. Toute restriction variable par client doit être nommée dans `_pilot.js`, dérivée pour les couches concernées et testée avec au moins le pilote et C2EGF. Le typage progressif/JSDoc peut renforcer les payloads et documents aux frontières ; éviter de migrer tout le dépôt avant d'avoir fermé les failles.
 
-**Point d'arrêt ADOPTION.md : les lots 1 et 3A sont terminés et vérifiés. Le lot 3B reste soumis à validation avant exécution.**
+**Point d'arrêt ADOPTION.md : les lots 1, 3A et 3B sont terminés et vérifiés. Le lot 3C reste soumis à validation avant exécution.**
 
 ## 8. Reproduction et pièces de travail
 

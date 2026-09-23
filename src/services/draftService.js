@@ -29,6 +29,7 @@ import { db } from '../config/firebase'
 import { getUserFriendlyMessage } from '../utils/errorHandler'
 import { formatDateToFrench } from '../utils/helpers'
 import { FIRESTORE_CONFIG } from '../constants/firestoreConstants'
+import { normalizeSubscriptionObserver, notifySubscriptionError } from './subscriptionObserver.js'
 import {
   validateFcfaAmount,
   normalizeNetworkBalances,
@@ -188,6 +189,7 @@ export class DraftService {
 
   subscribeToDrafts(callback) {
     const collectionRef = this._collectionRef(FIRESTORE_CONFIG.COLLECTIONS.DRAFTS)
+    const observer = normalizeSubscriptionObserver(callback)
 
     return onSnapshot(collectionRef,
       (snapshot) => {
@@ -196,13 +198,13 @@ export class DraftService {
             id: d.id,
             ...d.data()
           }))
-          callback(documents)
+          observer.onNext(documents)
         } catch (error) {
-          console.error('Drafts snapshot processing error:', error)
+          notifySubscriptionError(observer, error, 'Drafts snapshot processing error')
         }
       },
       (error) => {
-        console.error('Drafts subscription error:', error)
+        notifySubscriptionError(observer, error, 'Drafts subscription error')
       }
     )
   }

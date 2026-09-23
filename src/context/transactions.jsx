@@ -89,27 +89,36 @@ export const TransactionsProvider = ({ children }) => {
         }
 
         // Écouter les drafts (transactions non terminées)
-        unsubscribeDrafts = firestoreService.subscribeToDrafts((draftsData) => {
+        const onSubscriptionError = (subscriptionError) => {
           if (isMounted) {
+            setError(subscriptionError.message)
+            setLoading(false)
+          }
+        }
+
+        const onDrafts = (draftsData) => {
+            if (!isMounted) return
             // Déduplication des drafts
             const uniqueDrafts = draftsData.filter((draft, index, array) =>
               array.findIndex(d => d.id === draft.id) === index
             )
             setPendingTransactions(uniqueDrafts)
-          }
-        })
+        }
+        onDrafts.onError = onSubscriptionError
+        unsubscribeDrafts = firestoreService.subscribeToDrafts(onDrafts)
 
         // Écouter l'historique (transactions terminées)
-        unsubscribeHistory = firestoreService.subscribeToHistory((historyData) => {
-          if (isMounted) {
+        const onHistory = (historyData) => {
+            if (!isMounted) return
             // Déduplication de l'historique
             const uniqueHistory = historyData.filter((history, index, array) =>
               array.findIndex(h => h.id === history.id) === index
             )
             // Tri décroissant par date d'enregistrement : le dernier en haut.
             setCompletedTransactions(sortHistoryDesc(uniqueHistory))
-          }
-        })
+        }
+        onHistory.onError = onSubscriptionError
+        unsubscribeHistory = firestoreService.subscribeToHistory(onHistory)
 
         if (isMounted) {
           setLoading(false)

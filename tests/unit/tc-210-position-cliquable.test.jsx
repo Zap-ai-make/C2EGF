@@ -205,6 +205,7 @@ describe('TC-210-MO — le détail par boutique', () => {
     const { container } = monter()
     fireEvent.click(screen.getByTestId('ligne-dehors'))
     const pieges = [...container.querySelectorAll('[aria-hidden="true"] a, [aria-hidden="true"] button')]
+      .filter(element => !element.closest('[inert]'))
     expect(pieges).toEqual([])
   })
 })

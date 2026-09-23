@@ -539,27 +539,26 @@ describe('TC-020-14 — subscribeToNetworkBalances snapshot absent', () => {
 })
 
 // ---------------------------------------------------------------------------
-// TC-020-15 — subscribeToNetworkBalances : erreur loggée sans propagation
+// TC-020-15 — subscribeToNetworkBalances : erreur propagée à l'observateur
 // ---------------------------------------------------------------------------
 
-describe('TC-020-15 — subscribeToNetworkBalances erreur loggée sans propagation', () => {
+describe('TC-020-15 — subscribeToNetworkBalances propage l’erreur', () => {
   beforeEach(() => { vi.mocked(onSnapshot).mockClear() })
 
-  it('l\'erreur de snapshot est loggée dans console.error sans lancer d\'exception', () => {
+  it('transmet l’erreur de snapshot à onError sans effacer les dernières données', () => {
     const { service } = makeBalanceService()
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const onNext = vi.fn()
+    const onError = vi.fn()
+    const error = new Error('permission-denied')
 
     vi.mocked(onSnapshot).mockImplementation((_ref, _successCb, errorCb) => {
-      errorCb(new Error('permission-denied'))
+      errorCb(error)
       return vi.fn()
     })
 
-    // Ne doit pas lancer d'exception
-    expect(() => service.subscribeToNetworkBalances(vi.fn())).not.toThrow()
-    expect(consoleErrorSpy).toHaveBeenCalledOnce()
-    expect(consoleErrorSpy.mock.calls[0][0]).toMatch(/Network balances subscription error/)
-
-    consoleErrorSpy.mockRestore()
+    expect(() => service.subscribeToNetworkBalances({ onNext, onError })).not.toThrow()
+    expect(onError).toHaveBeenCalledWith(error)
+    expect(onNext).not.toHaveBeenCalled()
   })
 })
 

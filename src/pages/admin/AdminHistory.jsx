@@ -39,6 +39,11 @@ function AdminHistory() {
   const [search, setSearch]           = useState('')
 
   const lastDocRef = useRef(null)
+  const requestGenerationRef = useRef(0)
+
+  useEffect(() => () => {
+    requestGenerationRef.current += 1
+  }, [])
 
   // Chargement (une fois) de la liste des boutiques pour le sélecteur de filtre.
   useEffect(() => {
@@ -54,6 +59,9 @@ function AdminHistory() {
   }, [])
 
   const load = useCallback(async (reset, currentStoreMap = null) => {
+    const generation = reset
+      ? ++requestGenerationRef.current
+      : requestGenerationRef.current
     if (reset) {
       setLoading(true)
       setRecords([])
@@ -79,6 +87,8 @@ function AdminHistory() {
             storeNameMap: currentStoreMap ?? storeNameMap,
           })
 
+      if (generation !== requestGenerationRef.current) return
+
       if (reset) {
         setRecords(result.records)
         if (result.storeNameMap) setStoreNameMap(result.storeNameMap)
@@ -96,10 +106,12 @@ function AdminHistory() {
       lastDocRef.current = result.lastDoc
       setHasMore(result.hasMore)
     } catch (err) {
-      setError(err.message)
+      if (generation === requestGenerationRef.current) setError(err.message)
     } finally {
-      setLoading(false)
-      setLoadingMore(false)
+      if (generation === requestGenerationRef.current) {
+        setLoading(false)
+        setLoadingMore(false)
+      }
     }
   }, [search, storeFilter, storeNameMap])
 

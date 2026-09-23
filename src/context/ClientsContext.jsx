@@ -74,8 +74,8 @@ export function ClientsProvider({ children }) {
         }, 5000) // 5 secondes maximum
 
         // Écouter les changements en temps réel - PRIORITÉ À FIRESTORE
-        unsubscribe = firestoreService.subscribeToClients((clientsData) => {
-          if (isMounted) {
+        const onClients = (clientsData) => {
+            if (!isMounted) return
             clearTimeout(loadingTimeout)
 
             // Déduplication des clients pour éviter les erreurs de clés React
@@ -87,8 +87,14 @@ export function ClientsProvider({ children }) {
             setClients(sortClientsByRegistrationDesc(uniqueClients))
             setLoading(false)
             setError(null)
-          }
-        })
+        }
+        onClients.onError = (subscriptionError) => {
+          if (!isMounted) return
+          clearTimeout(loadingTimeout)
+          setError(subscriptionError.message)
+          setLoading(false)
+        }
+        unsubscribe = firestoreService.subscribeToClients(onClients)
 
       } catch (error) {
         console.error('Clients initialization error:', error)
@@ -173,4 +179,3 @@ export function ClientsProvider({ children }) {
     </ClientsContext.Provider>
   )
 }
-

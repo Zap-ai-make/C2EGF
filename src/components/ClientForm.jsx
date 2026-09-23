@@ -18,25 +18,20 @@ const EMPTY_CLIENT_FORM = {
   agentCommercial: ''
 }
 
-const CLIENT_FORM_DRAFT_KEY = getStorageKey('client_form_draft')
-
-const readClientFormDraft = () => {
-  if (typeof window === 'undefined') return EMPTY_CLIENT_FORM
-
-  try {
-    const draft = window.localStorage.getItem(CLIENT_FORM_DRAFT_KEY)
-    return draft ? { ...EMPTY_CLIENT_FORM, ...JSON.parse(draft) } : EMPTY_CLIENT_FORM
-  } catch {
-    return EMPTY_CLIENT_FORM
-  }
-}
-
-const hasFormDraft = (data) => Object.values(data).some(value => String(value || '').trim())
+const LEGACY_CLIENT_FORM_DRAFT_KEY = getStorageKey('client_form_draft')
 
 function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client' }) {
   const { toasts, showToast, removeToast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [formData, setFormData] = useState(() => initialData ? EMPTY_CLIENT_FORM : readClientFormDraft())
+  const [formData, setFormData] = useState(EMPTY_CLIENT_FORM)
+
+  useEffect(() => {
+    try {
+      window.localStorage.removeItem(LEGACY_CLIENT_FORM_DRAFT_KEY)
+    } catch {
+      // Le stockage peut être indisponible ; le formulaire reste en mémoire uniquement.
+    }
+  }, [])
 
   // Charger les données initiales si on modifie
   useEffect(() => {
@@ -56,20 +51,6 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client' 
       })
     }
   }, [initialData])
-
-  useEffect(() => {
-    if (initialData || typeof window === 'undefined') return
-
-    try {
-      if (hasFormDraft(formData)) {
-        window.localStorage.setItem(CLIENT_FORM_DRAFT_KEY, JSON.stringify(formData))
-      } else {
-        window.localStorage.removeItem(CLIENT_FORM_DRAFT_KEY)
-      }
-    } catch {
-      // Le brouillon est une aide UX; l'enregistrement principal reste prioritaire.
-    }
-  }, [formData, initialData])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -111,7 +92,6 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client' 
 
       // Reset du formulaire seulement si on n'est pas en mode modification
       if (!initialData) {
-        window.localStorage.removeItem(CLIENT_FORM_DRAFT_KEY)
         setFormData(EMPTY_CLIENT_FORM)
       }
     } catch (error) {
@@ -130,10 +110,11 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client' 
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="client-nom" className="block text-sm font-medium text-gray-700 mb-1">
             Nom
           </label>
           <input
+            id="client-nom"
             type="text"
             name="nom"
             value={formData.nom}
@@ -144,10 +125,11 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client' 
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="client-prenom" className="block text-sm font-medium text-gray-700 mb-1">
             Prénom
           </label>
           <input
+            id="client-prenom"
             type="text"
             name="prenom"
             value={formData.prenom}
@@ -158,10 +140,11 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client' 
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="client-identite" className="block text-sm font-medium text-gray-700 mb-1">
             Numéro d'identité
           </label>
           <input
+            id="client-identite"
             type="text"
             name="numeroIdentite"
             value={formData.numeroIdentite}
@@ -171,10 +154,11 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client' 
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="client-telephone" className="block text-sm font-medium text-gray-700 mb-1">
             Numéro personnel
           </label>
           <input
+            id="client-telephone"
             type="text"
             name="numeroPersonnel"
             value={formData.numeroPersonnel}
@@ -184,10 +168,11 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client' 
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="client-agent-orange" className="block text-sm font-medium text-gray-700 mb-1">
             Numéro agent / Code agent
           </label>
           <input
+            id="client-agent-orange"
             type="text"
             name="orange"
             value={formData.orange}
@@ -197,10 +182,11 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client' 
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="client-localite" className="block text-sm font-medium text-gray-700 mb-1">
             Localité
           </label>
           <input
+            id="client-localite"
             type="text"
             name="localite"
             value={formData.localite}
@@ -210,10 +196,11 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client' 
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="client-commercial" className="block text-sm font-medium text-gray-700 mb-1">
             Nom de l'agent commercial
           </label>
           <input
+            id="client-commercial"
             type="text"
             name="agentCommercial"
             value={formData.agentCommercial}

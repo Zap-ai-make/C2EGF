@@ -29,6 +29,7 @@ import {
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import { FIRESTORE_CONFIG } from '../constants/firestoreConstants'
+import { normalizeSubscriptionObserver, notifySubscriptionError } from './subscriptionObserver.js'
 
 const CURRENT_BALANCE_DOC_ID = 'current'
 
@@ -148,13 +149,14 @@ export class BalanceService {
    * @returns {function} Fonction de désabonnement
    */
   subscribeToNetworkBalances(callback) {
+    const observer = normalizeSubscriptionObserver(callback)
     return onSnapshot(
       this.getNetworkBalanceDocRef(),
       (snapshot) => {
-        callback(this._ctx.normalizeNetworkBalances(snapshot.exists() ? snapshot.data() : {}))
+        observer.onNext(this._ctx.normalizeNetworkBalances(snapshot.exists() ? snapshot.data() : {}))
       },
       (error) => {
-        console.error('Network balances subscription error:', error)
+        notifySubscriptionError(observer, error, 'Network balances subscription error')
       }
     )
   }

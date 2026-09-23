@@ -515,6 +515,20 @@ describe('TC-018-E — subscribeToDrafts', () => {
 
     expect(mockCollectionRef).toHaveBeenCalledWith('drafts')
   })
+
+  it('propage une erreur Firestore à onError', () => {
+    const { service } = makeDraftService()
+    const onError = vi.fn()
+    const error = new Error('permission-denied')
+    vi.mocked(onSnapshot).mockImplementation((_ref, _successCb, errorCb) => {
+      errorCb(error)
+      return vi.fn()
+    })
+
+    service.subscribeToDrafts({ onNext: vi.fn(), onError })
+
+    expect(onError).toHaveBeenCalledWith(error)
+  })
 })
 
 // ---------------------------------------------------------------------------

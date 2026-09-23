@@ -4,6 +4,7 @@ import { useFormValidation } from '../../hooks/useFormValidation'
 import { AUTH_LABELS, AUTH_PLACEHOLDERS, AUTH_SUCCESS, AUTH_CONFIG } from '../../constants/authMessages'
 import { AUTH_STYLES } from '../../constants/authStyles'
 import { createTimeoutWithCleanup } from '../../utils/authHelpers'
+import Dialog from '../ui/Dialog'
 
 function ForgotPasswordModal({ isOpen, onClose }) {
   const [message, setMessage] = useState('')
@@ -74,40 +75,28 @@ function ForgotPasswordModal({ isOpen, onClose }) {
   const emailProps = getFieldProps('email')
 
   return (
-    <div className={AUTH_STYLES.modal.overlay}>
-      <div className={AUTH_STYLES.modal.container}>
-        <div className={AUTH_STYLES.modal.header}>
-          <h3 className={AUTH_STYLES.modal.title}>
-            {AUTH_LABELS.FORGOT_PASSWORD}
-          </h3>
-          <button
-            onClick={handleClose}
-            className={AUTH_STYLES.modal.closeButton}
-            aria-label="Fermer la modal"
-          >
-            ×
-          </button>
-        </div>
-
+    <Dialog open={isOpen} onClose={handleClose} title={AUTH_LABELS.FORGOT_PASSWORD} testId="forgot-password-dialog">
         <p className={`${AUTH_STYLES.text.body} ${AUTH_STYLES.spacing.modal}`}>
           Entrez votre adresse email et nous vous enverrons un lien pour réinitialiser votre mot de passe.
         </p>
 
         {shouldShowErrors && (errors.submit || Object.values(errors).some(error => error)) && (
-          <div className={`${AUTH_STYLES.message.error} ${AUTH_STYLES.spacing.modal}`}>
+          <div role="alert" className={`${AUTH_STYLES.message.error} ${AUTH_STYLES.spacing.modal}`}>
             {errors.submit || Object.values(errors).find(error => error)}
           </div>
         )}
 
         {message && (
-          <div className={`${AUTH_STYLES.message.success} ${AUTH_STYLES.spacing.modal}`}>
+          <div role="status" className={`${AUTH_STYLES.message.success} ${AUTH_STYLES.spacing.modal}`}>
             {message}
           </div>
         )}
 
         <form onSubmit={handleSubmit}>
           <div className={AUTH_STYLES.spacing.modal}>
+            <label htmlFor="forgot-password-email" className={AUTH_STYLES.profile.label}>Adresse email</label>
             <input
+              id="forgot-password-email"
               type="email"
               placeholder={AUTH_PLACEHOLDERS.EMAIL}
               {...emailProps}
@@ -139,8 +128,7 @@ function ForgotPasswordModal({ isOpen, onClose }) {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Dialog>
   )
 }
 
