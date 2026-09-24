@@ -78,13 +78,8 @@ export function ClientsProvider({ children }) {
             if (!isMounted) return
             clearTimeout(loadingTimeout)
 
-            // Déduplication des clients pour éviter les erreurs de clés React
-            const uniqueClients = clientsData.filter((client, index, array) =>
-              array.findIndex(c => c.id === client.id) === index
-            )
-
             // Tri décroissant : le dernier client enregistré apparaît en haut.
-            setClients(sortClientsByRegistrationDesc(uniqueClients))
+            setClients(sortClientsByRegistrationDesc(clientsData))
             setLoading(false)
             setError(null)
         }

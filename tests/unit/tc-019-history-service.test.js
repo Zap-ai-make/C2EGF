@@ -123,30 +123,6 @@ const DEPOSIT_HISTORY_PATH1 = Object.freeze({
   clientId: 'client-001',
 })
 
-// Transaction historique de type "Crédit" validée directement (Path 1)
-// Orange.stock initial = 5000, montant = 800
-// reverseDirectValidatedImpact(Crédit) : stock += 800
-// Orange.stock attendu = 5800
-const CREDIT_HISTORY_PATH1 = Object.freeze({
-  type:     'Crédit',
-  reseau:   'Orange',
-  montant:  800,
-  statut:   'Validée',
-  clientId: 'client-002',
-})
-
-// Transaction historique de type "Retrait" sans règlement, avec validatedAt (Path 2 sans règlement)
-// reversePendingOnlyImpact(Retrait) : stock -= montant
-// Moov.stock initial = 3000, montant = 500 → Moov.stock attendu = 2500
-const WITHDRAWAL_HISTORY_PATH2_NO_PAYMENT = Object.freeze({
-  type:        'Retrait',
-  reseau:      'Moov',
-  montant:     500,
-  statut:      'Validée',
-  validatedAt: 'mock-server-timestamp',
-  clientId:    'client-003',
-})
-
 // ---------------------------------------------------------------------------
 // Usine à HistoryService avec ctx mocké
 // ---------------------------------------------------------------------------
@@ -765,6 +741,8 @@ describe('TC-019-Q — subscribeToHistory retourne l\'unsubscribe', () => {
     const [col, calledCb] = mockSubscribeToCollection.mock.calls[0]
     expect(col).toBe(FIRESTORE_CONFIG.COLLECTIONS.HISTORY)
     expect(calledCb).toBe(cb)
+    const options = mockSubscribeToCollection.mock.calls[0][2]
+    expect(options).toMatchObject({ orderByField: 'createdAt', orderDirection: 'desc' })
     expect(unsub).toBe(mockUnsub)
   })
 

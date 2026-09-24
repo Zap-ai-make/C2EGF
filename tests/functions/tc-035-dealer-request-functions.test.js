@@ -30,7 +30,6 @@
 import { describe, it, beforeAll, afterAll, beforeEach, expect } from 'vitest'
 import { initializeApp, getApps, deleteApp } from 'firebase-admin/app'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
-import { DealerRequestError } from '../../functions/src/errors.js'
 import { confirmDealerRequestHandler } from '../../functions/src/dealerRequests/confirmDealerRequest.js'
 import { rejectDealerRequestHandler } from '../../functions/src/dealerRequests/rejectDealerRequest.js'
 

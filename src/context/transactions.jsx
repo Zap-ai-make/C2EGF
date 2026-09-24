@@ -98,11 +98,8 @@ export const TransactionsProvider = ({ children }) => {
 
         const onDrafts = (draftsData) => {
             if (!isMounted) return
-            // Déduplication des drafts
-            const uniqueDrafts = draftsData.filter((draft, index, array) =>
-              array.findIndex(d => d.id === draft.id) === index
-            )
-            setPendingTransactions(uniqueDrafts)
+            // Un snapshot Firestore contient déjà un document unique par id.
+            setPendingTransactions(draftsData)
         }
         onDrafts.onError = onSubscriptionError
         unsubscribeDrafts = firestoreService.subscribeToDrafts(onDrafts)
@@ -110,12 +107,8 @@ export const TransactionsProvider = ({ children }) => {
         // Écouter l'historique (transactions terminées)
         const onHistory = (historyData) => {
             if (!isMounted) return
-            // Déduplication de l'historique
-            const uniqueHistory = historyData.filter((history, index, array) =>
-              array.findIndex(h => h.id === history.id) === index
-            )
             // Tri décroissant par date d'enregistrement : le dernier en haut.
-            setCompletedTransactions(sortHistoryDesc(uniqueHistory))
+            setCompletedTransactions(sortHistoryDesc(historyData))
         }
         onHistory.onError = onSubscriptionError
         unsubscribeHistory = firestoreService.subscribeToHistory(onHistory)

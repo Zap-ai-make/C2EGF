@@ -30,7 +30,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 
 import {
   transactionTopToday,
@@ -61,6 +61,21 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('TC-012 -- useTodayTransactions : filtrage statut Annulee', () => {
+
+  it('[TC-012-0] se réévalue au passage de minuit métier sans changement de liste', () => {
+    vi.setSystemTime(new Date('2026-06-30T23:59:59.000Z'))
+    const transaction = {
+      id: 'txn-next-day',
+      date: '01/07/2026 00:00',
+      statut: 'Validée',
+    }
+    const { result } = renderHook(() => useTodayTransactions([transaction]))
+    expect(result.current).toEqual([])
+
+    act(() => vi.advanceTimersByTime(1100))
+
+    expect(result.current.map(item => item.id)).toEqual(['txn-next-day'])
+  })
 
   // -------------------------------------------------------------------------
   // [TC-012-1] Transaction statut 'Annulée' du jour doit etre exclue

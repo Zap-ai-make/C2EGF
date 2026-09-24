@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { Menu, X } from 'lucide-react'
 import {
-  STORE_NAV_ITEMS,
   STORE_ACCOUNT_ITEM,
   NAV_GROUPS,
   INTERNAL_DEBTS_PATH,

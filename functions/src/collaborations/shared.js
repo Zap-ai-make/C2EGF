@@ -22,7 +22,7 @@
  */
 
 import { DealerRequestError } from '../errors.js'
-import { STORE_NETWORKS, COLLABORATIONS_ENABLED } from '../config/storeProfile.js'
+import { STORE_NETWORKS } from '../config/storeProfile.js'
 
 export const COLLABORATION_OPERATION_TYPES = new Set(['deposit', 'withdrawal'])
 

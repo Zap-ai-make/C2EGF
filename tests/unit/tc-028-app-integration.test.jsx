@@ -113,10 +113,10 @@ vi.mock('../../src/pages/Profil', () => ({
 }))
 
 // Pages Admin
-vi.mock('../../src/pages/admin/AdminHome', () => ({
+vi.mock('../../src/pages/admin/AdminDashboard.jsx', () => ({
   default: () => <div data-testid="admin-home">AdminHome</div>,
 }))
-vi.mock('../../src/pages/admin/AdminStoresPlaceholder', () => ({
+vi.mock('../../src/pages/admin/AdminStores.jsx', () => ({
   default: () => <div data-testid="admin-stores">AdminStores</div>,
 }))
 vi.mock('../../src/pages/admin/AdminProfile', () => ({
@@ -124,6 +124,9 @@ vi.mock('../../src/pages/admin/AdminProfile', () => ({
 }))
 
 // Pages Dealer
+vi.mock('../../src/pages/dealer/DealerDashboard.jsx', () => ({
+  default: () => <div data-testid="dealer-home">DealerDashboard</div>,
+}))
 vi.mock('../../src/pages/dealer/DealerStores', () => ({
   default: () => <div data-testid="dealer-stores">DealerStores</div>,
 }))
@@ -276,52 +279,52 @@ describe('TC-028-A — URL finale par rôle', () => {
     expect(screen.getByTestId('auth-page')).toBeInTheDocument()
   })
 
-  it('A-3 : store_admin sur "/" → Dashboard rendu', () => {
+  it('A-3 : store_admin sur "/" → Dashboard rendu', async () => {
     renderApp(storeAdminCtx(), '/')
-    expect(screen.getByTestId('page-dashboard')).toBeInTheDocument()
+    expect(await screen.findByTestId('page-dashboard')).toBeInTheDocument()
     expect(screen.getByTestId('location').textContent).toBe('/')
   })
 
-  it('A-4 : store_admin sur "/clients" → Clients rendu', () => {
+  it('A-4 : store_admin sur "/clients" → Clients rendu', async () => {
     renderApp(storeAdminCtx(), '/clients')
-    expect(screen.getByTestId('page-clients')).toBeInTheDocument()
+    expect(await screen.findByTestId('page-clients')).toBeInTheDocument()
     expect(screen.getByTestId('location').textContent).toBe('/clients')
   })
 
-  it('A-5 : store_admin sur "/transactions" → Transactions rendu', () => {
+  it('A-5 : store_admin sur "/transactions" → Transactions rendu', async () => {
     renderApp(storeAdminCtx(), '/transactions')
-    expect(screen.getByTestId('page-transactions')).toBeInTheDocument()
+    expect(await screen.findByTestId('page-transactions')).toBeInTheDocument()
   })
 
-  it('A-6 : store_admin sur "/historique" → Historique rendu', () => {
+  it('A-6 : store_admin sur "/historique" → Historique rendu', async () => {
     renderApp(storeAdminCtx(), '/historique')
-    expect(screen.getByTestId('page-historique')).toBeInTheDocument()
+    expect(await screen.findByTestId('page-historique')).toBeInTheDocument()
   })
 
-  it('A-7 : store_admin sur "/formulaire" → Formulaire rendu', () => {
+  it('A-7 : store_admin sur "/formulaire" → Formulaire rendu', async () => {
     renderApp(storeAdminCtx(), '/formulaire')
-    expect(screen.getByTestId('page-formulaire')).toBeInTheDocument()
+    expect(await screen.findByTestId('page-formulaire')).toBeInTheDocument()
   })
 
-  it('A-8 : store_admin sur "/profil" → Profil rendu', () => {
+  it('A-8 : store_admin sur "/profil" → Profil rendu', async () => {
     renderApp(storeAdminCtx(), '/profil')
-    expect(screen.getByTestId('page-profil')).toBeInTheDocument()
+    expect(await screen.findByTestId('page-profil')).toBeInTheDocument()
   })
 
-  it('A-9 : system_manager sur "/admin" → AdminHome rendu', () => {
+  it('A-9 : system_manager sur "/admin" → AdminHome rendu', async () => {
     renderApp(systemManagerCtx(), '/admin')
-    expect(screen.getByTestId('admin-home')).toBeInTheDocument()
+    expect(await screen.findByTestId('admin-home')).toBeInTheDocument()
     expect(screen.getByTestId('location').textContent).toBe('/admin')
   })
 
-  it('A-10 : system_manager sur "/admin/stores" → AdminStores rendu', () => {
+  it('A-10 : system_manager sur "/admin/stores" → AdminStores rendu', async () => {
     renderApp(systemManagerCtx(), '/admin/stores')
-    expect(screen.getByTestId('admin-stores')).toBeInTheDocument()
+    expect(await screen.findByTestId('admin-stores')).toBeInTheDocument()
   })
 
-  it('A-11 : system_manager sur "/admin/profile" → AdminProfile rendu', () => {
+  it('A-11 : system_manager sur "/admin/profile" → AdminProfile rendu', async () => {
     renderApp(systemManagerCtx(), '/admin/profile')
-    expect(screen.getByTestId('admin-profile')).toBeInTheDocument()
+    expect(await screen.findByTestId('admin-profile')).toBeInTheDocument()
   })
 
   // Renommé : ce test a TOUJOURS rendu DealerDashboard, jamais DealerHome.
@@ -329,30 +332,30 @@ describe('TC-028-A — URL finale par rôle', () => {
   // importé nulle part et son mock, retiré avec lui, ne servait à rien. Le
   // testid « dealer-home » est porté par DealerDashboard — nom trompeur, hors
   // périmètre de ce lot, à reprendre en S4 quand l'écran sera réécrit.
-  it('A-12 : dealer sur "/dealer" → le tableau de bord dealer est rendu', () => {
+  it('A-12 : dealer sur "/dealer" → le tableau de bord dealer est rendu', async () => {
     renderApp(dealerCtx(), '/dealer')
-    expect(screen.getByTestId('dealer-home')).toBeInTheDocument()
+    expect(await screen.findByTestId('dealer-home')).toBeInTheDocument()
     expect(screen.getByTestId('location').textContent).toBe('/dealer')
   })
 
-  it('A-13 : dealer sur "/dealer/stores" → DealerStores rendu', () => {
+  it('A-13 : dealer sur "/dealer/stores" → DealerStores rendu', async () => {
     renderApp(dealerCtx(), '/dealer/stores')
-    expect(screen.getByTestId('dealer-stores')).toBeInTheDocument()
+    expect(await screen.findByTestId('dealer-stores')).toBeInTheDocument()
   })
 
-  it('A-14 : dealer sur "/dealer/requests" → DealerRequests rendu', () => {
+  it('A-14 : dealer sur "/dealer/requests" → DealerRequests rendu', async () => {
     renderApp(dealerCtx(), '/dealer/requests')
-    expect(screen.getByTestId('dealer-requests')).toBeInTheDocument()
+    expect(await screen.findByTestId('dealer-requests')).toBeInTheDocument()
   })
 
-  it('A-15 : dealer sur "/dealer/profile" → DealerProfile rendu', () => {
+  it('A-15 : dealer sur "/dealer/profile" → DealerProfile rendu', async () => {
     renderApp(dealerCtx(), '/dealer/profile')
-    expect(screen.getByTestId('dealer-profile')).toBeInTheDocument()
+    expect(await screen.findByTestId('dealer-profile')).toBeInTheDocument()
   })
 
-  it('A-16 : dealer sur "/dealer/requests/new" → NewDealerRequest rendu', () => {
+  it('A-16 : dealer sur "/dealer/requests/new" → NewDealerRequest rendu', async () => {
     renderApp(dealerCtx(), '/dealer/requests/new')
-    expect(screen.getByTestId('dealer-requests-new')).toBeInTheDocument()
+    expect(await screen.findByTestId('dealer-requests-new')).toBeInTheDocument()
     expect(screen.getByTestId('location').textContent).toBe('/dealer/requests/new')
   })
 })
@@ -364,22 +367,22 @@ describe('TC-028-A — URL finale par rôle', () => {
 describe('TC-028-B — Wildcard et états bloqués', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('B-1 : store_admin sur URL inconnue → redirigé vers "/"', () => {
+  it('B-1 : store_admin sur URL inconnue → redirigé vers "/"', async () => {
     renderApp(storeAdminCtx(), '/page-inconnue')
+    expect(await screen.findByTestId('page-dashboard')).toBeInTheDocument()
     expect(screen.getByTestId('location').textContent).toBe('/')
-    expect(screen.getByTestId('page-dashboard')).toBeInTheDocument()
   })
 
-  it('B-2 : system_manager sur URL inconnue → redirigé vers "/admin"', () => {
+  it('B-2 : system_manager sur URL inconnue → redirigé vers "/admin"', async () => {
     renderApp(systemManagerCtx(), '/page-inconnue')
+    expect(await screen.findByTestId('admin-home')).toBeInTheDocument()
     expect(screen.getByTestId('location').textContent).toBe('/admin')
-    expect(screen.getByTestId('admin-home')).toBeInTheDocument()
   })
 
-  it('B-3 : dealer sur URL inconnue → redirigé vers "/dealer"', () => {
+  it('B-3 : dealer sur URL inconnue → redirigé vers "/dealer"', async () => {
     renderApp(dealerCtx(), '/page-inconnue')
+    expect(await screen.findByTestId('dealer-home')).toBeInTheDocument()
     expect(screen.getByTestId('location').textContent).toBe('/dealer')
-    expect(screen.getByTestId('dealer-home')).toBeInTheDocument()
   })
 
   it('B-4 : profil absent sur wildcard → Accès bloqué avec bouton déconnexion', () => {
@@ -406,14 +409,16 @@ describe('TC-028-B — Wildcard et états bloqués', () => {
     expect(logout).toHaveBeenCalledTimes(1)
   })
 
-  it('B-6 : store_admin → AdminLayout absent (isolation espaces)', () => {
+  it('B-6 : store_admin → AdminLayout absent (isolation espaces)', async () => {
     renderApp(storeAdminCtx(), '/')
+    await screen.findByTestId('page-dashboard')
     expect(screen.queryByTestId('admin-layout')).not.toBeInTheDocument()
     expect(screen.queryByTestId('dealer-layout')).not.toBeInTheDocument()
   })
 
-  it('B-7 : system_manager → Layout Boutique absent', () => {
+  it('B-7 : system_manager → Layout Boutique absent', async () => {
     renderApp(systemManagerCtx(), '/admin')
+    await screen.findByTestId('admin-home')
     expect(screen.queryByTestId('store-navbar')).not.toBeInTheDocument()
     expect(screen.queryByTestId('network-drawer')).not.toBeInTheDocument()
   })
@@ -476,31 +481,31 @@ describe('TC-028-C — Isolation Firestore providers', () => {
 describe('TC-028-D — Isolation routes Dealer', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('D-1 : dealer sur /dealer/stores → dealer-stores rendu', () => {
+  it('D-1 : dealer sur /dealer/stores → dealer-stores rendu', async () => {
     renderApp(dealerCtx(), '/dealer/stores')
-    expect(screen.getByTestId('dealer-stores')).toBeInTheDocument()
+    expect(await screen.findByTestId('dealer-stores')).toBeInTheDocument()
   })
 
-  it('D-2 : dealer sur /dealer/requests → dealer-requests rendu', () => {
+  it('D-2 : dealer sur /dealer/requests → dealer-requests rendu', async () => {
     renderApp(dealerCtx(), '/dealer/requests')
-    expect(screen.getByTestId('dealer-requests')).toBeInTheDocument()
+    expect(await screen.findByTestId('dealer-requests')).toBeInTheDocument()
   })
 
-  it('D-3 : dealer sur /dealer/requests/new → dealer-requests-new rendu', () => {
+  it('D-3 : dealer sur /dealer/requests/new → dealer-requests-new rendu', async () => {
     renderApp(dealerCtx(), '/dealer/requests/new')
-    expect(screen.getByTestId('dealer-requests-new')).toBeInTheDocument()
+    expect(await screen.findByTestId('dealer-requests-new')).toBeInTheDocument()
   })
 
-  it('D-4 : store_admin sur /dealer/stores → redirigé vers / (Dashboard)', () => {
+  it('D-4 : store_admin sur /dealer/stores → redirigé vers / (Dashboard)', async () => {
     renderApp(storeAdminCtx(), '/dealer/stores')
     expect(screen.queryByTestId('dealer-stores')).not.toBeInTheDocument()
-    expect(screen.getByTestId('page-dashboard')).toBeInTheDocument()
+    expect(await screen.findByTestId('page-dashboard')).toBeInTheDocument()
   })
 
-  it('D-5 : system_manager sur /dealer/stores → redirigé vers /admin', () => {
+  it('D-5 : system_manager sur /dealer/stores → redirigé vers /admin', async () => {
     renderApp(systemManagerCtx(), '/dealer/stores')
     expect(screen.queryByTestId('dealer-stores')).not.toBeInTheDocument()
-    expect(screen.getByTestId('admin-home')).toBeInTheDocument()
+    expect(await screen.findByTestId('admin-home')).toBeInTheDocument()
   })
 
   it('D-6 : non authentifié sur /dealer/stores → AuthPage', () => {
@@ -509,22 +514,22 @@ describe('TC-028-D — Isolation routes Dealer', () => {
     expect(screen.getByTestId('auth-page')).toBeInTheDocument()
   })
 
-  it('D-7 : store_admin sur /dealer/requests → redirigé vers /', () => {
+  it('D-7 : store_admin sur /dealer/requests → redirigé vers /', async () => {
     renderApp(storeAdminCtx(), '/dealer/requests')
     expect(screen.queryByTestId('dealer-requests')).not.toBeInTheDocument()
-    expect(screen.getByTestId('page-dashboard')).toBeInTheDocument()
+    expect(await screen.findByTestId('page-dashboard')).toBeInTheDocument()
   })
 
-  it('D-8 : store_admin sur /dealer/requests/new → redirigé vers /', () => {
+  it('D-8 : store_admin sur /dealer/requests/new → redirigé vers /', async () => {
     renderApp(storeAdminCtx(), '/dealer/requests/new')
     expect(screen.queryByTestId('dealer-requests-new')).not.toBeInTheDocument()
-    expect(screen.getByTestId('page-dashboard')).toBeInTheDocument()
+    expect(await screen.findByTestId('page-dashboard')).toBeInTheDocument()
   })
 
-  it('D-9 : system_manager sur /dealer/requests → redirigé vers /admin', () => {
+  it('D-9 : system_manager sur /dealer/requests → redirigé vers /admin', async () => {
     renderApp(systemManagerCtx(), '/dealer/requests')
     expect(screen.queryByTestId('dealer-requests')).not.toBeInTheDocument()
-    expect(screen.getByTestId('admin-home')).toBeInTheDocument()
+    expect(await screen.findByTestId('admin-home')).toBeInTheDocument()
   })
 })
 
@@ -537,26 +542,26 @@ describe('TC-028-D — Isolation routes Dealer', () => {
 describe('TC-028-E — Isolation routes Store Admin Dealer (V2-6)', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('E-1 : store_admin sur /dealer-requests → StoreAdminDealerRequests rendu', () => {
+  it('E-1 : store_admin sur /dealer-requests → StoreAdminDealerRequests rendu', async () => {
     renderApp(storeAdminCtx(), '/dealer-requests')
-    expect(screen.getByTestId('store-dealer-requests-page')).toBeInTheDocument()
+    expect(await screen.findByTestId('store-dealer-requests-page')).toBeInTheDocument()
   })
 
-  it('E-2 : store_admin sur /dealer-requests/req-123 → StoreAdminDealerRequestDetails rendu', () => {
+  it('E-2 : store_admin sur /dealer-requests/req-123 → StoreAdminDealerRequestDetails rendu', async () => {
     renderApp(storeAdminCtx(), '/dealer-requests/req-123')
-    expect(screen.getByTestId('store-dealer-request-details-page')).toBeInTheDocument()
+    expect(await screen.findByTestId('store-dealer-request-details-page')).toBeInTheDocument()
   })
 
-  it('E-3 : dealer sur /dealer-requests → redirigé vers /dealer (page non visible)', () => {
+  it('E-3 : dealer sur /dealer-requests → redirigé vers /dealer (page non visible)', async () => {
     renderApp(dealerCtx(), '/dealer-requests')
     expect(screen.queryByTestId('store-dealer-requests-page')).not.toBeInTheDocument()
-    expect(screen.getByTestId('dealer-home')).toBeInTheDocument()
+    expect(await screen.findByTestId('dealer-home')).toBeInTheDocument()
   })
 
-  it('E-4 : system_manager sur /dealer-requests → redirigé vers /admin', () => {
+  it('E-4 : system_manager sur /dealer-requests → redirigé vers /admin', async () => {
     renderApp(systemManagerCtx(), '/dealer-requests')
     expect(screen.queryByTestId('store-dealer-requests-page')).not.toBeInTheDocument()
-    expect(screen.getByTestId('admin-home')).toBeInTheDocument()
+    expect(await screen.findByTestId('admin-home')).toBeInTheDocument()
   })
 
   it('E-5 : non authentifié sur /dealer-requests → AuthPage', () => {
@@ -565,10 +570,10 @@ describe('TC-028-E — Isolation routes Store Admin Dealer (V2-6)', () => {
     expect(screen.getByTestId('auth-page')).toBeInTheDocument()
   })
 
-  it('E-6 : dealer sur /dealer-requests/req-abc → redirigé vers /dealer', () => {
+  it('E-6 : dealer sur /dealer-requests/req-abc → redirigé vers /dealer', async () => {
     renderApp(dealerCtx(), '/dealer-requests/req-abc')
     expect(screen.queryByTestId('store-dealer-request-details-page')).not.toBeInTheDocument()
-    expect(screen.getByTestId('dealer-home')).toBeInTheDocument()
+    expect(await screen.findByTestId('dealer-home')).toBeInTheDocument()
   })
 
   it('E-7 : non authentifié sur /dealer-requests/req-abc → AuthPage', () => {

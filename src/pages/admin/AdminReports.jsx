@@ -308,11 +308,6 @@ function AdminReports() {
           <section>
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
               Détail des demandes ({requests.length} résultat{requests.length > 1 ? 's' : ''})
-              {requests.length >= 500 && (
-                <span className="ml-2 text-amber-500 font-normal normal-case">
-                  — Limite 500 atteinte, affinez la période.
-                </span>
-              )}
             </h2>
             <div className="overflow-x-auto rounded-xl border border-gray-200">
               <table className="min-w-full text-sm" data-testid="report-table-detail">

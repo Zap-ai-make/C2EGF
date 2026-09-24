@@ -17,7 +17,7 @@ import { describe, it, beforeAll, afterAll, beforeEach, expect } from 'vitest'
 
 // Admin SDK
 import { initializeApp as initAdminApp, getApps as getAdminApps, deleteApp as deleteAdminApp } from 'firebase-admin/app'
-import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { getFirestore } from 'firebase-admin/firestore'
 import { getAuth as getAdminAuth }  from 'firebase-admin/auth'
 
 // Client SDK

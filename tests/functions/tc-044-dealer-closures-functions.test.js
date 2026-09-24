@@ -19,7 +19,6 @@
 import { describe, it, beforeAll, afterAll, beforeEach, expect } from 'vitest'
 import { initializeApp, getApps, deleteApp } from 'firebase-admin/app'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
-import { DealerRequestError } from '../../functions/src/errors.js'
 import { createDealerClosureHandler }  from '../../functions/src/closures/createDealerClosure.js'
 import { confirmDealerClosureHandler } from '../../functions/src/closures/confirmDealerClosure.js'
 import { rejectDealerClosureHandler }  from '../../functions/src/closures/rejectDealerClosure.js'
@@ -61,7 +60,6 @@ beforeEach(async () => { await clearFirestoreEmulator() })
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DEALER_UID       = 'dealer-uid-044'
-const DEALER_B_UID     = 'dealer-b-uid-044'
 const STORE_ADMIN_UID  = 'store-admin-uid-044'
 const OTHER_ADMIN_UID  = 'other-admin-uid-044'
 const STORE_A          = 'store-044-A'
@@ -71,10 +69,6 @@ const BUSINESS_DATE    = '2024-06-15'
 const DEALER_PROFILE = {
   role: 'dealer', active: true,
   email: 'dealer@test.044', name: 'Dealer 044',
-}
-const DEALER_B_PROFILE = {
-  role: 'dealer', active: true,
-  email: 'dealer-b@test.044', name: 'Dealer B 044',
 }
 const INACTIVE_DEALER_PROFILE = {
   role: 'dealer', active: false,
@@ -89,7 +83,6 @@ const OTHER_ADMIN_PROFILE = {
   email: 'other-admin@test.044', name: 'Other Admin 044',
 }
 const STORE_A_DOC = { name: 'Boutique 044-A', active: true, adminUid: STORE_ADMIN_UID }
-const STORE_B_DOC = { name: 'Boutique 044-B', active: true, adminUid: OTHER_ADMIN_UID }
 const BALANCE_DOC = {
   balances: {
     Orange: { stock: 40000, liquidite: 20000 },

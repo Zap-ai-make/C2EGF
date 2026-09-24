@@ -406,6 +406,7 @@ describe('TC-078-CH — listConsolidatedHistory', () => {
     expect(res.records[0].storeName).toBe('Boutique B')
     expect(res.records[1].storeId).toBe('store-a')
     expect(res.storeNameMap).toEqual({ 'store-a': 'Boutique A', 'store-b': 'Boutique B' })
+    expect(mocks.orderBy).toHaveBeenCalledWith('createdAt', 'desc')
   })
 
   it('[CH-02] storeNameMap fourni → pas de second fetch stores', async () => {
@@ -452,6 +453,7 @@ describe('TC-078-SH — listStoreHistory', () => {
     const res = await listStoreHistory({ storeId: 'store-a' })
     expect(res.records.map(r => r.id)).toEqual(['h2', 'h1'])
     expect(res.records[0].storeName).toBe('store-a')
+    expect(mocks.orderBy).toHaveBeenCalledWith('createdAt', 'desc')
   })
 })
 
@@ -488,18 +490,29 @@ describe('TC-078-NB — listAllNetworkBalances / getStoreNetworkBalances', () =>
 // ---------------------------------------------------------------------------
 
 describe('TC-078-RP — getRequestsForReport', () => {
-  it('[RP-01] dateTo étendue à 23:59:59.999 (fin de journée incluse)', async () => {
+  it('[RP-01] utilise les bornes UTC de la journée métier', async () => {
     mocks.getDocs.mockResolvedValue(makeQuerySnap([]))
     await getRequestsForReport({ dateFrom: '2026-01-01', dateTo: '2026-01-31' })
 
     const calls = mocks.Timestamp.fromDate.mock.calls
     expect(calls).toHaveLength(2)
-    const end = calls[1][0]
-    expect(end.getHours()).toBe(23)
-    expect(end.getMinutes()).toBe(59)
-    expect(end.getSeconds()).toBe(59)
-    // Limite de rapport actuelle : 500 documents.
+    expect(calls[0][0].toISOString()).toBe('2026-01-01T00:00:00.000Z')
+    expect(calls[1][0].toISOString()).toBe('2026-02-01T00:00:00.000Z')
     expect(mocks.limit).toHaveBeenCalledWith(500)
+  })
+
+  it('[RP-02] parcourt toutes les pages au-delà de 500 demandes', async () => {
+    const firstPage = Array.from({ length: 500 }, (_, i) => ({ __id: `r${i}`, createdAt: ts(1000 - i) }))
+    const secondPage = [{ __id: 'r500', createdAt: ts(1) }]
+    mocks.getDocs
+      .mockResolvedValueOnce(makeQuerySnap(firstPage))
+      .mockResolvedValueOnce(makeQuerySnap(secondPage))
+
+    const result = await getRequestsForReport()
+
+    expect(result).toHaveLength(501)
+    expect(mocks.getDocs).toHaveBeenCalledTimes(2)
+    expect(mocks.startAfter).toHaveBeenCalledWith(expect.objectContaining({ id: 'r499' }))
   })
 })
 

@@ -13,6 +13,8 @@
  *   - formatDateShort : jour/mois/année seulement
  */
 
+import { BUSINESS_TIME_ZONE } from './businessDate.js'
+
 // Convertit une valeur (Timestamp Firestore, Date, number, string) en Date
 // valide, ou null si la valeur est absente/invalide.
 function toValidDate(ts) {
@@ -26,6 +28,7 @@ export function formatDateTime(ts) {
   const d = toValidDate(ts)
   if (!d) return '—'
   return d.toLocaleDateString('fr-FR', {
+    timeZone: BUSINESS_TIME_ZONE,
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -38,5 +41,10 @@ export function formatDateTime(ts) {
 export function formatDateShort(ts) {
   const d = toValidDate(ts)
   if (!d) return '—'
-  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return d.toLocaleDateString('fr-FR', {
+    timeZone: BUSINESS_TIME_ZONE,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
 }

@@ -34,6 +34,7 @@ import {
   getCountFromServer,
   Timestamp,
 } from 'firebase/firestore'
+import { getBusinessDayBounds } from '../utils/businessDate.js'
 import { db } from '../config/firebase'
 import { ADMIN_PAGE_SIZE } from '../constants/dealerConstants'
 import { shapeDealerInventory } from '../utils/dealerInventory'
@@ -368,10 +369,12 @@ export async function listAllClients({ lastDoc = null, search = '', storeId = ''
 
 export async function listConsolidatedHistory({ lastDoc = null, search = '', storeNameMap = null } = {}) {
   try {
-    // Pas d'orderBy sur collectionGroup : Firestore n'auto-crée pas d'index COLLECTION_GROUP
-    // pour un champ simple. On trie côté client après chaque page.
-    const constraints = [limit(PAGE + 1)]
-    if (lastDoc) constraints.splice(0, 0, startAfter(lastDoc))
+    // L'index collection-group explicite de firestore.indexes.json garantit un
+    // ordre global entre les pages. Sans cet orderBy, chaque tranche était triée
+    // isolément et « Charger plus » pouvait placer une ancienne ligne avant une récente.
+    const constraints = [orderBy('createdAt', 'desc')]
+    if (lastDoc) constraints.push(startAfter(lastDoc))
+    constraints.push(limit(PAGE + 1))
 
     const fetches = [getDocs(query(collectionGroup(db, 'history'), ...constraints))]
     if (!storeNameMap) fetches.push(getDocs(query(collection(db, 'stores'), limit(200))))
@@ -449,13 +452,14 @@ export async function listStoreOptions() {
 // `clients/{storeId}/history` (côté serveur) — contrairement au filtre
 // client-side de listConsolidatedHistory, ceci renvoie TOUT l'historique de la
 // boutique (paginé), pas seulement les lignes présentes dans la page courante.
-// Pas d'orderBy Firestore (certains docs anciens peuvent ne pas avoir createdAt) :
-// on trie côté client par page, comme listConsolidatedHistory.
+// Les écritures actuelles portent toutes createdAt ; l'ordre Firestore rend le
+// curseur stable et l'ordre chronologique correct entre les pages.
 export async function listStoreHistory({ storeId, storeName = null, lastDoc = null } = {}) {
   if (!storeId) throw new Error('storeId requis pour listStoreHistory.')
   try {
-    const constraints = [limit(PAGE + 1)]
-    if (lastDoc) constraints.splice(0, 0, startAfter(lastDoc))
+    const constraints = [orderBy('createdAt', 'desc')]
+    if (lastDoc) constraints.push(startAfter(lastDoc))
+    constraints.push(limit(PAGE + 1))
 
     const snap = await getDocs(query(collection(db, 'clients', storeId, 'history'), ...constraints))
     const hasMore = snap.docs.length > PAGE
@@ -512,19 +516,28 @@ export async function getStoreNetworkBalances(storeId) {
 
 export async function getRequestsForReport({ dateFrom = null, dateTo = null, statusFilter = null } = {}) {
   try {
-    const constraints = []
-    if (statusFilter) constraints.push(where('status', '==', statusFilter))
-    if (dateFrom) constraints.push(where('createdAt', '>=', Timestamp.fromDate(new Date(dateFrom))))
-    if (dateTo) {
-      const end = new Date(dateTo)
-      end.setHours(23, 59, 59, 999)
-      constraints.push(where('createdAt', '<=', Timestamp.fromDate(end)))
+    const baseConstraints = []
+    if (statusFilter) baseConstraints.push(where('status', '==', statusFilter))
+    if (dateFrom) {
+      baseConstraints.push(where('createdAt', '>=', Timestamp.fromDate(getBusinessDayBounds(dateFrom).start)))
     }
-    constraints.push(orderBy('createdAt', 'desc'))
-    constraints.push(limit(500))
+    if (dateTo) {
+      baseConstraints.push(where('createdAt', '<', Timestamp.fromDate(getBusinessDayBounds(dateTo).end)))
+    }
+    baseConstraints.push(orderBy('createdAt', 'desc'))
 
-    const snap = await getDocs(query(collection(db, 'dealerRequests'), ...constraints))
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    const requests = []
+    let cursor = null
+    while (true) {
+      const pageConstraints = [...baseConstraints]
+      if (cursor) pageConstraints.push(startAfter(cursor))
+      pageConstraints.push(limit(500))
+      const snap = await getDocs(query(collection(db, 'dealerRequests'), ...pageConstraints))
+      requests.push(...snap.docs.map(d => ({ id: d.id, ...d.data() })))
+      if (snap.docs.length < 500) break
+      cursor = snap.docs.at(-1)
+    }
+    return requests
   } catch (err) {
     throw mapErr(err)
   }

@@ -1,5 +1,6 @@
 import { NETWORK_CODES, TRANSACTION_STYLES, FILTER_CONFIG } from './constants.js'
 import { parseFcfaAmount } from './fcfaAmount.js'
+import { BUSINESS_TIME_ZONE } from './businessDate.js'
 
 /**
  * Extrait le nom complet du client
@@ -26,7 +27,7 @@ export const getNetworkCode = (network) => {
 export const formatDateToFrench = (date = new Date()) => {
   return date.toLocaleString(
     FILTER_CONFIG.DATE_FORMAT.locale,
-    FILTER_CONFIG.DATE_FORMAT.options
+    { ...FILTER_CONFIG.DATE_FORMAT.options, timeZone: BUSINESS_TIME_ZONE }
   )
 }
 
@@ -51,6 +52,7 @@ export const formatTransactionDateTime = (transaction = {}) => {
   }
 
   return date.toLocaleString('fr-FR', {
+    timeZone: BUSINESS_TIME_ZONE,
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',

@@ -20,8 +20,9 @@ PARTICULARITÉS :
     copié sans historique git : aucun remote, aucun lien avec le dépôt d'origine.
   • Toute la variation client passe par un PROFIL déclaratif — voir ci-dessous.
   • Profil C2EGF : 1 réseau (Orange), dealer Orange, marque « C2EGF », thème bleu.
-  • Pas encore de projet Firebase ni de production. Les règles qui protègent une
-    prod vivante sont listées comme telles et s'activeront à la mise en ligne.
+  • La configuration locale référence le projet Firebase C2EGF `c2egf-b0b5a` via
+    l'alias `production`. L'état du service distant n'est pas présumé : toutes les
+    règles de prudence production s'appliquent dès maintenant.
 ```
 
 ---
@@ -116,13 +117,13 @@ Ces règles viennent du durcissement du produit. Elles ne dépendent pas de l'ex
 
 ---
 
-## Règles de production (s'activent à la mise en ligne)
+## Règles de production
 
-C2EGF n'a **pas encore** de projet Firebase ni de production. Dès qu'il en existe une, ces règles deviennent des interdits absolus, et ce bloc fusionne avec celui du dessus.
+La configuration locale désigne `c2egf-b0b5a` comme projet C2EGF. Son état distant n'est jamais déduit des fichiers du dépôt. Les interdits suivants s'appliquent dans tous les cas.
 
 - **Jamais déployer** (Firebase, Vercel, Netlify) à l'initiative d'un agent. Un déploiement est une décision humaine, exécutée par un humain.
 - **Jamais utiliser les identifiants de production**, ni écrire dans le Firestore de production.
-- **Jamais déployer vers le projet Firebase d'un autre client.** L'alias `production` qui pointait vers la prod TAOFIC a été retiré de `.firebaserc` pour cette raison ; ne pas le réintroduire sans qu'il désigne C2EGF.
+- **Jamais déployer vers le projet Firebase d'un autre client.** L'alias `production` désigne actuellement C2EGF (`c2egf-b0b5a`) ; toute modification exige une décision humaine et une vérification explicite.
 - **Jamais `git push` ni pull request distante** sans demande explicite. Ce dépôt n'a volontairement aucun remote.
 
 ---

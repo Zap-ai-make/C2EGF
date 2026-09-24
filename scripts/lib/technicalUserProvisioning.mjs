@@ -401,7 +401,7 @@ export function validateProfileStructure(profile, authUser = null, requestedRole
 // 7. Modèle de données
 // ─────────────────────────────────────────────
 
-export function buildProfileData({ uid, email, name, role }) {
+export function buildProfileData({ email, name, role }) {
   return {
     name: name.trim(),
     email,

@@ -1,6 +1,6 @@
 # Adaptation du CRM à un nouveau client
 
-> Document initial établi le 2026-07-31, actualisé après la mise en place des profils clients.
+> Document initial établi le 2026-07-31, actualisé le 2026-09-24 après la mise en place des profils clients.
 > La variation passe désormais par `config/clients/` et ses artefacts générés ; elle ne se fait
 > plus en modifiant des constantes dispersées.
 
@@ -9,8 +9,8 @@
 Ce dépôt a été cloné d'un projet d'origine, puis durci (sécurité, qualité, ~100+ tests).
 Pour le premier client, plusieurs fonctionnalités ont été **volontairement désactivées** —
 essentiellement en bridant des listes côté interface — sans supprimer la logique métier.
-Le nouveau client fonctionne sur le même principe mais a besoin de ces fonctionnalités :
-**tout est à réactiver, rien n'est à développer** (à l'exception du circuit dealer, voir §3).
+Chaque nouvelle instance choisit ses fonctionnalités dans son profil. Une capacité déjà présente
+peut être activée par configuration ; un besoin absent du pilote reste un chantier à spécifier.
 
 Vérification faite dans tout l'historique git (branches `main`, `feature/v2`,
 `audit/pre-v2-local`, tous les tags) : il n'existe **aucun commit « avant suppression »** vers
@@ -53,7 +53,7 @@ UI). Le nouveau client ayant besoin du dealer multi-réseaux, voici les 8 verrou
 la couche serveur (règles + functions `dealerRequests`, `closures`, `storeTransfers`) **et** le front
 (sélecteur de réseau + inventaire multi-réseaux) dérivent désormais du profil `dealer.networks`
 (réseau porté par l'opération, validé ∈ profil, `balances[network]`). Tout est **gardé par
-`IS_DEALER_MULTI_NETWORK`** → mono-réseau (TAOFIC) strictement inchangé.
+`IS_DEALER_MULTI_NETWORK`** → les profils mono-réseau, dont C2EGF, conservent leur comportement.
 
 | # | Verrou (avant → après) | Emplacement | État |
 |---|---|---|---|
@@ -79,7 +79,7 @@ Points favorables :
 
 Le nom du produit **dérive du profil client** (`config/clients/<id>.js` → `branding.appName` /
 `branding.pwaName`). Un nouveau client ne modifie **aucun fichier front** : il renseigne `branding`
-dans son profil. Défauts = « AKAYIS » / « AKAYIS CRM » → TAOFIC strictement inchangé (prouvé par tc-092).
+dans son profil. Les valeurs par défaut du pilote sont « AKAYIS » / « AKAYIS CRM » (couvert par tc-092).
 
 - **Runtime** : `src/constants/branding.js` (`APP_NAME`, `APP_FULL_NAME`) alimente les wordmarks
   (`Layout`, `WorkspaceTopbar`, `AdminLayout`, `DealerLayout`, `AuthSidebar`, dashboards) et le titre
@@ -94,22 +94,25 @@ scripts, commentaires) sont sans impact fonctionnel.
 
 ## 5. Nouveau projet Firebase — checklist
 
-L'isolation multi-clients est **déjà conçue** : `src/config/clientIsolation.js` namespace
-toutes les collections sous `clients/{CLIENT_ID}/…` et préfixe le localStorage, piloté par
-`VITE_CLIENT_ID` (modèle prêt dans `.env.example`, qui porte déjà `VITE_CLIENT_ID=nouveau_client`).
+L'isolation entre clients repose d'abord sur **un projet Firebase distinct par instance**.
+`VITE_CLIENT_ID` choisit le profil et préfixe le stockage local du navigateur. Dans Firestore,
+les données métier d'une boutique vivent notamment sous `clients/{storeId}/…`, tandis que
+`users`, `stores` et `globalClients` restent des collections racine : ce chemin n'est pas une
+frontière d'isolation entre sociétés.
 
 1. Créer le projet Firebase + app web ; remplir un `.env` dédié (clés API, project id,
    `VITE_CLIENT_ID` du nouveau client).
-2. Ajouter l'alias dans `.firebaserc` (actuel : `default=demo-akayis-test` pour émulateurs,
-   `production=taofic-ajagbe`).
-3. Déployer `firestore.rules`, `firestore.indexes.json`, functions (runtime Node 22) ; activer
-   Auth email/password. App Check recommandé (conclusion d'audit précédente).
-4. **Adapter les garde-fous des scripts admin** : `scripts/lib/assertFirebaseProject.mjs:42`
-   bloque en dur `taofic-ajagbe`, et `scripts/lib/assertResetProject.mjs:32` le définit comme
-   seul projet de production. Le nouveau projet devra y être référencé, sinon aucun script
-   admin ne fonctionnera dessus. Ces garde-fous continueront de protéger la prod du client actuel.
-5. Piège connu : `firebase deploy` échoue par intermittence (résolution DNS du routeur) —
-   contournement : pré-chauffer le cache DNS avant déploiement.
+2. Ajouter l'alias dans `.firebaserc` après vérification humaine (état actuel :
+   `default=demo-akayis-test`, `production=c2egf-b0b5a`).
+3. Générer puis vérifier les artefacts avant toute décision de déploiement :
+   `npm run check:generated`. Le déploiement de `firestore.rules`, des index et des Functions
+   reste une opération humaine selon `AGENTS.md`.
+4. **Adapter les garde-fous des scripts admin** : `assertFirebaseProject.mjs` bloque C2EGF et
+   tout identifiant non `demo-*`. `assertResetProject.mjs` ne reconnaît que `c2egf-b0b5a`
+   comme production de cette instance. Un autre projet reste bloqué tant que ces gardes n'ont
+   pas été revues explicitement.
+5. Avant toute opération sur des données réelles, désigner le responsable de la sauvegarde,
+   vérifier la restauration sur une copie et conserver la preuve de cette vérification.
 
 ## 6. Provisioning boutiques / comptes / données initiales — outillage existant
 

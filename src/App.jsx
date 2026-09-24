@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { ClientsProvider } from './context/ClientsContext.jsx'
 import { TransactionsProvider } from './context/transactions.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
@@ -18,45 +18,41 @@ import Layout from './components/Layout'
 import AdminLayout from './layouts/AdminLayout.jsx'
 import DealerLayout from './layouts/DealerLayout.jsx'
 
-// Pages Boutique (store_admin)
-import Dashboard from './pages/Dashboard'
-import Clients from './pages/Clients'
-import Transactions from './pages/Transactions'
-import Historique from './pages/Historique'
-import Formulaire from './pages/Formulaire'
-import Profil from './pages/Profil'
-import StoreAdminDealerRequests from './pages/store/StoreAdminDealerRequests.jsx'
-import StoreInternalDebts from './pages/store/StoreInternalDebts.jsx'
 import { INTERNAL_DEBTS_PATH } from './constants/navigation'
 import { COLLABORATIONS_ENABLED } from './constants/collaborationConstants'
-import StoreAdminDealerRequestDetails from './pages/store/StoreAdminDealerRequestDetails.jsx'
-
-// Pages Admin (system_manager)
-import AdminDashboard from './pages/admin/AdminDashboard.jsx'
-import AdminStores from './pages/admin/AdminStores.jsx'
-import AdminProfile from './pages/admin/AdminProfile.jsx'
-import AdminUsers from './pages/admin/AdminUsers.jsx'
-import AdminDealer from './pages/admin/AdminDealer.jsx'
-import AdminDealerInventory from './pages/admin/AdminDealerInventory.jsx'
-import AdminClients from './pages/admin/AdminClients.jsx'
-import AdminHistory from './pages/admin/AdminHistory.jsx'
-import AdminReports from './pages/admin/AdminReports.jsx'
-
-// Pages Dealer
-import DealerDashboard from './pages/dealer/DealerDashboard.jsx'
-import DealerStores from './pages/dealer/DealerStores.jsx'
-import DealerRequests from './pages/dealer/DealerRequests.jsx'
-import NewDealerRequest from './pages/dealer/NewDealerRequest.jsx'
-import DealerTransfers from './pages/dealer/DealerTransfers.jsx'
-import DealerHistory from './pages/dealer/DealerHistory.jsx'
-import DealerProfile from './pages/dealer/DealerProfile.jsx'
-
-// Pages Boutique — extensions V2
-import StoreAdminClosures from './pages/store/StoreAdminClosures.jsx'
 
 import { useAuth } from './context/AuthContext.jsx'
 import AuthPage from './components/auth/AuthPage.jsx'
 import AuthAccessBlocked from './components/auth/AuthAccessBlocked.jsx'
+
+const Dashboard = lazy(() => import('./pages/Dashboard.jsx'))
+const Clients = lazy(() => import('./pages/Clients.jsx'))
+const Transactions = lazy(() => import('./pages/Transactions.jsx'))
+const Historique = lazy(() => import('./pages/Historique.jsx'))
+const Formulaire = lazy(() => import('./pages/Formulaire.jsx'))
+const Profil = lazy(() => import('./pages/Profil.jsx'))
+const StoreAdminDealerRequests = lazy(() => import('./pages/store/StoreAdminDealerRequests.jsx'))
+const StoreInternalDebts = lazy(() => import('./pages/store/StoreInternalDebts.jsx'))
+const StoreAdminDealerRequestDetails = lazy(() => import('./pages/store/StoreAdminDealerRequestDetails.jsx'))
+const StoreAdminClosures = lazy(() => import('./pages/store/StoreAdminClosures.jsx'))
+
+const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard.jsx'))
+const AdminStores = lazy(() => import('./pages/admin/AdminStores.jsx'))
+const AdminProfile = lazy(() => import('./pages/admin/AdminProfile.jsx'))
+const AdminUsers = lazy(() => import('./pages/admin/AdminUsers.jsx'))
+const AdminDealer = lazy(() => import('./pages/admin/AdminDealer.jsx'))
+const AdminDealerInventory = lazy(() => import('./pages/admin/AdminDealerInventory.jsx'))
+const AdminClients = lazy(() => import('./pages/admin/AdminClients.jsx'))
+const AdminHistory = lazy(() => import('./pages/admin/AdminHistory.jsx'))
+const AdminReports = lazy(() => import('./pages/admin/AdminReports.jsx'))
+
+const DealerDashboard = lazy(() => import('./pages/dealer/DealerDashboard.jsx'))
+const DealerStores = lazy(() => import('./pages/dealer/DealerStores.jsx'))
+const DealerRequests = lazy(() => import('./pages/dealer/DealerRequests.jsx'))
+const NewDealerRequest = lazy(() => import('./pages/dealer/NewDealerRequest.jsx'))
+const DealerTransfers = lazy(() => import('./pages/dealer/DealerTransfers.jsx'))
+const DealerHistory = lazy(() => import('./pages/dealer/DealerHistory.jsx'))
+const DealerProfile = lazy(() => import('./pages/dealer/DealerProfile.jsx'))
 
 /**
  * Gère les routes inconnues (wildcard *) en appliquant les mêmes
@@ -99,6 +95,7 @@ export function AppContent() {
   return (
     <>
       <OfflineBanner />
+      <Suspense fallback={<FullPageSpinner />}>
       <Routes>
       {/* ── Espace Boutique (store_admin) ────────────────────────────────── */}
       <Route
@@ -163,7 +160,8 @@ export function AppContent() {
 
       {/* ── Fallback ──────────────────────────────────────────────────────── */}
       <Route path="*" element={<RoleBasedRedirect />} />
-    </Routes>
+      </Routes>
+      </Suspense>
     </>
   )
 }

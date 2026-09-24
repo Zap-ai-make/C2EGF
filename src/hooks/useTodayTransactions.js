@@ -1,5 +1,9 @@
-import { useMemo } from 'react'
-import { parsefrenchDate } from '../utils/helpers.js'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  businessDateKey,
+  millisecondsUntilNextBusinessDay,
+  storedBusinessDateKey,
+} from '../utils/businessDate.js'
 
 /**
  * Hook pour filtrer les transactions d'aujourd'hui
@@ -7,16 +11,31 @@ import { parsefrenchDate } from '../utils/helpers.js'
  * @returns {Array} Transactions d'aujourd'hui
  */
 export const useTodayTransactions = (allTransactions) => {
+  const [todayKey, setTodayKey] = useState(() => businessDateKey())
+
+  useEffect(() => {
+    const scheduleRollover = () => {
+      const now = new Date()
+      return setTimeout(() => {
+        setTodayKey(businessDateKey())
+        timeoutId = scheduleRollover()
+      }, millisecondsUntilNextBusinessDay(now) + 25)
+    }
+    let timeoutId = scheduleRollover()
+    return () => clearTimeout(timeoutId)
+  }, [])
+
   return useMemo(() => {
     if (!allTransactions?.length) return []
 
-    const today = new Date().toDateString()
-
     return allTransactions.filter(transaction => {
       if (transaction.statut === 'Annulée') return false
-      const transactionDate = parsefrenchDate(transaction.date)
-      if (!transactionDate) return false
-      return transactionDate.toDateString() === today
+      if (!transaction.date) return false
+      try {
+        return storedBusinessDateKey(transaction.date) === todayKey
+      } catch {
+        return false
+      }
     })
-  }, [allTransactions])
+  }, [allTransactions, todayKey])
 }

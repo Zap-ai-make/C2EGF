@@ -145,7 +145,6 @@ export class HistoryService {
   subscribeToHistory(callback, filters = {}) {
     const activeStore = this._requireActiveStore()
 
-    // ⚠️ Pas de orderByField pour inclure TOUS les éléments d'historique, même sans createdAt
     // Filtre storeId obligatoire : chaque boutique ne voit que ses propres transactions,
     // même si plusieurs boutiques partagent un même préfixe de chemin Firestore.
     const whereClause = [{ field: 'storeId', operator: '==', value: activeStore.id }]
@@ -166,7 +165,11 @@ export class HistoryService {
     return this._subscribeToCollection(
       FIRESTORE_CONFIG.COLLECTIONS.HISTORY,
       callback,
-      { where: whereClause }
+      {
+        where: whereClause,
+        orderByField: 'createdAt',
+        orderDirection: 'desc',
+      }
     )
   }
 }
