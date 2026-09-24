@@ -6,6 +6,7 @@ import EmptyState from '../../components/ui/EmptyState'
 import ErrorState from '../../components/ui/ErrorState'
 import StatusBadge from '../../components/ui/StatusBadge'
 import { SkeletonTable } from '../../components/ui/SkeletonList'
+import LoadMoreButton from '../../components/ui/LoadMoreButton'
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Panneau de détail boutique
@@ -248,16 +249,7 @@ function AdminStores() {
           </div>
 
           {hasMore && (
-            <div className="mt-4 text-center">
-              <button
-                type="button"
-                onClick={() => load(false)}
-                disabled={loadingMore}
-                className="rounded-lg border border-gray-200 bg-white px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500"
-              >
-                {loadingMore ? 'Chargement…' : 'Charger plus'}
-              </button>
-            </div>
+            <LoadMoreButton loading={loadingMore} onClick={() => load(false)} />
           )}
         </>
       )}
