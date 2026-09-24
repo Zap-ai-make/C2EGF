@@ -10,7 +10,7 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 
 **La meilleure évolution est progressive : rendre le serveur seul responsable des mouvements financiers, terminer le pilotage par profil, puis simplifier les couches existantes.** Une réécriture globale ou une migration massive vers TypeScript n'est pas justifiée par cet audit.
 
-### État de remédiation — lots 1, 3A, 3B, 3C, 3D, 4A et 4B-profils exécutés
+### État de remédiation — lots 1, 3A, 3B, 3C, 3D, 4A et deux sous-lots 4B exécutés
 
 - **SEC-01 corrigé** : la nouvelle Function `storeTransactionCommand` relit l'acteur et la boutique, valide le profil C2EGF, puis écrit soldes, mouvement et audit dans une transaction. L'initialisation reste limitée à zéro et l'édition manuelle est refusée par le profil C2EGF.
 - **SEC-02 corrigé** : `onboarding.selfRegistration` est un axe de profil. Il vaut `false` pour C2EGF ; les règles refusent l'auto-création de boutique/profil et l'interface ne propose plus l'inscription. Les accès passent par le gérant.
@@ -23,7 +23,8 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 - **PERF-01 / PERF-02 / QUA-02 / DOC-01 corrigés côté navigateur** : routes chargées à la demande, historique boutique limité à 100 lignes puis paginé explicitement, journée courante suivie séparément pour garder le tableau de bord exact, et agrégat « Dehors » calculé par une callable qui ne transmet plus les brouillons ni les données client au dealer. Le scan serveur de tous les brouillons reste un coût à matérialiser si le volume l'exige.
 - **QUA-03 corrigé** : dix modules sans appelant produit, test, script ou configuration ont été retirés dans un commit local dédié et réversible. Les outils de preview et `ProtectedRoute` restent en place car ils ont des consommateurs confirmés.
 - **QUA-04, profils corrigés** : les pages administrateur et dealer partagent désormais une seule présentation de profil, sans changement de contenu ni d'état vide. Les autres duplications recensées restent des lots indépendants.
-- Branches locales : `codex/audit-critical-remediation` (commit `99e25b5`), `codex/audit-important-business` (`a66250e`), `codex/audit-important-security` (`49ffeb3`), `codex/audit-important-data-ops` (`ca34881`) puis `codex/audit-history-aggregation` (`9a1bf79`, nettoyage QUA-03 `cf86162`, profils QUA-04 `e2122df`). Aucun déploiement, accès à un projet réel, script administrateur destructif ou push distant.
+- **QUA-04, pagination administrateur corrigée** : les quatre listes administrateur partagent le même bouton « Charger plus », tandis que chaque page conserve sa condition de fin et sa logique de chargement. La caractérisation vérifie curseur, attente, ajout et dernière page.
+- Branches locales : `codex/audit-critical-remediation` (commit `99e25b5`), `codex/audit-important-business` (`a66250e`), `codex/audit-important-security` (`49ffeb3`), `codex/audit-important-data-ops` (`ca34881`) puis `codex/audit-history-aggregation` (`9a1bf79`, nettoyage QUA-03 `cf86162`, profils QUA-04 `e2122df`, pagination QUA-04 `7f4458c`). Aucun déploiement, accès à un projet réel, script administrateur destructif ou push distant.
 
 ## Périmètre, méthode et limites
 
@@ -40,12 +41,12 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 | Contrôle | Résultat |
 |---|---|
 | `npm run lint` | Réussi après remédiation ; attention à son périmètre, QUA-02 |
-| `npm run test:unit` | **88 fichiers, 2 427 tests réussis** |
+| `npm run test:unit` | **89 fichiers, 2 431 tests réussis** |
 | `npm run test:components` | **20 fichiers, 310 tests réussis** |
 | Suite `vitest.firestore.config.js`, émulateur `demo-akayis-test` | **20 fichiers, 433 tests réussis** |
 | Suite `vitest.functions.config.js`, émulateur `demo-akayis-test` | **12 fichiers, 304 tests réussis** |
 | Suite `vitest.integration.config.js`, émulateurs `demo-akayis-test` | **2 fichiers, 42 tests réussis** |
-| `npm run build` | Réussi ; bundle principal **1 206,41 kB, gzip 323,51 kB** ; chunk xlsx 499,86 kB ; précache PWA 2 449,96 KiB |
+| `npm run build` | Réussi ; bundle principal **1 206,45 kB, gzip 323,54 kB** ; chunk xlsx 499,86 kB ; précache PWA 2 449,33 KiB |
 | Générateurs règles et Functions, `--client c2egf_burkina --check` | Les trois artefacts générés correspondent au profil |
 | `npm run check:secrets` | Aucune signature de secret à haute confiance dans les fichiers suivis |
 | `node audit/reproduce-rules.mjs` | **6 scénarios fermés** : écritures directes et auto-enrôlement refusés |
@@ -272,8 +273,8 @@ Les recherches sur les chemins et chaque symbole exporté n'ont trouvé aucun im
 L'analyse trouve **220 fenêtres identiques de 12 lignes significatives**, qui se chevauchent : **ce n'est ni un pourcentage de duplication, ni 220 blocs distincts**. Exemples vérifiés :
 
 - `AdminProfile.jsx` / `DealerProfile.jsx` : **corrigé dans `e2122df`**. `ProfileSummary` porte la présentation commune ; chaque page conserve seulement son titre, son rôle, son identifiant de test et la lecture du profil connecté. Une caractérisation commune couvre les deux contenus et l'état non chargé. Le vrai écran dealer a été inspecté en 1 440 px et 390 px, sans débordement.
-- `ChangePasswordModal.jsx:107` / `ForgotPasswordModal.jsx:96` : coquilles dupliquées, avec les mêmes lacunes d'accessibilité. Réutiliser `Dialog` a une valeur fonctionnelle directe.
-- Pagination/états dans `AdminClients`, `AdminDealer`, `AdminStores`, `AdminUsers` : extraire seulement la mécanique commune après avoir stabilisé le comportement asynchrone.
+- `ChangePasswordModal.jsx` / `ForgotPasswordModal.jsx` : **déjà corrigé dans `49ffeb3`**. Les deux utilisent `Dialog`, avec libellés reliés, fermeture par Échap, piège et restitution du focus couverts par `tc-123-dialog.test.jsx`. Le constat initial n'avait pas été actualisé après le lot 3B ; aucune seconde abstraction n'a été ajoutée.
+- Pagination dans `AdminClients`, `AdminDealer`, `AdminStores`, `AdminUsers` : **corrigée dans `7f4458c`**. `LoadMoreButton` porte le rendu commun ; la caractérisation de chaque page vérifie que le curseur courant est transmis, que l'attente est visible et désactivée, que les résultats sont ajoutés et que le bouton disparaît à la dernière page. Le rendu a été inspecté en 1 440 px et 390 px, sans débordement. Les états de chargement, erreur et vide restent volontairement composés dans chaque page avec les composants existants.
 - Prévalidation/relecture de profil dans les handlers de confirmation/rejet et d'inventaire : duplication à encadrer, mais **garder les vérifications autoritatives dans la transaction**. Ne pas les déplacer toutes avant la transaction au nom du DRY.
 - `functions/src/settlements/financialUtils.js` / `src/utils/financialImpact.js` : duplication volontaire de fonctions pures, contrôlée par `tc-081-financial-parity.test.js`. Conserver ce test ; un module partagé n'est utile que si le packaging Functions/front reste simple.
 - `formatters.js` / `formatFirestoreDate.js` : affichage similaire, gardes d'entrée pas strictement identiques. `parseAmount`, `parseStrictInteger`, `parseFcfaAmount` diffèrent notamment pour espaces et types ; **ne pas les fusionner aveuglément**.
@@ -336,11 +337,12 @@ Les thèmes et composants sémantiques existants constituent un socle utile. Que
 | 3D — historique et agrégat dealer | Pagination visible de l'archive, exactitude du jour courant, agrégat serveur et fermeture des brouillons au dealer | ✅ Terminé le 24 septembre ; scan serveur à matérialiser seulement si les mesures le justifient |
 | 4A — code non relié | QUA-03 : suppression des dix modules sans appelant confirmé | ✅ Terminé le 24 septembre ; suppression démontrée, testée et réversible par commit local |
 | 4B-profils — duplication UI | QUA-04 : présentation commune des profils administrateur et dealer | ✅ Terminé le 24 septembre ; contenu, état vide et rendu responsive caractérisés |
+| 4B-pagination — duplication UI | QUA-04 : bouton de page suivante commun aux quatre listes administrateur | ✅ Terminé le 24 septembre ; curseur, attente, ajout, fin et rendu responsive caractérisés |
 | Backlog — mineurs | Reste de QUA-04, QUA-05, cohérence des tokens | Petits refactors sans changement métier, motivés par un besoin testable |
 
 Une correction de sécurité et un refactor esthétique ne doivent pas partager un lot. Toute restriction variable par client doit être nommée dans `_pilot.js`, dérivée pour les couches concernées et testée avec au moins le pilote et C2EGF. Le typage progressif/JSDoc peut renforcer les payloads et documents aux frontières ; éviter de migrer tout le dépôt avant d'avoir fermé les failles.
 
-**Point d'arrêt ADOPTION.md : les lots 1, 3A, 3B, 3C, 3D, 4A et 4B-profils sont terminés. La normalisation d'éventuels historiques réels sans `createdAt`, la matérialisation éventuelle de l'agrégat dealer, le reste de QUA-04 et QUA-05 restent des chantiers séparés ; aucun autre changement métier n'est implicite.**
+**Point d'arrêt ADOPTION.md : les lots 1, 3A, 3B, 3C, 3D, 4A, 4B-profils et 4B-pagination sont terminés. La normalisation d'éventuels historiques réels sans `createdAt`, la matérialisation éventuelle de l'agrégat dealer, le reste de QUA-04 et QUA-05 restent des chantiers séparés ; aucun autre changement métier n'est implicite.**
 
 ## 8. Reproduction et pièces de travail
 
