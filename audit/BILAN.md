@@ -10,7 +10,7 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 
 **La meilleure évolution est progressive : rendre le serveur seul responsable des mouvements financiers, terminer le pilotage par profil, puis simplifier les couches existantes.** Une réécriture globale ou une migration massive vers TypeScript n'est pas justifiée par cet audit.
 
-### État de remédiation — lots 1, 3A, 3B, 3C et 3D exécutés
+### État de remédiation — lots 1, 3A, 3B, 3C, 3D et 4A exécutés
 
 - **SEC-01 corrigé** : la nouvelle Function `storeTransactionCommand` relit l'acteur et la boutique, valide le profil C2EGF, puis écrit soldes, mouvement et audit dans une transaction. L'initialisation reste limitée à zéro et l'édition manuelle est refusée par le profil C2EGF.
 - **SEC-02 corrigé** : `onboarding.selfRegistration` est un axe de profil. Il vaut `false` pour C2EGF ; les règles refusent l'auto-création de boutique/profil et l'interface ne propose plus l'inscription. Les accès passent par le gérant.
@@ -21,7 +21,8 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 - **QUA-01 / BUG-04 / UI-01 corrigés** : erreurs temps réel remontées, réponses obsolètes ignorées et formulaires/modales accessibles.
 - **BUG-03 / BUG-05 corrigés** : rapports exhaustifs au-delà de 500 lignes, historiques ordonnés avant pagination et journée métier calculée dans le fuseau du profil avec bascule à minuit.
 - **PERF-01 / PERF-02 / QUA-02 / DOC-01 corrigés côté navigateur** : routes chargées à la demande, historique boutique limité à 100 lignes puis paginé explicitement, journée courante suivie séparément pour garder le tableau de bord exact, et agrégat « Dehors » calculé par une callable qui ne transmet plus les brouillons ni les données client au dealer. Le scan serveur de tous les brouillons reste un coût à matérialiser si le volume l'exige.
-- Branches locales : `codex/audit-critical-remediation` (commit `99e25b5`), `codex/audit-important-business` (`a66250e`), `codex/audit-important-security` (`49ffeb3`), `codex/audit-important-data-ops` (`ca34881`) puis `codex/audit-history-aggregation` (`9a1bf79`). Aucun déploiement, accès à un projet réel, script administrateur destructif ou push distant.
+- **QUA-03 corrigé** : dix modules sans appelant produit, test, script ou configuration ont été retirés dans un commit local dédié et réversible. Les outils de preview et `ProtectedRoute` restent en place car ils ont des consommateurs confirmés.
+- Branches locales : `codex/audit-critical-remediation` (commit `99e25b5`), `codex/audit-important-business` (`a66250e`), `codex/audit-important-security` (`49ffeb3`), `codex/audit-important-data-ops` (`ca34881`) puis `codex/audit-history-aggregation` (`9a1bf79`, nettoyage QUA-03 `cf86162`). Aucun déploiement, accès à un projet réel, script administrateur destructif ou push distant.
 
 ## Périmètre, méthode et limites
 
@@ -43,7 +44,7 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 | Suite `vitest.firestore.config.js`, émulateur `demo-akayis-test` | **20 fichiers, 433 tests réussis** |
 | Suite `vitest.functions.config.js`, émulateur `demo-akayis-test` | **12 fichiers, 304 tests réussis** |
 | Suite `vitest.integration.config.js`, émulateurs `demo-akayis-test` | **2 fichiers, 42 tests réussis** |
-| `npm run build` | Réussi ; bundle principal **1 206,26 kB, gzip 323,46 kB** ; chunk xlsx 499,86 kB ; précache PWA 2 451,65 KiB |
+| `npm run build` | Réussi ; bundle principal **1 206,26 kB, gzip 323,47 kB** ; chunk xlsx 499,86 kB ; précache PWA 2 450,32 KiB |
 | Générateurs règles et Functions, `--client c2egf_burkina --check` | Les trois artefacts générés correspondent au profil |
 | `npm run check:secrets` | Aucune signature de secret à haute confiance dans les fichiers suivis |
 | `node audit/reproduce-rules.mjs` | **6 scénarios fermés** : écritures directes et auto-enrôlement refusés |
@@ -246,22 +247,22 @@ Le scan de secrets couvre des signatures de clés privées et jetons connus dans
 - Correction : configuration Node pour les `.mjs`, contrôle local reproductible de secrets/dépendances/profil, puis tests de règles et build. L'outil importe moins que le contrôle effectif. Conserver un mode sans dépendance à un remote puisque ce dépôt est volontairement local.
 - Résultat : ESLint couvre `.mjs` et `eslint-plugin-react` distingue les composants utilisés en JSX, ce qui a permis de retirer 19 déclarations réellement inutilisées sans réintroduire l'exception générale des majuscules. `quality:check` enchaîne artefacts générés, scan de signatures suivies, audit de dépendances, lint, tests locaux et build ; `quality:check:emulators` couvre Firestore, intégration et Functions sur `demo-*`, et `quality:check:full` réunit les deux.
 
-### QUA-03 — Code non relié à l'application à trier avant suppression
+### QUA-03 — Code non relié à l'application supprimé après tri
 
-**MINEUR · graphe d'imports et recherches croisées · effort S/M.**
+**MINEUR · CORRIGÉ le 24 septembre 2026 · commit local réversible `cf86162`.**
 
 L'inventaire trouve 15 modules `src` non atteignables depuis `src/main.jsx`. **Ce n'est pas une liste de 15 fichiers à supprimer.**
 
-| Catégorie | Fichiers | Décision proposée |
+| Catégorie | Fichiers | Décision |
 |---|---|---|
-| Candidats sans appelant produit trouvé | `components/historique/HistoriqueFilters.jsx`, `components/ui/WorkspaceTopbar.jsx`, `components/ui/StatCard.jsx`, `pages/admin/AdminHome.jsx`, `pages/admin/AdminStoresPlaceholder.jsx`, `utils/contextFactory.jsx` | Vérifier intention métier puis suppression par petit lot testable |
-| Sous-arbres devenus inaccessibles | `components/ui/DashboardCard.jsx` → `CardHeader.jsx` ; `utils/initializeApp.jsx` → `performanceMonitor.jsx` | Vérifier les anciens usages externes/configuration ; suppression groupée seulement si confirmée |
+| Candidats sans appelant produit trouvé | `components/historique/HistoriqueFilters.jsx`, `components/ui/WorkspaceTopbar.jsx`, `components/ui/StatCard.jsx`, `pages/admin/AdminHome.jsx`, `pages/admin/AdminStoresPlaceholder.jsx`, `utils/contextFactory.jsx` | **Supprimés** après vérification des références et tests |
+| Sous-arbres devenus inaccessibles | `components/ui/DashboardCard.jsx` → `CardHeader.jsx` ; `utils/initializeApp.jsx` → `performanceMonitor.jsx` | **Supprimés ensemble** après vérification des anciens usages et configurations |
 | Compatibilité encore testée | `components/auth/ProtectedRoute.jsx` | Garder jusqu'à migration explicite des tests/consommateurs de compatibilité vers `RoleGuard` |
 | Outils de QA | `src/preview.jsx` et les trois `src/preview-doubles/*` | **Conserver** : `preview.html` et `scripts/lib/banc.mjs` les utilisent hors point d'entrée production |
 
 `listAllNetworkBalances` n'a pas d'appelant trouvé dans `src` ; sa requête suspecte et son repli `[]` ne sont donc pas présentés comme un défaut d'écran actuellement utilisé. Le vieux composant `StatCard.jsx` ne doit pas être confondu avec la fonction locale du même nom dans `AdminReports.jsx`.
 
-Avant toute suppression : références statiques/dynamiques, scripts/configurations, usage métier, tests avant/après et possibilité de restauration par commit local, conformément à AGENTS.md. Rien n'a été supprimé.
+Les recherches sur les chemins et chaque symbole exporté n'ont trouvé aucun import statique ou dynamique, test, script, configuration ou usage métier des dix fichiers supprimés. Le lot retire 969 lignes. La référence avant suppression est le commit `fa473d3` et la restauration ciblée reste possible depuis `cf86162^`. Après suppression : lint réussi, 87 fichiers et 2 423 tests unitaires réussis, 20 fichiers et 310 tests composants réussis, build réussi, artefacts générés conformes et scan de secrets propre. Un premier lancement unitaire en parallèle a dépassé le délai de 5 secondes sur un test dealer ; ce fichier a réussi seul (32/32), puis la suite complète lancée seule a réussi (2 423/2 423).
 
 ### QUA-04 — Duplication réelle, mais plusieurs ressemblances sont intentionnelles
 
@@ -332,11 +333,12 @@ Les thèmes et composants sémantiques existants constituent un socle utile. Que
 | 3B — importants sécurité/fiabilité | SEC-06 à SEC-09, QUA-01, BUG-04, UI-01 | ✅ Terminé : imports bornés, isolation navigateur, erreurs visibles, concurrence et modales testées |
 | 3C — importants données/exploitation | BUG-03, BUG-05, PERF-02, QUA-02, DOC-01 et première réduction de PERF-01 | ✅ Terminé le 24 septembre |
 | 3D — historique et agrégat dealer | Pagination visible de l'archive, exactitude du jour courant, agrégat serveur et fermeture des brouillons au dealer | ✅ Terminé le 24 septembre ; scan serveur à matérialiser seulement si les mesures le justifient |
-| Backlog — mineurs | QUA-03/04/05, cohérence des tokens | Petits refactors sans changement métier ; suppression démontrée et réversible |
+| 4A — code non relié | QUA-03 : suppression des dix modules sans appelant confirmé | ✅ Terminé le 24 septembre ; suppression démontrée, testée et réversible par commit local |
+| Backlog — mineurs | QUA-04/05, cohérence des tokens | Petits refactors sans changement métier, motivés par un besoin testable |
 
 Une correction de sécurité et un refactor esthétique ne doivent pas partager un lot. Toute restriction variable par client doit être nommée dans `_pilot.js`, dérivée pour les couches concernées et testée avec au moins le pilote et C2EGF. Le typage progressif/JSDoc peut renforcer les payloads et documents aux frontières ; éviter de migrer tout le dépôt avant d'avoir fermé les failles.
 
-**Point d'arrêt ADOPTION.md : les lots 1, 3A, 3B, 3C et 3D sont terminés. La normalisation d'éventuels historiques réels sans `createdAt`, la matérialisation éventuelle de l'agrégat dealer et le backlog mineur restent des chantiers séparés ; aucun autre changement métier n'est implicite.**
+**Point d'arrêt ADOPTION.md : les lots 1, 3A, 3B, 3C, 3D et 4A sont terminés. La normalisation d'éventuels historiques réels sans `createdAt`, la matérialisation éventuelle de l'agrégat dealer et les lots mineurs QUA-04/05 restent des chantiers séparés ; aucun autre changement métier n'est implicite.**
 
 ## 8. Reproduction et pièces de travail
 
