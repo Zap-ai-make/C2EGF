@@ -40,6 +40,7 @@ import { declareInternalDebtCompensationHandler } from './collaborations/declare
 import { confirmInternalDebtCompensationHandler } from './collaborations/confirmInternalDebtCompensation.js'
 import { rejectInternalDebtCompensationHandler } from './collaborations/rejectInternalDebtCompensation.js'
 import { storeTransactionCommandHandler } from './storeTransactions/storeTransactionCommand.js'
+import { listOutstandingDraftsHandler } from './dealerMetrics/listOutstandingDrafts.js'
 
 // Garde idempotente : évite "App named '[DEFAULT]' already exists" lors des imports
 // dans les tests d'intégration (TC-036) qui s'exécutent après TC-035 dans le même processus.
@@ -158,6 +159,11 @@ export const decreaseDealerInventory = onCall(
 export const createPartnerDeposit = onCall(
   CALLABLE,
   wrapCallable(createPartnerDepositHandler, deps)
+)
+
+export const listOutstandingDrafts = onCall(
+  CALLABLE,
+  wrapCallable(listOutstandingDraftsHandler, deps)
 )
 
 // ── Collaborations inter-boutiques ──────────────────────────────────────────

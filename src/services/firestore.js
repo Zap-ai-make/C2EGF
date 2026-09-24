@@ -934,6 +934,10 @@ export class FirestoreService {
     return this._historyService.getHistory()
   }
 
+  async getHistoryPage(options = {}) {
+    return this._historyService.getHistoryPage(options)
+  }
+
   async addToHistory(transactionData) {
     return runStoreTransactionCommand({ action: 'add', transaction: { ...transactionData, statut: 'Validée' } })
   }

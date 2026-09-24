@@ -6,10 +6,8 @@
  *   clients/{storeId}/networkBalances/current  (lecture soldes)
  *   dealerRequests                       (lecture propres demandes, création)
  *
- *   clients/{storeId}/drafts             (LECTURE SEULE, élargie le 31/08/2026)
- *
  * Collections interdites :
- *   globalClients, history, drafts/{id}/settlements, users d'autres comptes,
+ *   globalClients, history, drafts, drafts/{id}/settlements, users d'autres comptes,
  *   sessions, auditLogs.
  *
  * Le service ne confirme, ne rejette, ne modifie et ne supprime
@@ -37,9 +35,9 @@ import {
   onSnapshot,
   serverTimestamp,
 } from 'firebase/firestore'
-import { db } from '../config/firebase'
+import { httpsCallable } from 'firebase/functions'
+import { db, functions } from '../config/firebase'
 import { parseStrictInteger as parseDealerAmount } from '../utils/parseStrictInteger'
-import { agregerArgentDehors } from '../utils/argentDehors'
 import { AUTH_ROLES } from '../constants/authMessages'
 import {
   DEALER_NETWORK,
@@ -53,14 +51,13 @@ const STORES_COLLECTION = 'stores'
 const DEALER_REQUESTS_COLLECTION = 'dealerRequests'
 const NETWORK_BALANCES_DOC = 'current'
 const NETWORK_BALANCES_COLLECTION = 'networkBalances'
-const DRAFTS_COLLECTION = 'drafts'
 
 // ---------------------------------------------------------------------------
 // Erreurs
 // ---------------------------------------------------------------------------
 
 function mapFirestoreError(err) {
-  const code = err?.code || ''
+  const code = String(err?.code || '').replace(/^functions\//, '')
   if (code === 'permission-denied') return new Error('Accès refusé. Vérifiez vos permissions.')
   if (code === 'unavailable') return new Error('Service temporairement indisponible. Réessayez.')
   if (code === 'failed-precondition') return new Error('Opération impossible dans l\'état actuel.')
@@ -272,42 +269,15 @@ function readAmount(value) {
 // ---------------------------------------------------------------------------
 // listArgentDehors — les transactions non terminées du réseau, agrégées
 //
-// UNE REQUÊTE, PAS QUATRE-VINGT-QUATRE. Même mécanique que
-// `listNetworkCaisses` ci-dessus : `collectionGroup` rend les brouillons de
-// toutes les boutiques en un aller-retour, et l'identifiant de la boutique se
-// lit sur le grand-parent du document (`clients/{storeId}/drafts/{id}`).
-//
-// AUCUN FILTRE `where`, ET CE N'EST PAS UN OUBLI. L'appartenance à `drafts`
-// EST le statut « non terminé » : `firestore.rules` interdit d'y écrire un
-// document qui ne soit pas pending. Filtrer sur `statut` ajouterait un index à
-// déployer pour retirer zéro document.
-//
-// ⚠ DROITS. Cette fonction est la seule de ce service à dépendre de
-//   l'élargissement du 31/08/2026 (`match /{path=**}/drafts/{docId}`). Tant
-//   qu'il n'est pas déployé, elle rend « Accès refusé » — et l'écran doit
-//   savoir le dire plutôt que compter zéro.
-//
-// ⚠ CE QU'ELLE RAMÈNE, ET QU'ELLE JETTE AUSSITÔT. Le document brut porte
-//   `clientId`, `operatorName`, `operatorEmail`, la date. Rien de tout cela ne
-//   sort d'ici : seuls `storeId`, `type`, `montant` et `remainingAmount`
-//   passent à l'agrégation. Ce n'est pas une protection — le réseau a déjà
-//   transporté le reste — mais c'est la garantie qu'aucun écran ne pourra
-//   l'afficher par accident.
+// Le navigateur ne lit plus les brouillons bruts. La callable vérifie le rôle,
+// agrège côté serveur et ne renvoie que les montants par boutique.
 // ---------------------------------------------------------------------------
 
-export async function listArgentDehors({ boutiques = [] } = {}) {
+export async function listArgentDehors() {
   try {
-    const snap = await getDocs(query(collectionGroup(db, DRAFTS_COLLECTION)))
-    const brouillons = snap.docs.map((d) => {
-      const data = d.data() ?? {}
-      return {
-        storeId: d.ref.parent.parent?.id ?? null,
-        type: data.type,
-        montant: data.montant,
-        remainingAmount: data.remainingAmount,
-      }
-    })
-    return agregerArgentDehors(brouillons, boutiques)
+    const response = await httpsCallable(functions, 'listOutstandingDrafts')({})
+    const { success: _success, ...aggregate } = response.data ?? {}
+    return aggregate
   } catch (err) {
     throw mapFirestoreError(err)
   }

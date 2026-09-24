@@ -692,23 +692,18 @@ describe('TC-V24-CG — Collection group system_manager / dealer', () => {
     await assertFails(getDoc(doc(ctx.firestore(), 'clients', 'store-A', 'history', 'hist-A1')))
   })
 
-  // ⚠ RETOURNÉE le 31/08/2026. Elle exigeait le refus ; la règle a été élargie
-  //   sur décision client pour alimenter « Dehors » sur l'accueil dealer. Ce que
-  //   la règle N'ouvre PAS reste tenu juste en dessous, par [CG-06] (history,
-  //   inchangé) et par le bloc TC-V24-BORNE ajouté en fin de fichier.
-  it('[CG-07] dealer lit un draft de store-A → allow (élargi 31/08/2026)', async () => {
+  // L'accueil dealer reçoit désormais un agrégat calculé côté serveur.
+  it('[CG-07] dealer lit un draft de store-A → deny', async () => {
     await seedAll(); await seedSubCollections()
     const ctx = getAuthenticatedContext(testEnv, 'dealer-a-uid')
-    await assertSucceeds(getDoc(doc(ctx.firestore(), 'clients', 'store-A', 'drafts', 'draft-A1')))
+    await assertFails(getDoc(doc(ctx.firestore(), 'clients', 'store-A', 'drafts', 'draft-A1')))
   })
 
-  // AGENTS.md : toute règle se teste sur DEUX boutiques. Une règle portée par
-  // `isDealer()` ne regarde pas le storeId — si elle ne passait que sur store-A,
-  // c'est qu'elle serait écrite autrement qu'on ne le croit.
-  it('[CG-07b] dealer lit un draft de store-B → allow', async () => {
+  // AGENTS.md : toute règle se teste sur DEUX boutiques.
+  it('[CG-07b] dealer lit un draft de store-B → deny', async () => {
     await seedAll(); await seedSubCollections()
     const ctx = getAuthenticatedContext(testEnv, 'dealer-a-uid')
-    await assertSucceeds(getDoc(doc(ctx.firestore(), 'clients', 'store-B', 'drafts', 'draft-B1')))
+    await assertFails(getDoc(doc(ctx.firestore(), 'clients', 'store-B', 'drafts', 'draft-B1')))
   })
 
   it('[CG-08] store-admin-A lit history store-B directement → deny', async () => {
@@ -1037,21 +1032,11 @@ async function seedBypassUsers() {
 }
 
 describe('TC-V24-BYP — Contournement refusé : rôles globaux avec storeId', () => {
-  // ⚠ RETOURNÉE le 31/08/2026, et il faut le dire sans euphémisme : la garde
-  //   est `isDealer()`, qui ne regarde PAS le storeId du profil. Un compte
-  //   dealer dont le profil porterait un storeId falsifié gagne donc le même
-  //   accès en lecture aux brouillons qu'un dealer ordinaire. Ce n'est pas un
-  //   défaut d'écriture — c'est ce que « rôle global » veut dire —, mais c'est
-  //   une conséquence de l'élargissement, et elle est consignée ici plutôt que
-  //   contournée par une règle plus fine qui donnerait l'illusion du contraire.
-  //
-  //   [BYP-02] juste en dessous n'a PAS bougé : le storeId falsifié ne donne
-  //   toujours rien sur `history`. C'est la preuve que le spoof ne « débloque »
-  //   rien par lui-même — seul le rôle dealer compte, et seulement sur drafts.
-  it('[BYP-01] dealer-spoof lit clients/store-A/drafts → allow (conséquence assumée)', async () => {
+  // Un storeId falsifié n'ouvre aucune donnée brute à un rôle global.
+  it('[BYP-01] dealer-spoof lit clients/store-A/drafts → deny', async () => {
     await seedAll(); await seedSubCollections(); await seedBypassUsers()
     const ctx = getAuthenticatedContext(testEnv, 'dealer-spoof-uid')
-    await assertSucceeds(getDoc(doc(ctx.firestore(), 'clients', 'store-A', 'drafts', 'draft-A1')))
+    await assertFails(getDoc(doc(ctx.firestore(), 'clients', 'store-A', 'drafts', 'draft-A1')))
   })
 
   it('[BYP-02] dealer-spoof lit clients/store-A/history → deny', async () => {
@@ -1223,16 +1208,11 @@ describe('TC-V24-CGN — Collection group : négatifs étendus', () => {
     await assertFails(getDocs(collectionGroup(ctx.firestore(), 'history')))
   })
 
-  // ⚠ RETOURNÉE le 31/08/2026 — c'est CETTE requête que l'accueil emploie :
-  //   `listArgentDehors` lit le groupe entier en un aller-retour, comme
-  //   `listNetworkCaisses` le fait pour les soldes. [CGN-04] (history) juste
-  //   au-dessus n'a pas bougé : l'écart entre les deux est voulu.
-  it('[CGN-05] dealer collectionGroup("drafts") getDocs → allow (élargi 31/08/2026)', async () => {
+  // La callable Admin est le seul chemin global pour l'accueil dealer.
+  it('[CGN-05] dealer collectionGroup("drafts") getDocs → deny', async () => {
     await seedAll(); await seedSubCollections()
     const ctx = getAuthenticatedContext(testEnv, 'dealer-a-uid')
-    const snap = await assertSucceeds(getDocs(collectionGroup(ctx.firestore(), 'drafts')))
-    // Deux boutiques au moins : c'est ce que la fonction agrège.
-    expect(snap.docs.length).toBeGreaterThanOrEqual(2)
+    await assertFails(getDocs(collectionGroup(ctx.firestore(), 'drafts')))
   })
 
   it('[CGN-06] utilisateur inactif collectionGroup("history") → deny', async () => {
@@ -1441,20 +1421,13 @@ describe('TC-V24-LQA — Validation liquidityAmount', () => {
 })
 
 // ===========================================================================
-// TC-V24-BORNE — l'élargissement de `drafts` s'arrête où il doit s'arrêter
-//
-// Le 31/08/2026, `clients/{storeId}/drafts` est passé en lecture pour le rôle
-// dealer (décision client, cf. § Demandes Dealer de firestore.rules). Un
-// élargissement ne se teste pas seulement par ce qu'il ouvre : il se teste par
-// ce qu'il LAISSE FERMÉ. Ce bloc est la borne.
+// TC-V24-BORNE — les brouillons restent cloisonnés
 //
 // Chaque cas est vérifié sur DEUX boutiques quand le chemin en dépend
-// (AGENTS.md), parce qu'une règle portée par `isDealer()` ne regarde pas le
-// storeId — et que si elle ne passait que sur store-A, c'est qu'elle ne serait
-// pas celle qu'on croit avoir écrite.
+// (AGENTS.md).
 // ===========================================================================
 
-describe('TC-V24-BORNE — ce que l’élargissement de drafts ne donne PAS', () => {
+describe('TC-V24-BORNE — brouillons cloisonnés', () => {
   it('[BOR-01] dealer ne CRÉE pas un draft (store-A)', async () => {
     await seedAll(); await seedSubCollections()
     const ctx = getAuthenticatedContext(testEnv, 'dealer-a-uid')
@@ -1531,9 +1504,7 @@ describe('TC-V24-BORNE — ce que l’élargissement de drafts ne donne PAS', ()
     await assertFails(getDoc(doc(ctx.firestore(), 'clients', 'store-A', 'auditLogs', 'log-1')))
   })
 
-  it('[BOR-10] un utilisateur INACTIF ne profite pas de l’élargissement', async () => {
-    // `isDealer()` passe par `isActiveUser()` : désactiver un compte doit lui
-    // retirer l'accès le jour même, sans changer une règle.
+  it('[BOR-10] un utilisateur INACTIF ne lit aucun brouillon', async () => {
     await seedAll(); await seedSubCollections()
     const ctx = getAuthenticatedContext(testEnv, 'inactive-uid')
     await assertFails(getDoc(doc(ctx.firestore(), 'clients', 'store-A', 'drafts', 'draft-A1')))
@@ -1550,8 +1521,7 @@ describe('TC-V24-BORNE — ce que l’élargissement de drafts ne donne PAS', ()
   })
 
   it('[BOR-12] un store_admin ne lit toujours pas les drafts d’une AUTRE boutique', async () => {
-    // L'élargissement porte sur le rôle dealer, et sur lui seul : le
-    // cloisonnement entre boutiques n'a pas bougé d'un pouce.
+    // La boutique conserve son accès local, jamais celui d'une autre boutique.
     await seedAll(); await seedSubCollections()
     const ctx = getAuthenticatedContext(testEnv, 'store-admin-a-uid')
     await assertSucceeds(getDoc(doc(ctx.firestore(), 'clients', 'store-A', 'drafts', 'draft-A1')))

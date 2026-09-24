@@ -1,9 +1,15 @@
-import { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react'
 import { getTransactionStyles, getAvailableActions, isDraftSettling, parsefrenchDate } from '../utils/helpers.js'
 import { STORAGE_KEYS } from '../constants/index.js'
+import { FIRESTORE_CONFIG } from '../constants/firestoreConstants.js'
 import { firestoreService } from '../services/firestore'
 import { addTransactionPayment, addTransactionRefund } from '../services/settlementService'
 import { AuthContext } from './AuthContext'
+import {
+  businessDateKey,
+  getBusinessDayBounds,
+  millisecondsUntilNextBusinessDay,
+} from '../utils/businessDate.js'
 
 // Exporté comme ClientsContext : permet de fournir une valeur sans monter le
 // provider réel (bancs d'essai, tests de rendu) — cf. src/preview.jsx.
@@ -29,6 +35,16 @@ const historyTimestamp = (item) => {
 export const sortHistoryDesc = (list) =>
   [...list].sort((a, b) => historyTimestamp(b) - historyTimestamp(a))
 
+export const mergeHistoryPages = (...lists) => {
+  const byId = new Map()
+  for (const list of lists) {
+    for (const item of list ?? []) {
+      if (item?.id) byId.set(item.id, item)
+    }
+  }
+  return sortHistoryDesc([...byId.values()])
+}
+
 export const useTransactions = () => {
   const context = useContext(TransactionsContext)
   if (!context) {
@@ -43,12 +59,32 @@ export const TransactionsProvider = ({ children }) => {
   // États pour les deux collections Firestore
   const [pendingTransactions, setPendingTransactions] = useState([])
   const [completedTransactions, setCompletedTransactions] = useState([])
+  const [historyHasMore, setHistoryHasMore] = useState(false)
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const liveHistoryRef = useRef([])
+  const todayHistoryRef = useRef([])
+  const archiveHistoryRef = useRef([])
+  const historyCursorRef = useRef(null)
+
+  const publishHistory = useCallback(() => {
+    setCompletedTransactions(mergeHistoryPages(
+      archiveHistoryRef.current,
+      liveHistoryRef.current,
+      todayHistoryRef.current,
+    ))
+  }, [])
 
   // Synchronisation temps réel avec Firestore pour les deux collections - seulement si authentifié
   useEffect(() => {
+    liveHistoryRef.current = []
+    todayHistoryRef.current = []
+    archiveHistoryRef.current = []
+    historyCursorRef.current = null
+    setHistoryLoadingMore(false)
+
     // Ne pas initialiser si l'auth est encore en cours de chargement
     if (authLoading) {
       return
@@ -58,12 +94,13 @@ export const TransactionsProvider = ({ children }) => {
     if (!user || !userProfile?.storeId || activeStore?.id !== userProfile.storeId) {
       setPendingTransactions([])
       setCompletedTransactions([])
+      setHistoryHasMore(false)
       setLoading(false)
       return
     }
 
     let isMounted = true
-    let unsubscribeDrafts, unsubscribeHistory
+    let unsubscribeDrafts, unsubscribeHistory, unsubscribeToday, rolloverTimeout
 
     const initializeTransactions = async () => {
       try {
@@ -104,14 +141,41 @@ export const TransactionsProvider = ({ children }) => {
         onDrafts.onError = onSubscriptionError
         unsubscribeDrafts = firestoreService.subscribeToDrafts(onDrafts)
 
-        // Écouter l'historique (transactions terminées)
+        const firstPage = await firestoreService.getHistoryPage()
+        if (!isMounted) return
+        archiveHistoryRef.current = firstPage.transactions
+        historyCursorRef.current = firstPage.lastDoc
+        setHistoryHasMore(firstPage.hasMore)
+        publishHistory()
+
+        // Écouter l'historique récent en temps réel.
         const onHistory = (historyData) => {
             if (!isMounted) return
-            // Tri décroissant par date d'enregistrement : le dernier en haut.
-            setCompletedTransactions(sortHistoryDesc(historyData))
+            liveHistoryRef.current = historyData
+            publishHistory()
         }
         onHistory.onError = onSubscriptionError
         unsubscribeHistory = firestoreService.subscribeToHistory(onHistory)
+
+        // Une journée métier peut dépasser la page de 100 lignes : cette écoute
+        // journalière garde les indicateurs du tableau de bord exacts.
+        const subscribeToday = () => {
+          unsubscribeToday?.()
+          const now = new Date()
+          const { start, end } = getBusinessDayBounds(businessDateKey(now))
+          const onToday = (historyData) => {
+            if (!isMounted) return
+            todayHistoryRef.current = historyData
+            publishHistory()
+          }
+          onToday.onError = onSubscriptionError
+          unsubscribeToday = firestoreService.subscribeToHistory(onToday, {
+            dateRange: { start, endExclusive: end },
+            limitCount: null,
+          })
+          rolloverTimeout = setTimeout(subscribeToday, millisecondsUntilNextBusinessDay(now) + 25)
+        }
+        subscribeToday()
 
         if (isMounted) {
           setLoading(false)
@@ -146,8 +210,29 @@ export const TransactionsProvider = ({ children }) => {
       if (unsubscribeHistory && typeof unsubscribeHistory === 'function') {
         unsubscribeHistory()
       }
+      if (unsubscribeToday && typeof unsubscribeToday === 'function') unsubscribeToday()
+      if (rolloverTimeout) clearTimeout(rolloverTimeout)
     }
-  }, [user, userProfile?.storeId, activeStore?.id, authLoading])
+  }, [user, userProfile?.storeId, activeStore?.id, authLoading, publishHistory])
+
+  const loadMoreHistory = useCallback(async () => {
+    if (!historyHasMore || historyLoadingMore || !historyCursorRef.current) return false
+    try {
+      setHistoryLoadingMore(true)
+      setError(null)
+      const page = await firestoreService.getHistoryPage({ lastDoc: historyCursorRef.current })
+      archiveHistoryRef.current = mergeHistoryPages(archiveHistoryRef.current, page.transactions)
+      historyCursorRef.current = page.lastDoc
+      setHistoryHasMore(page.hasMore)
+      publishHistory()
+      return true
+    } catch (loadError) {
+      setError(loadError.message)
+      return false
+    } finally {
+      setHistoryLoadingMore(false)
+    }
+  }, [historyHasMore, historyLoadingMore, publishHistory])
 
   const addTransaction = useCallback(async (transactionData) => {
     try {
@@ -237,7 +322,16 @@ export const TransactionsProvider = ({ children }) => {
       if (isDraft) {
         await firestoreService.deleteDraft(id)
       } else {
-        await firestoreService.deleteFromHistory(id)
+        const cancelled = await firestoreService.deleteFromHistory(id)
+        if (cancelled) {
+          const markCancelled = (items) => items.map((item) => (
+            item.id === id ? { ...item, statut: FIRESTORE_CONFIG.STATUS.CANCELLED } : item
+          ))
+          archiveHistoryRef.current = markCancelled(archiveHistoryRef.current)
+          liveHistoryRef.current = markCancelled(liveHistoryRef.current)
+          todayHistoryRef.current = markCancelled(todayHistoryRef.current)
+          publishHistory()
+        }
       }
       // La mise à jour de l'état se fera automatiquement via onSnapshot
     } catch (error) {
@@ -245,7 +339,7 @@ export const TransactionsProvider = ({ children }) => {
       setError(error.message)
       throw error
     }
-  }, [pendingTransactions])
+  }, [pendingTransactions, publishHistory])
 
   const startEditTransaction = useCallback((transaction) => {
     setEditingTransaction(transaction)
@@ -273,6 +367,9 @@ export const TransactionsProvider = ({ children }) => {
   const value = {
     pendingTransactions,
     completedTransactions,
+    historyHasMore,
+    historyLoadingMore,
+    loadMoreHistory,
     editingTransaction,
     loading,
     error,

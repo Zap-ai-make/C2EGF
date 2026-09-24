@@ -79,6 +79,8 @@ vi.mock('../../src/services/firestore', () => ({
     // Méthodes subscription utilisées par les vrais providers (Section C)
     subscribeToClients: vi.fn(() => vi.fn()),
     subscribeToDrafts: vi.fn(() => vi.fn()),
+    subscribeToHistory: vi.fn(() => vi.fn()),
+    getHistoryPage: vi.fn(() => Promise.resolve({ transactions: [], lastDoc: null, hasMore: false })),
     subscribeToTransactions: vi.fn(() => vi.fn()),
     ensureNetworkBalances: vi.fn(() => Promise.resolve()),
     subscribeToNetworkConfig: vi.fn(() => vi.fn()),

@@ -12,10 +12,9 @@
  * après, que le sous-onglet « Transactions clients » se comporte exactement pareil.
  *
  * ⚠ Ce qu'on fige est le comportement RÉEL de ce dépôt, pas celui décrit au §11.7
- *   du cahier des charges. En particulier, il n'y a ICI ni « Voir plus » ni
- *   `history.pageSize` : tout l'historique est chargé en mémoire et virtualisé
- *   au-delà de 60 lignes. Figer la description plutôt que le code inventerait une
- *   régression qui n'existe pas.
+ *   du cahier des charges. Le lot de performance ajoute ensuite une pagination
+ *   explicite : les premières lignes restent identiques et les archives plus
+ *   anciennes se chargent à la demande.
  *
  * Ce qu'on fige : les filtres de date (bornes incluses, cadran LOCAL), la
  * recherche, la navigation par jour (7 jours/page), les colonnes du tableau,
@@ -69,6 +68,9 @@ const tx = (over = {}) => ({
 
 const baseContext = (completedTransactions = []) => ({
   completedTransactions,
+  historyHasMore: false,
+  historyLoadingMore: false,
+  loadMoreHistory: vi.fn(),
   getTransactionStyles: () => ({ bgColor: '', textColor: '' }),
   addTransaction: vi.fn(),
 })
@@ -152,6 +154,22 @@ describe('TC-116-A — structure de la page', () => {
     contextValue = baseContext([tx({ client: { nom: 'SEULE', prenom: 'Ligne' } })])
     poser()
     expect(clientCells()).toEqual(['Ligne SEULE'])
+  })
+
+  it('propose de charger les archives seulement quand une page suivante existe', () => {
+    const loadMoreHistory = vi.fn()
+    contextValue = { ...baseContext([tx()]), historyHasMore: true, loadMoreHistory }
+    poser()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Charger les transactions précédentes' }))
+    expect(loadMoreHistory).toHaveBeenCalledOnce()
+  })
+
+  it('désactive la commande pendant le chargement', () => {
+    contextValue = { ...baseContext([tx()]), historyHasMore: true, historyLoadingMore: true }
+    poser()
+
+    expect(screen.getByRole('button', { name: 'Chargement des transactions précédentes' })).toBeDisabled()
   })
 })
 

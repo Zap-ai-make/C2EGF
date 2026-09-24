@@ -17,7 +17,7 @@ vi.mock('../../src/services/settlementService', () => ({
 }))
 vi.mock('../../src/context/AuthContext', () => ({ AuthContext: {} }))
 
-import { sortHistoryDesc } from '../../src/context/transactions.jsx'
+import { mergeHistoryPages, sortHistoryDesc } from '../../src/context/transactions.jsx'
 
 const ts = (ms) => ({ toMillis: () => ms })
 
@@ -44,5 +44,15 @@ describe('TC-063 — sortHistoryDesc', () => {
     const copy = [...input]
     sortHistoryDesc(input)
     expect(input).toEqual(copy)
+  })
+})
+
+describe('TC-063 — mergeHistoryPages', () => {
+  it('déduplique par id et donne priorité à la liste temps réel la plus récente', () => {
+    const archives = [{ id: 'a', statut: 'Validée', createdAt: ts(100) }]
+    const live = [{ id: 'a', statut: 'Annulée', createdAt: ts(100) }, { id: 'b', createdAt: ts(200) }]
+    const result = mergeHistoryPages(archives, live)
+    expect(result.map((item) => item.id)).toEqual(['b', 'a'])
+    expect(result.find((item) => item.id === 'a').statut).toBe('Annulée')
   })
 })

@@ -14,6 +14,7 @@ import PageHeader from '../components/ui/PageHeader'
 import { useHistoriqueFilters } from '../hooks/useHistoriqueFilters'
 import { useAuth } from '../context/AuthContext'
 import { COLLABORATIONS_ENABLED } from '../constants/collaborationConstants'
+import { useTransactions } from '../context/transactions.jsx'
 
 /**
  * Historique — quatre sources, un seul endroit où l'on relit.
@@ -55,6 +56,7 @@ function Historique() {
   const { currentUser, userProfile } = useAuth()
   const [params, setParams] = useSearchParams()
   const storeId = userProfile?.storeId ?? null
+  const { historyHasMore, historyLoadingMore, loadMoreHistory } = useTransactions()
 
   const demande = params.get('onglet')
   const onglet = ONGLETS.some((o) => o.cle === demande) ? demande : ONGLETS[0].cle
@@ -129,6 +131,22 @@ function Historique() {
           {/* Tableau des transactions */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <HistoriqueTable transactions={filteredTransactions} />
+
+            {historyHasMore && (
+              <div className="mt-5 flex justify-center">
+                <button
+                  type="button"
+                  onClick={loadMoreHistory}
+                  disabled={historyLoadingMore}
+                  aria-label={historyLoadingMore
+                    ? 'Chargement des transactions précédentes'
+                    : 'Charger les transactions précédentes'}
+                  className="rounded-lg border border-brand-300 px-4 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {historyLoadingMore ? 'Chargement…' : 'Charger les transactions précédentes'}
+                </button>
+              </div>
+            )}
 
             <ActionButtons
               filteredTransactions={filteredTransactions}

@@ -28,14 +28,21 @@
  */
 
 import {
+  getDocs,
+  limit,
+  orderBy,
+  query,
   runTransaction,
-  serverTimestamp
+  serverTimestamp,
+  startAfter,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import { getUserFriendlyMessage } from '../utils/errorHandler'
 import { formatDateToFrench } from '../utils/helpers'
 import { FIRESTORE_CONFIG } from '../constants/firestoreConstants'
 import { parseFcfaAmount } from '../utils/fcfaAmount.js'
+
+export const HISTORY_PAGE_SIZE = 100
 
 export class HistoryService {
   /**
@@ -55,6 +62,7 @@ export class HistoryService {
   _docRef(name, id) { return this._ctx.docRef(name, id) }
   async _addDocument(name, data) { return this._ctx.addDocument(name, data) }
   async _getCollection(name, opts) { return this._ctx.getCollection(name, opts) }
+  _collectionRef(name) { return this._ctx.collectionRef(name) }
   _subscribeToCollection(name, cb, opts) { return this._ctx.subscribeToCollection(name, cb, opts) }
   _normalizeTransactionLabel(value) { return this._ctx.normalizeTransactionLabel(value) }
   _normalizeNetworkBalances(data) { return this._ctx.normalizeNetworkBalances(data) }
@@ -67,6 +75,29 @@ export class HistoryService {
 
   async getHistory() {
     return this._getCollection(FIRESTORE_CONFIG.COLLECTIONS.HISTORY)
+  }
+
+  async getHistoryPage({ lastDoc = null, pageSize = HISTORY_PAGE_SIZE } = {}) {
+    this._requireActiveStore()
+    const safePageSize = Number.isSafeInteger(pageSize) && pageSize > 0
+      ? pageSize
+      : HISTORY_PAGE_SIZE
+    const constraints = [
+      orderBy('createdAt', 'desc'),
+    ]
+    if (lastDoc) constraints.push(startAfter(lastDoc))
+    constraints.push(limit(safePageSize + 1))
+
+    const snapshot = await getDocs(query(
+      this._collectionRef(FIRESTORE_CONFIG.COLLECTIONS.HISTORY),
+      ...constraints,
+    ))
+    const pageDocs = snapshot.docs.slice(0, safePageSize)
+    return {
+      transactions: pageDocs.map((doc) => ({ id: doc.id, ...doc.data() })),
+      lastDoc: pageDocs.at(-1) ?? null,
+      hasMore: snapshot.docs.length > safePageSize,
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -143,11 +174,11 @@ export class HistoryService {
   // ---------------------------------------------------------------------------
 
   subscribeToHistory(callback, filters = {}) {
-    const activeStore = this._requireActiveStore()
+    this._requireActiveStore()
 
-    // Filtre storeId obligatoire : chaque boutique ne voit que ses propres transactions,
-    // même si plusieurs boutiques partagent un même préfixe de chemin Firestore.
-    const whereClause = [{ field: 'storeId', operator: '==', value: activeStore.id }]
+    // collectionRef(history) pointe déjà sur clients/{activeStore}/history :
+    // le chemin isole la boutique et inclut les anciennes lignes sans storeId.
+    const whereClause = []
 
     if (filters.clientId) {
       whereClause.push({ field: 'clientId', operator: '==', value: filters.clientId })
@@ -160,6 +191,9 @@ export class HistoryService {
       if (filters.dateRange.end) {
         whereClause.push({ field: 'createdAt', operator: '<=', value: filters.dateRange.end })
       }
+      if (filters.dateRange.endExclusive) {
+        whereClause.push({ field: 'createdAt', operator: '<', value: filters.dateRange.endExclusive })
+      }
     }
 
     return this._subscribeToCollection(
@@ -169,6 +203,9 @@ export class HistoryService {
         where: whereClause,
         orderByField: 'createdAt',
         orderDirection: 'desc',
+        ...(filters.limitCount === null
+          ? {}
+          : { limitCount: filters.limitCount ?? HISTORY_PAGE_SIZE }),
       }
     )
   }

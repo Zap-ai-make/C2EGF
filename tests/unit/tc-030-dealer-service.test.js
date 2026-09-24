@@ -21,7 +21,10 @@ const mocks = vi.hoisted(() => ({
   orderBy: vi.fn((f, dir) => ({ orderBy: { f, dir } })),
   limit: vi.fn(n => ({ limit: n })),
   startAfter: vi.fn(d => ({ startAfter: d })),
+  httpsCallable: vi.fn(),
 }))
+
+vi.mock('firebase/functions', () => ({ httpsCallable: mocks.httpsCallable }))
 
 vi.mock('firebase/firestore', () => ({
   collection: mocks.collection,
@@ -41,6 +44,7 @@ vi.mock('firebase/firestore', () => ({
 vi.mock('../../src/config/firebase', () => ({
   db: {},
   auth: {},
+  functions: {},
 }))
 
 // ---------------------------------------------------------------------------
@@ -54,6 +58,7 @@ import {
   getStoreBalances,
   listDealerRequests,
   listNetworkCaisses,
+  listArgentDehors,
   parseDealerAmount,
 } from '../../src/services/dealerService'
 
@@ -91,6 +96,20 @@ function makeQuerySnap(docs = []) {
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.serverTimestamp.mockReturnValue('SERVER_TS')
+})
+
+describe('TC-030-OUT — argent dehors via agrégat serveur', () => {
+  it('[OUT-01] appelle la callable et ne lit aucun brouillon depuis le navigateur', async () => {
+    const callable = vi.fn(async () => ({
+      data: { success: true, parBoutique: [], depots: 1000, retraits: 200, dehors: 800, illisibles: 0, horsReseau: 0 },
+    }))
+    mocks.httpsCallable.mockReturnValueOnce(callable)
+
+    await expect(listArgentDehors({ boutiques: [{ storeId: 'ignoree' }] })).resolves.toMatchObject({ dehors: 800 })
+    expect(mocks.httpsCallable).toHaveBeenCalledWith({}, 'listOutstandingDrafts')
+    expect(callable).toHaveBeenCalledWith({})
+    expect(mocks.collectionGroup).not.toHaveBeenCalledWith({}, 'drafts')
+  })
 })
 
 // ---------------------------------------------------------------------------

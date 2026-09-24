@@ -97,6 +97,7 @@ vi.mock('../../src/utils/cacheManager', () => ({
 import { HistoryService } from '../../src/services/historyService.js'
 import { FirestoreService } from '../../src/services/firestore.js'
 import { runTransaction } from 'firebase/firestore'
+import { getDocs, limit, orderBy, query, startAfter, where } from 'firebase/firestore'
 import { FIRESTORE_CONFIG } from '../../src/constants/firestoreConstants.js'
 
 // ---------------------------------------------------------------------------
@@ -133,6 +134,7 @@ function makeHistoryService(overrides = {}) {
   const mockDocRef = vi.fn((col, id) => ({ _type: 'history', _col: col, _id: id }))
   const mockGetNetworkBalanceDocRef = vi.fn(() => ({ _type: 'balance' }))
   const mockSubscribeToCollection = vi.fn(() => vi.fn())
+  const mockCollectionRef = vi.fn(() => ({ _type: 'history-collection' }))
   const mockRequireActiveStore = vi.fn(() => ({ id: 'store-019', name: 'Boutique 019' }))
   const mockNormalizeTransactionLabel = vi.fn((v) => {
     return String(v || '').trim().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
@@ -172,6 +174,7 @@ function makeHistoryService(overrides = {}) {
     addDocument:                      mockAddDocument,
     getCollection:                    mockGetCollection,
     subscribeToCollection:            mockSubscribeToCollection,
+    collectionRef:                    mockCollectionRef,
     normalizeTransactionLabel:        mockNormalizeTransactionLabel,
     normalizeNetworkBalances:         mockNormalizeNetworkBalances,
     reverseHistoryTransactionImpact:  mockReverseHistoryTransactionImpact,
@@ -188,6 +191,7 @@ function makeHistoryService(overrides = {}) {
     mockDocRef,
     mockGetNetworkBalanceDocRef,
     mockSubscribeToCollection,
+    mockCollectionRef,
     mockRequireActiveStore,
     mockNormalizeTransactionLabel,
     mockNormalizeNetworkBalances,
@@ -743,6 +747,7 @@ describe('TC-019-Q — subscribeToHistory retourne l\'unsubscribe', () => {
     expect(calledCb).toBe(cb)
     const options = mockSubscribeToCollection.mock.calls[0][2]
     expect(options).toMatchObject({ orderByField: 'createdAt', orderDirection: 'desc' })
+    expect(options.limitCount).toBe(100)
     expect(unsub).toBe(mockUnsub)
   })
 
@@ -760,6 +765,57 @@ describe('TC-019-Q — subscribeToHistory retourne l\'unsubscribe', () => {
     expect(whereClause).toBeDefined()
     expect(whereClause.operator).toBe('==')
     expect(whereClause.value).toBe('client-filter-001')
+  })
+
+  it('TC-019-17c : une écoute journalière peut désactiver la limite', () => {
+    const { service, mockSubscribeToCollection } = makeHistoryService()
+    service.subscribeToHistory(vi.fn(), { limitCount: null })
+
+    const [, , options] = mockSubscribeToCollection.mock.calls[0]
+    expect(options).not.toHaveProperty('limitCount')
+  })
+})
+
+describe('TC-019-Q2 — getHistoryPage borne chaque lecture', () => {
+  beforeEach(() => {
+    vi.mocked(getDocs).mockReset()
+    vi.mocked(query).mockClear()
+    vi.mocked(where).mockClear()
+    vi.mocked(orderBy).mockClear()
+    vi.mocked(limit).mockClear()
+    vi.mocked(startAfter).mockClear()
+  })
+
+  it('TC-019-17d : lit N+1 documents, rend N lignes et un curseur', async () => {
+    const snapshots = Array.from({ length: 101 }, (_, i) => ({
+      id: `h-${i}`,
+      data: () => ({ montant: i }),
+    }))
+    vi.mocked(getDocs).mockResolvedValueOnce({ docs: snapshots })
+    const { service, mockCollectionRef } = makeHistoryService()
+
+    const page = await service.getHistoryPage({ pageSize: 100 })
+
+    expect(mockCollectionRef).toHaveBeenCalledWith(FIRESTORE_CONFIG.COLLECTIONS.HISTORY)
+    expect(where).not.toHaveBeenCalled()
+    expect(orderBy).toHaveBeenCalledWith('createdAt', 'desc')
+    expect(limit).toHaveBeenCalledWith(101)
+    expect(page.transactions).toHaveLength(100)
+    expect(page.transactions[0]).toEqual({ id: 'h-0', montant: 0 })
+    expect(page.hasMore).toBe(true)
+    expect(page.lastDoc).toBe(snapshots[99])
+  })
+
+  it('TC-019-17e : reprend après le dernier snapshot sans doublon', async () => {
+    const cursor = { id: 'cursor' }
+    vi.mocked(getDocs).mockResolvedValueOnce({ docs: [] })
+    const { service } = makeHistoryService()
+
+    const page = await service.getHistoryPage({ lastDoc: cursor, pageSize: 25 })
+
+    expect(startAfter).toHaveBeenCalledWith(cursor)
+    expect(limit).toHaveBeenCalledWith(26)
+    expect(page).toEqual({ transactions: [], lastDoc: null, hasMore: false })
   })
 })
 
@@ -811,6 +867,15 @@ describe('TC-019-S — facade FirestoreService réserve les écritures à la com
 
     const result = await fs.getHistory()
     expect(result).toStrictEqual(mockDocs)
+  })
+
+  it('TC-019-19a2 : getHistoryPage délègue les options et retourne la page', async () => {
+    const options = { lastDoc: { id: 'cursor' }, pageSize: 50 }
+    const mockPage = { transactions: [{ id: 'fh1' }], lastDoc: null, hasMore: false }
+    vi.spyOn(fs._historyService, 'getHistoryPage').mockResolvedValueOnce(mockPage)
+
+    await expect(fs.getHistoryPage(options)).resolves.toBe(mockPage)
+    expect(fs._historyService.getHistoryPage).toHaveBeenCalledWith(options)
   })
 
   it('TC-019-19b : addToHistory appelle la commande serveur et retourne le résultat', async () => {
