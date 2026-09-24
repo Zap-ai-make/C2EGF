@@ -10,7 +10,7 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 
 **La meilleure évolution est progressive : rendre le serveur seul responsable des mouvements financiers, terminer le pilotage par profil, puis simplifier les couches existantes.** Une réécriture globale ou une migration massive vers TypeScript n'est pas justifiée par cet audit.
 
-### État de remédiation — lots 1, 3A, 3B et 3C exécutés
+### État de remédiation — lots 1, 3A, 3B, 3C et 3D exécutés
 
 - **SEC-01 corrigé** : la nouvelle Function `storeTransactionCommand` relit l'acteur et la boutique, valide le profil C2EGF, puis écrit soldes, mouvement et audit dans une transaction. L'initialisation reste limitée à zéro et l'édition manuelle est refusée par le profil C2EGF.
 - **SEC-02 corrigé** : `onboarding.selfRegistration` est un axe de profil. Il vaut `false` pour C2EGF ; les règles refusent l'auto-création de boutique/profil et l'interface ne propose plus l'inscription. Les accès passent par le gérant.
@@ -20,8 +20,8 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 - **SEC-06 à SEC-09 corrigés** : imports Excel bornés et validés, PII non persistées, en-têtes HTTP déclarés et environnements Firebase hors production fermés par défaut.
 - **QUA-01 / BUG-04 / UI-01 corrigés** : erreurs temps réel remontées, réponses obsolètes ignorées et formulaires/modales accessibles.
 - **BUG-03 / BUG-05 corrigés** : rapports exhaustifs au-delà de 500 lignes, historiques ordonnés avant pagination et journée métier calculée dans le fuseau du profil avec bascule à minuit.
-- **PERF-02 / QUA-02 / DOC-01 corrigés** : routes chargées à la demande, contrôle local reproductible et contrats alignés sur la configuration C2EGF. **PERF-01 est réduit mais garde un reliquat explicite** : le coût quadratique a disparu, tandis que l'abonnement complet et l'agrégat dealer restent à remplacer par une pagination et des agrégats serveur sans tronquer les résultats.
-- Branches locales : `codex/audit-critical-remediation` (commit `99e25b5`), `codex/audit-important-business` (`a66250e`), `codex/audit-important-security` (`49ffeb3`) puis `codex/audit-important-data-ops` (`ca34881`). Aucun déploiement, accès à un projet réel, script administrateur destructif ou push distant.
+- **PERF-01 / PERF-02 / QUA-02 / DOC-01 corrigés côté navigateur** : routes chargées à la demande, historique boutique limité à 100 lignes puis paginé explicitement, journée courante suivie séparément pour garder le tableau de bord exact, et agrégat « Dehors » calculé par une callable qui ne transmet plus les brouillons ni les données client au dealer. Le scan serveur de tous les brouillons reste un coût à matérialiser si le volume l'exige.
+- Branches locales : `codex/audit-critical-remediation` (commit `99e25b5`), `codex/audit-important-business` (`a66250e`), `codex/audit-important-security` (`49ffeb3`), `codex/audit-important-data-ops` (`ca34881`) puis `codex/audit-history-aggregation` (`9a1bf79`). Aucun déploiement, accès à un projet réel, script administrateur destructif ou push distant.
 
 ## Périmètre, méthode et limites
 
@@ -38,12 +38,12 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 | Contrôle | Résultat |
 |---|---|
 | `npm run lint` | Réussi après remédiation ; attention à son périmètre, QUA-02 |
-| `npm run test:unit` | **86 fichiers, 2 412 tests réussis** |
-| `npm run test:components` | **20 fichiers, 308 tests réussis** |
+| `npm run test:unit` | **87 fichiers, 2 423 tests réussis** |
+| `npm run test:components` | **20 fichiers, 310 tests réussis** |
 | Suite `vitest.firestore.config.js`, émulateur `demo-akayis-test` | **20 fichiers, 433 tests réussis** |
 | Suite `vitest.functions.config.js`, émulateur `demo-akayis-test` | **12 fichiers, 304 tests réussis** |
 | Suite `vitest.integration.config.js`, émulateurs `demo-akayis-test` | **2 fichiers, 42 tests réussis** |
-| `npm run build` | Réussi ; bundle principal **1 205,23 kB, gzip 323,23 kB** ; chunk xlsx 499,86 kB ; précache PWA 2 450,09 KiB |
+| `npm run build` | Réussi ; bundle principal **1 206,26 kB, gzip 323,46 kB** ; chunk xlsx 499,86 kB ; précache PWA 2 451,65 KiB |
 | Générateurs règles et Functions, `--client c2egf_burkina --check` | Les trois artefacts générés correspondent au profil |
 | `npm run check:secrets` | Aucune signature de secret à haute confiance dans les fichiers suivis |
 | `node audit/reproduce-rules.mjs` | **6 scénarios fermés** : écritures directes et auto-enrôlement refusés |
@@ -220,12 +220,12 @@ Le scan de secrets couvre des signatures de clés privées et jetons connus dans
 
 ### PERF-01 — Historique complet chargé et dédupliqué en coût quadratique
 
-**IMPORTANT à mesure que les données croissent · PARTIELLEMENT CORRIGÉ le 24 septembre 2026.**
+**IMPORTANT à mesure que les données croissent · CORRIGÉ côté navigateur le 24 septembre 2026 ; coût serveur résiduel documenté.**
 
 - Localisation : `historyService.js:146`, `transactions.jsx:103`, `ClientsContext.jsx:84`, `dealerService.js:300`.
 - L'abonnement historique boutique ne pose pas de limite ni période par défaut. Les contextes exécutent `filter(...findIndex(...))` sur les snapshots complets : coût O(n²), alors que les identifiants d'un snapshot Firestore sont uniques. La virtualisation du tableau réduit le DOM, pas les lectures ni ces calculs. Le dealer lit également tous les brouillons pour son rapprochement ; cet accès est une décision antérieure explicite, pas une découverte d'IDOR.
 - Correction : pagination/période pour l'historique, agrégats adaptés aux tableaux de bord, `Map`/`Set` seulement là où plusieurs sources doivent réellement être fusionnées. Mesurer avec un volume réaliste avant d'ajouter une couche de cache.
-- Résultat : les trois `filter(...findIndex(...))` sur snapshots uniques ont été supprimés ; la fusion réelle des brouillons et historiques conserve son `Map`. L'historique est désormais ordonné à la source. L'abonnement boutique et `listArgentDehors` lisent encore toutes les lignes : ajouter une limite seule rendrait l'historique ou les montants faux. Le reliquat exige une pagination visible de l'archive et des agrégats serveur pour les tableaux de bord/dealer ; il reste classé IMPORTANT.
+- Résultat : les trois `filter(...findIndex(...))` sur snapshots uniques ont été supprimés. L'historique boutique écoute les 100 dernières lignes, expose « Charger les transactions précédentes » avec un curseur et fusionne les pages par identifiant. Une écoute limitée à la journée métier conserve les indicateurs du tableau de bord exacts au-delà de 100 opérations quotidiennes et se renouvelle à minuit. Le dealer appelle `listOutstandingDrafts` : le serveur vérifie son profil, agrège les brouillons des boutiques actives et ne renvoie que les totaux utiles ; les règles refusent désormais au dealer toute lecture directe ou `collectionGroup` des brouillons, sur deux boutiques testées. La callable parcourt encore tous les brouillons côté serveur : une vue matérialisée avec reprise/backfill serait le lot suivant si les mesures de volume montrent que ce coût devient significatif. Les historiques réels sans `createdAt` doivent toujours être recensés et normalisés avant activation, aucune donnée distante n'ayant été ouverte pendant l'audit.
 
 ### PERF-02 — Toutes les grandes routes partagent un bundle initial volumineux
 
@@ -330,12 +330,13 @@ Les thèmes et composants sémantiques existants constituent un socle utile. Que
 | 2 — autres critiques | Aucun autre critique confirmé dans ce bilan | Revoir ce lot si les vérifications d'exploitation révèlent un critique |
 | 3A — importants métier | BUG-01 avec garde anti-annulation de trace, BUG-02, SEC-04, SEC-05 | ✅ Terminé : requêtes réelles, reprise réseau, concurrence, profil et révocation testés |
 | 3B — importants sécurité/fiabilité | SEC-06 à SEC-09, QUA-01, BUG-04, UI-01 | ✅ Terminé : imports bornés, isolation navigateur, erreurs visibles, concurrence et modales testées |
-| 3C — importants données/exploitation | BUG-03, BUG-05, PERF-01/02, QUA-02, DOC-01 | Exécuté le 24 septembre ; reliquat PERF-01 conservé explicitement pour pagination d'archive et agrégats serveur |
+| 3C — importants données/exploitation | BUG-03, BUG-05, PERF-02, QUA-02, DOC-01 et première réduction de PERF-01 | ✅ Terminé le 24 septembre |
+| 3D — historique et agrégat dealer | Pagination visible de l'archive, exactitude du jour courant, agrégat serveur et fermeture des brouillons au dealer | ✅ Terminé le 24 septembre ; scan serveur à matérialiser seulement si les mesures le justifient |
 | Backlog — mineurs | QUA-03/04/05, cohérence des tokens | Petits refactors sans changement métier ; suppression démontrée et réversible |
 
 Une correction de sécurité et un refactor esthétique ne doivent pas partager un lot. Toute restriction variable par client doit être nommée dans `_pilot.js`, dérivée pour les couches concernées et testée avec au moins le pilote et C2EGF. Le typage progressif/JSDoc peut renforcer les payloads et documents aux frontières ; éviter de migrer tout le dépôt avant d'avoir fermé les failles.
 
-**Point d'arrêt ADOPTION.md : les lots 1, 3A, 3B et les corrections vérifiables de 3C sont terminés. Le reliquat PERF-01 et le backlog mineur restent des chantiers séparés ; aucun autre changement métier n'est implicite.**
+**Point d'arrêt ADOPTION.md : les lots 1, 3A, 3B, 3C et 3D sont terminés. La normalisation d'éventuels historiques réels sans `createdAt`, la matérialisation éventuelle de l'agrégat dealer et le backlog mineur restent des chantiers séparés ; aucun autre changement métier n'est implicite.**
 
 ## 8. Reproduction et pièces de travail
 
