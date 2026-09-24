@@ -37,6 +37,7 @@ import DealerTransfers from './pages/dealer/DealerTransfers.jsx'
 import DealerHistory from './pages/dealer/DealerHistory.jsx'
 import NewDealerRequest from './pages/dealer/NewDealerRequest.jsx'
 import DealerStores from './pages/dealer/DealerStores.jsx'
+import DealerProfile from './pages/dealer/DealerProfile.jsx'
 import Balance from './components/dashboard/Balance.jsx'
 import ReseauCards from './components/dashboard/ReseauCards.jsx'
 import FluxChart from './components/dashboard/FluxChart.jsx'
@@ -395,6 +396,7 @@ const ECRANS = {
   historique: DealerHistory,
   ravitailler: NewDealerRequest,
   boutiques: DealerStores,
+  profil: DealerProfile,
 }
 
 /**
@@ -411,6 +413,7 @@ const PAR_CHEMIN = {
   '/dealer/stores': DealerStores,
   '/dealer/transfers': DealerTransfers,
   '/dealer/history': DealerHistory,
+  '/dealer/profile': DealerProfile,
 }
 
 function EcranDealer() {
