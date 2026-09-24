@@ -10,7 +10,7 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 
 **La meilleure évolution est progressive : rendre le serveur seul responsable des mouvements financiers, terminer le pilotage par profil, puis simplifier les couches existantes.** Une réécriture globale ou une migration massive vers TypeScript n'est pas justifiée par cet audit.
 
-### État de remédiation — lots 1, 3A, 3B, 3C, 3D et 4A exécutés
+### État de remédiation — lots 1, 3A, 3B, 3C, 3D, 4A et 4B-profils exécutés
 
 - **SEC-01 corrigé** : la nouvelle Function `storeTransactionCommand` relit l'acteur et la boutique, valide le profil C2EGF, puis écrit soldes, mouvement et audit dans une transaction. L'initialisation reste limitée à zéro et l'édition manuelle est refusée par le profil C2EGF.
 - **SEC-02 corrigé** : `onboarding.selfRegistration` est un axe de profil. Il vaut `false` pour C2EGF ; les règles refusent l'auto-création de boutique/profil et l'interface ne propose plus l'inscription. Les accès passent par le gérant.
@@ -22,7 +22,8 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 - **BUG-03 / BUG-05 corrigés** : rapports exhaustifs au-delà de 500 lignes, historiques ordonnés avant pagination et journée métier calculée dans le fuseau du profil avec bascule à minuit.
 - **PERF-01 / PERF-02 / QUA-02 / DOC-01 corrigés côté navigateur** : routes chargées à la demande, historique boutique limité à 100 lignes puis paginé explicitement, journée courante suivie séparément pour garder le tableau de bord exact, et agrégat « Dehors » calculé par une callable qui ne transmet plus les brouillons ni les données client au dealer. Le scan serveur de tous les brouillons reste un coût à matérialiser si le volume l'exige.
 - **QUA-03 corrigé** : dix modules sans appelant produit, test, script ou configuration ont été retirés dans un commit local dédié et réversible. Les outils de preview et `ProtectedRoute` restent en place car ils ont des consommateurs confirmés.
-- Branches locales : `codex/audit-critical-remediation` (commit `99e25b5`), `codex/audit-important-business` (`a66250e`), `codex/audit-important-security` (`49ffeb3`), `codex/audit-important-data-ops` (`ca34881`) puis `codex/audit-history-aggregation` (`9a1bf79`, nettoyage QUA-03 `cf86162`). Aucun déploiement, accès à un projet réel, script administrateur destructif ou push distant.
+- **QUA-04, profils corrigés** : les pages administrateur et dealer partagent désormais une seule présentation de profil, sans changement de contenu ni d'état vide. Les autres duplications recensées restent des lots indépendants.
+- Branches locales : `codex/audit-critical-remediation` (commit `99e25b5`), `codex/audit-important-business` (`a66250e`), `codex/audit-important-security` (`49ffeb3`), `codex/audit-important-data-ops` (`ca34881`) puis `codex/audit-history-aggregation` (`9a1bf79`, nettoyage QUA-03 `cf86162`, profils QUA-04 `e2122df`). Aucun déploiement, accès à un projet réel, script administrateur destructif ou push distant.
 
 ## Périmètre, méthode et limites
 
@@ -39,12 +40,12 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 | Contrôle | Résultat |
 |---|---|
 | `npm run lint` | Réussi après remédiation ; attention à son périmètre, QUA-02 |
-| `npm run test:unit` | **87 fichiers, 2 423 tests réussis** |
+| `npm run test:unit` | **88 fichiers, 2 427 tests réussis** |
 | `npm run test:components` | **20 fichiers, 310 tests réussis** |
 | Suite `vitest.firestore.config.js`, émulateur `demo-akayis-test` | **20 fichiers, 433 tests réussis** |
 | Suite `vitest.functions.config.js`, émulateur `demo-akayis-test` | **12 fichiers, 304 tests réussis** |
 | Suite `vitest.integration.config.js`, émulateurs `demo-akayis-test` | **2 fichiers, 42 tests réussis** |
-| `npm run build` | Réussi ; bundle principal **1 206,26 kB, gzip 323,47 kB** ; chunk xlsx 499,86 kB ; précache PWA 2 450,32 KiB |
+| `npm run build` | Réussi ; bundle principal **1 206,41 kB, gzip 323,51 kB** ; chunk xlsx 499,86 kB ; précache PWA 2 449,96 KiB |
 | Générateurs règles et Functions, `--client c2egf_burkina --check` | Les trois artefacts générés correspondent au profil |
 | `npm run check:secrets` | Aucune signature de secret à haute confiance dans les fichiers suivis |
 | `node audit/reproduce-rules.mjs` | **6 scénarios fermés** : écritures directes et auto-enrôlement refusés |
@@ -266,11 +267,11 @@ Les recherches sur les chemins et chaque symbole exporté n'ont trouvé aucun im
 
 ### QUA-04 — Duplication réelle, mais plusieurs ressemblances sont intentionnelles
 
-**MINEUR sauf divergence métier · effort S/M par lot.**
+**MINEUR sauf divergence métier · sous-lot profils CORRIGÉ le 24 septembre 2026 · effort S/M par lot.**
 
 L'analyse trouve **220 fenêtres identiques de 12 lignes significatives**, qui se chevauchent : **ce n'est ni un pourcentage de duplication, ni 220 blocs distincts**. Exemples vérifiés :
 
-- `AdminProfile.jsx:10` / `DealerProfile.jsx:10` : présentation du profil presque identique ; composant simple à paramètres suffisants.
+- `AdminProfile.jsx` / `DealerProfile.jsx` : **corrigé dans `e2122df`**. `ProfileSummary` porte la présentation commune ; chaque page conserve seulement son titre, son rôle, son identifiant de test et la lecture du profil connecté. Une caractérisation commune couvre les deux contenus et l'état non chargé. Le vrai écran dealer a été inspecté en 1 440 px et 390 px, sans débordement.
 - `ChangePasswordModal.jsx:107` / `ForgotPasswordModal.jsx:96` : coquilles dupliquées, avec les mêmes lacunes d'accessibilité. Réutiliser `Dialog` a une valeur fonctionnelle directe.
 - Pagination/états dans `AdminClients`, `AdminDealer`, `AdminStores`, `AdminUsers` : extraire seulement la mécanique commune après avoir stabilisé le comportement asynchrone.
 - Prévalidation/relecture de profil dans les handlers de confirmation/rejet et d'inventaire : duplication à encadrer, mais **garder les vérifications autoritatives dans la transaction**. Ne pas les déplacer toutes avant la transaction au nom du DRY.
@@ -334,11 +335,12 @@ Les thèmes et composants sémantiques existants constituent un socle utile. Que
 | 3C — importants données/exploitation | BUG-03, BUG-05, PERF-02, QUA-02, DOC-01 et première réduction de PERF-01 | ✅ Terminé le 24 septembre |
 | 3D — historique et agrégat dealer | Pagination visible de l'archive, exactitude du jour courant, agrégat serveur et fermeture des brouillons au dealer | ✅ Terminé le 24 septembre ; scan serveur à matérialiser seulement si les mesures le justifient |
 | 4A — code non relié | QUA-03 : suppression des dix modules sans appelant confirmé | ✅ Terminé le 24 septembre ; suppression démontrée, testée et réversible par commit local |
-| Backlog — mineurs | QUA-04/05, cohérence des tokens | Petits refactors sans changement métier, motivés par un besoin testable |
+| 4B-profils — duplication UI | QUA-04 : présentation commune des profils administrateur et dealer | ✅ Terminé le 24 septembre ; contenu, état vide et rendu responsive caractérisés |
+| Backlog — mineurs | Reste de QUA-04, QUA-05, cohérence des tokens | Petits refactors sans changement métier, motivés par un besoin testable |
 
 Une correction de sécurité et un refactor esthétique ne doivent pas partager un lot. Toute restriction variable par client doit être nommée dans `_pilot.js`, dérivée pour les couches concernées et testée avec au moins le pilote et C2EGF. Le typage progressif/JSDoc peut renforcer les payloads et documents aux frontières ; éviter de migrer tout le dépôt avant d'avoir fermé les failles.
 
-**Point d'arrêt ADOPTION.md : les lots 1, 3A, 3B, 3C, 3D et 4A sont terminés. La normalisation d'éventuels historiques réels sans `createdAt`, la matérialisation éventuelle de l'agrégat dealer et les lots mineurs QUA-04/05 restent des chantiers séparés ; aucun autre changement métier n'est implicite.**
+**Point d'arrêt ADOPTION.md : les lots 1, 3A, 3B, 3C, 3D, 4A et 4B-profils sont terminés. La normalisation d'éventuels historiques réels sans `createdAt`, la matérialisation éventuelle de l'agrégat dealer, le reste de QUA-04 et QUA-05 restent des chantiers séparés ; aucun autre changement métier n'est implicite.**
 
 ## 8. Reproduction et pièces de travail
 
