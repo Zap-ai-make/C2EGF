@@ -10,7 +10,7 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 
 **La meilleure évolution est progressive : rendre le serveur seul responsable des mouvements financiers, terminer le pilotage par profil, puis simplifier les couches existantes.** Une réécriture globale ou une migration massive vers TypeScript n'est pas justifiée par cet audit.
 
-### État de remédiation — lots 1, 3A et 3B terminés
+### État de remédiation — lots 1, 3A, 3B et 3C exécutés
 
 - **SEC-01 corrigé** : la nouvelle Function `storeTransactionCommand` relit l'acteur et la boutique, valide le profil C2EGF, puis écrit soldes, mouvement et audit dans une transaction. L'initialisation reste limitée à zéro et l'édition manuelle est refusée par le profil C2EGF.
 - **SEC-02 corrigé** : `onboarding.selfRegistration` est un axe de profil. Il vaut `false` pour C2EGF ; les règles refusent l'auto-création de boutique/profil et l'interface ne propose plus l'inscription. Les accès passent par le gérant.
@@ -19,7 +19,9 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 - **SEC-04 / SEC-05 corrigés** : profil C2EGF imposé au serveur et activité de la boutique exigée dans les règles et commandes sensibles.
 - **SEC-06 à SEC-09 corrigés** : imports Excel bornés et validés, PII non persistées, en-têtes HTTP déclarés et environnements Firebase hors production fermés par défaut.
 - **QUA-01 / BUG-04 / UI-01 corrigés** : erreurs temps réel remontées, réponses obsolètes ignorées et formulaires/modales accessibles.
-- Branches locales : `codex/audit-critical-remediation` (commit `99e25b5`), `codex/audit-important-business` (commit `a66250e`) puis `codex/audit-important-security`. Aucun déploiement, accès à un projet réel, script administrateur destructif ou push distant.
+- **BUG-03 / BUG-05 corrigés** : rapports exhaustifs au-delà de 500 lignes, historiques ordonnés avant pagination et journée métier calculée dans le fuseau du profil avec bascule à minuit.
+- **PERF-02 / QUA-02 / DOC-01 corrigés** : routes chargées à la demande, contrôle local reproductible et contrats alignés sur la configuration C2EGF. **PERF-01 est réduit mais garde un reliquat explicite** : le coût quadratique a disparu, tandis que l'abonnement complet et l'agrégat dealer restent à remplacer par une pagination et des agrégats serveur sans tronquer les résultats.
+- Branches locales : `codex/audit-critical-remediation` (commit `99e25b5`), `codex/audit-important-business` (`a66250e`), `codex/audit-important-security` (`49ffeb3`) puis `codex/audit-important-data-ops` (`ca34881`). Aucun déploiement, accès à un projet réel, script administrateur destructif ou push distant.
 
 ## Périmètre, méthode et limites
 
@@ -36,13 +38,14 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 | Contrôle | Résultat |
 |---|---|
 | `npm run lint` | Réussi après remédiation ; attention à son périmètre, QUA-02 |
-| `npm run test:unit` | **85 fichiers, 2 405 tests réussis** |
+| `npm run test:unit` | **86 fichiers, 2 412 tests réussis** |
 | `npm run test:components` | **20 fichiers, 308 tests réussis** |
 | Suite `vitest.firestore.config.js`, émulateur `demo-akayis-test` | **20 fichiers, 433 tests réussis** |
 | Suite `vitest.functions.config.js`, émulateur `demo-akayis-test` | **12 fichiers, 304 tests réussis** |
 | Suite `vitest.integration.config.js`, émulateurs `demo-akayis-test` | **2 fichiers, 42 tests réussis** |
-| `npm run build` | Réussi ; bundle principal 1 837,22 kB, gzip 493,13 kB ; chunk xlsx 499,86 kB ; précache PWA 2 438,61 KiB |
+| `npm run build` | Réussi ; bundle principal **1 205,23 kB, gzip 323,23 kB** ; chunk xlsx 499,86 kB ; précache PWA 2 450,09 KiB |
 | Générateurs règles et Functions, `--client c2egf_burkina --check` | Les trois artefacts générés correspondent au profil |
+| `npm run check:secrets` | Aucune signature de secret à haute confiance dans les fichiers suivis |
 | `node audit/reproduce-rules.mjs` | **6 scénarios fermés** : écritures directes et auto-enrôlement refusés |
 | `audit/reproduce-backend.mjs` | Preuve d'exposition initiale conservée ; fermeture vérifiée par `tc-060`, `tc-067`, `tc-070`, `tc-072` et `tc-112` |
 | `node audit/scan-secrets.mjs` | **907 blobs texte Git examinés ; aucune signature détectée** |
@@ -174,13 +177,14 @@ Le scan de secrets couvre des signatures de clés privées et jetons connus dans
 
 ### BUG-03 — Rapports plafonnés et historique sans ordre chronologique global
 
-**IMPORTANT · confirmé par lecture · effort M.**
+**IMPORTANT · CORRIGÉ le 24 septembre 2026 · 501 demandes et ordre des requêtes couverts.**
 
 - Localisation : [adminService.js:369](../src/services/adminService.js#L369), ligne 450 et [ligne 524](../src/services/adminService.js#L524), [AdminReports.jsx:220](../src/pages/admin/AdminReports.jsx#L220), [ligne 313](../src/pages/admin/AdminReports.jsx#L313).
 - Le rapport agrège au maximum 500 demandes. **Un avertissement existe**, mais apparaît dans le détail ; les indicateurs supérieurs présentent quand même un montant « Toutes boutiques ». Au-delà de la limite, ces indicateurs ne couvrent pas la période complète.
 - Les historiques paginent sans `orderBy(createdAt)`, puis trient chaque page localement. Le tri n'est donc globalement correct qu'une fois toutes les pages chargées. La recherche est aussi limitée aux pages chargées ; `AdminHistory` l'annonce et maintient « Charger plus », ce qui évite de la qualifier de disparition silencieuse.
 - Correction : agrégats serveur ou parcours paginé exhaustif pour les rapports ; ordre indexé stable avec curseur pour l'historique, après normalisation des dates legacy. Mettre l'état incomplet au niveau des totaux tant que le plafond subsiste.
 - Test cible : 501+ opérations et dates volontairement décorrélées des identifiants ; comparer total et ordre attendus.
+- Résultat : le rapport parcourt toutes les tranches de 500 jusqu'à épuisement et n'affiche plus de total présenté comme complet sur une tranche. Les deux historiques appliquent `orderBy(createdAt, desc)` avant le curseur ; l'index collection-group correspondant est déjà déclaré. Avant activation sur un jeu ancien réel, les documents sans `createdAt` doivent être recensés et normalisés, car Firestore les exclut d'une requête ordonnée. Aucun jeu distant n'a été lu ou migré pendant ce lot.
 
 ### BUG-04 — Une réponse ancienne peut remplacer un filtre plus récent
 
@@ -204,39 +208,43 @@ Le scan de secrets couvre des signatures de clés privées et jetons connus dans
 
 ### BUG-05 — Fuseau métier déclaré mais non utilisé dans plusieurs calculs
 
-**IMPORTANT sous condition d'un poste réglé dans un autre fuseau · lecture confirmée · effort M.**
+**IMPORTANT sous condition d'un poste réglé dans un autre fuseau · CORRIGÉ le 24 septembre 2026.**
 
 - Localisation : `config/clients/_pilot.js:100`, `src/utils/formatters.js:27`, `src/hooks/useTodayTransactions.js:14`, `src/services/adminService.js:517`.
 - Le profil déclare `Africa/Ouagadougou`, tandis que ces chemins utilisent le fuseau du navigateur (`toDateString`, `toLocaleDateString` sans `timeZone`, `setHours`). Près de minuit, une session sur un poste hors UTC peut classer/afficher une opération dans un autre jour métier. `useTodayTransactions` ne se réévalue pas non plus au passage de minuit si la liste reste inchangée.
 - Correction : un module de dates métier alimenté par le profil, avec bornes UTC de la journée métier ; rafraîchissement temporel explicite là où l'écran reste ouvert.
 - Test cible : même timestamp depuis deux fuseaux, changement de mois et passage de minuit.
+- Résultat : `businessDate.js` dérive le fuseau du profil, calcule les bornes UTC y compris lors d'un changement d'heure et interprète les dates françaises stockées comme dates murales métier. Les rapports utilisent une borne de fin exclusive et le tableau de bord programme sa réévaluation au prochain minuit métier. Les formateurs partagés fixent aussi explicitement ce fuseau.
 
 ## 3. Performance, architecture et maintenance
 
 ### PERF-01 — Historique complet chargé et dédupliqué en coût quadratique
 
-**IMPORTANT à mesure que les données croissent · confirmé par lecture · effort M/L.**
+**IMPORTANT à mesure que les données croissent · PARTIELLEMENT CORRIGÉ le 24 septembre 2026.**
 
 - Localisation : `historyService.js:146`, `transactions.jsx:103`, `ClientsContext.jsx:84`, `dealerService.js:300`.
 - L'abonnement historique boutique ne pose pas de limite ni période par défaut. Les contextes exécutent `filter(...findIndex(...))` sur les snapshots complets : coût O(n²), alors que les identifiants d'un snapshot Firestore sont uniques. La virtualisation du tableau réduit le DOM, pas les lectures ni ces calculs. Le dealer lit également tous les brouillons pour son rapprochement ; cet accès est une décision antérieure explicite, pas une découverte d'IDOR.
 - Correction : pagination/période pour l'historique, agrégats adaptés aux tableaux de bord, `Map`/`Set` seulement là où plusieurs sources doivent réellement être fusionnées. Mesurer avec un volume réaliste avant d'ajouter une couche de cache.
+- Résultat : les trois `filter(...findIndex(...))` sur snapshots uniques ont été supprimés ; la fusion réelle des brouillons et historiques conserve son `Map`. L'historique est désormais ordonné à la source. L'abonnement boutique et `listArgentDehors` lisent encore toutes les lignes : ajouter une limite seule rendrait l'historique ou les montants faux. Le reliquat exige une pagination visible de l'archive et des agrégats serveur pour les tableaux de bord/dealer ; il reste classé IMPORTANT.
 
 ### PERF-02 — Toutes les grandes routes partagent un bundle initial volumineux
 
-**IMPORTANT pour les connexions mobiles · mesuré au build · effort M.**
+**IMPORTANT pour les connexions mobiles · CORRIGÉ le 24 septembre 2026 · mesuré au build.**
 
 - Localisation : imports statiques de `src/App.jsx`, `vite.config.js`.
 - Le bundle principal minifié mesure 1 608,93 kB (429,56 kB gzip), et la PWA précache environ 2,1 MiB. `xlsx` est déjà chargé par import dynamique, bonne pratique à conserver. Les espaces admin/dealer/boutique restent importés ensemble.
 - Correction : découper les routes avec `React.lazy`/`Suspense`, puis mesurer le coût réel de Recharts/Firebase et le téléchargement PWA. Vérifier le fonctionnement hors ligne avant de changer le précache ; ne pas simplement masquer l'avertissement de taille.
+- Résultat : les pages boutique, admin et dealer sont chargées avec `React.lazy` sous un `Suspense` commun. Le bundle principal passe de 1 608,93 kB (429,56 kB gzip) dans la mesure initiale à 1 205,23 kB (323,23 kB gzip), soit environ 25 % de moins en taille brute. Le précache reste exhaustif (61 entrées, 2 450,09 KiB), donc les chunks de route restent disponibles hors ligne ; sa politique n'a pas été assouplie.
 
 ### QUA-02 — Les garde-fous qualité ne couvrent pas tout le dépôt
 
-**IMPORTANT · configuration confirmée · effort S/M.**
+**IMPORTANT · CORRIGÉ le 24 septembre 2026.**
 
 - Localisation : [eslint.config.js:10](../eslint.config.js#L10), `package.json`, `firebase.json`.
 - Les règles ESLint recommandées ciblent `.js/.jsx`, pas `.mjs` : les scripts administratifs ne bénéficient pas de cette même analyse. `varsIgnorePattern:'^[A-Z_]'` laisse aussi passer des imports/constantes inutilisés commençant par une majuscule. Le lint ne détecte pas les fichiers inutilisés.
 - Aucun hook actif de scan, pipeline `.github/.husky` ou script de porte qualité sécurité n'a été trouvé dans les chemins inspectés. Les commandes de génération `--check` existent mais ne sont pas intégrées au build ou à un `predeploy`. Des contrôles externes peuvent exister ; ils n'ont pas été inspectés.
 - Correction : configuration Node pour les `.mjs`, contrôle local reproductible de secrets/dépendances/profil, puis tests de règles et build. L'outil importe moins que le contrôle effectif. Conserver un mode sans dépendance à un remote puisque ce dépôt est volontairement local.
+- Résultat : ESLint couvre `.mjs` et `eslint-plugin-react` distingue les composants utilisés en JSX, ce qui a permis de retirer 19 déclarations réellement inutilisées sans réintroduire l'exception générale des majuscules. `quality:check` enchaîne artefacts générés, scan de signatures suivies, audit de dépendances, lint, tests locaux et build ; `quality:check:emulators` couvre Firestore, intégration et Functions sur `demo-*`, et `quality:check:full` réunit les deux.
 
 ### QUA-03 — Code non relié à l'application à trier avant suppression
 
@@ -294,12 +302,13 @@ Les thèmes et composants sémantiques existants constituent un socle utile. Que
 
 ### DOC-01 — Contrats de projet en retard sur la configuration de production
 
-**IMPORTANT pour les décisions opérationnelles · confirmé · effort S.**
+**IMPORTANT pour les décisions opérationnelles · CORRIGÉ le 24 septembre 2026.**
 
 - `AGENTS.md` dit encore « aucun projet Firebase ni production ». `.firebaserc` porte `production:c2egf-b0b5a`, le profil cite ce projet et `functions/src/index.js` décrit des déploiements et quotas rencontrés. Cela prouve que les instructions ne reflètent plus la configuration locale ; l'état exact du service distant n'a pas été vérifié.
 - `docs/adaptation-nouveau-client.md` conserve aussi des indications TAOFIC anciennes et présente un namespace client comme isolation générale, alors que `users`, `stores`, `globalClients` restent à la racine et les données métier sont organisées par boutique.
 - Correction : remettre à jour le statut de production, le registre clients, l'isolation effective par projet, la procédure de validation des artefacts générés et les responsabilités de sauvegarde. Les anciens audits doivent être datés comme historiques ; leur phrase « aucun test / aucune Function » est désormais fausse pour le code actuel.
 - Aucun projet Firebase réel n'a été contacté pour cet audit ; les règles de prudence production ont été maintenues.
+- Résultat : `AGENTS.md` décrit désormais l'alias C2EGF sans présumer l'état distant et active immédiatement les interdits de production. Le guide d'adaptation explique l'isolation effective par projet, les collections racine, la vérification des artefacts et la responsabilité de sauvegarde ; ses anciens identifiants TAOFIC ont été retirés de la procédure courante.
 
 ## 6. Ce qui est sain et doit être conservé
 
@@ -321,12 +330,12 @@ Les thèmes et composants sémantiques existants constituent un socle utile. Que
 | 2 — autres critiques | Aucun autre critique confirmé dans ce bilan | Revoir ce lot si les vérifications d'exploitation révèlent un critique |
 | 3A — importants métier | BUG-01 avec garde anti-annulation de trace, BUG-02, SEC-04, SEC-05 | ✅ Terminé : requêtes réelles, reprise réseau, concurrence, profil et révocation testés |
 | 3B — importants sécurité/fiabilité | SEC-06 à SEC-09, QUA-01, BUG-04, UI-01 | ✅ Terminé : imports bornés, isolation navigateur, erreurs visibles, concurrence et modales testées |
-| 3C — importants données/exploitation | BUG-03, BUG-05, PERF-01/02, QUA-02, DOC-01 | Totaux complets, journée métier stable, mesures avant/après, contrôles automatisés et contrats cohérents |
+| 3C — importants données/exploitation | BUG-03, BUG-05, PERF-01/02, QUA-02, DOC-01 | Exécuté le 24 septembre ; reliquat PERF-01 conservé explicitement pour pagination d'archive et agrégats serveur |
 | Backlog — mineurs | QUA-03/04/05, cohérence des tokens | Petits refactors sans changement métier ; suppression démontrée et réversible |
 
 Une correction de sécurité et un refactor esthétique ne doivent pas partager un lot. Toute restriction variable par client doit être nommée dans `_pilot.js`, dérivée pour les couches concernées et testée avec au moins le pilote et C2EGF. Le typage progressif/JSDoc peut renforcer les payloads et documents aux frontières ; éviter de migrer tout le dépôt avant d'avoir fermé les failles.
 
-**Point d'arrêt ADOPTION.md : les lots 1, 3A et 3B sont terminés et vérifiés. Le lot 3C reste soumis à validation avant exécution.**
+**Point d'arrêt ADOPTION.md : les lots 1, 3A, 3B et les corrections vérifiables de 3C sont terminés. Le reliquat PERF-01 et le backlog mineur restent des chantiers séparés ; aucun autre changement métier n'est implicite.**
 
 ## 8. Reproduction et pièces de travail
 
