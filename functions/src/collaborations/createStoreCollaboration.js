@@ -14,7 +14,12 @@
  */
 
 import { DealerRequestError } from '../errors.js'
-import { validateAuthUid, validateInputPayload, validateProfileData } from '../dealerRequests/shared.js'
+import {
+  readValidatedProfile,
+  validateAuthUid,
+  validateInputPayload,
+  validateProfileData,
+} from '../dealerRequests/shared.js'
 import {
   assertCollaborationsEnabled,
   resolveCollaborationNetwork,
@@ -57,11 +62,7 @@ export async function createStoreCollaborationHandler(
   const network = resolveCollaborationNetwork(null, storeNetworks)
 
   // ── 4. Prévalidation profil (store_admin actif avec storeId) ───────────────
-  const profileSnap = await db.doc(`users/${actorUid}`).get()
-  if (!profileSnap.exists) {
-    throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-  }
-  validateProfileData(profileSnap.data())
+  await readValidatedProfile(db, actorUid, validateProfileData)
 
   // ── 5. Transaction : relecture autoritative + écriture du document pending ─
   let result
@@ -69,12 +70,10 @@ export async function createStoreCollaborationHandler(
     result = await db.runTransaction(async (t) => {
       // a. Profil relu dans la transaction — c'est LUI qui fait autorité sur la
       //    boutique demandeuse, jamais un storeId envoyé par le client.
-      const txProfileSnap = await t.get(db.doc(`users/${actorUid}`))
-      if (!txProfileSnap.exists) {
-        throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-      }
-      const txProfile = txProfileSnap.data()
-      const requestingStoreId = validateProfileData(txProfile)
+      const {
+        profile: txProfile,
+        validationResult: requestingStoreId,
+      } = await readValidatedProfile(db, actorUid, validateProfileData, t)
 
       // b. On ne se sollicite pas soi-même.
       if (requestingStoreId === supplierStoreId) {

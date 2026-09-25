@@ -58,6 +58,37 @@ const deps = () => ({ db, FieldValue, storeNetworks: ['Orange'], collaborationsE
 const makeRequest = (uid, data) => ({ auth: uid ? { uid, token: {} } : null, data: data ?? {} })
 const expectError = (promise, code) => expect(promise).rejects.toMatchObject({ code })
 
+function makeSnapshotOverrideDb(realDb, targetPath, overrideData) {
+  return {
+    doc: (...args) => realDb.doc(...args),
+    collection: (...args) => realDb.collection(...args),
+    runTransaction: (callback) =>
+      realDb.runTransaction(async (realTransaction) => {
+        let overrideApplied = false
+        const transactionProxy = {
+          get: async (ref) => {
+            const snapshot = await realTransaction.get(ref)
+            if (!overrideApplied && ref.path === targetPath) {
+              overrideApplied = true
+              return {
+                exists: snapshot.exists,
+                id: snapshot.id,
+                ref: snapshot.ref,
+                data: () => ({ ...snapshot.data(), ...overrideData }),
+              }
+            }
+            return snapshot
+          },
+          update: (...args) => realTransaction.update(...args),
+          set: (...args) => realTransaction.set(...args),
+          create: (...args) => realTransaction.create(...args),
+          delete: (...args) => realTransaction.delete(...args),
+        }
+        return callback(transactionProxy)
+      }),
+  }
+}
+
 async function seedBase({ stockB = 50000 } = {}) {
   await db.doc(`stores/${STORE_A}`).set({ name: 'Boutique A', active: true, adminUid: ADMIN_A })
   await db.doc(`stores/${STORE_B}`).set({ name: 'Boutique B', active: true, adminUid: ADMIN_B })
@@ -222,6 +253,22 @@ describe('TC-112-CR — createStoreCollaboration', () => {
     expect(await auditActions(STORE_A)).toContain('STORE_COLLABORATION_CREATED')
     expect(await auditActions(STORE_B)).toEqual([])
   })
+
+  it('[CR-16] demandeuse désactivée avant la transaction → aucune collaboration ni audit', async () => {
+    const concurrentDb = makeSnapshotOverrideDb(db, `users/${ADMIN_A}`, { active: false })
+
+    await expectError(
+      createStoreCollaborationHandler(
+        makeRequest(ADMIN_A, validPayload()),
+        { ...deps(), db: concurrentDb },
+      ),
+      'PROFILE_INACTIVE',
+    )
+
+    expect((await db.collection('storeCollaborations').get()).size).toBe(0)
+    expect(await auditActions(STORE_A)).toEqual([])
+    expect(await stockOf(STORE_B)).toBe(50000)
+  })
 })
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -356,6 +403,25 @@ describe('TC-112-CO — confirmStoreCollaboration : dépôt', () => {
       confirmStoreCollaborationHandler(makeRequest(ADMIN_B, { collaborationId: id }), deps()),
       'INVALID_BALANCE_DATA',
     )
+  })
+
+  it('[CO-13] fournisseuse réaffectée avant la transaction → aucun mouvement financier', async () => {
+    const id = await createAs()
+    const concurrentDb = makeSnapshotOverrideDb(db, `users/${ADMIN_B}`, { storeId: STORE_C })
+
+    await expectError(
+      confirmStoreCollaborationHandler(
+        makeRequest(ADMIN_B, { collaborationId: id }),
+        { ...deps(), db: concurrentDb },
+      ),
+      'COLLABORATION_STORE_MISMATCH',
+    )
+
+    expect((await db.doc(`storeCollaborations/${id}`).get()).data().status).toBe('pending')
+    expect(await stockOf(STORE_B)).toBe(50000)
+    expect((await db.collection('internalDebts').get()).size).toBe(0)
+    expect((await db.collection(`clients/${STORE_A}/history`).get()).size).toBe(0)
+    expect(await auditActions(STORE_B)).toEqual([])
   })
 })
 
@@ -504,6 +570,22 @@ describe('TC-112-RJ — rejectStoreCollaboration', () => {
     const logs = (await db.collection(`clients/${STORE_B}/auditLogs`).get()).docs.map((d) => d.data())
     const entry = logs.find((l) => l.action === 'STORE_COLLABORATION_REJECTED')
     expect(entry.rejectionReason).toBe('Stock épuisé ce matin')
+  })
+
+  it('[RJ-07] fournisseuse désactivée avant la transaction → collaboration et audit inchangés', async () => {
+    const id = await createAs()
+    const concurrentDb = makeSnapshotOverrideDb(db, `users/${ADMIN_B}`, { active: false })
+
+    await expectError(
+      rejectStoreCollaborationHandler(
+        makeRequest(ADMIN_B, { collaborationId: id, rejectionReason: 'Profil désactivé' }),
+        { ...deps(), db: concurrentDb },
+      ),
+      'PROFILE_INACTIVE',
+    )
+
+    expect((await db.doc(`storeCollaborations/${id}`).get()).data().status).toBe('pending')
+    expect(await auditActions(STORE_B)).toEqual([])
   })
 })
 

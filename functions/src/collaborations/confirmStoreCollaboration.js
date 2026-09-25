@@ -22,7 +22,12 @@
  */
 
 import { DealerRequestError } from '../errors.js'
-import { validateAuthUid, validateInputPayload, validateProfileData } from '../dealerRequests/shared.js'
+import {
+  readValidatedProfile,
+  validateAuthUid,
+  validateInputPayload,
+  validateProfileData,
+} from '../dealerRequests/shared.js'
 import {
   assertCollaborationsEnabled,
   resolveCollaborationNetwork,
@@ -58,11 +63,7 @@ export async function confirmStoreCollaborationHandler(
   const collaborationId = validateCollaborationId(payload.collaborationId)
 
   // ── 4. Prévalidation profil ────────────────────────────────────────────────
-  const profileSnap = await db.doc(`users/${actorUid}`).get()
-  if (!profileSnap.exists) {
-    throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-  }
-  validateProfileData(profileSnap.data())
+  await readValidatedProfile(db, actorUid, validateProfileData)
 
   // ── 5. Transaction atomique ────────────────────────────────────────────────
   let result
@@ -72,12 +73,10 @@ export async function confirmStoreCollaborationHandler(
       // écriture dans une même transaction.
 
       // a. Profil autoritatif.
-      const txProfileSnap = await t.get(db.doc(`users/${actorUid}`))
-      if (!txProfileSnap.exists) {
-        throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-      }
-      const txProfile = txProfileSnap.data()
-      const actorStoreId = validateProfileData(txProfile)
+      const {
+        profile: txProfile,
+        validationResult: actorStoreId,
+      } = await readValidatedProfile(db, actorUid, validateProfileData, t)
 
       // b. La collaboration.
       const collabRef = db.doc(`storeCollaborations/${collaborationId}`)
