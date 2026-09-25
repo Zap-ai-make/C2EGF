@@ -10,7 +10,7 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 
 **La meilleure évolution est progressive : rendre le serveur seul responsable des mouvements financiers, terminer le pilotage par profil, puis simplifier les couches existantes.** Une réécriture globale ou une migration massive vers TypeScript n'est pas justifiée par cet audit.
 
-### État de remédiation — lots 1, 3A, 3B, 3C, 3D, 4A et quatre sous-lots 4B exécutés
+### État de remédiation — lots 1, 3A, 3B, 3C, 3D, 4A et cinq sous-lots 4B exécutés
 
 - **SEC-01 corrigé** : la nouvelle Function `storeTransactionCommand` relit l'acteur et la boutique, valide le profil C2EGF, puis écrit soldes, mouvement et audit dans une transaction. L'initialisation reste limitée à zéro et l'édition manuelle est refusée par le profil C2EGF.
 - **SEC-02 corrigé** : `onboarding.selfRegistration` est un axe de profil. Il vaut `false` pour C2EGF ; les règles refusent l'auto-création de boutique/profil et l'interface ne propose plus l'inscription. Les accès passent par le gérant.
@@ -26,7 +26,8 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 - **QUA-04, pagination administrateur corrigée** : les quatre listes administrateur partagent le même bouton « Charger plus », tandis que chaque page conserve sa condition de fin et sa logique de chargement. La caractérisation vérifie curseur, attente, ajout et dernière page.
 - **QUA-04, lecture des profils financiers corrigée sur cinq handlers** : une seule fonction porte la lecture et l'erreur de profil absent pour confirmation/rejet de demande et inventaire dealer. Chaque handler conserve son validateur de rôle et sa relecture autoritative dans la transaction.
 - **QUA-04, profils des transferts boutique–dealer corrigés** : confirmation et rejet utilisent le même helper sans retirer la relecture transactionnelle. Deux caractérisations prouvent qu'une désactivation ou un changement de rôle concurrent bloque transfert, solde et audits.
-- Branches locales : `codex/audit-critical-remediation` (commit `99e25b5`), `codex/audit-important-business` (`a66250e`), `codex/audit-important-security` (`49ffeb3`), `codex/audit-important-data-ops` (`ca34881`) puis `codex/audit-history-aggregation` (`9a1bf79`, nettoyage QUA-03 `cf86162`, profils QUA-04 `e2122df`, pagination QUA-04 `7f4458c`, profils financiers QUA-04 `c574e67`, profils des transferts dealer `4e2bbf7`). Aucun déploiement, accès à un projet réel, script administrateur destructif ou push distant.
+- **QUA-04, profils des clôtures dealer corrigés** : création, confirmation et rejet utilisent le helper commun tout en conservant leurs validateurs et leurs relectures transactionnelles. Trois caractérisations couvrent désactivation, changement de boutique et retrait du rôle concurrents.
+- Branches locales : `codex/audit-critical-remediation` (commit `99e25b5`), `codex/audit-important-business` (`a66250e`), `codex/audit-important-security` (`49ffeb3`), `codex/audit-important-data-ops` (`ca34881`) puis `codex/audit-history-aggregation` (`9a1bf79`, nettoyage QUA-03 `cf86162`, profils QUA-04 `e2122df`, pagination QUA-04 `7f4458c`, profils financiers QUA-04 `c574e67`, profils des transferts dealer `4e2bbf7`, profils des clôtures dealer `dac6454`). Aucun déploiement, accès à un projet réel, script administrateur destructif ou push distant.
 
 ## Périmètre, méthode et limites
 
@@ -46,7 +47,7 @@ Deux défauts fonctionnels concrets ont ensuite été fermés : l'historique de 
 | `npm run test:unit` | **89 fichiers, 2 431 tests réussis** |
 | `npm run test:components` | **20 fichiers, 310 tests réussis** |
 | Suite `vitest.firestore.config.js`, émulateur `demo-akayis-test` | **20 fichiers, 433 tests réussis** |
-| Suite `vitest.functions.config.js`, émulateur `demo-akayis-test` | **12 fichiers, 306 tests réussis** |
+| Suite `vitest.functions.config.js`, émulateur `demo-akayis-test` | **12 fichiers, 309 tests réussis** |
 | Suite `vitest.integration.config.js`, émulateurs `demo-akayis-test` | **2 fichiers, 42 tests réussis** |
 | `npm run build` | Réussi ; bundle principal **1 206,45 kB, gzip 323,54 kB** ; chunk xlsx 499,86 kB ; précache PWA 2 449,33 KiB |
 | Générateurs règles et Functions, `--client c2egf_burkina --check` | Les trois artefacts générés correspondent au profil |
@@ -279,6 +280,7 @@ L'analyse trouve **220 fenêtres identiques de 12 lignes significatives**, qui s
 - Pagination dans `AdminClients`, `AdminDealer`, `AdminStores`, `AdminUsers` : **corrigée dans `7f4458c`**. `LoadMoreButton` porte le rendu commun ; la caractérisation de chaque page vérifie que le curseur courant est transmis, que l'attente est visible et désactivée, que les résultats sont ajoutés et que le bouton disparaît à la dernière page. Le rendu a été inspecté en 1 440 px et 390 px, sans débordement. Les états de chargement, erreur et vide restent volontairement composés dans chaque page avec les composants existants.
 - Prévalidation/relecture de profil dans les handlers de confirmation/rejet et d'inventaire : **premier sous-lot corrigé dans `c574e67` pour cinq commandes** (`confirmDealerRequest`, `rejectDealerRequest`, `replenishDealerInventory`, `decreaseDealerInventory`, `createPartnerDeposit`). `readValidatedProfile` choisit seulement le lecteur — référence hors transaction ou `transaction.get` dedans — puis applique le validateur propre au rôle. Les cinq prévalidations et les cinq relectures transactionnelles restent présentes.
 - Traitement des transferts boutique–dealer : **sous-lot corrigé dans `4e2bbf7` pour deux commandes** (`confirmStoreDealerTransfer`, `rejectStoreDealerTransfer`). Les deux prévalidations et les deux relectures transactionnelles restent présentes. Deux tests de concurrence ajoutés à TC-067 vérifient qu'une désactivation ou un retrait du rôle entre ces lectures laisse le transfert pending, les soldes inchangés et les audits vides. La suite Functions passe avant et après avec 12 fichiers et 306 tests. Les autres handlers similaires restent hors périmètre sans audit propre.
+- Clôtures dealer : **sous-lot corrigé dans `dac6454` pour trois commandes** (`createDealerClosure`, `confirmDealerClosure`, `rejectDealerClosure`). Les trois prévalidations et les trois relectures transactionnelles restent présentes. Trois tests ajoutés à TC-044 vérifient qu'une désactivation, un changement de boutique ou un retrait du rôle entre ces lectures ne crée ni ne traite une clôture et ne produit aucun audit. TC-044 passe avant et après avec 35 tests ; la suite Functions complète passe avec 12 fichiers et 309 tests. Une première exécution complète a subi un abandon transactionnel temporaire dans un test concurrent de TC-035, hors périmètre ; TC-035 isolé a réussi 46/46, puis la suite complète relancée seule a réussi 309/309.
 - `functions/src/settlements/financialUtils.js` / `src/utils/financialImpact.js` : duplication volontaire de fonctions pures, contrôlée par `tc-081-financial-parity.test.js`. Conserver ce test ; un module partagé n'est utile que si le packaging Functions/front reste simple.
 - `formatters.js` / `formatFirestoreDate.js` : affichage similaire, gardes d'entrée pas strictement identiques. `parseAmount`, `parseStrictInteger`, `parseFcfaAmount` diffèrent notamment pour espaces et types ; **ne pas les fusionner aveuglément**.
 
@@ -343,11 +345,12 @@ Les thèmes et composants sémantiques existants constituent un socle utile. Que
 | 4B-pagination — duplication UI | QUA-04 : bouton de page suivante commun aux quatre listes administrateur | ✅ Terminé le 24 septembre ; curseur, attente, ajout, fin et rendu responsive caractérisés |
 | 4B-profils financiers — duplication serveur | QUA-04 : lecture validée du profil dans cinq handlers financiers | ✅ Terminé le 25 septembre ; refus, concurrence, idempotence et audit validés sur émulateur démo |
 | 4B-profils transferts — duplication serveur | QUA-04 : lecture validée du profil lors de la confirmation et du rejet boutique–dealer | ✅ Terminé le 25 septembre ; concurrence, soldes, statut et audits validés sur émulateur démo |
+| 4B-profils clôtures — duplication serveur | QUA-04 : lecture validée du profil dans les trois commandes de clôture dealer | ✅ Terminé le 25 septembre ; concurrence, création, traitement et audits validés sur émulateur démo |
 | Backlog — mineurs | Reste de QUA-04, QUA-05, cohérence des tokens | Petits refactors sans changement métier, motivés par un besoin testable |
 
 Une correction de sécurité et un refactor esthétique ne doivent pas partager un lot. Toute restriction variable par client doit être nommée dans `_pilot.js`, dérivée pour les couches concernées et testée avec au moins le pilote et C2EGF. Le typage progressif/JSDoc peut renforcer les payloads et documents aux frontières ; éviter de migrer tout le dépôt avant d'avoir fermé les failles.
 
-**Point d'arrêt ADOPTION.md : les lots 1, 3A, 3B, 3C, 3D, 4A, 4B-profils, 4B-pagination, 4B-profils financiers et 4B-profils transferts sont terminés. La normalisation d'éventuels historiques réels sans `createdAt`, la matérialisation éventuelle de l'agrégat dealer, le reste de QUA-04 et QUA-05 restent des chantiers séparés ; aucun autre changement métier n'est implicite.**
+**Point d'arrêt ADOPTION.md : les lots 1, 3A, 3B, 3C, 3D, 4A, 4B-profils, 4B-pagination, 4B-profils financiers, 4B-profils transferts et 4B-profils clôtures sont terminés. La normalisation d'éventuels historiques réels sans `createdAt`, la matérialisation éventuelle de l'agrégat dealer, le reste de QUA-04 et QUA-05 restent des chantiers séparés ; aucun autre changement métier n'est implicite.**
 
 ## 8. Reproduction et pièces de travail
 
