@@ -22,6 +22,7 @@ import {
   validateRequestId,
   validateRequestData,
   validateProfileData,
+  readValidatedProfile,
   readCurrentBalance,
   getBalanceField,
   buildAuditEntry,
@@ -40,11 +41,7 @@ export async function confirmDealerRequestHandler(request, { db, FieldValue, dea
   const requestId = validateRequestId(payload.requestId)
 
   // ── 4. Prévalidation rapide du profil acteur (retour d'erreur anticipé) ───
-  const profileSnap = await db.doc(`users/${actorUid}`).get()
-  if (!profileSnap.exists) {
-    throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-  }
-  validateProfileData(profileSnap.data())
+  await readValidatedProfile(db, actorUid, validateProfileData)
 
   // ── 5. Transaction atomique ────────────────────────────────────────────────
   //   La validation du profil est RÉPÉTÉE dans la transaction (autoritative).
@@ -54,13 +51,10 @@ export async function confirmDealerRequestHandler(request, { db, FieldValue, dea
   try {
     result = await db.runTransaction(async (t) => {
       // Relecture authoritative du profil
-      const profileRef   = db.doc(`users/${actorUid}`)
-      const txProfileSnap = await t.get(profileRef)
-      if (!txProfileSnap.exists) {
-        throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-      }
-      const txProfile    = txProfileSnap.data()
-      const actorStoreId = validateProfileData(txProfile)
+      const {
+        profile: txProfile,
+        validationResult: actorStoreId,
+      } = await readValidatedProfile(db, actorUid, validateProfileData, t)
 
       const reqRef  = db.doc(`dealerRequests/${requestId}`)
       const reqSnap = await t.get(reqRef)

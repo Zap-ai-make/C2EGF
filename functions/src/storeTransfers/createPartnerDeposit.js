@@ -11,7 +11,7 @@
  */
 
 import { DealerRequestError } from '../errors.js'
-import { validateAuthUid, validateInputPayload } from '../dealerRequests/shared.js'
+import { readValidatedProfile, validateAuthUid, validateInputPayload } from '../dealerRequests/shared.js'
 import {
   validateTransferAmount,
   validatePartnerInput,
@@ -41,22 +41,18 @@ export async function createPartnerDepositHandler(request, { db, FieldValue, dea
   const isWithdrawal = operation === 'withdrawal'
 
   // ── 3. Prévalidation profil dealer ─────────────────────────────────────────
-  const profileSnap = await db.doc(`users/${actorUid}`).get()
-  if (!profileSnap.exists) {
-    throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-  }
-  validateDealerProfile(profileSnap.data())
+  await readValidatedProfile(db, actorUid, validateDealerProfile)
 
   // ── 4. Transaction : ajustement croisé stock ↔ liquidité ───────────────────
   let result
   try {
     result = await db.runTransaction(async (t) => {
-      const txProfileSnap = await t.get(db.doc(`users/${actorUid}`))
-      if (!txProfileSnap.exists) {
-        throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-      }
-      const txProfile = txProfileSnap.data()
-      validateDealerProfile(txProfile)
+      const { profile: txProfile } = await readValidatedProfile(
+        db,
+        actorUid,
+        validateDealerProfile,
+        t,
+      )
 
       const balRef = db.doc(`dealerBalances/${actorUid}`)
       const receiptRef = financialCommandReceiptRef(db, actorUid, 'partnerDeposit', idempotencyKey)

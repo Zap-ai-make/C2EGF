@@ -172,6 +172,27 @@ export function validateProfileData(profile) {
   return storeId
 }
 
+// Lecture commune du profil, sans affaiblir la relecture autoritative.
+// Hors transaction, `DocumentReference.get()` fournit le refus anticipé. Dans
+// une transaction, l'appelant passe `transaction` et la lecture participe au
+// contrôle de concurrence Firestore avant toute écriture financière.
+export async function readValidatedProfile(db, actorUid, validateProfile, transaction = null) {
+  const profileRef = db.doc(`users/${actorUid}`)
+  const profileSnap = transaction
+    ? await transaction.get(profileRef)
+    : await profileRef.get()
+
+  if (!profileSnap.exists) {
+    throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
+  }
+
+  const profile = profileSnap.data()
+  return {
+    profile,
+    validationResult: validateProfile(profile),
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Lecture du solde courant depuis les données brutes du document
 // ---------------------------------------------------------------------------
