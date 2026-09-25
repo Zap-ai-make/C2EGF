@@ -51,7 +51,7 @@ function makeRequest(data, uid = ACTOR_UID) {
   return { auth: { uid }, data }
 }
 
-function makeDb({ draftData = BASE_DRAFT, profileData = PROFILE_ADMIN, storeData = { active: true }, balanceData = BASE_BALANCES, settlementExists = false, settlementData = null } = {}) {
+function makeDb({ draftData = BASE_DRAFT, profileData = PROFILE_ADMIN, txProfileData = profileData, storeData = { active: true }, balanceData = BASE_BALANCES, settlementExists = false, settlementData = null } = {}) {
   const written = []
 
   const makeTxSnap = (data, exists = true) => ({ exists: !!data && exists, data: () => data })
@@ -62,7 +62,7 @@ function makeDb({ draftData = BASE_DRAFT, profileData = PROFILE_ADMIN, storeData
     if (ref._path.endsWith(`drafts/${DRAFT_ID}`))      return makeTxSnap(draftData)
     if (ref._path.includes('/settlements/'))           return makeTxSnap(resolvedSettlementData, settlementExists)
     if (ref._path.endsWith('networkBalances/current')) return makeTxSnap(balanceData)
-    if (ref._path.startsWith('users/'))                return makeTxSnap(profileData)
+    if (ref._path.startsWith('users/'))                return makeTxSnap(txProfileData)
     return makeTxSnap(null, false)
   }))
   const txSet    = vi.fn((ref, data, opts) => written.push({ op: 'set', path: ref._path, data, opts }))
@@ -72,7 +72,7 @@ function makeDb({ draftData = BASE_DRAFT, profileData = PROFILE_ADMIN, storeData
   const mockTx = {
     get:    vi.fn(async (ref) => {
       // Relecture du profil dans la transaction
-      if (ref._path && ref._path.startsWith('users/')) return makeTxSnap(profileData)
+      if (ref._path && ref._path.startsWith('users/')) return makeTxSnap(txProfileData)
       if (ref._path && ref._path.startsWith('stores/')) return makeTxSnap(storeData)
       return makeTxSnap(null, false)
     }),
@@ -417,6 +417,44 @@ describe('TC-060-E — addTransactionRefund : validation', () => {
 
     expect(result.idempotent).toBe(true)
     expect(written).toHaveLength(0)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TC-060-N — Concurrence : profil modifié après la prévalidation
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('TC-060-N — Profil modifié avant la transaction', () => {
+  it('paiement : profil désactivé → ROLE_FORBIDDEN et aucune écriture', async () => {
+    const { db, written, mockTx } = makeDb({
+      txProfileData: { ...PROFILE_ADMIN, active: false },
+    })
+
+    await expect(
+      addTransactionPaymentHandler(
+        makeRequest({ draftId: DRAFT_ID, amount: 1000, paymentMethod: 'Cash', idempotencyKey: 'profile-payment' }),
+        { db, FieldValue },
+      ),
+    ).rejects.toMatchObject({ code: 'ROLE_FORBIDDEN' })
+
+    expect(written).toHaveLength(0)
+    expect(mockTx.getAll).not.toHaveBeenCalled()
+  })
+
+  it('remboursement : boutique modifiée → SETTLEMENT_STORE_MISMATCH et aucune écriture', async () => {
+    const { db, written, mockTx } = makeDb({
+      txProfileData: { ...PROFILE_ADMIN, storeId: 'store-060-other' },
+    })
+
+    await expect(
+      addTransactionRefundHandler(
+        makeRequest({ draftId: DRAFT_ID, amount: 1000, paymentMethod: 'Cash', idempotencyKey: 'profile-refund' }),
+        { db, FieldValue },
+      ),
+    ).rejects.toMatchObject({ code: 'SETTLEMENT_STORE_MISMATCH' })
+
+    expect(written).toHaveLength(0)
+    expect(mockTx.getAll).not.toHaveBeenCalled()
   })
 })
 

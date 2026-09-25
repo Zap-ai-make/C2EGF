@@ -20,12 +20,20 @@
 import { write } from 'firebase-functions/logger'
 import { DealerRequestError } from '../errors.js'
 import { writeSafeAuditLog } from '../logging.js'
-import { validateAuthUid, validateInputPayload } from '../dealerRequests/shared.js'
+import {
+  readValidatedProfile,
+  validateAuthUid,
+  validateInputPayload,
+} from '../dealerRequests/shared.js'
 import {
   normalizeNetworkBalances,
   mapPaymentMethodToNetwork,
   applySettlementImpact,
 } from './financialUtils.js'
+import {
+  validateSettlementProfile,
+  validateSettlementTransactionProfile,
+} from './profileValidation.js'
 import { STORE_PAYMENT_METHODS } from '../config/storeProfile.js'
 
 function buildFinalStatus(type, paymentMethod) {
@@ -75,21 +83,11 @@ export async function addTransactionPaymentHandler(request, { db, FieldValue, lo
   const trimmedKey = idempotencyKey.trim()
 
   // ── 4. Pré-validation profil ──────────────────────────────────────────────
-  const profileSnap = await db.doc(`users/${actorUid}`).get()
-  if (!profileSnap.exists) {
-    throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-  }
-  const preProfile = profileSnap.data()
-  if (!preProfile.active) {
-    throw new DealerRequestError('PROFILE_INACTIVE', 'Compte désactivé.')
-  }
-  if (!['store_admin', 'member'].includes(preProfile.role)) {
-    throw new DealerRequestError('ROLE_FORBIDDEN', 'Seuls les membres de boutique peuvent enregistrer des règlements.')
-  }
-  const preStoreId = typeof preProfile.storeId === 'string' ? preProfile.storeId.trim() : ''
-  if (!preStoreId) {
-    throw new DealerRequestError('STORE_ID_REQUIRED', 'Profil sans boutique assignée.')
-  }
+  const { validationResult: preStoreId } = await readValidatedProfile(
+    db,
+    actorUid,
+    (profile) => validateSettlementProfile(profile, 'des règlements'),
+  )
 
   // ── 5. ID de settlement déterministe ──────────────────────────────────────
   const settlementId = `pmt_${draftId}_${actorUid}_${trimmedKey}`
@@ -102,18 +100,15 @@ export async function addTransactionPaymentHandler(request, { db, FieldValue, lo
   try {
     txResult = await db.runTransaction(async (t) => {
       // Relecture authoritative du profil
-      const txProfileSnap = await t.get(db.doc(`users/${actorUid}`))
-      if (!txProfileSnap.exists) {
-        throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil introuvable.')
-      }
-      const txProfile = txProfileSnap.data()
-      if (!txProfile.active || !['store_admin', 'member'].includes(txProfile.role)) {
-        throw new DealerRequestError('ROLE_FORBIDDEN', 'Accès refusé (profil modifié).')
-      }
-      const storeId = typeof txProfile.storeId === 'string' ? txProfile.storeId.trim() : ''
-      if (!storeId || storeId !== preStoreId) {
-        throw new DealerRequestError('SETTLEMENT_STORE_MISMATCH', 'Boutique modifiée entre les lectures.')
-      }
+      const {
+        profile: txProfile,
+        validationResult: storeId,
+      } = await readValidatedProfile(
+        db,
+        actorUid,
+        (profile) => validateSettlementTransactionProfile(profile, preStoreId),
+        t,
+      )
 
       const storeSnap = await t.get(db.doc(`stores/${storeId}`))
       if (!storeSnap.exists || storeSnap.data().active !== true) {
