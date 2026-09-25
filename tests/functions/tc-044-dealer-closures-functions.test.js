@@ -124,6 +124,37 @@ function defaultClosureId(dealerUid = DEALER_UID) {
   return `${dealerUid}_${STORE_A}_Orange_${BUSINESS_DATE}`
 }
 
+function makeSnapshotOverrideDb(realDb, targetPath, overrideData) {
+  return {
+    doc: (...args) => realDb.doc(...args),
+    collection: (...args) => realDb.collection(...args),
+    runTransaction: (callback) =>
+      realDb.runTransaction(async (realTransaction) => {
+        let overrideApplied = false
+        const transactionProxy = {
+          get: async (ref) => {
+            const snapshot = await realTransaction.get(ref)
+            if (!overrideApplied && ref.path === targetPath) {
+              overrideApplied = true
+              return {
+                exists: snapshot.exists,
+                id: snapshot.id,
+                ref: snapshot.ref,
+                data: () => ({ ...snapshot.data(), ...overrideData }),
+              }
+            }
+            return snapshot
+          },
+          update: (...args) => realTransaction.update(...args),
+          set: (...args) => realTransaction.set(...args),
+          create: (...args) => realTransaction.create(...args),
+          delete: (...args) => realTransaction.delete(...args),
+        }
+        return callback(transactionProxy)
+      }),
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // §CC — createDealerClosureHandler
 // ─────────────────────────────────────────────────────────────────────────────
@@ -382,6 +413,25 @@ describe('TC-044-CC — createDealerClosureHandler', () => {
     const snap = await db.collection('dealerClosures').get()
     expect(snap.size).toBe(1)
   })
+
+  it('[CC-17] dealer désactivé entre la prévalidation et la transaction → aucune clôture ni audit', async () => {
+    await seedDealer()
+    await seedStore()
+    await seedBalance()
+    const concurrentDb = makeSnapshotOverrideDb(db, `users/${DEALER_UID}`, { active: false })
+
+    await expect(
+      createDealerClosureHandler(
+        makeRequest(DEALER_UID, baseCreatePayload()),
+        { db: concurrentDb, FieldValue },
+      ),
+    ).rejects.toMatchObject({ code: 'PROFILE_INACTIVE' })
+
+    expect((await db.collection('dealerClosures').get()).size).toBe(0)
+    expect((await db.collection(`clients/${STORE_A}/auditLogs`).get()).size).toBe(0)
+    const balance = (await db.doc(`clients/${STORE_A}/networkBalances/current`).get()).data()
+    expect(balance.balances.Orange).toEqual({ stock: 40000, liquidite: 20000 })
+  })
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -489,6 +539,23 @@ describe('TC-044-CF — confirmDealerClosureHandler', () => {
       )
     ).rejects.toMatchObject({ code: 'ROLE_FORBIDDEN' })
   })
+
+  it('[CF-06] boutique du profil modifiée avant la transaction → clôture et audits inchangés', async () => {
+    await seedStoreAdmin()
+    await createPendingClosure('closure-profile-store')
+    const concurrentDb = makeSnapshotOverrideDb(db, `users/${STORE_ADMIN_UID}`, { storeId: STORE_B })
+
+    await expect(
+      confirmDealerClosureHandler(
+        makeRequest(STORE_ADMIN_UID, { closureId: 'closure-profile-store' }),
+        { db: concurrentDb, FieldValue },
+      ),
+    ).rejects.toMatchObject({ code: 'CLOSURE_STORE_MISMATCH' })
+
+    expect((await db.doc('dealerClosures/closure-profile-store').get()).data().status).toBe('pending')
+    expect((await db.collection(`clients/${STORE_A}/auditLogs`).get()).size).toBe(0)
+    expect((await db.collection(`clients/${STORE_B}/auditLogs`).get()).size).toBe(0)
+  })
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -573,6 +640,25 @@ describe('TC-044-RJ — rejectDealerClosureHandler', () => {
         { db, FieldValue }
       )
     ).rejects.toMatchObject({ code: 'CLOSURE_NOT_PENDING' })
+  })
+
+  it('[RJ-05] rôle retiré avant la transaction → clôture et audit inchangés', async () => {
+    await seedStoreAdmin()
+    await createPendingClosure('closure-profile-role')
+    const concurrentDb = makeSnapshotOverrideDb(db, `users/${STORE_ADMIN_UID}`, { role: 'dealer' })
+
+    await expect(
+      rejectDealerClosureHandler(
+        makeRequest(STORE_ADMIN_UID, {
+          closureId: 'closure-profile-role',
+          rejectionReason: 'Profil modifié.',
+        }),
+        { db: concurrentDb, FieldValue },
+      ),
+    ).rejects.toMatchObject({ code: 'ROLE_FORBIDDEN' })
+
+    expect((await db.doc('dealerClosures/closure-profile-role').get()).data().status).toBe('pending')
+    expect((await db.collection(`clients/${STORE_A}/auditLogs`).get()).size).toBe(0)
   })
 })
 

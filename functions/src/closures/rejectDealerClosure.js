@@ -11,6 +11,7 @@
 
 import { DealerRequestError } from '../errors.js'
 import {
+  readValidatedProfile,
   validateAuthUid,
   validateInputPayload,
   validateProfileData,
@@ -34,22 +35,16 @@ export async function rejectDealerClosureHandler(request, { db, FieldValue }) {
   const rejectionReason = validateRejectionReason(payload.rejectionReason)
 
   // ── 3. Prévalidation profil ───────────────────────────────────────────────
-  const profileSnap = await db.doc(`users/${actorUid}`).get()
-  if (!profileSnap.exists) {
-    throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-  }
-  validateProfileData(profileSnap.data())
+  await readValidatedProfile(db, actorUid, validateProfileData)
 
   // ── 4. Transaction ────────────────────────────────────────────────────────
   try {
     await db.runTransaction(async (t) => {
       // Relecture authoritative du profil
-      const txProfileSnap = await t.get(db.doc(`users/${actorUid}`))
-      if (!txProfileSnap.exists) {
-        throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-      }
-      const txProfile    = txProfileSnap.data()
-      const actorStoreId = validateProfileData(txProfile)
+      const {
+        profile: txProfile,
+        validationResult: actorStoreId,
+      } = await readValidatedProfile(db, actorUid, validateProfileData, t)
 
       // Lecture de la clôture
       const closureRef  = db.doc(`dealerClosures/${closureId}`)

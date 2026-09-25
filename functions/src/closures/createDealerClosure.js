@@ -52,7 +52,11 @@
  */
 
 import { DealerRequestError } from '../errors.js'
-import { validateAuthUid, validateInputPayload } from '../dealerRequests/shared.js'
+import {
+  readValidatedProfile,
+  validateAuthUid,
+  validateInputPayload,
+} from '../dealerRequests/shared.js'
 import { DEALER_NETWORKS } from '../config/dealerProfile.js'
 
 const BUSINESS_DATE_RE  = /^\d{4}-\d{2}-\d{2}$/
@@ -69,6 +73,15 @@ function validateDeclaredAmount(value, fieldName) {
     )
   }
   return value
+}
+
+function validateDealerClosureProfile(profile) {
+  if (!profile.active) {
+    throw new DealerRequestError('PROFILE_INACTIVE', 'Compte dealer inactif.')
+  }
+  if (profile.role !== 'dealer') {
+    throw new DealerRequestError('ROLE_FORBIDDEN', 'Action réservée aux dealers.')
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -129,17 +142,7 @@ export async function createDealerClosureHandler(request, { db, FieldValue, deal
   const closureRef   = db.collection('dealerClosures').doc(closureDocId)
 
   // ── 5. Prévalidation rapide du profil hors transaction (fail-fast) ─────────
-  const profileSnap = await db.doc(`users/${dealerUid}`).get()
-  if (!profileSnap.exists) {
-    throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-  }
-  const profile = profileSnap.data()
-  if (!profile.active) {
-    throw new DealerRequestError('PROFILE_INACTIVE', 'Compte dealer inactif.')
-  }
-  if (profile.role !== 'dealer') {
-    throw new DealerRequestError('ROLE_FORBIDDEN', 'Action réservée aux dealers.')
-  }
+  await readValidatedProfile(db, dealerUid, validateDealerClosureProfile)
 
   // ── 6. Transaction atomique ────────────────────────────────────────────────
   //   Toutes les lectures critiques sont répétées à l'intérieur de la transaction :
@@ -153,13 +156,12 @@ export async function createDealerClosureHandler(request, { db, FieldValue, deal
   try {
     await db.runTransaction(async (t) => {
       // 6a. Relecture autoritative du profil
-      const txProfileSnap = await t.get(db.doc(`users/${dealerUid}`))
-      if (!txProfileSnap.exists) {
-        throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-      }
-      const txProfile = txProfileSnap.data()
-      if (!txProfile.active)          throw new DealerRequestError('PROFILE_INACTIVE', 'Compte dealer inactif.')
-      if (txProfile.role !== 'dealer') throw new DealerRequestError('ROLE_FORBIDDEN',   'Action réservée aux dealers.')
+      const { profile: txProfile } = await readValidatedProfile(
+        db,
+        dealerUid,
+        validateDealerClosureProfile,
+        t,
+      )
 
       // 6b. Vérification d'unicité via l'ID déterministe (DOIT être dans la tx)
       const existingSnap = await t.get(closureRef)
