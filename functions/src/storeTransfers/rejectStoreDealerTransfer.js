@@ -10,6 +10,7 @@
 
 import { DealerRequestError } from '../errors.js'
 import {
+  readValidatedProfile,
   validateAuthUid,
   validateInputPayload,
   validateRejectionReason,
@@ -34,21 +35,17 @@ export async function rejectStoreDealerTransferHandler(request, { db, FieldValue
   const rejectionReason = validateRejectionReason(payload.rejectionReason)
 
   // ── 3. Prévalidation profil dealer ─────────────────────────────────────────
-  const profileSnap = await db.doc(`users/${actorUid}`).get()
-  if (!profileSnap.exists) {
-    throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-  }
-  validateDealerProfile(profileSnap.data())
+  await readValidatedProfile(db, actorUid, validateDealerProfile)
 
   // ── 4. Transaction atomique : restauration du solde boutique ───────────────
   try {
     await db.runTransaction(async (t) => {
-      const txProfileSnap = await t.get(db.doc(`users/${actorUid}`))
-      if (!txProfileSnap.exists) {
-        throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-      }
-      const txProfile = txProfileSnap.data()
-      validateDealerProfile(txProfile)
+      const { profile: txProfile } = await readValidatedProfile(
+        db,
+        actorUid,
+        validateDealerProfile,
+        t,
+      )
 
       const transferRef = db.doc(`storeDealerTransfers/${transferId}`)
       const transferSnap = await t.get(transferRef)

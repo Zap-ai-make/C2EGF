@@ -9,7 +9,11 @@
  */
 
 import { DealerRequestError } from '../errors.js'
-import { validateAuthUid, validateInputPayload } from '../dealerRequests/shared.js'
+import {
+  readValidatedProfile,
+  validateAuthUid,
+  validateInputPayload,
+} from '../dealerRequests/shared.js'
 import {
   validateTransferId,
   validateDealerProfile,
@@ -30,22 +34,18 @@ export async function confirmStoreDealerTransferHandler(request, { db, FieldValu
   const transferId = validateTransferId(payload.transferId)
 
   // ── 3. Prévalidation profil dealer ─────────────────────────────────────────
-  const profileSnap = await db.doc(`users/${actorUid}`).get()
-  if (!profileSnap.exists) {
-    throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-  }
-  validateDealerProfile(profileSnap.data())
+  await readValidatedProfile(db, actorUid, validateDealerProfile)
 
   // ── 4. Transaction atomique : crédit inventaire dealer ─────────────────────
   let result
   try {
     result = await db.runTransaction(async (t) => {
-      const txProfileSnap = await t.get(db.doc(`users/${actorUid}`))
-      if (!txProfileSnap.exists) {
-        throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-      }
-      const txProfile = txProfileSnap.data()
-      validateDealerProfile(txProfile)
+      const { profile: txProfile } = await readValidatedProfile(
+        db,
+        actorUid,
+        validateDealerProfile,
+        t,
+      )
 
       const transferRef = db.doc(`storeDealerTransfers/${transferId}`)
       const transferSnap = await t.get(transferRef)

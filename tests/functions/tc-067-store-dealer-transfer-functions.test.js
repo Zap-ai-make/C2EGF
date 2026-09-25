@@ -104,6 +104,37 @@ async function expectError(promise, code) {
   await expect(promise).rejects.toMatchObject({ code })
 }
 
+function makeSnapshotOverrideDb(realDb, targetPath, overrideData) {
+  return {
+    doc: (...args) => realDb.doc(...args),
+    collection: (...args) => realDb.collection(...args),
+    runTransaction: (callback) =>
+      realDb.runTransaction(async (realTransaction) => {
+        let overrideApplied = false
+        const transactionProxy = {
+          get: async (ref) => {
+            const snapshot = await realTransaction.get(ref)
+            if (!overrideApplied && ref.path === targetPath) {
+              overrideApplied = true
+              return {
+                exists: snapshot.exists,
+                id: snapshot.id,
+                ref: snapshot.ref,
+                data: () => ({ ...snapshot.data(), ...overrideData }),
+              }
+            }
+            return snapshot
+          },
+          update: (...args) => realTransaction.update(...args),
+          set: (...args) => realTransaction.set(...args),
+          create: (...args) => realTransaction.create(...args),
+          delete: (...args) => realTransaction.delete(...args),
+        }
+        return callback(transactionProxy)
+      }),
+  }
+}
+
 describe('TC-067-ID — idempotence des mouvements dealer', () => {
   it('deux créations concurrentes avec la même intention ne débitent la boutique qu’une fois', async () => {
     await seedUser(STORE_ADMIN_UID, STORE_ADMIN_PROFILE)
@@ -404,6 +435,24 @@ describe('TC-067-CO — confirm', () => {
       'TRANSFER_DEALER_MISMATCH',
     )
   })
+
+  it('[CO-08] dealer désactivé entre la prévalidation et la transaction → aucun effet financier', async () => {
+    await seedUser(DEALER_UID, DEALER_PROFILE)
+    await seedTransfer('t-profile-inactive', basePendingTransfer())
+    const concurrentDb = makeSnapshotOverrideDb(db, `users/${DEALER_UID}`, { active: false })
+
+    await expectError(
+      confirmStoreDealerTransferHandler(
+        makeRequest(DEALER_UID, { transferId: 't-profile-inactive' }),
+        { db: concurrentDb, FieldValue },
+      ),
+      'PROFILE_INACTIVE',
+    )
+
+    expect((await db.doc('storeDealerTransfers/t-profile-inactive').get()).data().status).toBe('pending')
+    expect((await db.doc(`dealerBalances/${DEALER_UID}`).get()).exists).toBe(false)
+    expect((await db.collection(`dealerBalances/${DEALER_UID}/auditLogs`).get()).size).toBe(0)
+  })
 })
 
 // ── §RJ — rejectStoreDealerTransferHandler ───────────────────────────────────
@@ -463,6 +512,26 @@ describe('TC-067-RJ — reject', () => {
       rejectStoreDealerTransferHandler(makeRequest(OTHER_DEALER_UID, { transferId: 't-1', rejectionReason: 'Motif valide' }), { db, FieldValue }),
       'TRANSFER_DEALER_MISMATCH',
     )
+  })
+
+  it('[RJ-05] rôle dealer retiré entre la prévalidation et la transaction → aucune restauration', async () => {
+    await seedUser(DEALER_UID, DEALER_PROFILE)
+    await seedBalance(STORE_A, { balances: { Orange: { stock: 45000, liquidite: 30000 } } })
+    await seedTransfer('t-profile-role', basePendingTransfer())
+    const concurrentDb = makeSnapshotOverrideDb(db, `users/${DEALER_UID}`, { role: 'store_admin' })
+
+    await expectError(
+      rejectStoreDealerTransferHandler(
+        makeRequest(DEALER_UID, { transferId: 't-profile-role', rejectionReason: 'Profil modifié' }),
+        { db: concurrentDb, FieldValue },
+      ),
+      'ROLE_FORBIDDEN',
+    )
+
+    expect((await db.doc('storeDealerTransfers/t-profile-role').get()).data().status).toBe('pending')
+    expect((await db.doc(`clients/${STORE_A}/networkBalances/current`).get()).data().balances.Orange.stock).toBe(45000)
+    expect((await db.collection(`clients/${STORE_A}/auditLogs`).get()).size).toBe(0)
+    expect((await db.collection(`dealerBalances/${DEALER_UID}/auditLogs`).get()).size).toBe(0)
   })
 })
 
