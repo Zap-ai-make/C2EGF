@@ -10,7 +10,12 @@
  */
 
 import { DealerRequestError } from '../errors.js'
-import { validateAuthUid, validateInputPayload, validateProfileData } from '../dealerRequests/shared.js'
+import {
+  readValidatedProfile,
+  validateAuthUid,
+  validateInputPayload,
+  validateProfileData,
+} from '../dealerRequests/shared.js'
 import {
   validateTransferType,
   validateTransferAmount,
@@ -37,11 +42,11 @@ export async function createStoreDealerTransferHandler(request, { db, FieldValue
   const field = transferBalanceField(transferType)
 
   // ── 3. Prévalidation profil (store_admin actif avec storeId) ──────────────
-  const profileSnap = await db.doc(`users/${actorUid}`).get()
-  if (!profileSnap.exists) {
-    throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-  }
-  const preStoreId = validateProfileData(profileSnap.data())
+  const { validationResult: preStoreId } = await readValidatedProfile(
+    db,
+    actorUid,
+    validateProfileData,
+  )
   const preStoreSnap = await db.doc(`stores/${preStoreId}`).get()
   if (!preStoreSnap.exists || preStoreSnap.data()?.active !== true) {
     throw new DealerRequestError('STORE_INACTIVE', 'Cette boutique est inactive.')
@@ -63,12 +68,10 @@ export async function createStoreDealerTransferHandler(request, { db, FieldValue
   try {
     result = await db.runTransaction(async (t) => {
       // Relecture autoritative du profil
-      const txProfileSnap = await t.get(db.doc(`users/${actorUid}`))
-      if (!txProfileSnap.exists) {
-        throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-      }
-      const txProfile = txProfileSnap.data()
-      const storeId = validateProfileData(txProfile)
+      const {
+        profile: txProfile,
+        validationResult: storeId,
+      } = await readValidatedProfile(db, actorUid, validateProfileData, t)
 
       const storeRef = db.doc(`stores/${storeId}`)
       const balRef = db.doc(`clients/${storeId}/networkBalances/current`)

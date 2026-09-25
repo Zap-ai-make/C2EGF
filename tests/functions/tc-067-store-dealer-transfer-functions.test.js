@@ -326,6 +326,26 @@ describe('TC-067-CR — create', () => {
     const transfers = await db.collection('storeDealerTransfers').get()
     expect(transfers.size).toBe(0)
   })
+
+  it('[CR-09] boutique admin désactivée entre la prévalidation et la transaction → aucun débit ni audit', async () => {
+    await seedUser(STORE_ADMIN_UID, STORE_ADMIN_PROFILE)
+    await seedUser(DEALER_UID, DEALER_PROFILE)
+    await seedBalance(STORE_A, BASE_BALANCE)
+    const concurrentDb = makeSnapshotOverrideDb(db, `users/${STORE_ADMIN_UID}`, { active: false })
+
+    await expectError(
+      createStoreDealerTransferHandler(
+        makeRequest(STORE_ADMIN_UID, { transferType: 'return_stock', amount: 5000 }),
+        { db: concurrentDb, FieldValue },
+      ),
+      'PROFILE_INACTIVE',
+    )
+
+    const balance = (await db.doc(`clients/${STORE_A}/networkBalances/current`).get()).data()
+    expect(balance.balances.Orange.stock).toBe(50000)
+    expect((await db.collection('storeDealerTransfers').get()).size).toBe(0)
+    expect((await db.collection(`clients/${STORE_A}/auditLogs`).get()).size).toBe(0)
+  })
 })
 
 // ── §CO — confirmStoreDealerTransferHandler ──────────────────────────────────
