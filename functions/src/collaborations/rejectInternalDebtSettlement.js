@@ -14,6 +14,7 @@
 
 import { DealerRequestError } from '../errors.js'
 import {
+  readValidatedProfile,
   validateAuthUid,
   validateInputPayload,
   validateProfileData,
@@ -45,21 +46,15 @@ export async function rejectInternalDebtSettlementHandler(
   const rejectionReason = validateRejectionReason(payload.rejectionReason)
 
   // ── 4. Prévalidation profil ────────────────────────────────────────────────
-  const profileSnap = await db.doc(`users/${actorUid}`).get()
-  if (!profileSnap.exists) {
-    throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-  }
-  validateProfileData(profileSnap.data())
+  await readValidatedProfile(db, actorUid, validateProfileData)
 
   // ── 5. Transaction ─────────────────────────────────────────────────────────
   try {
     await db.runTransaction(async (t) => {
-      const txProfileSnap = await t.get(db.doc(`users/${actorUid}`))
-      if (!txProfileSnap.exists) {
-        throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-      }
-      const txProfile = txProfileSnap.data()
-      const actorStoreId = validateProfileData(txProfile)
+      const {
+        profile: txProfile,
+        validationResult: actorStoreId,
+      } = await readValidatedProfile(db, actorUid, validateProfileData, t)
 
       const debtSnap = await t.get(db.doc(`internalDebts/${debtId}`))
       if (!debtSnap.exists) {
