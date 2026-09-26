@@ -31,8 +31,12 @@
  * Lecture seule, hors transaction.
  */
 
-import { DealerRequestError } from '../errors.js'
-import { validateAuthUid, validateInputPayload, validateProfileData } from '../dealerRequests/shared.js'
+import {
+  readValidatedProfile,
+  validateAuthUid,
+  validateInputPayload,
+  validateProfileData,
+} from '../dealerRequests/shared.js'
 import {
   assertCollaborationsEnabled,
   resolveCollaborationNetwork,
@@ -74,11 +78,11 @@ export async function listStoreCollaborationProvidersHandler(
   const minimum = Number.isSafeInteger(payload.amount) && payload.amount > 0 ? payload.amount : null
 
   // ── 4. Profil acteur (store_admin actif) ──────────────────────────────────
-  const profileSnap = await db.doc(`users/${actorUid}`).get()
-  if (!profileSnap.exists) {
-    throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-  }
-  const actorStoreId = validateProfileData(profileSnap.data())
+  const { validationResult: actorStoreId } = await readValidatedProfile(
+    db,
+    actorUid,
+    validateProfileData,
+  )
 
   // ── 5. Annuaire : boutiques actives, la sienne exclue ─────────────────────
   const snap = await db.collection('stores').where('active', '==', true).get()

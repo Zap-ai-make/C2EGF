@@ -1,5 +1,9 @@
 import { DealerRequestError } from '../errors.js'
-import { validateAuthUid, validateInputPayload } from '../dealerRequests/shared.js'
+import {
+  readValidatedProfile,
+  validateAuthUid,
+  validateInputPayload,
+} from '../dealerRequests/shared.js'
 
 const finite = (value) => typeof value === 'number' && Number.isFinite(value)
 const normalizedType = (value) => String(value ?? '')
@@ -12,6 +16,15 @@ const remainingAmount = (draft) => {
   if (finite(draft?.remainingAmount)) return draft.remainingAmount
   if (finite(draft?.montant)) return draft.montant
   return null
+}
+
+const validateDealerProfile = (profile) => {
+  if (!profile?.active) {
+    throw new DealerRequestError('PROFILE_INACTIVE', 'Votre compte est désactivé.')
+  }
+  if (profile.role !== 'dealer') {
+    throw new DealerRequestError('ROLE_FORBIDDEN', 'Action réservée au dealer.')
+  }
 }
 
 export function aggregateOutstandingDrafts({ stores = [], drafts = [] } = {}) {
@@ -50,17 +63,7 @@ export async function listOutstandingDraftsHandler(request, { db }) {
   const actorUid = validateAuthUid(request.auth?.uid)
   validateInputPayload(request.data ?? {}, [])
 
-  const profileSnap = await db.doc(`users/${actorUid}`).get()
-  if (!profileSnap.exists) {
-    throw new DealerRequestError('PROFILE_NOT_FOUND', 'Profil utilisateur introuvable.')
-  }
-  const profile = profileSnap.data()
-  if (!profile?.active) {
-    throw new DealerRequestError('PROFILE_INACTIVE', 'Votre compte est désactivé.')
-  }
-  if (profile.role !== 'dealer') {
-    throw new DealerRequestError('ROLE_FORBIDDEN', 'Action réservée au dealer.')
-  }
+  await readValidatedProfile(db, actorUid, validateDealerProfile)
 
   const [storesSnap, draftsSnap] = await Promise.all([
     db.collection('stores').where('active', '==', true).get(),

@@ -634,6 +634,22 @@ describe('TC-112-PR — listStoreCollaborationProviders', () => {
       'ROLE_FORBIDDEN',
     )
   })
+
+  it('[PR-08] profil absent → refus avant de lire l’annuaire', async () => {
+    await db.doc(`users/${ADMIN_A}`).delete()
+    await expectError(
+      listStoreCollaborationProvidersHandler(makeRequest(ADMIN_A, {}), deps()),
+      'PROFILE_NOT_FOUND',
+    )
+  })
+
+  it('[PR-09] profil inactif → refus avant de lire l’annuaire', async () => {
+    await db.doc(`users/${ADMIN_A}`).update({ active: false })
+    await expectError(
+      listStoreCollaborationProvidersHandler(makeRequest(ADMIN_A, {}), deps()),
+      'PROFILE_INACTIVE',
+    )
+  })
 })
 
 // ═════════════════════════════════════════════════════════════════════════════

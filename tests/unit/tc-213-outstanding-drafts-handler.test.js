@@ -56,13 +56,13 @@ describe('TC-213-A — agrégat dealer côté serveur', () => {
 })
 
 describe('TC-213-B — autorisation du callable', () => {
-  const makeDb = ({ profile = { active: true, role: 'dealer' } } = {}) => {
+  const makeDb = ({ profile = { active: true, role: 'dealer' }, profileExists = true } = {}) => {
     const storesGet = vi.fn(async () => ({ docs: [doc('store-a', { name: 'FADA' })] }))
     const draftsGet = vi.fn(async () => ({ docs: [
       { ref: { parent: { parent: { id: 'store-a' } } }, data: () => ({ type: 'Dépôt', montant: 5000 }) },
     ] }))
     return {
-      doc: vi.fn(() => ({ get: vi.fn(async () => ({ exists: true, data: () => profile })) })),
+      doc: vi.fn(() => ({ get: vi.fn(async () => ({ exists: profileExists, data: () => profile })) })),
       collection: vi.fn(() => ({ where: vi.fn(() => ({ get: storesGet })) })),
       collectionGroup: vi.fn(() => ({ get: draftsGet })),
       storesGet,
@@ -74,6 +74,20 @@ describe('TC-213-B — autorisation du callable', () => {
     const db = makeDb({ profile: { active: true, role: 'store_admin' } })
     await expect(listOutstandingDraftsHandler({ auth: { uid: 'u1' }, data: {} }, { db }))
       .rejects.toMatchObject({ code: 'ROLE_FORBIDDEN' })
+    expect(db.draftsGet).not.toHaveBeenCalled()
+  })
+
+  it('refuse un profil absent avant de lire les brouillons', async () => {
+    const db = makeDb({ profileExists: false })
+    await expect(listOutstandingDraftsHandler({ auth: { uid: 'u1' }, data: {} }, { db }))
+      .rejects.toMatchObject({ code: 'PROFILE_NOT_FOUND' })
+    expect(db.draftsGet).not.toHaveBeenCalled()
+  })
+
+  it('refuse un dealer inactif avant de lire les brouillons', async () => {
+    const db = makeDb({ profile: { active: false, role: 'dealer' } })
+    await expect(listOutstandingDraftsHandler({ auth: { uid: 'u1' }, data: {} }, { db }))
+      .rejects.toMatchObject({ code: 'PROFILE_INACTIVE' })
     expect(db.draftsGet).not.toHaveBeenCalled()
   })
 
