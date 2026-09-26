@@ -63,6 +63,37 @@ const deps = () => ({ db, FieldValue, collaborationsEnabled: true, storeNetworks
 const makeRequest = (uid, data) => ({ auth: uid ? { uid, token: {} } : null, data: data ?? {} })
 const expectError = (promise, code) => expect(promise).rejects.toMatchObject({ code })
 
+function makeSnapshotOverrideDb(realDb, targetPath, overrideData) {
+  return {
+    doc: (...args) => realDb.doc(...args),
+    collection: (...args) => realDb.collection(...args),
+    runTransaction: (callback) =>
+      realDb.runTransaction(async (realTransaction) => {
+        let overrideApplied = false
+        const transactionProxy = {
+          get: async (ref) => {
+            const snapshot = await realTransaction.get(ref)
+            if (!overrideApplied && ref.path === targetPath) {
+              overrideApplied = true
+              return {
+                exists: snapshot.exists,
+                id: snapshot.id,
+                ref: snapshot.ref,
+                data: () => ({ ...snapshot.data(), ...overrideData }),
+              }
+            }
+            return snapshot
+          },
+          update: (...args) => realTransaction.update(...args),
+          set: (...args) => realTransaction.set(...args),
+          create: (...args) => realTransaction.create(...args),
+          delete: (...args) => realTransaction.delete(...args),
+        }
+        return callback(transactionProxy)
+      }),
+  }
+}
+
 const debtDoc = (id, over = {}) => ({
   network: 'Orange', operationType: 'deposit',
   createdAt: new Date('2024-01-01T00:00:00Z'), ...over,
@@ -205,6 +236,23 @@ describe('TC-115-DE — declareInternalDebtCompensation', () => {
   it('[DE-12] audit chez la débitrice de D1', async () => {
     await declare(ADMIN_A, validDeclare())
     expect((await auditsOf(STORE_A)).map((l) => l.action)).toContain('INTERNAL_DEBT_COMPENSATION_DECLARED')
+  })
+
+  it('[DE-13] débitrice désactivée avant la transaction → aucune tranche ni audit', async () => {
+    const concurrentDb = makeSnapshotOverrideDb(db, `users/${ADMIN_A}`, { active: false })
+
+    await expectError(
+      declareInternalDebtCompensationHandler(
+        makeRequest(ADMIN_A, validDeclare()),
+        { ...deps(), db: concurrentDb },
+      ),
+      'PROFILE_INACTIVE',
+    )
+
+    expect(await slicesOf(D1)).toHaveLength(0)
+    expect((await getDebt(D1)).remainingAmount).toBe(20000)
+    expect((await getDebt(D2)).remainingAmount).toBe(12000)
+    expect(await auditsOf(STORE_A)).toEqual([])
   })
 })
 
@@ -359,6 +407,27 @@ describe('TC-115-CF — confirmInternalDebtCompensation', () => {
     expect((await getDebt(D1)).status).toBe('settled')
     expect((await getDebt(D2)).status).toBe('settled')
   })
+
+  it('[CF-12] créancière réaffectée avant la transaction → dettes et miroir inchangés', async () => {
+    const { settlementId } = await declare(ADMIN_A, validDeclare())
+    const concurrentDb = makeSnapshotOverrideDb(db, `users/${ADMIN_B}`, { storeId: STORE_C })
+
+    await expectError(
+      confirmInternalDebtCompensationHandler(
+        makeRequest(ADMIN_B, { debtId: D1, settlementId }),
+        { ...deps(), db: concurrentDb },
+      ),
+      'DEBT_STORE_MISMATCH',
+    )
+
+    expect((await getSlice(D1, settlementId)).settlementStatus).toBe('declared')
+    expect((await getDebt(D1)).remainingAmount).toBe(20000)
+    expect((await getDebt(D2)).remainingAmount).toBe(12000)
+    expect(await slicesOf(D2)).toHaveLength(0)
+    expect(await stockOf(STORE_A)).toBe(50000)
+    expect(await stockOf(STORE_B)).toBe(50000)
+    expect(await auditsOf(STORE_B)).toEqual([])
+  })
 })
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -412,6 +481,25 @@ describe('TC-115-RJ — rejectInternalDebtCompensation', () => {
     const entry = (await auditsOf(STORE_B)).find((l) => l.action === 'INTERNAL_DEBT_COMPENSATION_REJECTED')
     expect(entry.rejectionReason).toBe('Refusée')
     expect(entry.oppositeDebtId).toBe(D2)
+  })
+
+  it('[RJ-07] créancière désactivée avant la transaction → tranche et audit inchangés', async () => {
+    const { settlementId } = await declare(ADMIN_A, validDeclare())
+    const concurrentDb = makeSnapshotOverrideDb(db, `users/${ADMIN_B}`, { active: false })
+
+    await expectError(
+      rejectInternalDebtCompensationHandler(
+        makeRequest(ADMIN_B, { debtId: D1, settlementId, rejectionReason: 'Profil désactivé' }),
+        { ...deps(), db: concurrentDb },
+      ),
+      'PROFILE_INACTIVE',
+    )
+
+    expect((await getSlice(D1, settlementId)).settlementStatus).toBe('declared')
+    expect((await getDebt(D1)).remainingAmount).toBe(20000)
+    expect((await getDebt(D2)).remainingAmount).toBe(12000)
+    expect(await slicesOf(D2)).toHaveLength(0)
+    expect(await auditsOf(STORE_B)).toEqual([])
   })
 })
 
