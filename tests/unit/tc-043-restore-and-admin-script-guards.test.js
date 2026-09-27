@@ -23,6 +23,11 @@ import {
   resolveRestoreProject,
   AssertFirebaseProjectError,
 } from '../../scripts/lib/assertRestoreProject.mjs'
+import {
+  initializeGuardedAdminAuth,
+  initializeGuardedAdminAuthCli,
+  MISSING_ADMIN_CREDENTIALS_MESSAGE,
+} from '../../scripts/lib/initializeGuardedAdminAuth.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const scriptsDir = resolve(__dirname, '../../scripts')
@@ -100,20 +105,25 @@ describe('TC-043-A — resolveRestoreProject', () => {
 })
 
 describe('TC-043-B — câblage : garde projet AVANT initializeApp', () => {
-  const legacyGuardScripts = [
+  const guardedAuthScripts = [
     'generatePasswordResetLink.mjs',
     'updateAccountPassword.mjs',
-    'diagnoseAccount.mjs',
   ]
 
-  it.each(legacyGuardScripts)('%s appelle resolveAndAssertAdminProject avant initializeApp', async (file) => {
+  it.each(guardedAuthScripts)('%s délègue à initializeGuardedAdminAuthCli', async (file) => {
     const src = await readFile(resolve(scriptsDir, file), 'utf8')
+    expect(src).toContain('initializeGuardedAdminAuthCli()')
+    expect(src).toContain("from './lib/initializeGuardedAdminAuth.mjs'")
+    expect(src).not.toContain('initializeApp(')
+  })
+
+  it('diagnoseAccount.mjs appelle encore sa garde directe avant initializeApp', async () => {
+    const src = await readFile(resolve(scriptsDir, 'diagnoseAccount.mjs'), 'utf8')
     const guardIdx = src.indexOf('resolveAndAssertAdminProject(')
     const initIdx = src.indexOf('initializeApp(')
-    expect(guardIdx, `${file}: appel de garde manquant`).toBeGreaterThan(-1)
-    expect(initIdx, `${file}: initializeApp manquant`).toBeGreaterThan(-1)
-    expect(guardIdx, `${file}: la garde doit précéder initializeApp`).toBeLessThan(initIdx)
-    expect(src).toContain("from './lib/resolveAndAssertAdminProject.mjs'")
+    expect(guardIdx).toBeGreaterThan(-1)
+    expect(initIdx).toBeGreaterThan(-1)
+    expect(guardIdx).toBeLessThan(initIdx)
   })
 
   it('restoreDeletedAccount.mjs appelle resolveRestoreProject avant initializeApp et n’a plus d’échappatoire prod', async () => {
@@ -125,5 +135,120 @@ describe('TC-043-B — câblage : garde projet AVANT initializeApp', () => {
     expect(guardIdx).toBeLessThan(initIdx)
     // L'ancienne variable de confirmation production ne doit plus exister.
     expect(src).not.toContain('AKAYIS_CONFIRM_PRODUCTION_RESTORE')
+  })
+})
+
+describe('TC-043-C — initialisation Admin Auth gardée', () => {
+  const serviceAccountPath = 'service-account.json'
+  const readServiceAccount = (projectId = DEMO) =>
+    vi.fn().mockResolvedValue(JSON.stringify({ project_id: projectId, private_key: 'HIDDEN' }))
+
+  it('bloque la production avant de charger Firebase Admin', async () => {
+    const loadAdminApp = vi.fn()
+    const loadAdminAuth = vi.fn()
+
+    await expect(initializeGuardedAdminAuth({
+      serviceAccountPath,
+      envProjectId: undefined,
+      readFileImpl: readServiceAccount(PROD),
+      loadAdminApp,
+      loadAdminAuth,
+    })).rejects.toMatchObject({ code: 'PRODUCTION_PROJECT_BLOCKED' })
+
+    expect(loadAdminApp).not.toHaveBeenCalled()
+    expect(loadAdminAuth).not.toHaveBeenCalled()
+  })
+
+  it('bloque une incohérence de projet avant de charger Firebase Admin', async () => {
+    const loadAdminApp = vi.fn()
+    const loadAdminAuth = vi.fn()
+
+    await expect(initializeGuardedAdminAuth({
+      serviceAccountPath,
+      envProjectId: 'demo-autre',
+      readFileImpl: readServiceAccount(),
+      loadAdminApp,
+      loadAdminAuth,
+    })).rejects.toMatchObject({ code: 'PROJECT_ID_MISMATCH' })
+
+    expect(loadAdminApp).not.toHaveBeenCalled()
+    expect(loadAdminAuth).not.toHaveBeenCalled()
+  })
+
+  it('initialise Auth sur un projet demo validé', async () => {
+    const auth = { getUserByEmail: vi.fn() }
+    const credential = { kind: 'credential' }
+    const initializeApp = vi.fn()
+    const cert = vi.fn().mockReturnValue(credential)
+    const getAuth = vi.fn().mockReturnValue(auth)
+
+    await expect(initializeGuardedAdminAuth({
+      serviceAccountPath,
+      envProjectId: DEMO,
+      readFileImpl: readServiceAccount(),
+      loadAdminApp: vi.fn().mockResolvedValue({ initializeApp, cert }),
+      loadAdminAuth: vi.fn().mockResolvedValue({ getAuth }),
+    })).resolves.toBe(auth)
+
+    expect(cert).toHaveBeenCalledWith(expect.objectContaining({ project_id: DEMO }))
+    expect(initializeApp).toHaveBeenCalledWith({ credential })
+    expect(getAuth).toHaveBeenCalledOnce()
+  })
+
+  it('ne charge pas Firebase Admin si le JSON du compte de service est invalide', async () => {
+    const loadAdminApp = vi.fn()
+    const loadAdminAuth = vi.fn()
+
+    await expect(initializeGuardedAdminAuth({
+      serviceAccountPath,
+      envProjectId: DEMO,
+      readFileImpl: vi.fn().mockResolvedValue('{'),
+      loadAdminApp,
+      loadAdminAuth,
+    })).rejects.toBeInstanceOf(SyntaxError)
+
+    expect(loadAdminApp).not.toHaveBeenCalled()
+    expect(loadAdminAuth).not.toHaveBeenCalled()
+  })
+
+  it('l’adaptateur CLI conserve le message quand les credentials manquent', async () => {
+    const reportError = vi.fn()
+    const exitProcess = vi.fn()
+    const readFileImpl = vi.fn()
+
+    await expect(initializeGuardedAdminAuthCli({
+      env: {},
+      reportError,
+      exitProcess,
+      readFileImpl,
+    })).resolves.toBeUndefined()
+
+    expect(reportError).toHaveBeenCalledWith(MISSING_ADMIN_CREDENTIALS_MESSAGE)
+    expect(exitProcess).toHaveBeenCalledWith(1)
+    expect(readFileImpl).not.toHaveBeenCalled()
+  })
+
+  it('l’adaptateur CLI conserve le message typé et bloque avant le SDK', async () => {
+    const reportError = vi.fn()
+    const exitProcess = vi.fn()
+    const loadAdminApp = vi.fn()
+    const loadAdminAuth = vi.fn()
+
+    await expect(initializeGuardedAdminAuthCli({
+      env: {
+        GOOGLE_APPLICATION_CREDENTIALS: serviceAccountPath,
+        GCLOUD_PROJECT: PROD,
+      },
+      reportError,
+      exitProcess,
+      readFileImpl: readServiceAccount(PROD),
+      loadAdminApp,
+      loadAdminAuth,
+    })).resolves.toBeUndefined()
+
+    expect(reportError).toHaveBeenCalledWith(expect.stringContaining('PRODUCTION_PROJECT_BLOCKED'))
+    expect(exitProcess).toHaveBeenCalledWith(1)
+    expect(loadAdminApp).not.toHaveBeenCalled()
+    expect(loadAdminAuth).not.toHaveBeenCalled()
   })
 })
