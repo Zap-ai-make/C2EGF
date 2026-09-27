@@ -1,9 +1,9 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { listDealerRequests, subscribeDealerRequests } from '../../services/dealerService'
+import { useRealtimePaginatedRequests } from '../../hooks/useRealtimePaginatedRequests'
 import { formatCurrency } from '../../utils/formatCurrency'
-import { mergeUniqueRequests } from '../../utils/mergeRequests'
 import {
   DEALER_REQUEST_STATUS_LABELS,
   DEALER_REQUEST_TYPE_LABELS,
@@ -22,11 +22,10 @@ import { formatDateTime as formatDate } from '../../utils/formatters'
 /**
  * Mes ravitaillements — la file de ce que le dealer a envoyé.
  *
- * ⚠ SEUL LE RENDU A CHANGÉ DANS CE FICHIER. Tout ce qui est au-dessus du
- *   `return` — la double source (abonnement temps réel sur la première page,
- *   curseur `getDocs` sur les suivantes), les quatre `ref` de garde, la
- *   génération de contexte — est de la logique de CONCURRENCE, pas du dessin.
- *   Elle est figée par S1 et n'a pas été touchée.
+ * La double source — abonnement temps réel sur la première page, curseur
+ * `getDocs` sur les suivantes — vit dans `useRealtimePaginatedRequests`. Ses
+ * gardes de concurrence restent caractérisées sur cette page et sur la vue
+ * boutique, qui partage désormais la même orchestration.
  *
  * L'état « Appuyez sur Actualiser » a disparu : il était inatteignable, puisque
  * l'abonnement part au montage. Un état mort dans le code est un état qu'on
@@ -56,144 +55,30 @@ function DealerRequests() {
   const { currentUser, userProfile } = useAuth()
   const navigate = useNavigate()
 
-  // Première page — mise à jour temps réel via onSnapshot
-  const [realtimeRequests, setRealtimeRequests] = useState([])
-  // Pages supplémentaires — chargées via getDocs avec curseur
-  const [extraRequests, setExtraRequests] = useState([])
-  const [hasMore, setHasMore] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [error, setError] = useState(null)
-  const [hasLoaded, setHasLoaded] = useState(false)
-  // refreshKey force la re-souscription sans changer les filtres (bouton Actualiser)
-  const [refreshKey, setRefreshKey] = useState(0)
-
   // Filtres
   const [statusFilter, setStatusFilter] = useState('')
   const [storeSearch, setStoreSearch] = useState('')
 
-  // Curseurs Firestore — séparés pour éviter qu'un nouveau snapshot n'écrase
-  // le curseur d'une page supplémentaire déjà chargée.
-  const realtimeLastDocRef = useRef(null)     // dernier doc du snapshot (première page)
-  const paginationLastDocRef = useRef(null)   // dernier doc de la dernière page extra
-  // Indique si au moins un loadMore a réussi, indépendamment de la valeur du curseur.
-  // paginationLastDocRef peut devenir null sur la dernière page ; ce flag empêche
-  // le snapshot de restaurer hasMore et de repartir depuis le curseur realtime.
-  const hasLoadedExtraPagesRef = useRef(false)
-  // Génération du contexte : incrémentée à chaque reset (filtre / user / profil / refreshKey).
-  // Un loadMore qui se résout après un reset détecte la divergence et ne touche aucun état.
-  const requestGenerationRef = useRef(0)
-  // Identifiant de l'opération loadMore en cours : protège le finally contre une ancienne
-  // opération qui remettraitloadingMore à false alors qu'une nouvelle est en cours.
-  const loadMoreOperationRef = useRef(0)
+  const requestArgs = useMemo(() => ({
+    currentUser,
+    userProfile,
+    statusFilter: statusFilter || null,
+  }), [currentUser, statusFilter, userProfile])
 
-  // ---------------------------------------------------------------------------
-  // Abonnement temps réel — première page
-  // Redémarre à chaque changement de filtre ou d'Actualiser
-  // ---------------------------------------------------------------------------
-
-  useEffect(() => {
-    requestGenerationRef.current += 1
-    setLoadingMore(false)
-    setRealtimeRequests([])
-    setExtraRequests([])
-    setHasMore(false)
-    setLoading(true)
-    setHasLoaded(false)
-    setError(null)
-    realtimeLastDocRef.current = null
-    paginationLastDocRef.current = null
-    hasLoadedExtraPagesRef.current = false
-
-    let unsubscribe
-    try {
-      unsubscribe = subscribeDealerRequests({
-        currentUser,
-        userProfile,
-        statusFilter: statusFilter || null,
-        onUpdate: ({ requests, lastDoc, hasMore: more }) => {
-          setRealtimeRequests(requests)
-          realtimeLastDocRef.current = lastDoc
-          // Ne mettre à jour hasMore depuis le snapshot que si aucune page extra
-          // n'a encore été chargée ; après, c'est le loadMore qui gère hasMore.
-          if (!hasLoadedExtraPagesRef.current) {
-            setHasMore(more)
-          }
-          setLoading(false)
-          setHasLoaded(true)
-        },
-        onError: (err) => {
-          setError(err.message)
-          setLoading(false)
-          setHasLoaded(true)
-        },
-      })
-    } catch (err) {
-      setError(err.message)
-      setLoading(false)
-      setHasLoaded(true)
-    }
-
-    return () => {
-      // Invalider toute opération asynchrone en vol (loadMore) avant de fermer
-      // le listener. Sans cet incrément, un loadMore démarré avant le démontage
-      // ou le changement de filtre passerait le guard de génération et tenterait
-      // d'écrire sur les setters d'un contexte périmé ou d'un composant démonté.
-      requestGenerationRef.current += 1
-      loadMoreOperationRef.current += 1
-      unsubscribe?.()
-    }
-  }, [statusFilter, refreshKey, currentUser, userProfile])
-
-  // ---------------------------------------------------------------------------
-  // Page suivante — getDocs avec curseur (Charger plus)
-  // ---------------------------------------------------------------------------
-
-  const loadMore = useCallback(async () => {
-    // Pagination commencée et curseur épuisé → dernière page déjà atteinte,
-    // ne pas repartir depuis realtimeLastDocRef.
-    if (hasLoadedExtraPagesRef.current && paginationLastDocRef.current === null) return
-    // Avant le premier loadMore : curseur du snapshot.
-    // Après au moins un loadMore : curseur de la dernière page extra.
-    const cursorDoc = hasLoadedExtraPagesRef.current
-      ? paginationLastDocRef.current
-      : realtimeLastDocRef.current
-    if (!cursorDoc || loadingMore) return
-
-    // Capturer la génération et l'id d'opération avant tout await.
-    // Si le contexte change pendant l'attente, requestGenerationRef.current sera différent
-    // et aucun état ne sera écrit pour ce contexte obsolète.
-    const generationAtStart = requestGenerationRef.current
-    const operationId = ++loadMoreOperationRef.current
-
-    setLoadingMore(true)
-    try {
-      const result = await listDealerRequests({
-        currentUser,
-        userProfile,
-        statusFilter: statusFilter || null,
-        lastDoc: cursorDoc,
-      })
-      // Résultat obsolète : le contexte a changé pendant l'attente — abandonner.
-      if (generationAtStart !== requestGenerationRef.current) return
-      setExtraRequests(prev => [...prev, ...result.requests])
-      hasLoadedExtraPagesRef.current = true
-      paginationLastDocRef.current = result.lastDoc
-      setHasMore(result.hasMore)
-    } catch (err) {
-      if (generationAtStart !== requestGenerationRef.current) return
-      setError(err.message)
-    } finally {
-      // Ne remettre loadingMore à false que si cette opération est toujours
-      // la dernière en date ET que le contexte n'a pas changé.
-      if (
-        generationAtStart === requestGenerationRef.current &&
-        operationId === loadMoreOperationRef.current
-      ) {
-        setLoadingMore(false)
-      }
-    }
-  }, [currentUser, userProfile, statusFilter, loadingMore])
+  const {
+    requests,
+    hasMore,
+    loading,
+    loadingMore,
+    error,
+    hasLoaded,
+    loadMore,
+    refresh,
+  } = useRealtimePaginatedRequests({
+    subscribeRequests: subscribeDealerRequests,
+    listRequests: listDealerRequests,
+    subscriptionArgs: requestArgs,
+  })
 
   // ---------------------------------------------------------------------------
   // Filtre statut → redémarre l'abonnement via useEffect
@@ -202,15 +87,6 @@ function DealerRequests() {
   function handleStatusChange(value) {
     setStatusFilter(value)
   }
-
-  // ---------------------------------------------------------------------------
-  // Fusion première page (temps réel) + pages supplémentaires, sans doublons
-  // ---------------------------------------------------------------------------
-
-  const requests = useMemo(
-    () => mergeUniqueRequests(realtimeRequests, extraRequests),
-    [realtimeRequests, extraRequests],
-  )
 
   const filtered = storeSearch.trim()
     ? requests.filter(r =>
@@ -258,7 +134,7 @@ function DealerRequests() {
           <>
             <button
               type="button"
-              onClick={() => { setExtraRequests([]); setRefreshKey(k => k + 1) }}
+              onClick={refresh}
               disabled={loading}
               className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:bg-brand-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
               aria-label="Actualiser la liste"
@@ -321,7 +197,7 @@ function DealerRequests() {
       {loading && <SqueletteRegistre colonnes={COLONNES} lignes={5} />}
 
       {error && (
-        <ErrorState message={error} onRetry={() => setRefreshKey(k => k + 1)} />
+        <ErrorState message={error} onRetry={refresh} />
       )}
 
       {/* Deux vides, et non un seul (DESIGN.md §10). « Vous n'avez encore rien

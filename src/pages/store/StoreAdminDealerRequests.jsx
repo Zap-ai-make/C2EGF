@@ -1,12 +1,12 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import {
   listStoreAdminDealerRequests,
   subscribeStoreAdminDealerRequests,
 } from '../../services/storeAdminDealerService'
+import { useRealtimePaginatedRequests } from '../../hooks/useRealtimePaginatedRequests'
 import { formatStoredAmount } from '../../utils/formatCurrency'
-import { mergeUniqueRequests } from '../../utils/mergeRequests'
 import { formatFirestoreDate } from '../../utils/formatFirestoreDate'
 import DealerRequestStatusBadge from '../../components/ui/DealerRequestStatusBadge'
 import PageHeader from '../../components/ui/PageHeader'
@@ -50,131 +50,31 @@ function StoreAdminDealerRequests() {
   const { currentUser, userProfile } = useAuth()
   const navigate = useNavigate()
 
-  // Première page — mise à jour temps réel via onSnapshot
-  const [realtimeRequests, setRealtimeRequests] = useState([])
-  // Pages supplémentaires — chargées via getDocs avec curseur
-  const [extraRequests, setExtraRequests] = useState([])
-  const [hasMore, setHasMore] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [error, setError] = useState(null)
-  const [hasLoaded, setHasLoaded] = useState(false)
-  // refreshKey force la re-souscription sans changer les filtres (bouton Actualiser)
-  const [refreshKey, setRefreshKey] = useState(0)
-
   const [statusFilter, setStatusFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [dealerSearch, setDealerSearch] = useState('')
 
-  // Curseurs Firestore — séparés pour éviter qu'un nouveau snapshot n'écrase
-  // le curseur d'une page supplémentaire déjà chargée.
-  const realtimeLastDocRef = useRef(null)     // dernier doc du snapshot (première page)
-  const paginationLastDocRef = useRef(null)   // dernier doc de la dernière page extra
-  // Indique si au moins un loadMore a réussi, indépendamment de la valeur du curseur.
-  const hasLoadedExtraPagesRef = useRef(false)
-  // Génération du contexte : incrémentée à chaque reset (filtre / user / profil / refreshKey).
-  const requestGenerationRef = useRef(0)
-  // Identifiant de l'opération loadMore en cours : protège le finally.
-  const loadMoreOperationRef = useRef(0)
+  const requestArgs = useMemo(() => ({
+    currentUser,
+    userProfile,
+    statusFilter: statusFilter || null,
+    typeFilter: typeFilter || null,
+  }), [currentUser, statusFilter, typeFilter, userProfile])
 
-  // ---------------------------------------------------------------------------
-  // Abonnement temps réel — première page
-  // ---------------------------------------------------------------------------
-
-  useEffect(() => {
-    requestGenerationRef.current += 1
-    setLoadingMore(false)
-    setRealtimeRequests([])
-    setExtraRequests([])
-    setHasMore(false)
-    setLoading(true)
-    setHasLoaded(false)
-    setError(null)
-    realtimeLastDocRef.current = null
-    paginationLastDocRef.current = null
-    hasLoadedExtraPagesRef.current = false
-
-    let unsubscribe
-    try {
-      unsubscribe = subscribeStoreAdminDealerRequests({
-        currentUser,
-        userProfile,
-        statusFilter: statusFilter || null,
-        typeFilter: typeFilter || null,
-        onUpdate: ({ requests, lastDoc, hasMore: more }) => {
-          setRealtimeRequests(requests)
-          realtimeLastDocRef.current = lastDoc
-          // Ne mettre à jour hasMore depuis le snapshot que si aucune page extra
-          // n'a encore été chargée ; après, c'est le loadMore qui gère hasMore.
-          if (!hasLoadedExtraPagesRef.current) {
-            setHasMore(more)
-          }
-          setLoading(false)
-          setHasLoaded(true)
-        },
-        onError: (err) => {
-          setError(err.message)
-          setLoading(false)
-          setHasLoaded(true)
-        },
-      })
-    } catch (err) {
-      setError(err.message)
-      setLoading(false)
-      setHasLoaded(true)
-    }
-
-    return () => {
-      requestGenerationRef.current += 1
-      loadMoreOperationRef.current += 1
-      unsubscribe?.()
-    }
-  }, [statusFilter, typeFilter, refreshKey, currentUser, userProfile])
-
-  // ---------------------------------------------------------------------------
-  // Chargement page suivante
-  // ---------------------------------------------------------------------------
-
-  const loadMore = useCallback(async () => {
-    // Pagination commencée et curseur épuisé → dernière page déjà atteinte,
-    // ne pas repartir depuis realtimeLastDocRef.
-    if (hasLoadedExtraPagesRef.current && paginationLastDocRef.current === null) return
-    // Avant le premier loadMore : curseur du snapshot.
-    // Après au moins un loadMore : curseur de la dernière page extra.
-    const cursorDoc = hasLoadedExtraPagesRef.current
-      ? paginationLastDocRef.current
-      : realtimeLastDocRef.current
-    if (!cursorDoc || loadingMore) return
-
-    const generationAtStart = requestGenerationRef.current
-    const operationId = ++loadMoreOperationRef.current
-
-    setLoadingMore(true)
-    try {
-      const result = await listStoreAdminDealerRequests({
-        currentUser,
-        userProfile,
-        statusFilter: statusFilter || null,
-        typeFilter: typeFilter || null,
-        lastDoc: cursorDoc,
-      })
-      if (generationAtStart !== requestGenerationRef.current) return
-      setExtraRequests(prev => [...prev, ...result.requests])
-      hasLoadedExtraPagesRef.current = true
-      paginationLastDocRef.current = result.lastDoc
-      setHasMore(result.hasMore)
-    } catch (err) {
-      if (generationAtStart !== requestGenerationRef.current) return
-      setError(err.message)
-    } finally {
-      if (
-        generationAtStart === requestGenerationRef.current &&
-        operationId === loadMoreOperationRef.current
-      ) {
-        setLoadingMore(false)
-      }
-    }
-  }, [currentUser, userProfile, statusFilter, typeFilter, loadingMore])
+  const {
+    requests,
+    hasMore,
+    loading,
+    loadingMore,
+    error,
+    hasLoaded,
+    loadMore,
+    refresh,
+  } = useRealtimePaginatedRequests({
+    subscribeRequests: subscribeStoreAdminDealerRequests,
+    listRequests: listStoreAdminDealerRequests,
+    subscriptionArgs: requestArgs,
+  })
 
   // ---------------------------------------------------------------------------
   // Changements de filtre → re-souscription via useEffect
@@ -187,15 +87,6 @@ function StoreAdminDealerRequests() {
   function handleTypeChange(value) {
     setTypeFilter(value)
   }
-
-  // ---------------------------------------------------------------------------
-  // Fusion première page (temps réel) + pages supplémentaires, sans doublons
-  // ---------------------------------------------------------------------------
-
-  const requests = useMemo(
-    () => mergeUniqueRequests(realtimeRequests, extraRequests),
-    [realtimeRequests, extraRequests],
-  )
 
   const filtered = dealerSearch.trim()
     ? requests.filter(r =>
@@ -221,7 +112,7 @@ function StoreAdminDealerRequests() {
         actions={
           <button
             type="button"
-            onClick={() => { setExtraRequests([]); setRefreshKey(k => k + 1) }}
+            onClick={refresh}
             disabled={loading}
             className="inline-flex items-center gap-1.5 rounded border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-brand-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             aria-label="Actualiser la liste"
@@ -299,7 +190,7 @@ function StoreAdminDealerRequests() {
 
       {/* Erreur : le composant partagé, qui porte déjà role="alert" et son
           bouton « Réessayer ». */}
-      {error && <ErrorState message={error} onRetry={() => setRefreshKey(k => k + 1)} />}
+      {error && <ErrorState message={error} onRetry={refresh} />}
 
       {/* Deux vides distincts, deux issues distinctes : des filtres qui ne
           rendent rien s'effacent ; une boîte réellement vide n'attend rien de
