@@ -84,6 +84,30 @@ describe('TC-043-A — resolveRestoreProject', () => {
     }
   })
 
+  it('service account absent → REFUSÉ même si GCLOUD_PROJECT est fourni', () => {
+    try {
+      resolveRestoreProject({ serviceAccount: null, envProjectId: DEMO, execute: false })
+      throw new Error('aurait dû lever')
+    } catch (e) {
+      expect(e).toBeInstanceOf(AssertFirebaseProjectError)
+      expect(e.code).toBe('SERVICE_ACCOUNT_MISSING')
+    }
+  })
+
+  it.each([
+    [null, 'SERVICE_ACCOUNT_MISSING_PROJECT_ID'],
+    [42, 'SERVICE_ACCOUNT_INVALID_PROJECT_ID_TYPE'],
+    ['   ', 'SERVICE_ACCOUNT_EMPTY_PROJECT_ID'],
+  ])('project_id=%j → REFUSÉ avec %s', (projectId, code) => {
+    try {
+      resolveRestoreProject({ serviceAccount: sa(projectId), envProjectId: DEMO, execute: false })
+      throw new Error('aurait dû lever')
+    } catch (e) {
+      expect(e).toBeInstanceOf(AssertFirebaseProjectError)
+      expect(e.code).toBe(code)
+    }
+  })
+
   it('mismatch service account / GCLOUD_PROJECT → REFUSÉ', () => {
     try {
       resolveRestoreProject({ serviceAccount: sa(DEMO), envProjectId: PROD, execute: false })
