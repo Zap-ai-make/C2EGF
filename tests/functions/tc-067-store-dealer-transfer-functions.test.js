@@ -609,6 +609,25 @@ describe('TC-067-RP — replenish', () => {
       'INVALID_TRANSFER_AMOUNT',
     )
   })
+
+  it('[RP-06] dépassement d’entier sûr → BALANCE_OVERFLOW, aucune écriture', async () => {
+    await seedUser(DEALER_UID, DEALER_PROFILE)
+    await db.doc(`dealerBalances/${DEALER_UID}`).set({
+      balances: { Orange: { stock: Number.MAX_SAFE_INTEGER, liquidite: 1000 } },
+    })
+
+    await expectError(
+      replenishDealerInventoryHandler(
+        makeRequest(DEALER_UID, { resource: 'stock', amount: 1 }),
+        { db, FieldValue },
+      ),
+      'BALANCE_OVERFLOW',
+    )
+
+    const balance = (await db.doc(`dealerBalances/${DEALER_UID}`).get()).data()
+    expect(balance.balances.Orange.stock).toBe(Number.MAX_SAFE_INTEGER)
+    expect((await db.collection(`dealerBalances/${DEALER_UID}/auditLogs`).get()).size).toBe(0)
+  })
 })
 
 // ── §MN — multi-réseaux : réseau porté par l'opération (balances[network]) ───
