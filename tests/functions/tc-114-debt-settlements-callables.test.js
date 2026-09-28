@@ -529,6 +529,29 @@ describe('TC-114-RJ — rejectInternalDebtSettlement', () => {
     expect((await debtDoc()).remainingAmount).toBe(20000)
     expect(await auditsOf(STORE_B)).toEqual([])
   })
+
+  it('[RJ-08] une compensation est refusée par le rejet de règlement', async () => {
+    const settlementId = `dcp_${DEBT_ID}_${ADMIN_A}_reject`
+    await db.doc(`internalDebts/${DEBT_ID}/settlements/${settlementId}`).set({
+      debtId: DEBT_ID,
+      oppositeDebtId: 'debt-ba',
+      debtorStoreId: STORE_A,
+      creditorStoreId: STORE_B,
+      amount: 5000,
+      method: 'compensation',
+      settlementStatus: 'declared',
+      declaredBy: ADMIN_A,
+      declaredAt: new Date(),
+    })
+
+    await expectError(
+      reject(ADMIN_B, { debtId: DEBT_ID, settlementId, rejectionReason: 'Mauvais circuit' }),
+      'SETTLEMENT_NOT_FOUND',
+    )
+
+    expect((await settlementDoc(settlementId)).settlementStatus).toBe('declared')
+    expect(await auditsOf(STORE_B)).toEqual([])
+  })
 })
 
 // ═════════════════════════════════════════════════════════════════════════════

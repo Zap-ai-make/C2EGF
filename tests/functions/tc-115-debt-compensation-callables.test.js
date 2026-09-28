@@ -501,6 +501,28 @@ describe('TC-115-RJ — rejectInternalDebtCompensation', () => {
     expect(await slicesOf(D2)).toHaveLength(0)
     expect(await auditsOf(STORE_B)).toEqual([])
   })
+
+  it('[RJ-08] un règlement ordinaire est refusé par le rejet de compensation', async () => {
+    const settlementId = `dst_${D1}_${ADMIN_A}_reject`
+    await db.doc(`internalDebts/${D1}/settlements/${settlementId}`).set({
+      debtId: D1,
+      debtorStoreId: STORE_A,
+      creditorStoreId: STORE_B,
+      amount: 5000,
+      method: 'Cash',
+      settlementStatus: 'declared',
+      declaredBy: ADMIN_A,
+      declaredAt: new Date(),
+    })
+
+    await expectError(
+      reject(ADMIN_B, { debtId: D1, settlementId, rejectionReason: 'Mauvais circuit' }),
+      'SETTLEMENT_NOT_FOUND',
+    )
+
+    expect((await getSlice(D1, settlementId)).settlementStatus).toBe('declared')
+    expect(await auditsOf(STORE_B)).toEqual([])
+  })
 })
 
 // ═════════════════════════════════════════════════════════════════════════════
