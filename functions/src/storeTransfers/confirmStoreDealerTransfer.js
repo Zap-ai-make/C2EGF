@@ -10,20 +10,19 @@
 
 import { DealerRequestError } from '../errors.js'
 import {
-  readValidatedProfile,
   validateAuthUid,
   validateInputPayload,
 } from '../dealerRequests/shared.js'
 import {
   validateTransferId,
-  validateDealerProfile,
-  validateTransferType,
-  transferBalanceField,
   readDealerBalanceAmount,
   nextFluxAmount,
-  resolveTransferNetwork,
 } from './shared.js'
 import { DEALER_NETWORKS } from '../config/dealerProfile.js'
+import {
+  prevalidateDealerTransferActor,
+  readPendingStoreDealerTransfer,
+} from './storeDealerTransferDecisionShared.js'
 
 export async function confirmStoreDealerTransferHandler(request, { db, FieldValue, dealerNetworks = DEALER_NETWORKS }) {
   // ── 1. Auth ────────────────────────────────────────────────────────────────
@@ -34,39 +33,26 @@ export async function confirmStoreDealerTransferHandler(request, { db, FieldValu
   const transferId = validateTransferId(payload.transferId)
 
   // ── 3. Prévalidation profil dealer ─────────────────────────────────────────
-  await readValidatedProfile(db, actorUid, validateDealerProfile)
+  await prevalidateDealerTransferActor(db, actorUid)
 
   // ── 4. Transaction atomique : crédit inventaire dealer ─────────────────────
   let result
   try {
     result = await db.runTransaction(async (t) => {
-      const { profile: txProfile } = await readValidatedProfile(
+      const {
+        profile: txProfile,
+        transferRef,
+        transfer,
+        field,
+        network,
+        amount,
+      } = await readPendingStoreDealerTransfer({
         db,
+        transaction: t,
         actorUid,
-        validateDealerProfile,
-        t,
-      )
-
-      const transferRef = db.doc(`storeDealerTransfers/${transferId}`)
-      const transferSnap = await t.get(transferRef)
-      if (!transferSnap.exists) {
-        throw new DealerRequestError('TRANSFER_NOT_FOUND', 'Transfert introuvable.')
-      }
-      const transfer = transferSnap.data()
-
-      if (transfer.dealerUid !== actorUid) {
-        throw new DealerRequestError('TRANSFER_DEALER_MISMATCH', 'Ce transfert ne vous est pas destiné.')
-      }
-      if (transfer.status !== 'pending') {
-        throw new DealerRequestError('TRANSFER_NOT_PENDING', 'Ce transfert a déjà été traité.')
-      }
-      const field = transferBalanceField(validateTransferType(transfer.transferType))
-      // Réseau du transfert (persisté à la création), validé ∈ profil (défense en profondeur).
-      const network = resolveTransferNetwork(transfer.network, dealerNetworks)
-      const amount = transfer.amount
-      if (!Number.isSafeInteger(amount) || amount <= 0) {
-        throw new DealerRequestError('INVALID_TRANSFER_DATA', 'Montant du transfert invalide.')
-      }
+        transferId,
+        dealerNetworks,
+      })
 
       // Règle métier : SEUL le retour de stock crédite l'inventaire dealer.
       // L'« Envoi de liquidité » est validé et tracé mais NE crédite PAS la

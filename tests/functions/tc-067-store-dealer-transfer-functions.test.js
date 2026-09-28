@@ -473,6 +473,23 @@ describe('TC-067-CO — confirm', () => {
     expect((await db.doc(`dealerBalances/${DEALER_UID}`).get()).exists).toBe(false)
     expect((await db.collection(`dealerBalances/${DEALER_UID}/auditLogs`).get()).size).toBe(0)
   })
+
+  it('[CO-09] montant persisté invalide → INVALID_TRANSFER_DATA, aucune écriture', async () => {
+    await seedUser(DEALER_UID, DEALER_PROFILE)
+    await seedTransfer('t-invalid-amount', basePendingTransfer({ amount: 0 }))
+
+    await expectError(
+      confirmStoreDealerTransferHandler(
+        makeRequest(DEALER_UID, { transferId: 't-invalid-amount' }),
+        { db, FieldValue },
+      ),
+      'INVALID_TRANSFER_DATA',
+    )
+
+    expect((await db.doc('storeDealerTransfers/t-invalid-amount').get()).data().status).toBe('pending')
+    expect((await db.doc(`dealerBalances/${DEALER_UID}`).get()).exists).toBe(false)
+    expect((await db.collection(`dealerBalances/${DEALER_UID}/auditLogs`).get()).size).toBe(0)
+  })
 })
 
 // ── §RJ — rejectStoreDealerTransferHandler ───────────────────────────────────
@@ -549,6 +566,25 @@ describe('TC-067-RJ — reject', () => {
     )
 
     expect((await db.doc('storeDealerTransfers/t-profile-role').get()).data().status).toBe('pending')
+    expect((await db.doc(`clients/${STORE_A}/networkBalances/current`).get()).data().balances.Orange.stock).toBe(45000)
+    expect((await db.collection(`clients/${STORE_A}/auditLogs`).get()).size).toBe(0)
+    expect((await db.collection(`dealerBalances/${DEALER_UID}/auditLogs`).get()).size).toBe(0)
+  })
+
+  it('[RJ-06] type persisté invalide → INVALID_TRANSFER_TYPE, aucune restauration', async () => {
+    await seedUser(DEALER_UID, DEALER_PROFILE)
+    await seedBalance(STORE_A, { balances: { Orange: { stock: 45000, liquidite: 30000 } } })
+    await seedTransfer('t-invalid-type', basePendingTransfer({ transferType: 'invalid' }))
+
+    await expectError(
+      rejectStoreDealerTransferHandler(
+        makeRequest(DEALER_UID, { transferId: 't-invalid-type', rejectionReason: 'Type invalide' }),
+        { db, FieldValue },
+      ),
+      'INVALID_TRANSFER_TYPE',
+    )
+
+    expect((await db.doc('storeDealerTransfers/t-invalid-type').get()).data().status).toBe('pending')
     expect((await db.doc(`clients/${STORE_A}/networkBalances/current`).get()).data().balances.Orange.stock).toBe(45000)
     expect((await db.collection(`clients/${STORE_A}/auditLogs`).get()).size).toBe(0)
     expect((await db.collection(`dealerBalances/${DEALER_UID}/auditLogs`).get()).size).toBe(0)
