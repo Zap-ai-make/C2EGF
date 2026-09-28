@@ -16,6 +16,8 @@ import { formatCurrency } from '../../utils/formatCurrency'
 import { formatFirestoreDate } from '../../utils/formatFirestoreDate'
 import StatusBadge from '../ui/StatusBadge'
 import Dialog from '../ui/Dialog'
+import Bouton from '../ui/ActionButton'
+import RejectionReasonField from '../ui/RejectionReasonField'
 
 /**
  * Collaborations — le troisième mode de l'écran Transactions.
@@ -53,21 +55,6 @@ const SOUS_ONGLETS = [
   { cle: 'outgoing', libelle: 'Mes demandes', actif: 'border-outflow text-outflow' },
   { cle: 'incoming', libelle: 'Reçues', actif: 'border-inflow text-inflow' },
 ]
-
-function Bouton({ variante = 'neutre', className = '', ...props }) {
-  const styles = {
-    primaire: 'bg-brand-500 text-white hover:bg-brand-600',
-    neutre: 'border border-line bg-surface text-ink hover:bg-brand-50',
-    danger: 'border border-danger/40 bg-danger-soft text-danger hover:bg-danger-soft/70',
-  }
-  return (
-    <button
-      type="button"
-      className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:cursor-not-allowed disabled:opacity-50 ${styles[variante]} ${className}`}
-      {...props}
-    />
-  )
-}
 
 /**
  * Plafond de lignes RENDUES, pas de lignes cherchables : le filtre porte
@@ -654,18 +641,11 @@ function CollaborationsPanel({
           </>
         }
       >
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-ink">
-            Motif <span className="font-normal text-ink-muted">(3 à 500 caractères)</span>
-          </span>
-          <textarea
-            rows={3}
-            value={motif}
-            onChange={(e) => setMotif(e.target.value)}
-            className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-          />
-        </label>
-        <p className="mt-1 text-xs text-ink-muted">La boutique demandeuse lira ce motif.</p>
+        <RejectionReasonField
+          value={motif}
+          onChange={(e) => setMotif(e.target.value)}
+          description="La boutique demandeuse lira ce motif."
+        />
         {erreurDialogue && <p className="mt-2 text-sm text-danger" role="alert">{erreurDialogue}</p>}
       </Dialog>
     </div>
