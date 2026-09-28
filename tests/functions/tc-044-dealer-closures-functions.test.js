@@ -490,7 +490,9 @@ describe('TC-044-CF — confirmDealerClosureHandler', () => {
     // Audit créé
     const auditSnap = await db.collection(`clients/${STORE_A}/auditLogs`).get()
     expect(auditSnap.size).toBe(1)
-    expect(auditSnap.docs[0].data().action).toBe('DEALER_CLOSURE_CONFIRMED')
+    const audit = auditSnap.docs[0].data()
+    expect(audit.action).toBe('DEALER_CLOSURE_CONFIRMED')
+    expect(audit.rejectionReason).toBeUndefined()
   })
 
   it('[CF-02] autre boutique → CLOSURE_STORE_MISMATCH', async () => {
