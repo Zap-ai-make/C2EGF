@@ -16,16 +16,7 @@
 
 import { DealerRequestError } from '../errors.js'
 import {
-  readValidatedProfile,
-  validateAuthUid,
-  validateInputPayload,
-  validateProfileData,
-} from '../dealerRequests/shared.js'
-import { assertCollaborationsEnabled } from './shared.js'
-import {
   validateDebtId,
-  validateSettlementId,
-  validateSettlementAmount,
   deterministicMirrorId,
   validateOppositeDebtPair,
   readDebtState,
@@ -35,25 +26,20 @@ import {
   SETTLEMENT_STATUSES,
   COMPENSATION_METHOD,
 } from './debtShared.js'
+import {
+  prepareInternalDebtConfirmation,
+  readCompensationConfirmationContext,
+} from './internalDebtConfirmationShared.js'
 import { COLLABORATIONS_ENABLED } from '../config/storeProfile.js'
 
 export async function confirmInternalDebtCompensationHandler(
   request,
   { db, FieldValue, collaborationsEnabled = COLLABORATIONS_ENABLED },
 ) {
-  // ── 1. Auth ────────────────────────────────────────────────────────────────
-  const actorUid = validateAuthUid(request.auth?.uid)
-
-  // ── 2. Module ouvert ? ─────────────────────────────────────────────────────
-  assertCollaborationsEnabled(collaborationsEnabled)
-
-  // ── 3. Payload (allow-list) ────────────────────────────────────────────────
-  const payload = validateInputPayload(request.data, ['debtId', 'settlementId'])
-  const debtId = validateDebtId(payload.debtId)
-  const settlementId = validateSettlementId(payload.settlementId)
-
-  // ── 4. Prévalidation profil ────────────────────────────────────────────────
-  await readValidatedProfile(db, actorUid, validateProfileData)
+  const { actorUid, debtId, settlementId } = await prepareInternalDebtConfirmation(
+    request,
+    { db, collaborationsEnabled },
+  )
 
   // ── 5. Transaction ─────────────────────────────────────────────────────────
   let result
@@ -61,42 +47,18 @@ export async function confirmInternalDebtCompensationHandler(
     result = await db.runTransaction(async (t) => {
       // ═══ LECTURES ═══════════════════════════════════════════════════════════
       const {
-        profile: txProfile,
-        validationResult: actorStoreId,
-      } = await readValidatedProfile(db, actorUid, validateProfileData, t)
+        actorStoreId,
+        amount,
+        debt: debt1,
+        debtRef: d1Ref,
+        settlement,
+        settlementRef,
+        txProfile,
+      } = await readCompensationConfirmationContext({
+        db, transaction: t, actorUid, debtId, settlementId,
+      })
 
-      // a. D1 — c'est sa CRÉANCIÈRE qui accepte la compensation.
-      const d1Ref = db.doc(`internalDebts/${debtId}`)
-      const d1Snap = await t.get(d1Ref)
-      if (!d1Snap.exists) {
-        throw new DealerRequestError('DEBT_NOT_FOUND', 'Dette introuvable.')
-      }
-      const debt1 = d1Snap.data()
-      if (debt1.creditorStoreId !== actorStoreId) {
-        throw new DealerRequestError('DEBT_STORE_MISMATCH', "Vous n'êtes pas autorisé sur cette dette.")
-      }
-
-      // b. La tranche, qui DOIT être une compensation.
-      const settlementRef = db.doc(`internalDebts/${debtId}/settlements/${settlementId}`)
-      const settlementSnap = await t.get(settlementRef)
-      if (!settlementSnap.exists) {
-        throw new DealerRequestError('SETTLEMENT_NOT_FOUND', 'Règlement introuvable.')
-      }
-      const settlement = settlementSnap.data()
-      if (settlement.method !== COMPENSATION_METHOD) {
-        throw new DealerRequestError(
-          'SETTLEMENT_NOT_FOUND',
-          "Cette tranche n'est pas une compensation : utilisez la confirmation de règlement.",
-        )
-      }
-      if (settlement.settlementStatus !== SETTLEMENT_STATUSES.DECLARED) {
-        throw new DealerRequestError(
-          'SETTLEMENT_NOT_DECLARED',
-          "Ce règlement n'est pas en attente de confirmation.",
-        )
-      }
-
-      // c. D2, relue depuis la TRANCHE (pas depuis le payload).
+      // D2 est relue depuis la TRANCHE (pas depuis le payload).
       const oppositeDebtId = validateDebtId(settlement.oppositeDebtId)
       const d2Ref = db.doc(`internalDebts/${oppositeDebtId}`)
       const d2Snap = await t.get(d2Ref)
@@ -108,8 +70,7 @@ export async function confirmInternalDebtCompensationHandler(
       // d. La paire opposée est REVALIDÉE : rien ne garantit qu'elle l'est encore.
       validateOppositeDebtPair(debt1, debt2)
 
-      // e. Plafond revalidé AU MOMENT PRÉSENT — garde-fou anti-dérive.
-      const amount = validateSettlementAmount(settlement.amount)
+      // Plafond revalidé AU MOMENT PRÉSENT — garde-fou anti-dérive.
       const state1 = readDebtState(debt1)
       const state2 = readDebtState(debt2)
       assertCompensationWithinCapacity(

@@ -19,23 +19,17 @@
  */
 
 import { DealerRequestError } from '../errors.js'
+import { readStoreStock } from './shared.js'
 import {
-  readValidatedProfile,
-  validateAuthUid,
-  validateInputPayload,
-  validateProfileData,
-} from '../dealerRequests/shared.js'
-import { assertCollaborationsEnabled, readStoreStock } from './shared.js'
-import {
-  validateDebtId,
-  validateSettlementId,
-  validateSettlementAmount,
   nextDebtState,
   settlementMovesStock,
   settlementNetwork,
   SETTLEMENT_STATUSES,
-  COMPENSATION_METHOD,
 } from './debtShared.js'
+import {
+  prepareInternalDebtConfirmation,
+  readSettlementConfirmationContext,
+} from './internalDebtConfirmationShared.js'
 import { COLLABORATIONS_ENABLED, STORE_NETWORKS } from '../config/storeProfile.js'
 
 export async function confirmInternalDebtSettlementHandler(
@@ -47,19 +41,10 @@ export async function confirmInternalDebtSettlementHandler(
     storeNetworks = STORE_NETWORKS,
   },
 ) {
-  // ── 1. Auth ────────────────────────────────────────────────────────────────
-  const actorUid = validateAuthUid(request.auth?.uid)
-
-  // ── 2. Module ouvert ? ─────────────────────────────────────────────────────
-  assertCollaborationsEnabled(collaborationsEnabled)
-
-  // ── 3. Payload (allow-list) ────────────────────────────────────────────────
-  const payload = validateInputPayload(request.data, ['debtId', 'settlementId'])
-  const debtId = validateDebtId(payload.debtId)
-  const settlementId = validateSettlementId(payload.settlementId)
-
-  // ── 4. Prévalidation profil ────────────────────────────────────────────────
-  await readValidatedProfile(db, actorUid, validateProfileData)
+  const { actorUid, debtId, settlementId } = await prepareInternalDebtConfirmation(
+    request,
+    { db, collaborationsEnabled },
+  )
 
   // ── 5. Transaction ─────────────────────────────────────────────────────────
   let result
@@ -67,53 +52,23 @@ export async function confirmInternalDebtSettlementHandler(
     result = await db.runTransaction(async (t) => {
       // ═══ LECTURES ═══════════════════════════════════════════════════════════
 
-      // a. Profil autoritatif.
       const {
-        profile: txProfile,
-        validationResult: actorStoreId,
-      } = await readValidatedProfile(db, actorUid, validateProfileData, t)
+        actorStoreId,
+        amount,
+        debt,
+        debtRef,
+        settlement,
+        settlementRef,
+        txProfile,
+      } = await readSettlementConfirmationContext({
+        db, transaction: t, actorUid, debtId, settlementId,
+      })
 
-      // b. La dette — seule la CRÉANCIÈRE confirme : c'est elle qui reçoit.
-      const debtRef = db.doc(`internalDebts/${debtId}`)
-      const debtSnap = await t.get(debtRef)
-      if (!debtSnap.exists) {
-        throw new DealerRequestError('DEBT_NOT_FOUND', 'Dette introuvable.')
-      }
-      const debt = debtSnap.data()
-      if (debt.creditorStoreId !== actorStoreId) {
-        throw new DealerRequestError('DEBT_STORE_MISMATCH', "Vous n'êtes pas autorisé sur cette dette.")
-      }
-
-      // c. La tranche.
-      const settlementRef = db.doc(`internalDebts/${debtId}/settlements/${settlementId}`)
-      const settlementSnap = await t.get(settlementRef)
-      if (!settlementSnap.exists) {
-        throw new DealerRequestError('SETTLEMENT_NOT_FOUND', 'Règlement introuvable.')
-      }
-      const settlement = settlementSnap.data()
-
-      // d. Aiguillage : une tranche de COMPENSATION ne se confirme pas par ce
-      //    chemin. L'imputer ici ne toucherait qu'UNE des deux dettes et
-      //    laisserait la dette opposée intacte — un déséquilibre silencieux.
-      if (settlement.method === COMPENSATION_METHOD) {
-        throw new DealerRequestError(
-          'SETTLEMENT_NOT_FOUND',
-          'Cette tranche est une compensation : utilisez la confirmation de compensation.',
-        )
-      }
-
-      if (settlement.settlementStatus !== SETTLEMENT_STATUSES.DECLARED) {
-        throw new DealerRequestError(
-          'SETTLEMENT_NOT_DECLARED',
-          "Ce règlement n'est pas en attente de confirmation.",
-        )
-      }
-
-      // e. Montant revalidé depuis le DOCUMENT, puis imputation calculée.
-      const amount = validateSettlementAmount(settlement.amount)
+      // La méthode n'est volontairement pas revalidée : un code historique
+      // doit rester confirmable. Seule une compensation est aiguillée ailleurs.
       const nextDebt = nextDebtState(debt, amount)
 
-      // f. Mouvement de stock conditionnel — les DEUX soldes lus AVANT toute
+      // Mouvement de stock conditionnel — les DEUX soldes lus AVANT toute
       //    écriture, y compris avant la mise à jour de la dette.
       const movesStock = settlementMovesStock(settlement.method, storeNetworks)
       let stockMove = null
