@@ -30,8 +30,12 @@ import {
 } from './financialUtils.js'
 import {
   validateSettlementProfile,
-  validateSettlementTransactionProfile,
 } from './profileValidation.js'
+import {
+  buildSettlementAuditBase,
+  readIdempotentSettlement,
+  readSettlementTransactionContext,
+} from './settlementShared.js'
 import { STORE_PAYMENT_METHODS } from '../config/storeProfile.js'
 
 /**
@@ -88,49 +92,36 @@ export async function addTransactionRefundHandler(request, { db, FieldValue, log
   let txResult
   try {
     txResult = await db.runTransaction(async (t) => {
-      // Relecture authoritative du profil
       const {
-        profile: txProfile,
-        validationResult: storeId,
-      } = await readValidatedProfile(
+        txProfile,
+        storeId,
+        draftRef,
+        settlementRef,
+        balanceRef,
+        draftSnap,
+        settlementSnap,
+        balanceSnap,
+      } = await readSettlementTransactionContext({
         db,
+        transaction: t,
         actorUid,
-        (profile) => validateSettlementTransactionProfile(profile, preStoreId),
-        t,
-      )
-      const storeSnap = await t.get(db.doc(`stores/${storeId}`))
-      if (!storeSnap.exists || storeSnap.data().active !== true) {
-        throw new DealerRequestError('STORE_INACTIVE', 'Boutique désactivée.')
-      }
-
-      const draftRef      = db.doc(`clients/${storeId}/drafts/${draftId}`)
-      const settlementRef = db.doc(`clients/${storeId}/drafts/${draftId}/settlements/${settlementId}`)
-      const balanceRef    = db.doc(`clients/${storeId}/networkBalances/current`)
-
-      const [draftSnap, settlementSnap, balanceSnap] = await t.getAll(draftRef, settlementRef, balanceRef)
+        preStoreId,
+        draftId,
+        settlementId,
+      })
 
       // ── Idempotence stricte ───────────────────────────────────────────────
-      if (settlementSnap.exists) {
-        const existingData = settlementSnap.data()
-        if (existingData.amount !== amount || existingData.paymentMethod !== paymentMethod) {
-          // On CAPTURE le détail (montants/méthode) pour un log serveur émis hors transaction
-          // (diagnostic — jamais renvoyé au client ; message client volontairement générique).
-          idempotencyConflictLog = {
-            event:          'SETTLEMENT_IDEMPOTENCY_CONFLICT',
-            action:         'addTransactionRefund',
-            actorUid,
-            storeId,
-            settlementId,
-            existingAmount: existingData.amount,
-            newAmount:      amount,
-            existingMethod: existingData.paymentMethod,
-            newMethod:      paymentMethod,
-          }
-          throw new DealerRequestError(
-            'IDEMPOTENCY_CONFLICT',
-            'Cette opération a déjà été enregistrée avec des paramètres différents. Rechargez la page et réessayez.'
-          )
-        }
+      const existingData = readIdempotentSettlement({
+        settlementSnap,
+        amount,
+        paymentMethod,
+        action: 'addTransactionRefund',
+        actorUid,
+        storeId,
+        settlementId,
+        recordConflict: (conflict) => { idempotencyConflictLog = conflict },
+      })
+      if (existingData) {
         return { idempotent: true }
       }
 
@@ -192,24 +183,21 @@ export async function addTransactionRefundHandler(request, { db, FieldValue, log
         // Identité
         type:              'refund',
         operationType:     'refund',
-        settlementId,
-        draftId,
-        storeId,
-        clientId:          draft.clientId ?? null,
-        amount,
-        paymentMethod,
-        effectiveNetwork:  affectedNetwork,
-        idempotencyKey:    trimmedKey,
-        // Acteur
-        actorUid,
-        actorName:         txProfile.name  ?? null,
-        actorRole:         txProfile.role,
-        actorStoreId:      storeId,
-        // Avant
-        previousPaidAmount:       paidAmount,
-        previousRefundedAmount:   refundedAmount,
-        previousRemainingAmount:  remainingAmount,
-        previousSettlementStatus: draft.settlementStatus ?? null,
+        ...buildSettlementAuditBase({
+          settlementId,
+          draftId,
+          storeId,
+          draft,
+          amount,
+          paymentMethod,
+          affectedNetwork,
+          trimmedKey,
+          actorUid,
+          txProfile,
+          paidAmount,
+          refundedAmount,
+          remainingAmount,
+        }),
         // Après
         newPaidAmount:       paidAmount,
         newRefundedAmount:   newRefunded,

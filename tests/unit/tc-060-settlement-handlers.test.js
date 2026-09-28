@@ -322,6 +322,26 @@ describe('TC-060-D — addTransactionPayment : idempotence', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('TC-060-E — addTransactionRefund : validation', () => {
+  it('rejette un remboursement lorsque la boutique est inactive', async () => {
+    const { db, written } = makeDb({
+      storeData: { active: false },
+      draftData: {
+        ...BASE_DRAFT,
+        originalAmount: 5000,
+        paidAmount: 5000,
+        refundedAmount: 0,
+        remainingAmount: 0,
+      },
+    })
+
+    await expect(addTransactionRefundHandler(
+      makeRequest({ draftId: DRAFT_ID, amount: 1000, paymentMethod: 'Cash', idempotencyKey: 'inactive-refund' }),
+      { db, FieldValue },
+    )).rejects.toMatchObject({ code: 'STORE_INACTIVE' })
+
+    expect(written).toHaveLength(0)
+  })
+
   it('autorise le remboursement d’une ancienne tranche sur un réseau retiré du profil', async () => {
     const { db } = makeDb({
       draftData: {
