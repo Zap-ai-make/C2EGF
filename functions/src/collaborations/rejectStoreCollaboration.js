@@ -24,6 +24,7 @@ import {
   validateCollaborationId,
   COLLABORATION_STATUSES,
 } from './shared.js'
+import { readPendingStoreCollaborationDecisionContext } from './storeCollaborationDecisionShared.js'
 import { COLLABORATIONS_ENABLED } from '../config/storeProfile.js'
 
 export async function rejectStoreCollaborationHandler(
@@ -48,26 +49,13 @@ export async function rejectStoreCollaborationHandler(
   try {
     await db.runTransaction(async (t) => {
       const {
-        profile: txProfile,
-        validationResult: actorStoreId,
-      } = await readValidatedProfile(db, actorUid, validateProfileData, t)
-
-      const collabRef = db.doc(`storeCollaborations/${collaborationId}`)
-      const collabSnap = await t.get(collabRef)
-      if (!collabSnap.exists) {
-        throw new DealerRequestError('COLLABORATION_NOT_FOUND', 'Collaboration introuvable.')
-      }
-      const collab = collabSnap.data()
-
-      if (collab.supplierStoreId !== actorStoreId) {
-        throw new DealerRequestError(
-          'COLLABORATION_STORE_MISMATCH',
-          'Cette collaboration ne vous est pas destinée.',
-        )
-      }
-      if (collab.status !== COLLABORATION_STATUSES.PENDING) {
-        throw new DealerRequestError('COLLABORATION_NOT_PENDING', 'Cette collaboration a déjà été traitée.')
-      }
+        actorStoreId,
+        collab,
+        collabRef,
+        txProfile,
+      } = await readPendingStoreCollaborationDecisionContext({
+        db, transaction: t, actorUid, collaborationId,
+      })
 
       const now = FieldValue.serverTimestamp()
 

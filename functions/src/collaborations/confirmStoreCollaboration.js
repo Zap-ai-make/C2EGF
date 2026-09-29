@@ -41,6 +41,7 @@ import {
   debtDirection,
   COLLABORATION_STATUSES,
 } from './shared.js'
+import { readPendingStoreCollaborationDecisionContext } from './storeCollaborationDecisionShared.js'
 import { STORE_NETWORKS, COLLABORATIONS_ENABLED } from '../config/storeProfile.js'
 
 export async function confirmStoreCollaborationHandler(
@@ -72,42 +73,22 @@ export async function confirmStoreCollaborationHandler(
       // ⚠ TOUTES les lectures d'abord : Firestore refuse toute lecture après une
       // écriture dans une même transaction.
 
-      // a. Profil autoritatif.
       const {
-        profile: txProfile,
-        validationResult: actorStoreId,
-      } = await readValidatedProfile(db, actorUid, validateProfileData, t)
+        actorStoreId,
+        collab,
+        collabRef,
+        txProfile,
+      } = await readPendingStoreCollaborationDecisionContext({
+        db, transaction: t, actorUid, collaborationId,
+      })
 
-      // b. La collaboration.
-      const collabRef = db.doc(`storeCollaborations/${collaborationId}`)
-      const collabSnap = await t.get(collabRef)
-      if (!collabSnap.exists) {
-        throw new DealerRequestError('COLLABORATION_NOT_FOUND', 'Collaboration introuvable.')
-      }
-      const collab = collabSnap.data()
-
-      // c. Seule la FOURNISSEUSE confirme. La demandeuse ne peut jamais
-      //    s'auto-servir en confirmant sa propre demande.
-      if (collab.supplierStoreId !== actorStoreId) {
-        throw new DealerRequestError(
-          'COLLABORATION_STORE_MISMATCH',
-          "Cette collaboration ne vous est pas destinée.",
-        )
-      }
-
-      // d. Terminalité : un document déjà traité ne se retraite pas. C'est ce qui
-      //    empêche un double clic de bouger le stock deux fois.
-      if (collab.status !== COLLABORATION_STATUSES.PENDING) {
-        throw new DealerRequestError('COLLABORATION_NOT_PENDING', 'Cette collaboration a déjà été traitée.')
-      }
-
-      // e. Revalidation des données LUES DANS LE DOCUMENT (pas du payload).
+      // Revalidation des données LUES DANS LE DOCUMENT (pas du payload).
       const operationType = validateOperationType(collab.operationType)
       const amount = validateCollaborationAmount(collab.amount)
       const requestingStoreId = validateStoreRef(collab.requestingStoreId)
       const network = resolveCollaborationNetwork(collab.network, storeNetworks)
 
-      // f. Défense en profondeur : la boutique a pu être désactivée depuis la
+      // Défense en profondeur : la boutique a pu être désactivée depuis la
       //    création de la demande.
       const actorStoreSnap = await t.get(db.doc(`stores/${actorStoreId}`))
       if (!actorStoreSnap.exists) {
@@ -117,7 +98,7 @@ export async function confirmStoreCollaborationHandler(
         throw new DealerRequestError('STORE_INACTIVE', "Votre boutique n'est plus active.")
       }
 
-      // g. Le solde que la fournisseuse va céder : son STOCK sur un dépôt, sa
+      // Le solde que la fournisseuse va céder : son STOCK sur un dépôt, sa
       //    LIQUIDITÉ sur un retrait. Tolérant à l'absence, strict sur la valeur.
       const resourceField = supplierResourceField(operationType)
       const balRef = db.doc(`clients/${actorStoreId}/networkBalances/current`)
@@ -126,7 +107,7 @@ export async function confirmStoreCollaborationHandler(
         balSnap.exists ? balSnap.data() : null, network, resourceField,
       )
 
-      // h. Suffisance, puis nouveau solde. La fournisseuse cède dans les deux sens.
+      // Suffisance, puis nouveau solde. La fournisseuse cède dans les deux sens.
       const newSupplierBalance = nextSupplierBalance(operationType, amount, previousSupplierBalance)
       const { debtorStoreId, creditorStoreId } = debtDirection(operationType, {
         requestingStoreId,
