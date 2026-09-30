@@ -19,6 +19,7 @@ import { describe, it, expect } from 'vitest'
 import { NETWORK_OPTIONS, TRANSACTION_TYPES, PAYMENT_METHODS } from '../../src/utils/constants.js'
 import { DEALER_NETWORK } from '../../src/constants/dealerConstants.js'
 import { activeProfile } from '../../src/config/activeClientProfile.js'
+import { resolveProfile } from '../../config/clients/index.js'
 
 describe('TC-083 — Constantes dérivées du profil client actif', () => {
   it('le profil actif en test est bien C2EGF (VITE_CLIENT_ID via .env)', () => {
@@ -42,5 +43,43 @@ describe('TC-083 — Constantes dérivées du profil client actif', () => {
 
   it('DEALER_NETWORK = profil C2EGF (Orange, mono-réseau)', () => {
     expect(DEALER_NETWORK).toBe('Orange')
+  })
+
+  it('le démarrage C2EGF expose uniquement le parcours simplifié des caissières', () => {
+    expect(activeProfile.storeWorkspace).toEqual({
+      navigation: {
+        dealerRequests: false,
+        internalDebts: false,
+      },
+      transactions: {
+        dealerOperations: false,
+        collaborations: false,
+      },
+      history: {
+        dealer: true,
+        dealerLabel: 'Ravitaillement',
+        collaborations: false,
+        internalDebts: false,
+      },
+    })
+  })
+
+  it('le pilote conserve l’espace boutique complet pour les autres instances', () => {
+    expect(resolveProfile('_pilot').storeWorkspace).toEqual({
+      navigation: {
+        dealerRequests: true,
+        internalDebts: true,
+      },
+      transactions: {
+        dealerOperations: true,
+        collaborations: true,
+      },
+      history: {
+        dealer: true,
+        dealerLabel: 'Dealer',
+        collaborations: true,
+        internalDebts: true,
+      },
+    })
   })
 })

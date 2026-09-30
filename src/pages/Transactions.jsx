@@ -9,10 +9,11 @@ import CollaborationsPanel from '../components/transactions/CollaborationsPanel'
 import ErrorBoundary from '../components/ui/ErrorBoundary'
 import PageHeader from '../components/ui/PageHeader'
 import { COLLABORATIONS_ENABLED } from '../constants/collaborationConstants'
+import { STORE_TRANSACTION_VISIBILITY } from '../constants/storeWorkspace.js'
 import { useIncomingCollaborationsCount } from '../hooks/useIncomingCollaborationsCount'
 
 /**
- * Transactions — trois modes, et c'est l'URL qui décide.
+ * Transactions — les modes visibles du profil, et c'est l'URL qui décide.
  *
  * POURQUOI L'URL PLUTÔT QU'UN useState
  * ────────────────────────────────────
@@ -32,7 +33,13 @@ import { useIncomingCollaborationsCount } from '../hooks/useIncomingCollaboratio
  * comme une visite sans paramètre.
  */
 
-const MODES = ['client', 'dealer', ...(COLLABORATIONS_ENABLED ? ['collaborations'] : [])]
+const MODES = [
+  'client',
+  ...(STORE_TRANSACTION_VISIBILITY.dealerOperations ? ['dealer'] : []),
+  ...(COLLABORATIONS_ENABLED && STORE_TRANSACTION_VISIBILITY.collaborations
+    ? ['collaborations']
+    : []),
+]
 
 const LIBELLES = {
   client: 'Transaction client',
@@ -45,7 +52,10 @@ function Transactions() {
   const { userProfile } = useAuth()
   const [params, setParams] = useSearchParams()
   const storeId = userProfile?.storeId ?? null
-  const compteurRecues = useIncomingCollaborationsCount(storeId)
+  const compteurRecues = useIncomingCollaborationsCount(
+    storeId,
+    STORE_TRANSACTION_VISIBILITY.collaborations,
+  )
 
   const demande = params.get('tab')
   const mode = MODES.includes(demande) ? demande : MODES[0]

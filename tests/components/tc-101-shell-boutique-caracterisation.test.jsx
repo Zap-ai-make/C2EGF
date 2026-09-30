@@ -28,6 +28,13 @@ vi.mock('../../src/context/ThemeContext.jsx', () => ({
     themeClasses: { navbar: 'navbar-stub', background: 'bg-stub', text: 'text-stub' },
   }),
 }))
+vi.mock('../../src/constants/storeWorkspace.js', () => ({
+  STORE_NAVIGATION_VISIBILITY: { dealerRequests: true, internalDebts: true },
+  STORE_TRANSACTION_VISIBILITY: { dealerOperations: true, collaborations: true },
+  STORE_HISTORY_CONFIG: {
+    dealer: true, dealerLabel: 'Dealer', collaborations: true, internalDebts: true,
+  },
+}))
 vi.mock('../../src/context/AuthContext.jsx', () => ({
   useAuth: () => ({ currentUser: { uid: 'u1' }, userProfile: { role: 'store_admin' } }),
 }))

@@ -14,10 +14,11 @@ import PageHeader from '../components/ui/PageHeader'
 import { useHistoriqueFilters } from '../hooks/useHistoriqueFilters'
 import { useAuth } from '../context/AuthContext'
 import { COLLABORATIONS_ENABLED } from '../constants/collaborationConstants'
+import { STORE_HISTORY_CONFIG } from '../constants/storeWorkspace.js'
 import { useTransactions } from '../context/transactions.jsx'
 
 /**
- * Historique — quatre sources, un seul endroit où l'on relit.
+ * Historique — les sources visibles du profil, un seul endroit où l'on relit.
  *
  * L'ONGLET « CLIENTS » N'A PAS BOUGÉ D'UN PIXEL
  * ─────────────────────────────────────────────
@@ -29,7 +30,7 @@ import { useTransactions } from '../context/transactions.jsx'
  *
  * POURQUOI LE FILTRE N'EST PAS PARTAGÉ
  * ────────────────────────────────────
- * Le cahier décrit un filtre générique commun aux quatre onglets. Le filtre
+ * Le cahier décrit un filtre générique commun aux onglets. Le filtre
  * actuel n'est pas générique : il cherche un CLIENT, notion qui n'existe ni pour
  * une dette ni pour un ravitaillement. Le partager voudrait dire soit le vider
  * de sa moitié utile, soit afficher un champ mort sur trois onglets sur quatre.
@@ -43,12 +44,16 @@ import { useTransactions } from '../context/transactions.jsx'
 
 const ONGLETS = [
   { cle: 'clients', libelle: 'Transactions clients' },
-  { cle: 'dealer', libelle: 'Dealer' },
-  ...(COLLABORATIONS_ENABLED
+  ...(STORE_HISTORY_CONFIG.dealer
+    ? [{ cle: 'dealer', libelle: STORE_HISTORY_CONFIG.dealerLabel }]
+    : []),
+  ...(COLLABORATIONS_ENABLED && STORE_HISTORY_CONFIG.collaborations
     ? [
       { cle: 'collaborations', libelle: 'Collaborations' },
-      { cle: 'dettes', libelle: 'Dettes internes' },
     ]
+    : []),
+  ...(COLLABORATIONS_ENABLED && STORE_HISTORY_CONFIG.internalDebts
+    ? [{ cle: 'dettes', libelle: 'Dettes internes' }]
     : []),
 ]
 

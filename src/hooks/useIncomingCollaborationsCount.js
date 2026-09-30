@@ -17,14 +17,14 @@ import { subscribeIncomingCollaborationsCount } from '../services/collaborationS
  * Sans boutique, il vaut 0 et n'ouvre rien : un profil incomplet ne doit pas
  * faire tomber la barre de navigation.
  */
-export function useIncomingCollaborationsCount(storeId) {
+export function useIncomingCollaborationsCount(storeId, enabled = true) {
   const [count, setCount] = useState(0)
 
   useEffect(() => {
     setCount(0)
-    if (!storeId) return undefined
+    if (!enabled || !storeId) return undefined
     return subscribeIncomingCollaborationsCount({ storeId, onUpdate: setCount })
-  }, [storeId])
+  }, [enabled, storeId])
 
   return count
 }

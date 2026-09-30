@@ -30,6 +30,12 @@ régénérer les règles et la configuration Functions, puis de redéployer les 
 | Méthodes de règlement | `transactions.paymentMethods` | Front et Functions `STORE_PAYMENT_METHODS` ; une méthode retirée reste utilisable uniquement pour rembourser une tranche historique existante |
 | Type de transaction **Crédit** | `transactions.types` | Front et règles `profileTransactionTypes()` |
 
+La visibilité progressive de l'espace boutique se règle avec `storeWorkspace`. Cet axe peut
+masquer les demandes dealer, les dettes internes et certains onglets de Transactions ou
+d'Historique pendant l'accompagnement des caissières. Il ne coupe aucune capacité métier et ne
+demande qu'un nouveau build front : les routes, les données et les contrôles serveur restent en
+place pour permettre une réactivation par profil.
+
 ## 2. Logique de remboursement inter-réseaux — complète, rien à implémenter
 
 Scénario type : un client prend du stock **Orange** et rembourse via **Moov** ; ou prend un
@@ -144,6 +150,7 @@ Invariants métier à respecter au provisioning :
 | 3 | Rebranding | Trivial — ~5 fichiers front | Front uniquement |
 | 4 | Nouveau projet Firebase | Configuration + déploiement + garde-fous scripts | Nouveau projet |
 | 5 | Provisioning | Scripts existants à exécuter | Nouveau projet |
+| 6 | Visibilité progressive de l'espace boutique | Profil `storeWorkspace` | Front uniquement |
 
 **Conclusion : c'est une levée de brides, pas du développement.** Toute la logique métier
 (5 réseaux, crédits, remboursements croisés, paiements partiels, annulations, audit) est

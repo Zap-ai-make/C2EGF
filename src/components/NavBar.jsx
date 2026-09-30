@@ -14,6 +14,10 @@ import { subscribeStorePendingCount } from '../services/storeAdminDealerService'
 import { safeUnsubscribe } from '../services/resilientOnSnapshot'
 import { subscribePendingSettlementsCount } from '../services/collaborationService'
 import { useIncomingCollaborationsCount } from '../hooks/useIncomingCollaborationsCount'
+import {
+  STORE_NAVIGATION_VISIBILITY,
+  STORE_TRANSACTION_VISIBILITY,
+} from '../constants/storeWorkspace.js'
 
 import PWAInstallButton from './PWAInstallButton'
 
@@ -166,6 +170,7 @@ function NavBar() {
 
   useEffect(() => {
     setPendingCount(0)
+    if (!STORE_NAVIGATION_VISIBILITY.dealerRequests) return undefined
     // ⚠ Cet abonnement-ci ne passe PAS par resilientOnSnapshot : il rend la
     //   fonction brute du SDK, qui lève dès que la file interne de Firestore est
     //   tombée. Rendue telle quelle à React, elle ferait tomber la BARRE DE
@@ -186,12 +191,16 @@ function NavBar() {
    */
   useEffect(() => {
     setSettlementsCount(0)
+    if (!STORE_NAVIGATION_VISIBILITY.internalDebts) return undefined
     const storeId = userProfile?.storeId
     if (!storeId) return undefined
     return subscribePendingSettlementsCount({ storeId, onUpdate: setSettlementsCount })
   }, [userProfile?.storeId])
 
-  const collaborationsCount = useIncomingCollaborationsCount(userProfile?.storeId)
+  const collaborationsCount = useIncomingCollaborationsCount(
+    userProfile?.storeId,
+    STORE_TRANSACTION_VISIBILITY.collaborations,
+  )
 
   // Naviguer referme le panneau. Sans ça, il resterait ouvert par-dessus la page
   // qu'on vient de demander.
@@ -214,9 +223,15 @@ function NavBar() {
    * et nulle part ailleurs.
    */
   const compteurs = {
-    [DEALER_REQUESTS_PATH]: pendingCount,
-    [INTERNAL_DEBTS_PATH]: settlementsCount,
-    [TRANSACTIONS_PATH]: collaborationsCount,
+    ...(STORE_NAVIGATION_VISIBILITY.dealerRequests
+      ? { [DEALER_REQUESTS_PATH]: pendingCount }
+      : {}),
+    ...(STORE_NAVIGATION_VISIBILITY.internalDebts
+      ? { [INTERNAL_DEBTS_PATH]: settlementsCount }
+      : {}),
+    ...(STORE_TRANSACTION_VISIBILITY.collaborations
+      ? { [TRANSACTIONS_PATH]: collaborationsCount }
+      : {}),
   }
   Object.keys(compteurs).forEach(assertCompteurAutorise)
   const totalEnAttente = Object.values(compteurs).reduce((somme, n) => somme + n, 0)

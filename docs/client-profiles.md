@@ -47,12 +47,20 @@ la résolution **stricte** (qui lève) est réservée à la génération de règ
 | `cashier.canEditBalances` | édition soldes par la boutique on/off | Front + **Functions** |
 | `dealer.enabled` / `dealer.networks` | dealer absent / mono / multi-réseaux | Front + **Règles** + **Functions** |
 | `collaborations.enabled` | collaborations inter-boutiques + dettes internes on/off | Front + **Functions** |
+| `storeWorkspace` | visibilité progressive des entrées boutique pendant l'accompagnement | Front |
 | `regional.timezone` | fuseau horaire d'affichage des dates | Front |
 
 > `collaborations.enabled` est **indépendant du nombre de réseaux** : une boutique sollicite une
 > consœur parce qu'elle est à court de **stock**, pas parce qu'il lui manque une SIM. Un client
 > mono-réseau en a donc autant besoin qu'un multi-réseaux. Ne pas le déduire de
 > `networks.enabled.length`.
+
+`storeWorkspace` est un axe de **présentation** : il masque des entrées et des onglets sans
+désactiver les capacités, supprimer les routes ni modifier les données. Il permet un démarrage
+progressif avec les équipes terrain. Il ne relève donc pas de l'enforcement serveur décrit
+ci-dessous. Pour C2EGF, les demandes dealer et dettes internes disparaissent de la navigation ;
+les transactions restent centrées sur les clients et l'historique conserve « Transactions
+clients » plus « Ravitaillement ».
 
 Ajouter un axe = ajouter un champ **nommé et commenté** dans `_pilot.js` (défaut le plus
 riche), puis le faire dériver dans les couches.
@@ -114,7 +122,7 @@ manuelle ; il vaut `false` pour C2EGF.
 ### A. Profil (code, commité sur `main`)
 1. **Créer `config/clients/<id>.js`** : copier `_pilot.js` (tout activé) puis **désactiver** ce que
    le client n'utilise pas (réseaux, type `Crédit`, méthodes de règlement, `cashier.canEditBalances`,
-   `dealer.networks`, `regional.timezone`, `branding`). `id` = identifiant **normalisé** (minuscules,
+   `dealer.networks`, `storeWorkspace`, `regional.timezone`, `branding`). `id` = identifiant **normalisé** (minuscules,
    non-alphanumérique → `_`) ; `firebaseProject` = id du projet Firebase.
 2. **L'enregistrer** dans `config/clients/index.js` → `PROFILES` (clé = `id` normalisé).
 3. **Test de caractérisation** façon `tc-083` : figer les constantes attendues du nouveau profil

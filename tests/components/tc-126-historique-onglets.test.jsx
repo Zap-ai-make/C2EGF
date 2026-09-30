@@ -33,6 +33,13 @@ vi.mock('../../src/context/AuthContext', () => ({
     userProfile: { role: 'store_admin', storeId: 'store-a' },
   }),
 }))
+vi.mock('../../src/constants/storeWorkspace.js', () => ({
+  STORE_NAVIGATION_VISIBILITY: { dealerRequests: true, internalDebts: true },
+  STORE_TRANSACTION_VISIBILITY: { dealerOperations: true, collaborations: true },
+  STORE_HISTORY_CONFIG: {
+    dealer: true, dealerLabel: 'Dealer', collaborations: true, internalDebts: true,
+  },
+}))
 vi.mock('../../src/context/transactions.jsx', () => ({
   useTransactions: () => ({ completedTransactions: [], loading: false }),
 }))

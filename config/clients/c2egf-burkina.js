@@ -66,6 +66,26 @@ export const c2egfProfile = Object.freeze({
     canEditBalances: false,
   }),
 
+  // ── Démarrage simplifié pour les caissières ──────────────────────────────
+  // Les capacités restent présentes et testées. Seuls leurs points d'entrée
+  // avancés sont retirés du parcours initial, le temps de la prise en main.
+  storeWorkspace: Object.freeze({
+    navigation: Object.freeze({
+      dealerRequests: false,
+      internalDebts: false,
+    }),
+    transactions: Object.freeze({
+      dealerOperations: false,
+      collaborations: false,
+    }),
+    history: Object.freeze({
+      dealer: true,
+      dealerLabel: 'Ravitaillement',
+      collaborations: false,
+      internalDebts: false,
+    }),
+  }),
+
   // ── Dealer : présent, mono-réseau (Orange) ─────────────────────────────────
   dealer: Object.freeze({
     enabled: true,

@@ -69,6 +69,27 @@ export const pilotProfile = Object.freeze({
     canEditBalances: true,
   }),
 
+  // ── Parcours visible dans l'espace boutique ──────────────────────────────
+  // Ces drapeaux simplifient l'apprentissage sans désactiver les capacités
+  // métier ni leurs routes. Le pilote expose tout ; une instance peut masquer
+  // temporairement les écrans avancés puis les réactiver sans supprimer le code.
+  storeWorkspace: Object.freeze({
+    navigation: Object.freeze({
+      dealerRequests: true,
+      internalDebts: true,
+    }),
+    transactions: Object.freeze({
+      dealerOperations: true,
+      collaborations: true,
+    }),
+    history: Object.freeze({
+      dealer: true,
+      dealerLabel: 'Dealer',
+      collaborations: true,
+      internalDebts: true,
+    }),
+  }),
+
   // ── Circuit dealer (ravitaillement stock/liquidité) ────────────────────────
   // enabled=false → pas d'espace dealer du tout.
   // networks     → réseaux qu'UN dealer approvisionne (multi-réseaux supporté).
