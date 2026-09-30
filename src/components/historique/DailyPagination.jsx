@@ -1,5 +1,27 @@
 import { useState, useMemo } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { storedBusinessDateKey } from '../../utils/businessDate.js'
+
+const transactionDayKey = (transaction) => {
+  const candidates = [
+    transaction?.date,
+    transaction?.createdAt,
+    transaction?.validatedAt,
+    transaction?.updatedAt,
+  ]
+
+  for (const candidate of candidates) {
+    if (candidate == null) continue
+    try {
+      const value = typeof candidate?.toDate === 'function' ? candidate.toDate() : candidate
+      return storedBusinessDateKey(value)
+    } catch {
+      // Une ancienne valeur invalide ne doit pas empêcher l'accès à l'historique.
+    }
+  }
+
+  return storedBusinessDateKey(new Date())
+}
 
 function DailyPagination({ transactions, onDateSelect }) {
   const [currentPage, setCurrentPage] = useState(0)
@@ -10,20 +32,7 @@ function DailyPagination({ transactions, onDateSelect }) {
     const groups = {}
     
     transactions.forEach(transaction => {
-      let dateKey
-      if (transaction.date) {
-        // Format français: "15/09/2025 14:30"
-        const [datePart] = transaction.date.split(' ')
-        if (datePart.includes('/')) {
-          const [day, month, year] = datePart.split('/')
-          const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
-          dateKey = date.toISOString().split('T')[0] // Format YYYY-MM-DD
-        } else {
-          dateKey = new Date(transaction.date).toISOString().split('T')[0]
-        }
-      } else {
-        dateKey = new Date().toISOString().split('T')[0]
-      }
+      const dateKey = transactionDayKey(transaction)
       
       if (!groups[dateKey]) {
         groups[dateKey] = []
@@ -51,11 +60,9 @@ function DailyPagination({ transactions, onDateSelect }) {
   const currentDays = sortedDays.slice(startIndex, startIndex + daysPerPage)
 
   const handleDayClick = (dateKey) => {
-    const selectedDate = new Date(dateKey)
-    const formattedDate = selectedDate.toISOString().split('T')[0]
     onDateSelect && onDateSelect({
-      from: formattedDate,
-      to: formattedDate
+      from: dateKey,
+      to: dateKey
     })
   }
 

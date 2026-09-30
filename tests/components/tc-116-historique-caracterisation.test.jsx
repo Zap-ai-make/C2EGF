@@ -362,6 +362,18 @@ describe('TC-116-D — navigation par jour', () => {
     expect(screen.getByText(/^2 transactions$/)).toBeInTheDocument()
   })
 
+  it('accepte une date Firebase dans les historiques réels', () => {
+    contextValue = baseContext([
+      tx({
+        id: 'firebase-date',
+        date: { toDate: () => new Date(2026, 6, 3, 10, 30) },
+      }),
+    ])
+
+    expect(() => poser()).not.toThrow()
+    expect(screen.getByText('03/07/2026')).toBeInTheDocument()
+  })
+
   it('cliquer une carte filtre sur cette seule journée', () => {
     contextValue = baseContext([
       tx({ id: 'a', client: { nom: 'PREMIER', prenom: 'X' }, date: '01/07/2026 10:00' }),
