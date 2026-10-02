@@ -17,7 +17,7 @@ const normalizeLabel = (value) => String(value || '')
   .replace(/[\u0300-\u036f]/g, '')
   .toLowerCase()
 
-function TransactionForm({ clients }) {
+function TransactionForm({ clients, embedded = false, onComplete, onCancel }) {
   const { toasts, showToast, removeToast } = useToast()
   const { addTransaction, editingTransaction, clearEditTransaction, updateTransaction } = useTransactions()
   const { validateAmount, getStock, getLiquidite, getFormattedStock } = useSimpleNetworkData()
@@ -290,16 +290,23 @@ function TransactionForm({ clients }) {
       setManualAgentCode('')
       setClientSearchResetToken(prev => prev + 1)
       setAmount('')
-      setNetwork('Orange')
+      setNetwork(NETWORK_OPTIONS[0])
       setTransactionType('')
       setPendingConfirmation(null)
+
+      // La caisse reste ouverte entre deux clients : les champs sont vidés, pas
+      // la fenêtre. Rouvrir la modale à chaque passage coûtait un geste par
+      // client, toute la journée. En MODIFICATION c'est l'inverse : rien à
+      // enchaîner, et un formulaire vide après une sauvegarde laisserait croire
+      // qu'on peut encore agir sur la ligne qu'on vient de quitter.
+      if (editingTransaction) onComplete?.()
     } catch (error) {
       showToast(error?.message || 'Erreur lors de la sauvegarde de la transaction', 'error')
       logger.user.error('Transaction save', error)
     } finally {
       setIsSubmitting(false)
     }
-  }, [pendingConfirmation, editingTransaction, updateTransaction, clearEditTransaction, showToast, addTransaction])
+  }, [pendingConfirmation, editingTransaction, updateTransaction, clearEditTransaction, showToast, addTransaction, onComplete])
 
   const cancelPendingSubmit = useCallback(() => {
     setPendingConfirmation(null)
@@ -315,7 +322,8 @@ function TransactionForm({ clients }) {
     setNetwork('Orange')
     setTransactionType('')
     showToast(MESSAGES.SUCCESS.MODIFICATION_CANCELLED, 'info')
-  }, [clearEditTransaction, showToast])
+    onCancel?.()
+  }, [clearEditTransaction, showToast, onCancel])
 
   const nonTermineeDisabledReason = !formValidation.isFormValid || !formValidation.actionStates.canMarkAsNonTermine
     ? formValidation.actionStates.nonTermineeReason
@@ -325,7 +333,7 @@ function TransactionForm({ clients }) {
     : ''
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
+    <div className={embedded ? '' : 'rounded-lg bg-white p-6 shadow-md'}>
       {editingTransaction && (
         <div className="mb-4 rounded border border-brand-200 bg-brand-50 p-3">
           <h3 className="text-lg font-medium text-brand-600">
@@ -333,7 +341,10 @@ function TransactionForm({ clients }) {
           </h3>
         </div>
       )}
-      <div className="space-y-4">
+      {/* Le filet qui enferme la saisie : il dit où commence et où finit ce que
+          le gérant doit remplir, dans une modale où le fond de l'écran reste
+          visible. Sans lui, les champs flottaient contre le bord du dialogue. */}
+      <div className="space-y-4 rounded-lg border border-line p-5">
         {/* Recherche de client */}
         <div>
           <ClientSearch 
@@ -363,7 +374,10 @@ function TransactionForm({ clients }) {
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="Saisir le montant"
-            className={`w-full px-3 py-2 border-2 rounded focus:outline-none transition-colors ${
+            /* Aligné à droite et en chiffres à chasse fixe : un montant se lit
+               par ses unités, et deux saisies successives doivent s'aligner
+               colonne par colonne. C'est la convention de toute caisse. */
+            className={`w-full px-3 py-2 border-2 rounded text-right font-mono tabular-nums focus:outline-none transition-colors ${
               formValidation.stockValidation.isValid
                 ? 'border-line focus-visible:ring-2 focus-visible:ring-brand-400'
                 : 'border-danger focus-visible:ring-2 focus-visible:ring-danger'
@@ -415,8 +429,16 @@ function TransactionForm({ clients }) {
           )}
         </div>
 
-        {/* Réseau */}
+        {/* Réseau — le SÉLECTEUR n'apparaît qu'à partir de deux réseaux.
+            C2EGF n'en opère qu'un : demander à chaque saisie de choisir dans une
+            liste d'un seul élément était un geste pour rien, et un geste de
+            travers possible. Le réseau continue d'être porté par l'état et
+            envoyé avec la transaction ; il vient du profil au lieu de la main.
+            Les messages de validation, eux, restent affichés dans tous les cas :
+            « ce client n'a pas de code Orange » doit se voir même sans liste. */}
         <div>
+          {NETWORK_OPTIONS.length > 1 && (
+          <>
           <label className="block text-lg font-semibold text-gray-700 mb-1">
             Réseau :
           </label>
@@ -445,6 +467,8 @@ function TransactionForm({ clients }) {
               )
             })}
           </select>
+          </>
+          )}
 
           {/* Message d'erreur de validation réseau */}
           {!formValidation.networkValidation.isValid && (selectedClient || manualAgentCode.trim()) && (
@@ -481,32 +505,38 @@ function TransactionForm({ clients }) {
           <label className="block text-lg font-semibold text-gray-700 mb-1">
             Nature :
           </label>
-          <div className={`rounded border border-line p-4 transition-colors ${
-            normalizeLabel(transactionType) === 'depot' ? 'bg-inflow-soft' :
-            normalizeLabel(transactionType) === 'retrait' ? 'bg-outflow-soft' :
-            normalizeLabel(transactionType) === 'credit' ? 'bg-pending-soft' :
-            'bg-surface'
-          }`}>
-          <div className="flex flex-wrap gap-8 md:flex-row flex-col">
-            {TRANSACTION_TYPES.map((type, index) => (
-              <div key={type.value} className="flex items-center">
-                <label className="flex items-center space-x-2 cursor-pointer">
+          {/* Une boîte par nature, au lieu d'un bloc unique coupé d'un trait :
+              chaque option devient une cible franche, et la sélection se lit
+              sur la boîte elle-même. La teinte retenue (entrée / sortie) ne
+              porte jamais seule l'information — le radio natif reste visible et
+              coché (DESIGN.md §5). */}
+          <div className="flex flex-col gap-3 md:flex-row">
+            {TRANSACTION_TYPES.map((type) => {
+              const actif = transactionType === type.value
+              const nature = normalizeLabel(type.value)
+              const teinte = !actif
+                ? 'border-line bg-surface hover:border-brand-200'
+                : nature === 'depot' ? 'border-inflow bg-inflow-soft'
+                : nature === 'retrait' ? 'border-outflow bg-outflow-soft'
+                : 'border-pending bg-pending-soft'
+
+              return (
+                <label
+                  key={type.value}
+                  className={`flex flex-1 cursor-pointer items-center gap-3 rounded border-2 px-4 py-3 transition-colors focus-within:ring-2 focus-within:ring-brand-400 ${teinte}`}
+                >
                   <input
                     type="radio"
                     name="transactionType"
                     value={type.value}
-                    checked={transactionType === type.value}
+                    checked={actif}
                     onChange={(e) => setTransactionType(e.target.value)}
-                    className="h-4 w-4 accent-brand-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                    className="h-4 w-4 accent-brand-500 focus:outline-none"
                   />
-                  <span className="text-gray-700">{type.label}</span>
+                  <span className={`font-semibold ${actif ? 'text-ink' : 'text-gray-700'}`}>{type.label}</span>
                 </label>
-                {index < TRANSACTION_TYPES.length - 1 && (
-                  <div className="ml-8 h-8 border-l border-gray-300"></div>
-                )}
-              </div>
-            ))}
-          </div>
+              )
+            })}
           </div>
         </div>
 

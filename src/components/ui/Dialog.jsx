@@ -166,7 +166,10 @@ function Dialog({ open, onClose, title, description, children, footer, testId, l
             type="button"
             onClick={onClose}
             aria-label="Fermer"
-            className="-mr-1 rounded-md p-1 text-ink-muted transition-colors hover:bg-brand-50 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+            /* La croix est encadrée : posée nue, elle se lisait comme une
+               décoration de l'en-tête plutôt que comme la sortie. Le cadre lui
+               donne une cible franche, au doigt comme à l'œil. */
+            className="-mr-1 rounded-md border border-line p-1.5 text-ink-muted transition-colors hover:bg-brand-50 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
             <X className="h-5 w-5" aria-hidden="true" strokeWidth={1.75} />
           </button>

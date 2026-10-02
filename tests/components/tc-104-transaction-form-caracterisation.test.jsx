@@ -63,22 +63,26 @@ describe('TC-104 — champs du formulaire', () => {
     ).toBeInTheDocument()
   })
 
-  it('expose les trois champs de saisie attendus', () => {
+  // Deux champs, plus le réseau — qui n'est plus SAISI en mono-réseau : il vient
+  // du profil. Voir TC-219 pour son absence d'affichage et sa présence dans la
+  // transaction envoyée.
+  it('expose les deux champs de saisie attendus', () => {
     renderForm()
     expect(screen.getByText('Montant (FCFA) :')).toBeInTheDocument()
-    expect(screen.getByText('Réseau :')).toBeInTheDocument()
     expect(screen.getByText('Nature :')).toBeInTheDocument()
     expect(screen.getByPlaceholderText('Saisir le montant')).toBeInTheDocument()
   })
 })
 
 describe('TC-104 — les options viennent du profil client', () => {
-  it('un seul réseau proposé : Orange', () => {
+  // Le profil ne déclare qu'Orange. Le sélecteur ne s'affiche qu'à partir de
+  // deux réseaux : avec un seul, choisir dans une liste d'un élément n'apporte
+  // rien. Le jour où le profil en déclare deux, la liste revient d'elle-même.
+  it('un seul réseau au profil → aucun sélecteur à remplir', () => {
     renderForm()
-    const options = screen.getAllByRole('option')
-    expect(options).toHaveLength(1)
-    expect(options[0]).toHaveTextContent('Orange')
     expect(NETWORK_OPTIONS).toEqual(['Orange'])
+    expect(screen.queryAllByRole('option')).toHaveLength(0)
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
   })
 
   it('deux natures d’opération : Dépôt et Retrait — pas de Crédit', () => {
