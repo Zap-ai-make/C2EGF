@@ -120,6 +120,25 @@ function applyLiquidityDelta(balances, delta) {
   return next
 }
 
+/**
+ * Le ravitaillement de la centrale.
+ *
+ * C'est la seule opération qui fait MONTER la somme stock + liquidité. Une
+ * transaction client ne fait que la déplacer d'un vase à l'autre : un dépôt
+ * vide le stock et remplit la liquidité, un retrait l'inverse. Ici, de la
+ * valeur entre dans la boutique — d'où une fonction nommée à part plutôt
+ * qu'un `adjustBalanceValue` appelé au milieu d'un handler, pour que la
+ * relecture d'un solde anormal mène droit à la bonne porte.
+ *
+ * Le montant est toujours positif : vider un vase n'est pas un ravitaillement
+ * et n'a pas à passer par ce chemin.
+ */
+export function applyReplenishmentImpact(balances, network, field, amount) {
+  if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error('Montant de ravitaillement invalide.')
+  if (field !== 'stock' && field !== 'liquidite') throw new Error('Vase de ravitaillement inconnu.')
+  return adjustBalanceValue(balances, network, field, amount)
+}
+
 export function applyInitialTransactionImpact(balances, transaction) {
   const amount = transaction.montant
   const pending = ['non terminees'].includes(normalizeType(transaction.statut))

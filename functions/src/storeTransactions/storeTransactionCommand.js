@@ -4,6 +4,7 @@ import { validateAuthUid, validateInputPayload } from '../dealerRequests/shared.
 import {
   normalizeNetworkBalances,
   applyInitialTransactionImpact,
+  applyReplenishmentImpact,
   reverseInitialTransactionImpact,
   applySettlementImpact,
   mapPaymentMethodToNetwork,
@@ -23,6 +24,12 @@ const SETTLEMENT_FIELDS = [
 ]
 const PENDING = ['Non Terminées', 'Non Terminees']
 const VALIDATED = ['Validée', 'Validee']
+const REPLENISHMENT_TYPE = 'Ravitaillement'
+const CLOSURE_TYPE = 'Clôture'
+// Ni l'un ni l'autre n'est un mouvement client : `reverseHistoryTransactionImpact`
+// ne sait pas les défaire, et `cancelHistory` les refuse pour cette raison.
+const UNCANCELLABLE_TYPES = [REPLENISHMENT_TYPE, CLOSURE_TYPE]
+const NOTE_MAX = 280
 
 function fail(code, message) { throw new DealerRequestError(code, message) }
 function cleanId(value, field) {
@@ -32,6 +39,13 @@ function cleanId(value, field) {
 function cleanAmount(value) {
   if (!Number.isSafeInteger(value) || value <= 0) fail('STORE_TRANSACTION_INVALID', 'Montant FCFA invalide.')
   return value
+}
+// La note du ravitaillement est libre et facultative, donc bornée : elle finit
+// dans un historique qu'on relit, pas dans un champ de recherche.
+function cleanNote(value) {
+  if (value === undefined || value === null) return ''
+  if (typeof value !== 'string' || value.length > NOTE_MAX) fail('STORE_TRANSACTION_INVALID', 'Note invalide.')
+  return value.trim()
 }
 function cleanTransaction(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) fail('STORE_TRANSACTION_INVALID', 'Transaction invalide.')
@@ -72,7 +86,7 @@ async function readActor(t, db, uid) {
 
 export async function storeTransactionCommandHandler(request, { db, FieldValue, logWriter = write }) {
   const uid = validateAuthUid(request.auth?.uid)
-  const payload = validateInputPayload(request.data, ['action', 'transaction', 'draftId', 'historyId', 'updates', 'paymentMethod', 'amount', 'network', 'balanceType', 'balanceAmount', 'balances'])
+  const payload = validateInputPayload(request.data, ['action', 'transaction', 'draftId', 'historyId', 'updates', 'paymentMethod', 'amount', 'network', 'balanceType', 'balanceAmount', 'balances', 'note'])
   const action = String(payload.action || '')
   const now = FieldValue.serverTimestamp()
 
@@ -133,6 +147,40 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       return { id: ref.id, ...data }
     }
 
+    // Ravitaillement : la centrale réapprovisionne la boutique. Le client ne
+    // choisit que le montant, le vase et la note ; le réseau vient du profil
+    // (STORE_NETWORKS), jamais de la charge utile — un réseau soufflé par le
+    // navigateur crediterait un solde que la boutique n'opère pas.
+    if (action === 'replenish') {
+      const amount = cleanAmount(payload.amount)
+      if (!['stock', 'liquidite'].includes(payload.balanceType)) fail('STORE_TRANSACTION_INVALID', 'Vase de ravitaillement inconnu.')
+      const note = cleanNote(payload.note)
+      const network = STORE_NETWORKS[0]
+      const nextBalances = applyReplenishmentImpact(balances, network, payload.balanceType, amount)
+      const ref = db.collection(`clients/${storeId}/history`).doc()
+      const data = {
+        type: REPLENISHMENT_TYPE,
+        montant: amount,
+        reseau: network,
+        balanceType: payload.balanceType,
+        statut: 'Validée',
+        note,
+        storeId,
+        storeName: store.name || profile.storeName || '',
+        operatorId: uid,
+        operatorName: profile.name || '',
+        operatorEmail: profile.email || '',
+        date: dateFr(),
+        createdAt: now,
+        updatedAt: now,
+        validatedAt: now,
+      }
+      t.set(ref, data)
+      t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
+      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: ref.id, uid, balanceType: payload.balanceType, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
+      return { id: ref.id, ...data }
+    }
+
     if (action === 'updateDraft') {
       const draftId = cleanId(payload.draftId, 'draftId')
       const ref = db.doc(`clients/${storeId}/drafts/${draftId}`)
@@ -183,6 +231,46 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       return { validated: true, historyId: historyRef.id }
     }
 
+    // Clôture : la boutique repart de zéro. On écrit d'abord ce qu'on solde,
+    // on remet à zéro ensuite — l'inverse ferait disparaître les montants des
+    // livres. Rien n'est lu dans la charge utile : le serveur solde ce qu'il
+    // voit, et un montant soufflé par le navigateur n'a aucun effet.
+    if (action === 'closeDay') {
+      const soldes = STORE_NETWORKS.map(network => ({
+        network,
+        stock: Number(balances[network]?.stock) || 0,
+        liquidite: Number(balances[network]?.liquidite) || 0,
+      }))
+      const total = soldes.reduce((somme, s) => somme + s.stock + s.liquidite, 0)
+      if (total <= 0) fail('STORE_TRANSACTION_INVALID', 'Les soldes sont déjà à zéro.')
+
+      const nextBalances = normalizeNetworkBalances({})
+      const principal = soldes[0]
+      const ref = db.collection(`clients/${storeId}/history`).doc()
+      const data = {
+        type: CLOSURE_TYPE,
+        montant: total,
+        reseau: principal.network,
+        stockSolde: principal.stock,
+        liquiditeSoldee: principal.liquidite,
+        soldes,
+        statut: 'Validée',
+        storeId,
+        storeName: store.name || profile.storeName || '',
+        operatorId: uid,
+        operatorName: profile.name || '',
+        operatorEmail: profile.email || '',
+        date: dateFr(),
+        createdAt: now,
+        updatedAt: now,
+        validatedAt: now,
+      }
+      t.set(ref, data)
+      t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
+      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: ref.id, uid, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
+      return { id: ref.id, ...data }
+    }
+
     if (action === 'cancelHistory') {
       const historyId = cleanId(payload.historyId, 'historyId')
       const ref = db.doc(`clients/${storeId}/history/${historyId}`)
@@ -190,6 +278,11 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       if (!snap.exists) fail('STORE_TRANSACTION_NOT_FOUND', 'Transaction introuvable.')
       const history = snap.data()
       if (history.collaborationId) fail('STORE_TRANSACTION_INVALID', "Une trace de collaboration ne peut pas être annulée depuis l'historique.")
+      // `reverseHistoryTransactionImpact` ne sait défaire qu'un dépôt ou un
+      // retrait. Sur un ravitaillement ou une clôture il ne rendrait rien et la
+      // ligne passerait quand même à « Annulée » : le solde resterait faux sans
+      // trace du désaccord. On refuse plutôt que de mentir au gérant.
+      if (UNCANCELLABLE_TYPES.includes(history.type)) fail('STORE_TRANSACTION_INVALID', `Une ligne « ${history.type} » ne s'annule pas depuis l'historique.`)
       const nextBalances = reverseHistoryTransactionImpact(balances, history)
       t.update(ref, { statut: 'Annulée', cancelledAt: now, cancelledBy: uid, updatedAt: now })
       t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
