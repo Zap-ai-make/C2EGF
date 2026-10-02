@@ -48,6 +48,7 @@ describe('TC-083 — Constantes dérivées du profil client actif', () => {
   it('le démarrage C2EGF expose uniquement le parcours simplifié des caissières', () => {
     expect(activeProfile.storeWorkspace).toEqual({
       navigation: {
+        standaloneClientForm: false,
         dealerRequests: false,
         internalDebts: false,
       },
@@ -67,6 +68,7 @@ describe('TC-083 — Constantes dérivées du profil client actif', () => {
   it('le pilote conserve l’espace boutique complet pour les autres instances', () => {
     expect(resolveProfile('_pilot').storeWorkspace).toEqual({
       navigation: {
+        standaloneClientForm: true,
         dealerRequests: true,
         internalDebts: true,
       },

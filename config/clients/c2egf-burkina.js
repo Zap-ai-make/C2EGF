@@ -71,6 +71,7 @@ export const c2egfProfile = Object.freeze({
   // avancés sont retirés du parcours initial, le temps de la prise en main.
   storeWorkspace: Object.freeze({
     navigation: Object.freeze({
+      standaloneClientForm: false,
       dealerRequests: false,
       internalDebts: false,
     }),

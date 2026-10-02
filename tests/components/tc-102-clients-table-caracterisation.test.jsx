@@ -56,8 +56,15 @@ const makeClients = (n) =>
     dateAjout: '26/08/2026 10:00',
   }))
 
-const renderTable = (clients) =>
-  render(<ClientsTable clients={clients} onEdit={vi.fn()} onImportClients={vi.fn()} />)
+const renderTable = (clients, onAddClient = vi.fn()) =>
+  render(
+    <ClientsTable
+      clients={clients}
+      onEdit={vi.fn()}
+      onImportClients={vi.fn()}
+      onAddClient={onAddClient}
+    />,
+  )
 
 const dataRows = () => Array.from(document.querySelectorAll('tbody tr'))
 
@@ -164,7 +171,7 @@ describe('TC-102 — états et actions', () => {
 
   it('le bouton d’export annonce le nombre d’éléments concernés', () => {
     renderTable(makeClients(12))
-    expect(screen.getByRole('button', { name: /Exporter \(XLSM\) \(12\)/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Exporter (XLSM) · 12' })).toBeInTheDocument()
   })
 
   it('liste vide → l’export n’annonce aucun compte', () => {
@@ -175,5 +182,14 @@ describe('TC-102 — états et actions', () => {
   it('propose l’import de fichier', () => {
     renderTable(makeClients(2))
     expect(screen.getByRole('button', { name: 'Importer (XLSM)' })).toBeInTheDocument()
+  })
+
+  it('propose l’ajout d’un client à côté des actions de fichier', () => {
+    const onAddClient = vi.fn()
+    renderTable(makeClients(2), onAddClient)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ajouter un client' }))
+
+    expect(onAddClient).toHaveBeenCalledOnce()
   })
 })

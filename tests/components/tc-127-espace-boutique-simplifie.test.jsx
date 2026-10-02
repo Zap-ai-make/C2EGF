@@ -65,7 +65,6 @@ describe('TC-127 — espace boutique simplifié pour le démarrage C2EGF', () =>
     expect(STORE_NAV_ITEMS.map((item) => item.name)).toEqual([
       'Tableau de bord',
       'Transactions',
-      'Formulaire',
       'Clients',
       'Historique',
     ])

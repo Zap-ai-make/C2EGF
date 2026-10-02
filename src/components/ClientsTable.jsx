@@ -11,9 +11,9 @@ import Pagination from './Pagination'
 import Toast from './Toast'
 import PageHeader from './ui/PageHeader'
 import EmptyState from './ui/EmptyState'
-import { Users, SearchX } from 'lucide-react'
+import { Download, Plus, Users, SearchX } from 'lucide-react'
 
-function ClientsTable({ clients, onEdit, onImportClients, emptyAction }) {
+function ClientsTable({ clients, onEdit, onImportClients, onAddClient, emptyAction }) {
   const { toasts, showToast, removeToast } = useToast()
   const { activeStore } = useContext(AuthContext)
   const { searchTerm, setSearchTerm, selectedMonth, setSelectedMonth, filteredClients } = useClientsFilter(clients)
@@ -47,20 +47,33 @@ function ClientsTable({ clients, onEdit, onImportClients, emptyAction }) {
       />
 
       {/* Boutons d'action en haut */}
-      <div className="flex flex-wrap justify-between gap-3 mb-6">
+      <div className="mb-6 flex flex-wrap justify-between gap-3">
         <button 
+          type="button"
           onClick={handleImportClick}
           disabled={isImporting}
           className="rounded border border-line bg-surface px-6 py-2 font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         >
           {isImporting ? 'Import en cours...' : 'Importer (XLSM)'}
         </button>
-        <button 
-          onClick={() => handleExport(filteredClients)}
-          className="rounded border border-line bg-surface px-6 py-2 font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-        >
-          Exporter (XLSM) {filteredClients.length > 0 && `(${filteredClients.length})`}
-        </button>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => handleExport(filteredClients)}
+            className="inline-flex items-center justify-center gap-2 rounded border border-line bg-surface px-6 py-2 font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+          >
+            <Download className="h-5 w-5" aria-hidden="true" strokeWidth={1.75} />
+            Exporter (XLSM) {filteredClients.length > 0 && `· ${filteredClients.length}`}
+          </button>
+          <button
+            type="button"
+            onClick={onAddClient}
+            className="inline-flex items-center justify-center gap-2 rounded bg-brand-500 px-6 py-2 font-medium text-white transition-colors hover:bg-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+          >
+            <Plus className="h-5 w-5" aria-hidden="true" strokeWidth={1.75} />
+            Ajouter un client
+          </button>
+        </div>
       </div>
 
       {/* Filtres */}

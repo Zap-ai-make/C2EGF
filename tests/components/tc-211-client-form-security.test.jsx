@@ -11,8 +11,8 @@ describe('TC-211 — formulaire client', () => {
     render(<ClientForm onSubmit={vi.fn()} />)
 
     expect(localStorage.getItem(storageKey)).toBeNull()
-    expect(screen.getByLabelText('Nom')).toHaveValue('')
-    expect(screen.getByLabelText('Prénom')).toHaveValue('')
+    expect(screen.getByLabelText(/^Nom \*/)).toHaveValue('')
+    expect(screen.getByLabelText(/^Prénom \*/)).toHaveValue('')
     expect(screen.getByLabelText("Numéro d'identité")).toBeInTheDocument()
     expect(screen.getByLabelText('Numéro personnel')).toBeInTheDocument()
     expect(screen.getByLabelText('Numéro agent / Code agent')).toBeInTheDocument()

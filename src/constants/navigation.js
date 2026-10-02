@@ -42,7 +42,9 @@ export const INTERNAL_DEBTS_PATH = '/dettes'
 export const STORE_NAV_ITEMS = [
   { name: 'Tableau de bord', path: '/',                group: NAV_GROUPS.COURANT },
   { name: 'Transactions',    path: '/transactions',    group: NAV_GROUPS.COURANT },
-  { name: 'Formulaire',      path: '/formulaire',      group: NAV_GROUPS.COURANT },
+  ...(STORE_NAVIGATION_VISIBILITY.standaloneClientForm
+    ? [{ name: 'Formulaire', path: '/formulaire', group: NAV_GROUPS.COURANT }]
+    : []),
   ...(STORE_NAVIGATION_VISIBILITY.dealerRequests
     ? [{ name: 'Demandes Dealer', path: '/dealer-requests', group: NAV_GROUPS.COURANT }]
     : []),

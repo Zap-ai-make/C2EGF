@@ -1,13 +1,14 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { ChevronLeft } from 'lucide-react'
 import { useClients } from '../hooks/useClients'
 import ClientsTable from '../components/ClientsTable'
 import ClientForm from '../components/ClientForm'
+import Dialog from '../components/ui/Dialog'
 
 function Clients() {
   const { clients, editClient, addClient } = useClients()
   const [editingClient, setEditingClient] = useState(null)
+  const [isAddingClient, setIsAddingClient] = useState(false)
 
   // Pas de suppression ici, et ce n'est pas un oubli. Le bouton « Supprimer »
   // de TableRow est désactivé en dur — « pour protéger la base clients
@@ -26,6 +27,11 @@ function Clients() {
   const handleEditSubmit = async (updatedData) => {
     await editClient(editingClient.id, updatedData)
     setEditingClient(null)
+  }
+
+  const handleAddSubmit = async (newClient) => {
+    await addClient(newClient)
+    setIsAddingClient(false)
   }
 
   const handleCancelEdit = () => {
@@ -67,21 +73,35 @@ function Clients() {
   }
 
   return (
-    <ClientsTable
-      clients={clients}
-      onEdit={handleEdit}
-      onImportClients={handleImportClients}
-      emptyAction={
-        // L'issue proposée par l'état vide. Elle vit ICI et non dans le tableau :
-        // seule la page connaît le routeur, et le tableau reste testable seul.
-        <Link
-          to="/formulaire"
-          className="rounded bg-brand-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-        >
-          Enregistrer un client
-        </Link>
-      }
-    />
+    <>
+      <ClientsTable
+        clients={clients}
+        onEdit={handleEdit}
+        onImportClients={handleImportClients}
+        onAddClient={() => setIsAddingClient(true)}
+        emptyAction={
+          <button
+            type="button"
+            onClick={() => setIsAddingClient(true)}
+            className="rounded bg-brand-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+          >
+            Enregistrer un client
+          </button>
+        }
+      />
+
+      <Dialog
+        open={isAddingClient}
+        onClose={() => setIsAddingClient(false)}
+        title="Ajouter un client"
+        description="Les champs marqués d'une étoile sont obligatoires"
+        largeur="max-w-6xl"
+        spacious
+        testId="ajout-client-dialog"
+      >
+        <ClientForm onSubmit={handleAddSubmit} embedded />
+      </Dialog>
+    </>
   )
 }
 

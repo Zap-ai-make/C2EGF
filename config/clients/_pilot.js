@@ -75,6 +75,9 @@ export const pilotProfile = Object.freeze({
   // temporairement les écrans avancés puis les réactiver sans supprimer le code.
   storeWorkspace: Object.freeze({
     navigation: Object.freeze({
+      // Affiche la page autonome d'ajout client dans la navigation principale.
+      // Une instance peut la masquer quand l'ajout est proposé depuis Clients.
+      standaloneClientForm: true,
       dealerRequests: true,
       internalDebts: true,
     }),

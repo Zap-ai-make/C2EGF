@@ -20,7 +20,7 @@ const EMPTY_CLIENT_FORM = {
 
 const LEGACY_CLIENT_FORM_DRAFT_KEY = getStorageKey('client_form_draft')
 
-function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client' }) {
+function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client', embedded = false }) {
   const { toasts, showToast, removeToast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState(EMPTY_CLIENT_FORM)
@@ -104,14 +104,12 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client' 
 
   const inputClasses = "w-full rounded border border-line px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
 
-  return (
-    <div className="bg-white rounded-lg shadow-md p-6 w-full">
-      <PageHeader title={title} />
-
-      <form onSubmit={handleSubmit} className="space-y-4">
+  const formContent = (
+    <>
+      <form onSubmit={handleSubmit} className={embedded ? 'grid grid-cols-1 gap-x-7 gap-y-5 md:grid-cols-2' : 'space-y-4'}>
         <div>
           <label htmlFor="client-nom" className="block text-sm font-medium text-gray-700 mb-1">
-            Nom
+            Nom <span className="text-danger" aria-hidden="true">*</span>
           </label>
           <input
             id="client-nom"
@@ -126,7 +124,7 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client' 
 
         <div>
           <label htmlFor="client-prenom" className="block text-sm font-medium text-gray-700 mb-1">
-            Prénom
+            Prénom <span className="text-danger" aria-hidden="true">*</span>
           </label>
           <input
             id="client-prenom"
@@ -212,7 +210,7 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client' 
         <button
           type="submit"
           disabled={isSubmitting}
-          className="mt-6 rounded bg-brand-500 px-6 py-2 font-medium text-white transition-colors hover:bg-brand-600 disabled:bg-gray-300 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+          className={`${embedded ? 'md:col-span-2 md:justify-self-end' : 'mt-6'} rounded bg-brand-500 px-6 py-2 font-medium text-white transition-colors hover:bg-brand-600 disabled:bg-gray-300 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400`}
         >
           {isSubmitting ? 'Enregistrement...' : initialData ? 'Modifier' : 'Enregistrer'}
         </button>
@@ -230,6 +228,17 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client' 
           />
         ))}
       </div>
+    </>
+  )
+
+  if (embedded) {
+    return formContent
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow-md p-6 w-full">
+      <PageHeader title={title} />
+      {formContent}
     </div>
   )
 }

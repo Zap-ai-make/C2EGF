@@ -44,7 +44,7 @@ const CIBLES_FOCUSABLES = [
  *   à `max-w-md`, la dernière colonne du second sortait du cadre, et c'était
  *   celle qu'on venait chercher.
  */
-function Dialog({ open, onClose, title, description, children, footer, testId, largeur = 'max-w-md' }) {
+function Dialog({ open, onClose, title, description, children, footer, testId, largeur = 'max-w-md', spacious = false }) {
   const panneau = useRef(null)
   const corps = useRef(null)
   const focusPrecedent = useRef(null)
@@ -157,10 +157,10 @@ function Dialog({ open, onClose, title, description, children, footer, testId, l
         data-testid={testId}
         className={`max-h-full w-full ${largeur} overflow-y-auto rounded-xl border border-line bg-surface shadow-xl`}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
+        <div className={`flex items-start justify-between gap-4 border-b border-line ${spacious ? 'px-7 py-5' : 'px-5 py-4'}`}>
           <div className="min-w-0">
-            <h2 id={titleId} className="text-base font-semibold text-ink">{title}</h2>
-            {description && <p id={descriptionId} className="mt-0.5 text-sm text-ink-muted">{description}</p>}
+            <h2 id={titleId} className={`${spacious ? 'text-2xl' : 'text-base'} font-semibold text-ink`}>{title}</h2>
+            {description && <p id={descriptionId} className={`mt-0.5 ${spacious ? 'text-base' : 'text-sm'} text-ink-muted`}>{description}</p>}
           </div>
           <button
             type="button"
@@ -172,7 +172,7 @@ function Dialog({ open, onClose, title, description, children, footer, testId, l
           </button>
         </div>
 
-        <div ref={corps} className="px-5 py-4">{children}</div>
+        <div ref={corps} className={spacious ? 'px-7 py-5' : 'px-5 py-4'}>{children}</div>
 
         {footer && (
           <div className="flex flex-wrap justify-end gap-2 border-t border-line bg-brand-50 px-5 py-3">

@@ -34,7 +34,7 @@ vi.mock('../../src/context/AuthContext', () => ({
   }),
 }))
 vi.mock('../../src/constants/storeWorkspace.js', () => ({
-  STORE_NAVIGATION_VISIBILITY: { dealerRequests: true, internalDebts: true },
+  STORE_NAVIGATION_VISIBILITY: { standaloneClientForm: true, dealerRequests: true, internalDebts: true },
   STORE_TRANSACTION_VISIBILITY: { dealerOperations: true, collaborations: true },
   STORE_HISTORY_CONFIG: {
     dealer: true, dealerLabel: 'Dealer', collaborations: true, internalDebts: true,
