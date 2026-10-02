@@ -198,8 +198,11 @@ const dealerCtx = () => ({
 // ============================================================================
 
 describe('TC-027-R — getDefaultRouteForRole', () => {
-  it('R-1 : store_admin → "/"', () => {
-    expect(getDefaultRouteForRole(AUTH_ROLES.STORE_ADMIN)).toBe('/')
+  // Le profil C2EGF masque le tableau de bord : le « chez-soi » du gérant est
+  // Transactions, et toute redirection le dépose donc là, pas sur une page
+  // absente de sa navigation (storeWorkspace.navigation.dashboard).
+  it('R-1 : store_admin → "/transactions"', () => {
+    expect(getDefaultRouteForRole(AUTH_ROLES.STORE_ADMIN)).toBe('/transactions')
   })
 
   it('R-2 : system_manager → "/admin"', () => {
@@ -289,14 +292,14 @@ describe('TC-027-G — RoleGuard', () => {
     expect(screen.getByTestId('private')).toBeInTheDocument()
   })
 
-  it('G-6 : store_admin refusé sur /admin → redirigé vers "/"', () => {
+  it('G-6 : store_admin refusé sur /admin → redirigé vers "/transactions"', () => {
     // Route guard placée directement sur /admin pour éviter le conflit de priorité /*
     useAuth.mockReturnValue(storeAdminCtx())
     render(
       <MemoryRouter initialEntries={['/admin']}>
         <Routes>
           <Route path="/admin" element={<RoleGuard allowedRoles={[AUTH_ROLES.SYSTEM_MANAGER]}><PrivateContent /></RoleGuard>} />
-          <Route path="/" element={<div data-testid="store-root">BOUTIQUE</div>} />
+          <Route path="/transactions" element={<div data-testid="store-root">BOUTIQUE</div>} />
         </Routes>
       </MemoryRouter>
     )
@@ -304,13 +307,13 @@ describe('TC-027-G — RoleGuard', () => {
     expect(screen.queryByTestId('private')).not.toBeInTheDocument()
   })
 
-  it('G-7 : store_admin refusé sur /dealer → redirigé vers "/"', () => {
+  it('G-7 : store_admin refusé sur /dealer → redirigé vers "/transactions"', () => {
     useAuth.mockReturnValue(storeAdminCtx())
     render(
       <MemoryRouter initialEntries={['/dealer']}>
         <Routes>
           <Route path="/dealer" element={<RoleGuard allowedRoles={[AUTH_ROLES.DEALER]}><PrivateContent /></RoleGuard>} />
-          <Route path="/" element={<div data-testid="store-root">BOUTIQUE</div>} />
+          <Route path="/transactions" element={<div data-testid="store-root">BOUTIQUE</div>} />
         </Routes>
       </MemoryRouter>
     )
@@ -620,6 +623,7 @@ describe('TC-027-X — Redirections croisées', () => {
             }
           >
             <Route path="/" element={null} />
+            <Route path="/transactions" element={null} />
             <Route path="/clients" element={null} />
           </Route>
           <Route
@@ -660,13 +664,13 @@ describe('TC-027-X — Redirections croisées', () => {
     expect(screen.queryByTestId('dealer-space')).not.toBeInTheDocument()
   })
 
-  it('X-3 : store_admin sur /admin → redirigé vers "/"', () => {
+  it('X-3 : store_admin sur /admin → redirigé vers "/transactions"', () => {
     renderCrossRoutes(storeAdminCtx(), '/admin')
     expect(screen.getByTestId('boutique-space')).toBeInTheDocument()
     expect(screen.queryByTestId('admin-space')).not.toBeInTheDocument()
   })
 
-  it('X-4 : store_admin sur /dealer → redirigé vers "/"', () => {
+  it('X-4 : store_admin sur /dealer → redirigé vers "/transactions"', () => {
     renderCrossRoutes(storeAdminCtx(), '/dealer')
     expect(screen.getByTestId('boutique-space')).toBeInTheDocument()
     expect(screen.queryByTestId('dealer-space')).not.toBeInTheDocument()

@@ -194,7 +194,7 @@ function renderSignInWithRoutes(initialPath = '/auth') {
       <LocationDisplay />
       <Routes>
         <Route path="/auth" element={<SignInForm onToggle={vi.fn()} />} />
-        <Route path="/" element={<div data-testid="store-home">Boutique</div>} />
+        <Route path="/transactions" element={<div data-testid="store-home">Boutique</div>} />
         <Route path="/admin" element={<div data-testid="admin-home">Admin</div>} />
         <Route path="/dealer" element={<div data-testid="dealer-home">Dealer</div>} />
       </Routes>
@@ -228,7 +228,7 @@ describe('TC-043-N — Navigation post-login (SignInForm)', () => {
     expect(screen.getByTestId('admin-home')).toBeInTheDocument()
   })
 
-  it('N-2 : store_admin connecté → navigue vers /', async () => {
+  it('N-2 : store_admin connecté → navigue vers /transactions', async () => {
     const signin = vi.fn().mockResolvedValue({ role: AUTH_ROLES.STORE_ADMIN })
     setupFormMock(signin)
 
@@ -236,7 +236,7 @@ describe('TC-043-N — Navigation post-login (SignInForm)', () => {
     submitForm(container)
 
     await waitFor(() => {
-      expect(screen.getByTestId('location').textContent).toBe('/')
+      expect(screen.getByTestId('location').textContent).toBe('/transactions')
     })
     expect(screen.getByTestId('store-home')).toBeInTheDocument()
   })
@@ -302,7 +302,7 @@ describe('TC-043-G — Cloisonnement routes admin', () => {
               </RoleGuard>
             }
           />
-          <Route path="/" element={<div data-testid="store-root">Boutique</div>} />
+          <Route path="/transactions" element={<div data-testid="store-root">Boutique</div>} />
           <Route path="/dealer" element={<div data-testid="dealer-root">Dealer</div>} />
         </Routes>
       </MemoryRouter>
@@ -321,7 +321,7 @@ describe('TC-043-G — Cloisonnement routes admin', () => {
     expect(screen.getByTestId('dealer-root')).toBeInTheDocument()
   })
 
-  it('G-3 : store_admin → bloqué sur /admin, redirigé vers /', () => {
+  it('G-3 : store_admin → bloqué sur /admin, redirigé vers /transactions', () => {
     renderAdminRoute(storeAdminCtx())
     expect(screen.queryByTestId('admin-content')).not.toBeInTheDocument()
     expect(screen.getByTestId('store-root')).toBeInTheDocument()

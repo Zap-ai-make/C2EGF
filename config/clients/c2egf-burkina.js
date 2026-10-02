@@ -71,6 +71,10 @@ export const c2egfProfile = Object.freeze({
   // avancés sont retirés du parcours initial, le temps de la prise en main.
   storeWorkspace: Object.freeze({
     navigation: Object.freeze({
+      // Le gérant C2EGF travaille dans Transactions du matin au soir : le
+      // tableau de bord encombrait la rangée sans être ouvert. Masqué, pas
+      // supprimé — `/` reste atteignable et le rallumer est un simple `true`.
+      dashboard: false,
       standaloneClientForm: false,
       dealerRequests: false,
       internalDebts: false,

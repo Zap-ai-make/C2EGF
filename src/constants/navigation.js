@@ -40,7 +40,9 @@ export const INTERNAL_DEBTS_PATH = '/dettes'
  *   supprimer sa route : sa réactivation reste alors un simple choix de profil.
  */
 export const STORE_NAV_ITEMS = [
-  { name: 'Tableau de bord', path: '/',                group: NAV_GROUPS.COURANT },
+  ...(STORE_NAVIGATION_VISIBILITY.dashboard
+    ? [{ name: 'Tableau de bord', path: '/', group: NAV_GROUPS.COURANT }]
+    : []),
   { name: 'Transactions',    path: '/transactions',    group: NAV_GROUPS.COURANT },
   ...(STORE_NAVIGATION_VISIBILITY.standaloneClientForm
     ? [{ name: 'Formulaire', path: '/formulaire', group: NAV_GROUPS.COURANT }]

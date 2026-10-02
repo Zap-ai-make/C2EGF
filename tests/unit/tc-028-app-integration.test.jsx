@@ -369,10 +369,10 @@ describe('TC-028-A — URL finale par rôle', () => {
 describe('TC-028-B — Wildcard et états bloqués', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('B-1 : store_admin sur URL inconnue → redirigé vers "/"', async () => {
+  it('B-1 : store_admin sur URL inconnue → redirigé vers "/transactions"', async () => {
     renderApp(storeAdminCtx(), '/page-inconnue')
-    expect(await screen.findByTestId('page-dashboard')).toBeInTheDocument()
-    expect(screen.getByTestId('location').textContent).toBe('/')
+    expect(await screen.findByTestId('page-transactions')).toBeInTheDocument()
+    expect(screen.getByTestId('location').textContent).toBe('/transactions')
   })
 
   it('B-2 : system_manager sur URL inconnue → redirigé vers "/admin"', async () => {
@@ -498,10 +498,10 @@ describe('TC-028-D — Isolation routes Dealer', () => {
     expect(await screen.findByTestId('dealer-requests-new')).toBeInTheDocument()
   })
 
-  it('D-4 : store_admin sur /dealer/stores → redirigé vers / (Dashboard)', async () => {
+  it('D-4 : store_admin sur /dealer/stores → redirigé vers /transactions', async () => {
     renderApp(storeAdminCtx(), '/dealer/stores')
     expect(screen.queryByTestId('dealer-stores')).not.toBeInTheDocument()
-    expect(await screen.findByTestId('page-dashboard')).toBeInTheDocument()
+    expect(await screen.findByTestId('page-transactions')).toBeInTheDocument()
   })
 
   it('D-5 : system_manager sur /dealer/stores → redirigé vers /admin', async () => {
@@ -516,16 +516,16 @@ describe('TC-028-D — Isolation routes Dealer', () => {
     expect(screen.getByTestId('auth-page')).toBeInTheDocument()
   })
 
-  it('D-7 : store_admin sur /dealer/requests → redirigé vers /', async () => {
+  it('D-7 : store_admin sur /dealer/requests → redirigé vers /transactions', async () => {
     renderApp(storeAdminCtx(), '/dealer/requests')
     expect(screen.queryByTestId('dealer-requests')).not.toBeInTheDocument()
-    expect(await screen.findByTestId('page-dashboard')).toBeInTheDocument()
+    expect(await screen.findByTestId('page-transactions')).toBeInTheDocument()
   })
 
-  it('D-8 : store_admin sur /dealer/requests/new → redirigé vers /', async () => {
+  it('D-8 : store_admin sur /dealer/requests/new → redirigé vers /transactions', async () => {
     renderApp(storeAdminCtx(), '/dealer/requests/new')
     expect(screen.queryByTestId('dealer-requests-new')).not.toBeInTheDocument()
-    expect(await screen.findByTestId('page-dashboard')).toBeInTheDocument()
+    expect(await screen.findByTestId('page-transactions')).toBeInTheDocument()
   })
 
   it('D-9 : system_manager sur /dealer/requests → redirigé vers /admin', async () => {

@@ -295,11 +295,25 @@ function NavBar() {
     <nav className={`${themeClasses.navbar} w-full`}>
       <div className="relative flex w-full items-center gap-3 px-4">
 
-        {/* ── Bureau : la rangée, centrée sur le même axe que la marque ────── */}
-        <div className="hidden flex-1 items-center justify-center md:flex">
-          {courant.map(renduBureau)}
-          <span className="mx-3 h-6 w-px shrink-0 bg-white/25" aria-hidden="true" />
-          {referentiel.map(renduBureau)}
+        {/* ── Bureau : le groupe « courant » au centre RÉEL de la barre ─────
+            Le gérant passe sa journée dans Transactions ; elle mérite l'axe,
+            pas une place prise par ce qui l'entoure. Une grille à trois
+            colonnes dont les deux extérieures sont égales (`1fr`) y pose le
+            groupe quelle que soit la largeur des consultations à sa droite —
+            ce qu'un `justify-center` sur la rangée entière ne sait pas faire :
+            il centre l'ENSEMBLE, donc décale le premier groupe vers la gauche
+            dès que le second est plus large. Les consultations restent
+            groupées derrière le filet, qui continue de dire que les deux
+            groupes ne sont pas de même nature. */}
+        <div className="hidden flex-1 items-center md:grid md:grid-cols-[1fr_auto_1fr]">
+          <span aria-hidden="true" />
+          <div className="flex items-center justify-center gap-2">
+            {courant.map(renduBureau)}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="mx-4 h-6 w-px shrink-0 bg-white/25" aria-hidden="true" />
+            {referentiel.map(renduBureau)}
+          </div>
         </div>
 
         {/* ── Mobile : un bouton, et un panneau ─────────────────────────────

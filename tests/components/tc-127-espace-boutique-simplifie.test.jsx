@@ -11,6 +11,12 @@ vi.mock('../../src/context/AuthContext', () => ({
 }))
 vi.mock('../../src/context/transactions.jsx', () => ({
   useTransactions: () => ({
+    pendingTransactions: [
+      { id: 'tx-1', type: 'Retrait' },
+      { id: 'tx-1', type: 'Retrait' },
+    ],
+    editingTransaction: null,
+    clearEditTransaction: vi.fn(),
     historyHasMore: false,
     historyLoadingMore: false,
     loadMoreHistory: vi.fn(),
@@ -42,7 +48,13 @@ vi.mock('../../src/components/transactions/CollaborationsPanel', () => ({
   default: () => <div data-testid="contenu-collaborations" />,
 }))
 vi.mock('../../src/components/ui/PageHeader', () => ({
-  default: ({ title }) => <h1>{title}</h1>,
+  default: ({ title, subtitle, actions }) => (
+    <header>
+      <h1>{title}</h1>
+      <p>{subtitle}</p>
+      {actions}
+    </header>
+  ),
 }))
 
 vi.mock('../../src/components/historique/DateFilter', () => ({ default: () => null }))
@@ -62,27 +74,38 @@ import Historique from '../../src/pages/Historique.jsx'
 
 describe('TC-127 — espace boutique simplifié pour le démarrage C2EGF', () => {
   it('masque les demandes dealer et les dettes internes de la navigation', () => {
+    // Le tableau de bord a quitté la rangée : le gérant C2EGF travaille dans
+    // Transactions, et le profil le masque (storeWorkspace.navigation.dashboard).
+    // Sa route reste servie — seule l'entrée disparaît.
     expect(STORE_NAV_ITEMS.map((item) => item.name)).toEqual([
-      'Tableau de bord',
       'Transactions',
       'Clients',
       'Historique',
     ])
   })
 
-  it('ne propose que la transaction client, même avec une ancienne URL dealer', () => {
+  it('affiche la liste et ouvre le formulaire client dans une modale', () => {
     render(
       <MemoryRouter initialEntries={['/transactions?tab=dealer']}>
         <Transactions />
       </MemoryRouter>,
     )
 
-    expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual([
-      'Transaction client',
-    ])
-    expect(screen.getByTestId('contenu-transaction-client')).toBeInTheDocument()
+    expect(screen.getByText('1 transaction non terminée · 0 dépôt, 1 retrait')).toBeInTheDocument()
+    expect(screen.getByTestId('onglet-client')).toHaveTextContent('Transaction client1')
+    expect(screen.getByRole('button', { name: 'Enregistrer une transaction' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /exporter/i })).not.toBeInTheDocument()
+    expect(screen.queryByTestId('contenu-transaction-client')).not.toBeInTheDocument()
     expect(screen.queryByTestId('contenu-operation-dealer')).not.toBeInTheDocument()
     expect(screen.queryByTestId('contenu-collaborations')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enregistrer une transaction' }))
+
+    expect(screen.getByRole('dialog', { name: 'Enregistrer une transaction' })).toBeInTheDocument()
+    expect(screen.getByTestId('contenu-transaction-client')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fermer' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('garde les clients et remplace les trois archives avancées par Ravitaillement', () => {

@@ -75,6 +75,11 @@ export const pilotProfile = Object.freeze({
   // temporairement les écrans avancés puis les réactiver sans supprimer le code.
   storeWorkspace: Object.freeze({
     navigation: Object.freeze({
+      // Affiche le tableau de bord dans la navigation de la boutique. Une
+      // instance dont le gérant travaille toute la journée dans Transactions
+      // peut le masquer : la route `/` reste servie, seule l'entrée disparaît,
+      // et la destination d'après-connexion suit (voir utils/roleRouting.js).
+      dashboard: true,
       // Affiche la page autonome d'ajout client dans la navigation principale.
       // Une instance peut la masquer quand l'ajout est proposé depuis Clients.
       standaloneClientForm: true,
