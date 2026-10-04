@@ -24,8 +24,8 @@ import { formatCurrency } from '../../utils/formatCurrency'
  */
 
 const VASES = [
-  { cle: 'stock', libelle: 'Stock électronique', aide: 'Le float du réseau' },
-  { cle: 'liquidite', libelle: 'Liquidité', aide: 'Les espèces en caisse' },
+  { cle: 'stock', libelle: 'Stock' },
+  { cle: 'liquidite', libelle: 'Espèce' },
 ]
 
 const NOTE_MAX = 280
@@ -110,7 +110,6 @@ function RavitaillementForm({ onComplete, onCancel }) {
           value={note}
           maxLength={NOTE_MAX}
           onChange={(event) => setNote(event.target.value)}
-          placeholder="Bordereau, porteur, remarque…"
           className="w-full rounded border-2 border-line px-3 py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         />
       </div>
@@ -136,11 +135,10 @@ function RavitaillementForm({ onComplete, onCancel }) {
               {/* La sélection ne peut pas tenir à la seule teinte (DESIGN.md §5) :
                   le radio natif est en sr-only, donc l'œil n'aurait que la
                   couleur. La pastille cochée porte la même information en forme. */}
-              <span className="flex items-start justify-between gap-2">
+              <span className="flex items-center justify-between gap-2">
                 <span className="block text-sm font-semibold text-ink">{option.libelle}</span>
-                {vase === option.cle && <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" aria-hidden="true" />}
+                {vase === option.cle && <Check className="h-4 w-4 shrink-0 text-brand-600" aria-hidden="true" />}
               </span>
-              <span className="block text-xs text-ink-muted">{option.aide}</span>
             </label>
           ))}
         </div>

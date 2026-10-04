@@ -116,7 +116,7 @@ describe('TC-216 — ravitaillement depuis l’écran Transactions', () => {
     afficher()
     ouvrirModal()
     saisirMontant('900')
-    fireEvent.click(screen.getByRole('radio', { name: /Liquidité/ }))
+    fireEvent.click(screen.getByRole('radio', { name: /Espèce/ }))
     fireEvent.click(screen.getByTestId('valider-ravitaillement'))
 
     await waitFor(() => expect(runStoreTransactionCommand).toHaveBeenCalledWith({

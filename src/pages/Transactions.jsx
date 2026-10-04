@@ -219,7 +219,6 @@ function Transactions() {
         open={ravitaillementOuvert}
         onClose={() => setRavitaillementOuvert(false)}
         title="Ravitaillement"
-        description="Ce que la centrale vient de livrer à la boutique."
         testId="ravitaillement-dialog"
       >
         <ErrorBoundary>
@@ -249,7 +248,10 @@ function Transactions() {
         open={formulaireOuvert}
         onClose={fermerFormulaire}
         title={editingTransaction ? 'Modifier la transaction' : 'Enregistrer une transaction'}
-        largeur="max-w-5xl"
+        /* `max-w-5xl` étirait la saisie sur toute la largeur de l'écran : le
+           montant, aligné à droite, finissait à un demi-mètre du libellé qui
+           l'annonce. Une saisie de quatre champs n'a pas besoin de cette place. */
+        largeur="max-w-xl"
         spacious
         testId="transaction-dialog"
       >

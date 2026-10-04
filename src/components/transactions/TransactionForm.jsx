@@ -376,8 +376,13 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel }) {
             placeholder="Saisir le montant"
             /* Aligné à droite et en chiffres à chasse fixe : un montant se lit
                par ses unités, et deux saisies successives doivent s'aligner
-               colonne par colonne. C'est la convention de toute caisse. */
-            className={`w-full px-3 py-2 border-2 rounded text-right font-mono tabular-nums focus:outline-none transition-colors ${
+               colonne par colonne. C'est la convention de toute caisse.
+
+               Mais un champ pleine largeur renvoyait les chiffres loin du
+               libellé : on tapait à un bout de la ligne en lisant à l'autre.
+               Le champ est donc borné — il reste assez large pour un montant à
+               neuf chiffres, pas davantage. */
+            className={`w-full max-w-xs px-3 py-2 border-2 rounded text-right font-mono text-lg tabular-nums focus:outline-none transition-colors ${
               formValidation.stockValidation.isValid
                 ? 'border-line focus-visible:ring-2 focus-visible:ring-brand-400'
                 : 'border-danger focus-visible:ring-2 focus-visible:ring-danger'
