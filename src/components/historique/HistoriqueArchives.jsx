@@ -17,6 +17,8 @@ import {
   DEALER_REQUEST_STATUS_LABELS,
   DEALER_REQUEST_TYPE_LABELS,
 } from '../../constants/dealerConstants'
+import { STORE_MOVEMENT_TYPES } from '../../utils/constants'
+import { useTransactions } from '../../context/transactions.jsx'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { formatFirestoreDate } from '../../utils/formatFirestoreDate'
 import StatusBadge from '../ui/StatusBadge'
@@ -189,6 +191,14 @@ export function ArchiveDettes({ storeId }) {
 /** Ravitaillements demandés au dealer — en lecture seule. */
 export function ArchiveDealer({ currentUser, userProfile }) {
   const [lignes, setLignes] = useState(null)
+  const { completedTransactions = [] } = useTransactions()
+
+  // Les mouvements que la boutique s'est appliqués à elle-même : ravitaillements
+  // reçus, clôtures de journée. Ils viennent du registre `history`, pas du
+  // circuit dealer — deux sources, un même onglet, parce que le gérant qui vient
+  // ici cherche « d'où vient mon stock et où il est parti », pas « quel service
+  // l'a écrit ».
+  const mouvements = completedTransactions.filter((t) => STORE_MOVEMENT_TYPES.includes(t.type))
 
   useEffect(() => {
     setLignes(null)
@@ -205,18 +215,42 @@ export function ArchiveDealer({ currentUser, userProfile }) {
   }, [currentUser, userProfile])
 
   return (
-    <Coquille titre="Aucune demande au dealer" lignes={lignes} enTetes="Demandes au dealer">
-      {lignes?.map((r) => (
-        <Ligne
-          key={r.id}
-          principal={DEALER_REQUEST_TYPE_LABELS[r.type] ?? r.type}
-          secondaire={r.network}
-          montant={r.amount}
-          date={r.createdAt}
-          statut={statutVisuel(r.status)}
-          libelleStatut={DEALER_REQUEST_STATUS_LABELS[r.status] ?? r.status}
-        />
-      ))}
-    </Coquille>
+    <>
+      <ul aria-label="Mouvements de la boutique" className="divide-y divide-line">
+        {mouvements.length === 0 ? (
+          <li className="px-4 py-10 text-center">
+            <p className="text-base font-medium text-ink">Aucun ravitaillement ni clôture</p>
+            <p className="mt-1 text-sm text-ink-muted">Rien n’est encore passé par ici.</p>
+          </li>
+        ) : mouvements.map((m) => (
+          <Ligne
+            key={m.id}
+            principal={m.type}
+            secondaire={m.note || undefined}
+            montant={m.montant}
+            date={m.date}
+            statut="confirmed"
+            libelleStatut={m.statut}
+          />
+        ))}
+      </ul>
+
+      {/* Le circuit dealer reste listé à part : une demande au dealer attend une
+          réponse d'un tiers, un ravitaillement saisi ici est déjà acquis. Les
+          confondre dans une seule liste mélangerait deux degrés de certitude. */}
+      <Coquille titre="Aucune demande au dealer" lignes={lignes} enTetes="Demandes au dealer">
+        {lignes?.map((r) => (
+          <Ligne
+            key={r.id}
+            principal={DEALER_REQUEST_TYPE_LABELS[r.type] ?? r.type}
+            secondaire={r.network}
+            montant={r.amount}
+            date={r.createdAt}
+            statut={statutVisuel(r.status)}
+            libelleStatut={DEALER_REQUEST_STATUS_LABELS[r.status] ?? r.status}
+          />
+        ))}
+      </Coquille>
+    </>
   )
 }

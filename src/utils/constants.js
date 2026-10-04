@@ -19,6 +19,20 @@ export const TRANSACTION_TYPES = activeProfile.transactions.types.map(
   (type) => ({ value: type, label: type })
 )
 
+/**
+ * Les mouvements de la BOUTIQUE, par opposition aux transactions d'un client.
+ *
+ * Ils vivent dans la même collection `history` — c'est le même registre, et
+ * c'est voulu : un solde ne se reconstitue qu'en relisant tout ce qui l'a fait
+ * bouger. Mais ils n'ont ni client ni code agent, et s'affichaient donc sous
+ * « Client inconnu » avec une colonne vide au milieu des dépôts d'agents.
+ *
+ * D'où cette liste : un seul endroit décide ce qui relève du registre de la
+ * boutique, et les deux écrans (onglet clients, onglet Ravitaillement) s'y
+ * réfèrent au lieu de recopier chacun ses noms de types.
+ */
+export const STORE_MOVEMENT_TYPES = ['Ravitaillement', 'Clôture']
+
 // Méthodes de paiement — dérivées du profil (transactions.paymentMethods).
 export const PAYMENT_METHODS = [...activeProfile.transactions.paymentMethods]
 

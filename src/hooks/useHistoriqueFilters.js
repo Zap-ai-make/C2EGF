@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useTransactions } from '../context/transactions.jsx'
 import { matchesSearchTerm, matchesDateFilter } from '../utils/helpers.js'
+import { STORE_MOVEMENT_TYPES } from '../utils/constants.js'
 
 export const useHistoriqueFilters = () => {
   const { completedTransactions } = useTransactions()
@@ -14,7 +15,11 @@ export const useHistoriqueFilters = () => {
   // Transactions filtrées avec useMemo pour optimiser les performances
   const filteredTransactions = useMemo(() => {
     return completedTransactions.filter(transaction => {
-      return matchesDateFilter(transaction, appliedDateFilter, showTodayOnly) && 
+      // Ravitaillements et clôtures sont des mouvements de la boutique, pas des
+      // transactions d'agents : ils ont leur onglet. Les laisser ici les
+      // affichait sous « Client inconnu », code vide, au milieu des dépôts.
+      if (STORE_MOVEMENT_TYPES.includes(transaction.type)) return false
+      return matchesDateFilter(transaction, appliedDateFilter, showTodayOnly) &&
              matchesSearchTerm(transaction, appliedSearchTerm || searchTerm)
     })
   }, [completedTransactions, appliedDateFilter, appliedSearchTerm, searchTerm, showTodayOnly])
