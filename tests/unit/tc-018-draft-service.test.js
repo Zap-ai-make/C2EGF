@@ -837,9 +837,20 @@ describe('TC-018-I — Façade FirestoreService : lectures locales et écritures
     expect(commandMocks.run).toHaveBeenCalledWith({ action: 'add', transaction: depositDraft })
   })
 
-  it('validateTransaction délègue à draftService.validateTransaction avec les 4 paramètres', async () => {
+  it('validateTransaction transmet le mode de règlement, le montant et le drapeau direct', async () => {
     await firestoreSvc.validateTransaction('draft-001', 'Payé par Cash', 'Cash', 5000)
-    expect(commandMocks.run).toHaveBeenCalledWith({ action: 'validateDraft', draftId: 'draft-001', paymentMethod: 'Cash', amount: 5000 })
+    expect(commandMocks.run).toHaveBeenCalledWith({ action: 'validateDraft', draftId: 'draft-001', paymentMethod: 'Cash', amount: 5000, direct: false })
+  })
+
+  /**
+   * `direct` rejoue le geste du bouton « Valider » : validée sans règlement,
+   * mais avec la jambe de liquidité que cela implique. Sans ce drapeau, un mode
+   * de règlement nul laisse les soldes intacts — c'est le comportement
+   * d'origine, et la correction d'une ligne rouverte s'y serait perdue.
+   */
+  it('validateTransaction porte le drapeau direct quand il est demandé', async () => {
+    await firestoreSvc.validateTransaction('draft-002', 'Validée', null, null, true)
+    expect(commandMocks.run).toHaveBeenCalledWith({ action: 'validateDraft', draftId: 'draft-002', paymentMethod: null, amount: null, direct: true })
   })
 
   it('les méthodes non-draft ne sont pas impactées (addClient toujours fonctionnel)', async () => {

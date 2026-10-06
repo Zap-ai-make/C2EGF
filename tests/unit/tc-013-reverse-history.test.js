@@ -398,25 +398,32 @@ describe('TC-013-E — Immutabilité', () => {
 
 // ---------------------------------------------------------------------------
 
-describe('TC-013-F — Retrait Path 1 : erreur systématique (renversement interdit)', () => {
+describe('TC-013-F — Retrait Path 1 : renversement conditionne a sa repartition', () => {
   /**
-   * COMPORTEMENT SÉCURISÉ — Lot 3B
+   * LA PROTECTION RESTE, SA CONDITION A CHANGE.
    *
-   * Depuis la correction A1 (Lot 3B), tout Retrait Path 1 direct (sans validatedAt ni
-   * paymentMethod) lève une erreur explicite au lieu de produire une asymétrie silencieuse.
+   * Le refus tenait a une raison exacte : un retrait consomme la liquidite EN
+   * CASCADE sur plusieurs reseaux, et sans la repartition exacte, lui rendre le
+   * montant produirait un TOTAL juste sur une repartition fausse.
    *
-   * Raison : sans la répartition exacte de la liquidité stockée par réseau dans le
-   * document history, le renversement d'un Retrait qui a consommé plusieurs réseaux en
-   * cascade est mathématiquement impossible à rendre exact.
+   * L entete d origine nommait lui-meme la sortie : « stocker le delta par
+   * reseau dans history lors de la creation ». C est ce que fait desormais
+   * `liquidityConsumptionSplit`, appelee par l action `add` AVANT d appliquer
+   * l impact — apres, l information n existe plus nulle part.
    *
-   * Ce chemin est pratiquement inaccessible via l'UI (transactions.jsx force
-   * statut = 'Non Terminées' par défaut → Retraits passent toujours par
-   * draft → validateTransaction).
+   * Les deux cas se separent donc nettement :
+   *   • SANS `liquiditySplit` (lignes anterieures a ce lot) le refus demeure,
+   *     parce que l information est reellement perdue. F1 et F2 le figent.
+   *   • AVEC `liquiditySplit`, l inversion est exacte, reseau par reseau. F3 le
+   *     verifie sur une cascade reelle, celle-la meme qui motivait le refus.
    *
-   * Solution future : stocker le delta par réseau dans history lors de la création.
+   * Autre correction a l entete d origine : ce chemin n est PAS inaccessible
+   * via l UI. Le bouton « Valider » du formulaire ecrit directement une ligne
+   * validee, sans reglement — c est precisement le cas que les franchises ont
+   * remonte.
    */
 
-  it('[TC-013-F1] retrait Path 1 avec cascade de liquidité — lève une erreur (renversement impossible)', () => {
+  it('[TC-013-F1] sans repartition enregistree — leve une erreur (information perdue)', () => {
     const sparseBalances = {
       Orange:  { stock: 2000, liquidite:   50 },
       Moov:    { stock: 1500, liquidite: 1000 },
@@ -445,7 +452,7 @@ describe('TC-013-F — Retrait Path 1 : erreur systématique (renversement inter
     )
   })
 
-  it('[TC-013-F2] retrait Path 1 même sans cascade — lève une erreur (protection systématique)', () => {
+  it('[TC-013-F2] sans repartition, meme sans cascade — leve une erreur (on ne devine pas)', () => {
     // Même quand la liquidité Orange est suffisante, Retrait Path 1 reste interdit
     // car on ne peut pas garantir que la cascade n'a pas eu lieu au moment de l'apply initial
     const richBalances = {
@@ -467,5 +474,37 @@ describe('TC-013-F — Retrait Path 1 : erreur systématique (renversement inter
     expect(() => svc.reverseHistoryTransactionImpact(richBalances, historyData)).toThrow(
       'Renversement impossible'
     )
+  })
+
+  it('[TC-013-F3] AVEC la répartition enregistrée — rend chaque réseau à l’identique', () => {
+    const sparseBalances = {
+      Orange:  { stock: 2000, liquidite:   50 },
+      Moov:    { stock: 1500, liquidite: 1000 },
+      Telecel: { stock: 1000, liquidite:  200 },
+      Coris:   { stock:  500, liquidite:  100 },
+      Sank:    { stock:  300, liquidite:   50 },
+    }
+
+    const historyData = {
+      type: 'Retrait',
+      statut: 'Validée',
+      montant: 300,          // > Orange.liquidite (50) -> cascade vers Moov
+      reseau: 'Moov',
+      // La répartition que l’action `add` écrit désormais à la création.
+      liquiditySplit: { Orange: 50, Moov: 250 },
+    }
+
+    const apres = svc.applyInitialTransactionImpact(sparseBalances, historyData)
+    expect(apres.Orange.liquidite).toBe(0)
+    expect(apres.Moov.liquidite).toBe(750)
+
+    const rendu = svc.reverseHistoryTransactionImpact(apres, historyData)
+
+    // Chaque réseau retrouve EXACTEMENT ce qu’il avait donné : c’est toute la
+    // différence avec un total juste posé au mauvais endroit.
+    expect(rendu.Orange.liquidite).toBe(50)
+    expect(rendu.Moov.liquidite).toBe(1000)
+    expect(rendu.Moov.stock).toBe(1500)
+    expect(rendu).toEqual(sparseBalances)
   })
 })

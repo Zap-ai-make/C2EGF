@@ -118,6 +118,9 @@ describe('TC-127 — espace boutique simplifié pour le démarrage C2EGF', () =>
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       'Transactions clients',
       'Ravitaillement',
+      // Inconditionnelle : la corbeille survit même au profil le plus réduit,
+      // parce que la suppression, elle, y survit aussi.
+      'Corbeille',
     ])
     expect(screen.getByTestId('onglet-historique-clients')).toHaveAttribute('aria-selected', 'true')
     expect(screen.queryByTestId('onglet-historique-collaborations')).not.toBeInTheDocument()

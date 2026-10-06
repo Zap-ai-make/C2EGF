@@ -6,6 +6,7 @@ import { PAYMENT_METHODS } from '../../utils/constants.js'
 import { getClientName, formatTransactionDateTime } from '../../utils/helpers.js'
 import { SkeletonRow } from '../ui/SkeletonList.jsx'
 import EmptyState from '../ui/EmptyState.jsx'
+import Dialog from '../ui/Dialog.jsx'
 import { ChevronLeft } from 'lucide-react'
 import { ClipboardCheck } from 'lucide-react'
 import OptimisticToast from '../ui/OptimisticToast.jsx'
@@ -14,8 +15,11 @@ import { generateIdempotencyKey } from '../../services/settlementService.js'
 import { prefereMouvementReduit } from '../../hooks/useReducedMotion.js'
 
 const TransactionTable = memo(function TransactionTable() {
-  const { pendingTransactions, getActionButtons, getTransactionStyles, addPaymentTranche, addRefundTranche, startEditTransaction, loading } = useTransactions()
+  const { pendingTransactions, getActionButtons, getTransactionStyles, addPaymentTranche, addRefundTranche, startEditTransaction, trashTransaction, loading } = useTransactions()
   const { themeClasses } = useTheme()
+  // La ligne que le gérant s'apprête à supprimer, le temps qu'il confirme.
+  const [aSupprimer, setASupprimer] = useState(null)
+  const [suppressionEnCours, setSuppressionEnCours] = useState(false)
 
   // Déduplicateur pour éviter les erreurs de clés React
   const uniquePendingTransactions = useMemo(() => {
@@ -28,6 +32,29 @@ const TransactionTable = memo(function TransactionTable() {
       return true
     })
   }, [pendingTransactions])
+  /**
+   * Ce qui reste à encaisser et à payer, par type.
+   *
+   * Calculé sur la liste DÉDUPLIQUÉE : compter deux fois une ligne que React
+   * voit en double gonflerait un total que la caissière compare à sa caisse.
+   * Le libellé est normalisé — accents et casse — parce que l'historique
+   * contient des « Dépôt » et des « Depot » selon leur époque d'écriture.
+   */
+  const totauxEnAttente = useMemo(() => {
+    const normaliser = (valeur) => String(valeur || '')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+
+    return uniquePendingTransactions.reduce((somme, transaction) => {
+      const montant = Number(transaction.montant) || 0
+      const type = normaliser(transaction.type)
+      if (type === 'depot') somme.depots += montant
+      else if (type === 'retrait') somme.retraits += montant
+      return somme
+    }, { depots: 0, retraits: 0 })
+  }, [uniquePendingTransactions])
+
   const [activeDropdown, setActiveDropdown] = useState(null)
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 })
   const [currentActionType, setCurrentActionType] = useState(null)
@@ -226,9 +253,41 @@ const TransactionTable = memo(function TransactionTable() {
 
   return (
     <div className="mt-8">
-      <h2 className={`text-xl font-bold ${themeClasses.text} mb-4`}>
-        Non Terminées
-      </h2>
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <h2 className={`text-xl font-bold ${themeClasses.text}`}>
+          Non Terminées
+        </h2>
+
+        {/* Deux totaux, pas un tableau de bord.
+            Ce qu'ils répondent tient en une question que la caissière se pose
+            dix fois par jour : « combien reste-t-il à encaisser, combien à
+            payer ? ». Volontairement petits et posés à côté du titre plutôt
+            qu'en bandeau : ils informent sans prendre la place des lignes,
+            qui sont ce qu'on vient lire.
+
+            La couleur reprend celle des types dans le tableau — vert pour ce
+            qui entre, rouge pour ce qui sort —, mais elle ne porte jamais le
+            sens seule : chaque case est étiquetée. */}
+        <span
+          className="inline-flex items-baseline gap-1.5 rounded-md border border-inflow/30 bg-inflow-soft px-2.5 py-1"
+          data-testid="total-depots-non-terminees"
+        >
+          <span className="text-xs font-medium text-inflow">Dépôts</span>
+          <span className="font-mono text-sm font-semibold tabular-nums text-inflow">
+            {totauxEnAttente.depots.toLocaleString('fr-FR')}
+          </span>
+        </span>
+
+        <span
+          className="inline-flex items-baseline gap-1.5 rounded-md border border-danger/30 bg-danger-soft px-2.5 py-1"
+          data-testid="total-retraits-non-terminees"
+        >
+          <span className="text-xs font-medium text-danger">Retraits</span>
+          <span className="font-mono text-sm font-semibold tabular-nums text-danger">
+            {totauxEnAttente.retraits.toLocaleString('fr-FR')}
+          </span>
+        </span>
+      </div>
 
       <div className={`bg-white rounded-lg border ${themeClasses.tableBorder}`}>
         <div className="overflow-x-auto overflow-y-visible">
@@ -244,8 +303,11 @@ const TransactionTable = memo(function TransactionTable() {
                 <th className={`px-4 py-3 text-left text-base font-medium ${themeClasses.text}`}>
                   Type
                 </th>
+                {/* Le réseau a quitté cette colonne : la boutique n'en opère
+                    qu'un, et le répéter sur chaque ligne n'apprenait rien. Le
+                    code agent, lui, sert à retrouver une transaction. */}
                 <th className={`px-4 py-3 text-left text-base font-medium ${themeClasses.text}`}>
-                  Réseau
+                  Code
                 </th>
                 <th className={`px-4 py-3 text-right text-base font-medium ${themeClasses.text}`}>
                   Montant
@@ -292,7 +354,7 @@ const TransactionTable = memo(function TransactionTable() {
                         {transaction.type}
                       </td>
                       <td className="px-4 py-3 text-base">
-                        {transaction.reseau} ({transaction.code})
+                        {transaction.code || '-'}
                       </td>
                       <td className={`px-4 py-3 text-right text-base font-medium tabular-nums ${styles.textColor}`}>
                         <span>{(Number(transaction.montant) || 0).toLocaleString('fr-FR')} FCFA</span>
@@ -343,6 +405,19 @@ const TransactionTable = memo(function TransactionTable() {
                               Rembourser
                             </button>
                           )}
+
+                          {/* « Supprimer » ferme la rangée, après les gestes
+                              qui font avancer la transaction : la détruire
+                              n'est pas une étape du flux normal. */}
+                          <button
+                            type="button"
+                            onClick={() => setASupprimer(transaction)}
+                            disabled={isProcessingTransaction}
+                            data-testid="supprimer-non-terminee"
+                            className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink-muted transition-colors hover:border-danger hover:text-danger disabled:cursor-not-allowed disabled:hover:border-line disabled:hover:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                          >
+                            Supprimer
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -505,6 +580,63 @@ const TransactionTable = memo(function TransactionTable() {
         onClose={() => setRollbackToast({ show: false, message: '', type: 'info' })}
         autoClose={true}
       />
+
+      <Dialog
+        open={Boolean(aSupprimer)}
+        onClose={() => setASupprimer(null)}
+        title="Supprimer cette transaction ?"
+        testId="confirmer-suppression-non-terminee"
+        footer={(
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setASupprimer(null)}
+              className="rounded border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!aSupprimer) return
+                setSuppressionEnCours(true)
+                try {
+                  await trashTransaction(aSupprimer.id)
+                  setASupprimer(null)
+                } catch (error) {
+                  // On garde le modal ouvert : disparaître sans rien dire
+                  // laisserait croire que la suppression a eu lieu.
+                  setRollbackToast({ show: true, message: error?.message || 'Suppression impossible', type: 'error' })
+                } finally {
+                  setSuppressionEnCours(false)
+                }
+              }}
+              disabled={suppressionEnCours}
+              data-testid="confirmer-supprimer-non-terminee"
+              className="rounded bg-danger px-4 py-2 text-sm font-semibold text-white transition-colors hover:brightness-110 disabled:cursor-wait disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+            >
+              {suppressionEnCours ? 'Suppression…' : 'Supprimer'}
+            </button>
+          </div>
+        )}
+      >
+        {aSupprimer && (
+          <div className="space-y-3 text-sm text-ink">
+            <p>
+              <span className="font-medium">{getClientName(aSupprimer.client)}</span>
+              {' · '}{aSupprimer.type}
+              {' · '}
+              <span className="font-mono tabular-nums">
+                {(Number(aSupprimer.montant) || 0).toLocaleString('fr-FR')} FCFA
+              </span>
+            </p>
+            <p className="text-ink-muted">
+              Le stock engagé sera rendu et la ligne ira dans la corbeille, où
+              elle restera lisible. Elle ne pourra pas être restaurée.
+            </p>
+          </div>
+        )}
+      </Dialog>
     </div>
   )
 })

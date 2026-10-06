@@ -50,6 +50,7 @@ vi.mock('../../src/context/transactions.jsx', () => ({
 }))
 
 import Historique from '../../src/pages/Historique.jsx'
+import { STORE_HISTORY_CONFIG } from '../../src/constants/storeWorkspace.js'
 
 // `date` est au format « JJ/MM/AAAA HH:mm » — c'est ce format que parse le filtre.
 const tx = (over = {}) => ({
@@ -112,12 +113,29 @@ describe('TC-116-A — structure de la page', () => {
     expect(screen.getByRole('heading', { name: 'Historique' })).toBeInTheDocument()
   })
 
-  it('expose les 9 colonnes du tableau, dans cet ordre', () => {
+  /**
+   * ⚠ CE TEST A SIGNALÉ DEUX CHANGEMENTS VOULUS, COUP SUR COUP.
+   *
+   * Il figeait neuf colonnes littérales. Depuis : « Actions » s'est ajoutée en
+   * queue (Modifier / Supprimer / Modification), et les deux colonnes
+   * d'opérateur sont passées sous un drapeau de profil — chez C2EGF toute la
+   * boutique opère sous un compte unique, et « C2EGF SIEGE » se répétait à
+   * l'identique sur chaque ligne.
+   *
+   * Il exprime maintenant la RÈGLE plutôt qu'un instantané : le noyau ne bouge
+   * pas, « Actions » ferme toujours la marche, et les deux colonnes
+   * d'opérateur suivent `operatorColumns`. Un prochain changement de profil ne
+   * le fera plus échouer pour rien — mais une colonne déplacée ou perdue, si.
+   */
+  it('expose les colonnes du profil, dans cet ordre', () => {
     contextValue = baseContext([tx()])
     poser()
     const headers = Array.from(document.querySelectorAll('thead th')).map((th) => th.textContent.trim())
     expect(headers).toEqual([
-      'Date & heure', 'Client', 'Type', 'Réseau', 'Code', 'Montant', 'Statut', 'Utilisateur', 'Email utilisateur',
+      // « Réseau » retiré : une seule valeur possible dans cette boutique.
+      'Date & heure', 'Client', 'Type', 'Code', 'Montant', 'Statut',
+      ...(STORE_HISTORY_CONFIG.operatorColumns !== false ? ['Utilisateur', 'Email utilisateur'] : []),
+      'Actions',
     ])
   })
 

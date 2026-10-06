@@ -19,7 +19,7 @@ const normalizeLabel = (value) => String(value || '')
 
 function TransactionForm({ clients, embedded = false, onComplete, onCancel }) {
   const { toasts, showToast, removeToast } = useToast()
-  const { addTransaction, editingTransaction, clearEditTransaction, updateTransaction } = useTransactions()
+  const { addTransaction, editingTransaction, clearEditTransaction, updateTransaction, saveReopenedCorrection } = useTransactions()
   const { validateAmount, getStock, getLiquidite, getFormattedStock } = useSimpleNetworkData()
   const [selectedClient, setSelectedClient] = useState(null)
   const [manualAgentCode, setManualAgentCode] = useState('')
@@ -275,9 +275,22 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel }) {
 
     try {
       if (editingTransaction) {
-        await updateTransaction(editingTransaction.id, pendingConfirmation.transactionData)
+        // Une ligne venue de l'historique y RETOURNE : on enchaîne la
+        // correction et la revalidation par le mode de règlement mémorisé, au
+        // lieu de l'abandonner dans les non terminées où la caissière devrait
+        // la retrouver et la revalider à la main.
+        if (editingTransaction.reopenedFromHistoryId) {
+          await saveReopenedCorrection(editingTransaction, pendingConfirmation.transactionData)
+        } else {
+          await updateTransaction(editingTransaction.id, pendingConfirmation.transactionData)
+        }
         clearEditTransaction()
-        showToast(MESSAGES.SUCCESS.TRANSACTION_MODIFIED, 'success')
+        showToast(
+          editingTransaction.reopenedFromHistoryId
+            ? MESSAGES.SUCCESS.TRANSACTION_CORRECTED
+            : MESSAGES.SUCCESS.TRANSACTION_MODIFIED,
+          'success',
+        )
       } else {
         await addTransaction(pendingConfirmation.transactionData)
         showToast(
@@ -306,7 +319,7 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel }) {
     } finally {
       setIsSubmitting(false)
     }
-  }, [pendingConfirmation, editingTransaction, updateTransaction, clearEditTransaction, showToast, addTransaction, onComplete])
+  }, [pendingConfirmation, editingTransaction, updateTransaction, saveReopenedCorrection, clearEditTransaction, showToast, addTransaction, onComplete])
 
   const cancelPendingSubmit = useCallback(() => {
     setPendingConfirmation(null)

@@ -20,6 +20,7 @@ import DealerLayout from './layouts/DealerLayout.jsx'
 
 import { INTERNAL_DEBTS_PATH } from './constants/navigation'
 import { COLLABORATIONS_ENABLED } from './constants/collaborationConstants'
+import { STORE_NAVIGATION_VISIBILITY } from './constants/storeWorkspace.js'
 
 import { useAuth } from './context/AuthContext.jsx'
 import AuthPage from './components/auth/AuthPage.jsx'
@@ -105,7 +106,19 @@ export function AppContent() {
           </RoleGuard>
         }
       >
-        <Route path="/" element={<Dashboard />} />
+        {/* MASQUER L'ENTRÉE DE MENU NE SUFFISAIT PAS.
+            La redirection d'après-connexion visait bien /transactions, mais
+            `/` servait toujours le tableau de bord : un signet, le raccourci
+            PWA, ou un simple rechargement sur la racine y ramenait le gérant
+            sans jamais consulter son rôle. On redirige plutôt que de retirer
+            la route — la racine d'une application doit toujours mener quelque
+            part, et `getDefaultRouteForRole` sait déjà où. */}
+        <Route
+          path="/"
+          element={STORE_NAVIGATION_VISIBILITY.dashboard
+            ? <Dashboard />
+            : <Navigate to={getDefaultRouteForRole(AUTH_ROLES.STORE_ADMIN)} replace />}
+        />
         <Route path="/clients" element={<Clients />} />
         <Route path="/transactions" element={<Transactions />} />
         <Route path="/historique" element={<Historique />} />

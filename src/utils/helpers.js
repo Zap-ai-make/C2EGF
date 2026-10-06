@@ -62,6 +62,29 @@ export const formatTransactionDateTime = (transaction = {}) => {
 }
 
 /**
+ * Formate un instant ISOLÉ — Timestamp Firestore, Date, ou date française.
+ *
+ * `formatTransactionDateTime` juste au-dessus fait ce travail pour une
+ * TRANSACTION : son travail réel est de choisir, parmi cinq champs, lequel
+ * porte une heure. Ici il n'y a rien à choisir — le journal des modifications
+ * et la corbeille portent un instant par entrée, pas un document à interroger.
+ * D'où une seconde porte plutôt qu'un objet factice à une clé.
+ */
+export const formatInstant = (value) => {
+  const date = toDateValue(value)
+  if (!date || isNaN(date.getTime())) return '-'
+
+  return date.toLocaleString('fr-FR', {
+    timeZone: BUSINESS_TIME_ZONE,
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+/**
  * Parse une date au format français "DD/MM/YYYY HH:mm"
  * Retourne un objet Date valide ou null en cas d'erreur
  */

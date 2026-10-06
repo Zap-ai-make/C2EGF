@@ -41,7 +41,11 @@ export const FIRESTORE_CONFIG = {
     PENDING: 'Non Terminées',
     VALIDATED: 'Validée',
     REFUNDED: 'Remboursée',
-    CANCELLED: 'Annulée'
+    CANCELLED: 'Annulée',
+    // La corbeille. Volontairement distinct d'« Annulée » : annuler est une
+    // décision métier qu'on assume, supprimer est la correction d'une saisie
+    // fausse. Afficher « Annulée » sur la seconde raconterait l'inverse.
+    DELETED: 'Supprimée'
   },
 
   // Règles de validation

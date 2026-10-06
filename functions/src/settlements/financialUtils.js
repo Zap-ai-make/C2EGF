@@ -165,8 +165,14 @@ export function reverseInitialTransactionImpact(balances, transaction) {
   return reversePendingOnlyImpact(balances, transaction.type, transaction.reseau, transaction.montant)
 }
 
+// Une ligne dont l'impact a DÉJÀ été défait ne doit pas pouvoir le défaire une
+// seconde fois : elle rendrait un montant que la boutique a déjà récupéré, et
+// les cartes gonfleraient d'un dépôt fantôme. « Annulée » couvrait ce cas ;
+// « Supprimée » — la corbeille — le couvre pour la même raison et au même titre.
+const DEJA_DEFAIT = ['annulee', 'supprimee']
+
 export function reverseHistoryTransactionImpact(balances, history) {
-  if (normalizeType(history.statut) === 'annulee') throw new Error('Cette transaction est déjà annulée.')
+  if (DEJA_DEFAIT.includes(normalizeType(history.statut))) throw new Error('Cette transaction est déjà annulée.')
   const { type, reseau, montant } = history
   if (!type || !reseau || !Number.isSafeInteger(montant) || montant <= 0) throw new Error('Historique financier incomplet.')
   let next = { ...balances }
@@ -185,10 +191,80 @@ export function reverseHistoryTransactionImpact(balances, history) {
     next = network === 'Liquidite' ? applyLiquidityDelta(next, -delta) : adjustBalanceValue(next, network, 'stock', -delta)
     return reversePendingOnlyImpact(next, type, reseau, montant)
   }
+  // `directValidation` marque une ligne passée par le bouton « Valider » du
+  // formulaire : validée d'un geste, sans règlement. Le test vient AVANT celui
+  // de `validatedAt`, que ces lignes portent aussi — sans quoi on ne défairait
+  // que la jambe du brouillon et la liquidité resterait échouée dans les soldes.
+  if (history.directValidation) return reverseDirectValidation(next, type, reseau, montant, history.liquiditySplit)
   if (history.validatedAt) return reversePendingOnlyImpact(next, type, reseau, montant)
-  if (isDepot(type)) return applyLiquidityDelta(adjustBalanceValue(next, reseau, 'stock', montant), -montant)
-  if (isRetrait(type)) throw new Error("L'annulation automatique de ce retrait historique n'est pas sûre.")
+  if (isDepot(type) || isRetrait(type)) return reverseDirectValidation(next, type, reseau, montant, history.liquiditySplit)
   return adjustBalanceValue(next, reseau, 'stock', montant)
+}
+
+/**
+ * La répartition EXACTE d'une consommation de liquidité, réseau par réseau.
+ *
+ * `applyLiquidityDelta` consomme un delta négatif EN CASCADE : il vide le
+ * premier réseau, puis entame le suivant, et ainsi de suite. L'opération n'est
+ * donc pas réversible à partir du seul montant — rendre la somme au premier
+ * réseau recréerait un total juste sur une répartition fausse.
+ *
+ * Cette fonction rejoue la même boucle mais RETOURNE la répartition au lieu de
+ * l'appliquer, pour qu'on puisse l'écrire dans le document d'historique au
+ * moment de la création. C'est la seule façon de pouvoir défaire le geste plus
+ * tard, et c'est exactement ce que la limitation documentée de TC-013-F
+ * appelait de ses vœux.
+ */
+export function liquidityConsumptionSplit(balances, amount) {
+  const split = {}
+  let remaining = amount
+
+  for (const network of Object.keys(balances)) {
+    if (remaining <= 0) break
+    const available = Number(balances[network]?.liquidite) || 0
+    const taken = Math.min(available, remaining)
+    if (taken > 0) split[network] = taken
+    remaining -= taken
+  }
+
+  if (remaining > 0) {
+    const total = Object.values(balances).reduce((sum, d) => sum + (Number(d?.liquidite) || 0), 0)
+    throw new Error(`Liquidite insuffisante. Disponible: ${total.toLocaleString('fr-FR')} FCFA`)
+  }
+
+  return split
+}
+
+/**
+ * Défait une ligne validée SANS règlement : ses deux jambes d'un coup.
+ *
+ * L'inverse de la branche « validée » d'`applyInitialTransactionImpact` : un
+ * dépôt y vide le stock et remplit la liquidité, un retrait fait l'inverse.
+ *
+ * LE RETRAIT EXIGE SA RÉPARTITION, ET CE N'EST PAS UNE PRÉCAUTION DE PRINCIPE
+ * ──────────────────────────────────────────────────────────────────────────
+ * Un retrait consomme la liquidité en cascade sur plusieurs réseaux. Rendre le
+ * montant au premier réseau produirait un TOTAL juste sur une répartition
+ * fausse — l'erreur la plus coûteuse qui soit, parce qu'elle ne se voit pas.
+ *
+ * Avec `split`, écrit à la création, l'inversion est exacte : chaque réseau
+ * récupère ce qu'il avait donné. Sans lui — les lignes d'avant ce lot — le
+ * refus demeure, parce que l'information est réellement perdue. Le dépôt n'a
+ * pas ce problème : sa liquidité est entrée d'un bloc sur un seul réseau.
+ */
+function reverseDirectValidation(balances, type, reseau, montant, split) {
+  if (isDepot(type)) return applyLiquidityDelta(adjustBalanceValue(balances, reseau, 'stock', montant), -montant)
+  if (isRetrait(type)) {
+    if (!split || typeof split !== 'object' || !Object.keys(split).length) {
+      throw new Error("L'annulation automatique de ce retrait historique n'est pas sûre.")
+    }
+    let next = adjustBalanceValue(balances, reseau, 'stock', -montant)
+    for (const [network, amount] of Object.entries(split)) {
+      next = adjustBalanceValue(next, network, 'liquidite', Number(amount) || 0)
+    }
+    return next
+  }
+  throw new Error('Type de transaction non reconnu.')
 }
 
 /**

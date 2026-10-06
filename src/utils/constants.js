@@ -33,6 +33,21 @@ export const TRANSACTION_TYPES = activeProfile.transactions.types.map(
  */
 export const STORE_MOVEMENT_TYPES = ['Ravitaillement', 'Clôture']
 
+/**
+ * Une ligne à la corbeille.
+ *
+ * Le test porte sur `deletedAt` et NON sur le statut. Deux raisons, et la
+ * seconde compte autant que la première :
+ *
+ *   1. Une ligne « Annulée » d'avant ce lot n'a pas été supprimée par qui que
+ *      ce soit — elle a été annulée pour une raison métier. La faire tomber
+ *      dans la corbeille réécrirait son histoire a posteriori.
+ *   2. `deletedAt` porte l'information dont la corbeille a besoin pour trier
+ *      et pour dire « supprimée par Awa à 15h10 ». Un statut ne dit que quoi,
+ *      jamais quand ni par qui.
+ */
+export const estSupprimee = (transaction) => Boolean(transaction?.deletedAt)
+
 // Méthodes de paiement — dérivées du profil (transactions.paymentMethods).
 export const PAYMENT_METHODS = [...activeProfile.transactions.paymentMethods]
 
@@ -103,6 +118,11 @@ export const MESSAGES = {
     TRANSACTION_SAVED: 'Transaction sauvée en attente',
     TRANSACTION_VALIDATED: 'Transaction validée',
     TRANSACTION_MODIFIED: 'Transaction modifiée avec succès',
+    // Message distinct : après la correction d'une ligne rouverte, le gérant
+    // doit savoir qu'elle est REPARTIE dans l'historique. « Modifiée avec
+    // succès » le laisserait la chercher dans les non terminées, où elle n'est
+    // plus.
+    TRANSACTION_CORRECTED: 'Transaction corrigée et replacée dans l’historique',
     MODIFICATION_CANCELLED: 'Modification annulée',
     IMPORT_SUCCESS: (count) => `${count} transactions importées avec succès !`
   }

@@ -69,10 +69,18 @@ describe('TC-103 — structure du tableau', () => {
     expect(screen.getByRole('heading', { name: 'Non Terminées' })).toBeInTheDocument()
   })
 
+  /**
+   * ⚠ « Réseau » a cédé la place à « Code », volontairement.
+   *
+   * La boutique n'opère qu'un seul réseau : la colonne répétait « Orange » sur
+   * chaque ligne et noyait le code agent entre parenthèses, alors que c'est
+   * lui qu'on lit pour retrouver une transaction. Le compte de colonnes ne
+   * bouge pas ; c'est leur contenu qui gagne.
+   */
   it('expose les 6 colonnes du contrat métier', () => {
     render(<TransactionTable />)
     const labels = screen.getAllByRole('columnheader').map((th) => th.textContent.trim())
-    expect(labels).toEqual(['Date & heure', 'Client', 'Type', 'Réseau', 'Montant', 'Actions'])
+    expect(labels).toEqual(['Date & heure', 'Client', 'Type', 'Code', 'Montant', 'Actions'])
   })
 })
 
@@ -103,12 +111,13 @@ describe('TC-103 — contenu d’une ligne', () => {
     contextValue = baseContext({ pendingTransactions: [makeTransaction()] })
   })
 
-  it('affiche le nom du client, le type, le réseau avec son code', () => {
+  it('affiche le nom du client, le type et le code agent', () => {
     render(<TransactionTable />)
     const row = dataRows()[0]
     expect(within(row).getByText('Guafarou BANABA')).toBeInTheDocument()
     expect(within(row).getByText('Dépôt')).toBeInTheDocument()
-    expect(within(row).getByText('Orange (123456)')).toBeInTheDocument()
+    // Le code seul, sans le « Orange ( ) » qui l'enrobait.
+    expect(within(row).getByText('123456')).toBeInTheDocument()
   })
 
   it('affiche le montant formaté en FCFA', () => {

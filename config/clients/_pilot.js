@@ -77,8 +77,12 @@ export const pilotProfile = Object.freeze({
     navigation: Object.freeze({
       // Affiche le tableau de bord dans la navigation de la boutique. Une
       // instance dont le gérant travaille toute la journée dans Transactions
-      // peut le masquer : la route `/` reste servie, seule l'entrée disparaît,
-      // et la destination d'après-connexion suit (voir utils/roleRouting.js).
+      // peut le masquer. Masquer l'entrée NE SUFFIT PAS : tant que `/` servait
+      // encore le tableau de bord, tout rechargement sur la racine — signet,
+      // raccourci PWA, réouverture de l'application — y ramenait le gérant
+      // sans jamais passer par la redirection de rôle. `/` redirige donc vers
+      // la destination du rôle quand ce drapeau est faux (voir App.jsx et
+      // utils/roleRouting.js).
       dashboard: true,
       // Affiche la page autonome d'ajout client dans la navigation principale.
       // Une instance peut la masquer quand l'ajout est proposé depuis Clients.
@@ -95,6 +99,14 @@ export const pilotProfile = Object.freeze({
       dealerLabel: 'Dealer',
       collaborations: true,
       internalDebts: true,
+      // Affiche « Utilisateur » et « Email utilisateur » dans l'historique
+      // client. Une boutique dont tout le monde partage le même compte y lit
+      // deux fois la même valeur sur chaque ligne : deux colonnes de largeur
+      // pleine qui n'apprennent rien et repoussent les actions hors de l'écran.
+      // Masquer n'efface RIEN : les champs restent écrits sur chaque
+      // transaction, l'export XLSM garde sa colonne « Email utilisateur », et
+      // l'audit serveur conserve l'uid de l'auteur. Seul l'affichage recule.
+      operatorColumns: true,
     }),
   }),
 

@@ -62,6 +62,9 @@ describe('TC-083 — Constantes dérivées du profil client actif', () => {
         dealerLabel: 'Ravitaillement',
         collaborations: false,
         internalDebts: false,
+        // Toute la boutique opère sous un compte unique : les deux colonnes
+        // d'opérateur répétaient le même nom sur chaque ligne.
+        operatorColumns: false,
       },
     })
   })
@@ -83,6 +86,7 @@ describe('TC-083 — Constantes dérivées du profil client actif', () => {
         dealerLabel: 'Dealer',
         collaborations: true,
         internalDebts: true,
+        operatorColumns: true,
       },
     })
   })

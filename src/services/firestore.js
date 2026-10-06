@@ -924,6 +924,19 @@ export class FirestoreService {
     return result.deleted
   }
 
+  /**
+   * Met une non terminée à la corbeille.
+   *
+   * Distinct de `deleteDraft`, qui efface le document pour de bon : ici il
+   * déménage dans l'historique marqué « Supprimée », et le gérant peut relire
+   * ce qu'il contenait. `deleteDraft` reste pour les appelants qui veulent
+   * vraiment faire disparaître une ligne.
+   */
+  async trashDraft(draftId) {
+    const result = await runStoreTransactionCommand({ action: 'trashDraft', draftId })
+    return result.historyId
+  }
+
   subscribeToDrafts(callback) {
     return this._draftService.subscribeToDrafts(callback)
   }
@@ -951,6 +964,26 @@ export class FirestoreService {
     return result.cancelled
   }
 
+  /** Met une ligne d'historique à la corbeille et rend son montant aux soldes. */
+  async trashHistory(historyId) {
+    const result = await runStoreTransactionCommand({ action: 'trashHistory', historyId })
+    return result.trashed
+  }
+
+  /**
+   * Ramène une ligne validée dans les non terminées pour correction.
+   *
+   * Renvoie l'identifiant du BROUILLON créé — c'est lui, pas la ligne
+   * d'historique d'origine, que le formulaire doit modifier ensuite.
+   */
+  async reopenHistory(historyId) {
+    const result = await runStoreTransactionCommand({ action: 'reopenHistory', historyId })
+    // `direct` vient du serveur et non d'un test refait ici : lui seul a lu le
+    // document d'historique, et la règle (« la ligne portait-elle ses deux
+    // jambes ? ») ne se devine pas depuis la copie locale.
+    return { draftId: result.draftId, direct: result.direct === true }
+  }
+
   subscribeToHistory(callback, filters = {}) {
     return this._historyService.subscribeToHistory(callback, filters)
   }
@@ -961,9 +994,12 @@ export class FirestoreService {
   }
 
   // VALIDATION DE TRANSACTION (Drafts → History) — délègue à DraftService
-  async validateTransaction(draftId, customStatus = 'Validée', selectedPaymentMethod = null, amountOverride = null) {
+  async validateTransaction(draftId, customStatus = 'Validée', selectedPaymentMethod = null, amountOverride = null, direct = false) {
     void customStatus
-    const result = await runStoreTransactionCommand({ action: 'validateDraft', draftId, paymentMethod: selectedPaymentMethod, amount: amountOverride })
+    // `direct` rejoue le geste du bouton « Valider » du formulaire : validée
+    // sans règlement, mais avec la jambe de liquidité que cela implique. Sans
+    // lui, un mode de règlement nul laisse les soldes intacts.
+    const result = await runStoreTransactionCommand({ action: 'validateDraft', draftId, paymentMethod: selectedPaymentMethod, amount: amountOverride, direct })
     return result.validated
   }
 

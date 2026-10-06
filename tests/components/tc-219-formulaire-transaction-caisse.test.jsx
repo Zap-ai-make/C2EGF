@@ -59,6 +59,7 @@ beforeEach(() => {
   transactionsValue = {
     addTransaction: vi.fn().mockResolvedValue(undefined),
     updateTransaction: vi.fn().mockResolvedValue(undefined),
+    saveReopenedCorrection: vi.fn().mockResolvedValue(undefined),
     editingTransaction: null,
     clearEditTransaction: vi.fn(),
   }
@@ -113,5 +114,55 @@ describe('TC-219 — la modale reste ouverte entre deux clients', () => {
 
     await waitFor(() => expect(transactionsValue.updateTransaction).toHaveBeenCalled())
     await waitFor(() => expect(onComplete).toHaveBeenCalled())
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Une ligne venue de l'historique y retourne
+// ---------------------------------------------------------------------------
+
+describe('TC-219 — correction d’une transaction rouverte', () => {
+  const ROUVERTE = {
+    id: 'draft-9',
+    clientId: 'c-1',
+    type: 'Dépôt',
+    reseau: 'Orange',
+    montant: 5000,
+    statut: 'Non Terminées',
+    // Les deux marques posées par la réouverture : d'où vient la ligne, et par
+    // quel mode de règlement la remettre dans l'historique.
+    reopenedFromHistoryId: 'h-1',
+    reopenedPaymentMethod: 'Cash',
+  }
+
+  const corriger = async () => {
+    renderForm()
+    saisirTransaction()
+    fireEvent.click(screen.getByRole('button', { name: 'Sauvegarder' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Confirmer' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmer' }))
+  }
+
+  it('la renvoie dans l’historique au lieu de la laisser en non terminée', async () => {
+    transactionsValue.editingTransaction = ROUVERTE
+    await corriger()
+
+    // `updateTransaction` seul arrêterait la ligne dans les non terminées, où
+    // la caissière devrait la retrouver et re-choisir un mode de règlement
+    // qu'elle n'a jamais voulu changer.
+    await waitFor(() => expect(transactionsValue.saveReopenedCorrection).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'draft-9', reopenedPaymentMethod: 'Cash' }),
+      expect.objectContaining({ montant: 5000 }),
+    ))
+    expect(transactionsValue.updateTransaction).not.toHaveBeenCalled()
+    await waitFor(() => expect(onComplete).toHaveBeenCalled())
+  })
+
+  it('une modification ORDINAIRE emprunte toujours l’autre chemin', async () => {
+    transactionsValue.editingTransaction = { ...ROUVERTE, reopenedFromHistoryId: undefined, reopenedPaymentMethod: undefined }
+    await corriger()
+
+    await waitFor(() => expect(transactionsValue.updateTransaction).toHaveBeenCalled())
+    expect(transactionsValue.saveReopenedCorrection).not.toHaveBeenCalled()
   })
 })

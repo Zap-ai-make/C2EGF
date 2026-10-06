@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import DateFilter from '../components/historique/DateFilter'
 import ClientSearch from '../components/historique/ClientSearch'
 import HistoriqueTable from '../components/historique/HistoriqueTable'
@@ -10,6 +10,7 @@ import {
   ArchiveDettes,
   ArchiveDealer,
 } from '../components/historique/HistoriqueArchives'
+import CorbeilleTable from '../components/historique/CorbeilleTable'
 import PageHeader from '../components/ui/PageHeader'
 import { useHistoriqueFilters } from '../hooks/useHistoriqueFilters'
 import { useAuth } from '../context/AuthContext'
@@ -55,19 +56,26 @@ const ONGLETS = [
   ...(COLLABORATIONS_ENABLED && STORE_HISTORY_CONFIG.internalDebts
     ? [{ cle: 'dettes', libelle: 'Dettes internes' }]
     : []),
+  // La corbeille ferme la marche, et ce n'est pas un hasard : on y va quand
+  // quelque chose a mal tourné, pas dans le cours normal de la journée.
+  // Inconditionnelle — toute boutique peut supprimer, donc toute boutique doit
+  // pouvoir relire ce qu'elle a supprimé.
+  { cle: 'corbeille', libelle: 'Corbeille' },
 ]
 
 function Historique() {
   const { currentUser, userProfile } = useAuth()
   const [params, setParams] = useSearchParams()
+  const navigate = useNavigate()
   const storeId = userProfile?.storeId ?? null
-  const { historyHasMore, historyLoadingMore, loadMoreHistory } = useTransactions()
+  const { historyHasMore, historyLoadingMore, loadMoreHistory, reopenTransaction } = useTransactions()
 
   const demande = params.get('onglet')
   const onglet = ONGLETS.some((o) => o.cle === demande) ? demande : ONGLETS[0].cle
 
   const {
     filteredTransactions,
+    corbeille,
     allTransactions,
     applyDateFilter,
     applySearchFilter,
@@ -79,6 +87,22 @@ function Historique() {
   const allerA = useCallback(
     (cle) => setParams({ onglet: cle }, { replace: true }),
     [setParams],
+  )
+
+  /**
+   * Rouvrir une transaction validée, puis emmener le gérant sur le formulaire.
+   *
+   * Les deux moitiés sont indissociables : le serveur rend la part encaissée
+   * aux soldes et recrée un brouillon, mais si personne ne déplace le gérant,
+   * il reste devant un historique dont la ligne a disparu, sans comprendre où
+   * elle est passée ni que l'argent lui a été rendu.
+   */
+  const rouvrirPuisCorriger = useCallback(
+    async (transaction) => {
+      await reopenTransaction(transaction)
+      navigate('/transactions')
+    },
+    [navigate, reopenTransaction],
   )
 
   const tabClass = (actif) =>
@@ -135,7 +159,10 @@ function Historique() {
 
           {/* Tableau des transactions */}
           <div className="bg-white rounded-lg shadow-md p-6">
-            <HistoriqueTable transactions={filteredTransactions} />
+            <HistoriqueTable
+              transactions={filteredTransactions}
+              onReopen={rouvrirPuisCorriger}
+            />
 
             {historyHasMore && (
               <div className="mt-5 flex justify-center">
@@ -168,6 +195,7 @@ function Historique() {
           )}
           {onglet === 'collaborations' && <ArchiveCollaborations storeId={storeId} />}
           {onglet === 'dettes' && <ArchiveDettes storeId={storeId} />}
+          {onglet === 'corbeille' && <CorbeilleTable transactions={corbeille} />}
         </div>
       )}
     </div>

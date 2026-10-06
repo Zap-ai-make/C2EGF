@@ -53,9 +53,12 @@ describe('TC-091 — HistoriqueTable virtualisation', () => {
   it('sous le seuil (30 lignes) → toutes les lignes rendues (non-régression)', () => {
     render(<HistoriqueTable transactions={makeTxns(30)} />)
     expect(dataRows()).toHaveLength(30)
-    // En-têtes toujours présents.
+    // En-têtes toujours présents. On vise les deux BORNES de la rangée plutôt
+    // qu'une colonne du milieu : « Email utilisateur » dépend désormais d'un
+    // drapeau de profil, et ce test mesure la virtualisation, pas la
+    // composition des colonnes (TC-116 s'en charge).
     expect(screen.getByText('Date & heure')).toBeInTheDocument()
-    expect(screen.getByText('Email utilisateur')).toBeInTheDocument()
+    expect(screen.getByText('Actions')).toBeInTheDocument()
   })
 
   it('au-dessus du seuil (500 lignes) → tranche fenêtrée (moins que le total)', () => {

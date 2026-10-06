@@ -73,7 +73,9 @@ export const c2egfProfile = Object.freeze({
     navigation: Object.freeze({
       // Le gérant C2EGF travaille dans Transactions du matin au soir : le
       // tableau de bord encombrait la rangée sans être ouvert. Masqué, pas
-      // supprimé — `/` reste atteignable et le rallumer est un simple `true`.
+      // supprimé — le rallumer est un simple `true`. `/` reste atteignable,
+      // mais redirige désormais vers Transactions au lieu d'afficher un écran
+      // que la navigation ne propose plus.
       dashboard: false,
       standaloneClientForm: false,
       dealerRequests: false,
@@ -88,6 +90,10 @@ export const c2egfProfile = Object.freeze({
       dealerLabel: 'Ravitaillement',
       collaborations: false,
       internalDebts: false,
+      // Toute la boutique opère sous le compte « C2EGF SIEGE » : les deux
+      // colonnes répétaient le même nom et le même e-mail sur chaque ligne.
+      // Elles reviendront le jour où chaque caissière aura son compte.
+      operatorColumns: false,
     }),
   }),
 

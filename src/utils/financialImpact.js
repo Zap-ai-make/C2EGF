@@ -369,15 +369,29 @@ export function reversePendingOnlyImpact(balances, type, reseau, amount) {
  * @param {number} amount
  * @returns {object} Nouvelles balances
  */
-export function reverseDirectValidatedImpact(balances, type, reseau, amount) {
+export function reverseDirectValidatedImpact(balances, type, reseau, amount, split) {
   if (isDepositType(type)) {
     return applyLiquidityDelta(
       adjustBalanceValue(balances, reseau, 'stock', amount),
       -amount
     )
   }
+  // Un retrait consomme la liquidité EN CASCADE sur plusieurs réseaux. Rendre
+  // le montant au premier produirait un total juste sur une répartition fausse
+  // — l'erreur la plus coûteuse, parce qu'elle ne se voit pas.
+  //
+  // Avec `split`, écrit à la création depuis ce lot, l'inversion est exacte :
+  // chaque réseau récupère ce qu'il avait donné. Sans lui — les lignes
+  // antérieures — le refus demeure, parce que l'information est perdue.
   if (isWithdrawalType(type)) {
-    throw new Error('Renversement impossible : la répartition exacte de la liquidité consommée par ce retrait n\'est pas disponible. Cette transaction ne peut pas être annulée automatiquement.')
+    if (!split || typeof split !== 'object' || !Object.keys(split).length) {
+      throw new Error('Renversement impossible : la répartition exacte de la liquidité consommée par ce retrait n\'est pas disponible. Cette transaction ne peut pas être annulée automatiquement.')
+    }
+    let next = adjustBalanceValue(balances, reseau, 'stock', -amount)
+    for (const [network, montant] of Object.entries(split)) {
+      next = adjustBalanceValue(next, network, 'liquidite', Number(montant) || 0)
+    }
+    return next
   }
   if (isCreditType(type)) {
     return adjustBalanceValue(balances, reseau, 'stock', amount)
@@ -409,7 +423,12 @@ export function reverseHistoryTransactionImpact(currentBalances, historyData) {
   const effectiveNetwork = historyData.effectiveNetwork || null
   const statut = historyData.statut
 
-  if (normalizeTransactionLabel(statut) === normalizeTransactionLabel(FIRESTORE_CONFIG.STATUS.CANCELLED)) {
+  // Une ligne dont l'impact a DÉJÀ été défait ne doit pas pouvoir le défaire une
+  // seconde fois. « Annulée » couvrait ce cas ; « Supprimée » — la corbeille —
+  // le couvre au même titre et pour la même raison.
+  const dejaDefait = [FIRESTORE_CONFIG.STATUS.CANCELLED, FIRESTORE_CONFIG.STATUS.DELETED]
+    .map(normalizeTransactionLabel)
+  if (dejaDefait.includes(normalizeTransactionLabel(statut))) {
     throw new Error('Cette transaction est déjà annulée')
   }
 
@@ -459,13 +478,21 @@ export function reverseHistoryTransactionImpact(currentBalances, historyData) {
     return reversePendingOnlyImpact(next, type, reseau, amount)
   }
 
+  // `directValidation` marque une ligne passée par le bouton « Valider » :
+  // validée d'un geste, sans règlement. Le test vient AVANT celui de
+  // `validatedAt`, que ces lignes portent aussi — sans quoi on ne défairait que
+  // la jambe du brouillon et la liquidité resterait échouée dans les soldes.
+  if (historyData.directValidation) {
+    return reverseDirectValidatedImpact(currentBalances, type, reseau, amount, historyData.liquiditySplit)
+  }
+
   // Path 2 sans règlement : annuler uniquement l'impact pending
   if (historyData.validatedAt) {
     return reversePendingOnlyImpact(currentBalances, type, reseau, amount)
   }
 
   // Path 1 direct validée : annuler applyInitialTransactionImpact(Validée)
-  return reverseDirectValidatedImpact(currentBalances, type, reseau, amount)
+  return reverseDirectValidatedImpact(currentBalances, type, reseau, amount, historyData.liquiditySplit)
 }
 
 // ---------------------------------------------------------------------------

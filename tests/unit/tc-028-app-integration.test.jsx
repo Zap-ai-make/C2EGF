@@ -189,6 +189,7 @@ import { useAuth, AuthContext } from '../../src/context/AuthContext'
 import { firestoreService } from '../../src/services/firestore'
 import { AUTH_ROLES } from '../../src/constants/authMessages'
 import { AppContent } from '../../src/App'
+import { STORE_NAVIGATION_VISIBILITY } from '../../src/constants/storeWorkspace.js'
 
 // Providers réels pour les tests d'isolation (Section C)
 import { ClientsProvider } from '../../src/context/ClientsContext'
@@ -281,10 +282,29 @@ describe('TC-028-A — URL finale par rôle', () => {
     expect(screen.getByTestId('auth-page')).toBeInTheDocument()
   })
 
-  it('A-3 : store_admin sur "/" → Dashboard rendu', async () => {
+  /**
+   * ⚠ CE TEST A CHANGÉ DE CAMP, ET C'EST VOULU.
+   *
+   * Il affirmait « / → Dashboard ». Le profil C2EGF masque le tableau de bord
+   * (`storeWorkspace.navigation.dashboard: false`), et masquer la seule entrée
+   * de menu ne suffisait pas : `/` continuait de le servir, donc le signet, le
+   * raccourci PWA et tout rechargement sur la racine y ramenaient le gérant
+   * sans jamais consulter son rôle.
+   *
+   * L'assertion suit le drapeau au lieu de le contredire : quand le tableau de
+   * bord est visible, `/` l'affiche ; sinon `/` redirige vers la destination
+   * que `getDefaultRouteForRole` désigne déjà.
+   */
+  it('A-3 : store_admin sur "/" → suit le drapeau du profil', async () => {
     renderApp(storeAdminCtx(), '/')
-    expect(await screen.findByTestId('page-dashboard')).toBeInTheDocument()
-    expect(screen.getByTestId('location').textContent).toBe('/')
+
+    if (STORE_NAVIGATION_VISIBILITY.dashboard) {
+      expect(await screen.findByTestId('page-dashboard')).toBeInTheDocument()
+      expect(screen.getByTestId('location').textContent).toBe('/')
+    } else {
+      expect(await screen.findByTestId('page-transactions')).toBeInTheDocument()
+      expect(screen.getByTestId('location').textContent).toBe('/transactions')
+    }
   })
 
   it('A-4 : store_admin sur "/clients" → Clients rendu', async () => {
@@ -412,8 +432,11 @@ describe('TC-028-B — Wildcard et états bloqués', () => {
   })
 
   it('B-6 : store_admin → AdminLayout absent (isolation espaces)', async () => {
-    renderApp(storeAdminCtx(), '/')
-    await screen.findByTestId('page-dashboard')
+    // Par `/transactions` : ce test porte sur l'ISOLATION des layouts, pas sur
+    // la page atteinte. Le viser sur `/` le rendrait otage du drapeau du
+    // tableau de bord, qu'il ne cherche pas à mesurer.
+    renderApp(storeAdminCtx(), '/transactions')
+    await screen.findByTestId('page-transactions')
     expect(screen.queryByTestId('admin-layout')).not.toBeInTheDocument()
     expect(screen.queryByTestId('dealer-layout')).not.toBeInTheDocument()
   })

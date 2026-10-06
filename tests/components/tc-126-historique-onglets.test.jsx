@@ -88,10 +88,13 @@ beforeEach(() => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 describe('TC-126-A — les onglets', () => {
-  it('[HI-01] les quatre sources sont proposées sous le profil réel', () => {
+  // La corbeille ferme la marche et n'est conditionnée par aucun drapeau de
+  // profil : toute boutique peut supprimer, donc toute boutique doit pouvoir
+  // relire ce qu'elle a supprimé.
+  it('[HI-01] les quatre sources et la corbeille sont proposées sous le profil réel', () => {
     poser()
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
-      'Transactions clients', 'Dealer', 'Collaborations', 'Dettes internes',
+      'Transactions clients', 'Dealer', 'Collaborations', 'Dettes internes', 'Corbeille',
     ])
   })
 

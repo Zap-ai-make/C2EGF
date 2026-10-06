@@ -313,33 +313,129 @@ export const TransactionsProvider = ({ children }) => {
     }
   }, [])
 
-  const deleteTransaction = useCallback(async (id) => {
+  /**
+   * Met une transaction à la corbeille, qu'elle soit non terminée ou validée.
+   *
+   * UNE SEULE FONCTION POUR LES DEUX TABLEAUX
+   * L'appelant n'a pas à savoir où vit la ligne : les deux boutons
+   * « Supprimer » — celui des non terminées et celui de l'historique —
+   * appellent ceci, et le routage se fait sur ce que le contexte sait déjà.
+   * Dans les deux cas le serveur rend le montant aux soldes et la ligne
+   * réapparaît dans la corbeille.
+   */
+  const trashTransaction = useCallback(async (id) => {
     try {
       setError(null)
-      // Vérifier d'abord si c'est dans les drafts ou l'historique
       const isDraft = pendingTransactions.some(t => t.id === id)
 
       if (isDraft) {
-        await firestoreService.deleteDraft(id)
+        await firestoreService.trashDraft(id)
       } else {
-        const cancelled = await firestoreService.deleteFromHistory(id)
-        if (cancelled) {
-          const markCancelled = (items) => items.map((item) => (
-            item.id === id ? { ...item, statut: FIRESTORE_CONFIG.STATUS.CANCELLED } : item
+        const trashed = await firestoreService.trashHistory(id)
+        if (trashed) {
+          // Marquage optimiste : les pages d'archive ne sont pas toutes
+          // branchées sur un onSnapshot, et la ligne doit quitter l'onglet
+          // clients tout de suite — sinon le gérant reclique.
+          const marquerSupprimee = (items) => items.map((item) => (
+            item.id === id
+              ? { ...item, statut: FIRESTORE_CONFIG.STATUS.DELETED, deletedAt: new Date() }
+              : item
           ))
-          archiveHistoryRef.current = markCancelled(archiveHistoryRef.current)
-          liveHistoryRef.current = markCancelled(liveHistoryRef.current)
-          todayHistoryRef.current = markCancelled(todayHistoryRef.current)
+          archiveHistoryRef.current = marquerSupprimee(archiveHistoryRef.current)
+          liveHistoryRef.current = marquerSupprimee(liveHistoryRef.current)
+          todayHistoryRef.current = marquerSupprimee(todayHistoryRef.current)
           publishHistory()
         }
       }
-      // La mise à jour de l'état se fera automatiquement via onSnapshot
     } catch (error) {
       console.error('Erreur lors de la suppression de la transaction:', error)
       setError(error.message)
       throw error
     }
   }, [pendingTransactions, publishHistory])
+
+  /**
+   * Ramène une transaction validée dans le formulaire pour correction.
+   *
+   * Le serveur rend la part encaissée aux soldes et recrée un brouillon ; on
+   * ouvre le formulaire sur CE brouillon, pas sur la ligne d'historique qui
+   * vient de disparaître — c'est son identifiant que la correction modifiera.
+   *
+   * On préremplit depuis la ligne qu'on a déjà en main plutôt que d'attendre
+   * le snapshot : le formulaire s'ouvre sans latence, et l'abonnement corrige
+   * la copie locale dans la seconde.
+   */
+  const reopenTransaction = useCallback(async (transaction) => {
+    try {
+      setError(null)
+      const { draftId, direct } = await firestoreService.reopenHistory(transaction.id)
+      const retiree = (items) => items.filter((item) => item.id !== transaction.id)
+      archiveHistoryRef.current = retiree(archiveHistoryRef.current)
+      liveHistoryRef.current = retiree(liveHistoryRef.current)
+      todayHistoryRef.current = retiree(todayHistoryRef.current)
+      publishHistory()
+      // Liste blanche, comme côté serveur : recopier la ligne d'historique en
+      // entier traînerait ses neuf champs de règlement dans l'objet en cours
+      // d'édition, qui paraîtrait alors déjà réglé à qui l'inspecte.
+      setEditingTransaction({
+        client: transaction.client,
+        clientId: transaction.clientId,
+        code: transaction.code,
+        type: transaction.type,
+        reseau: transaction.reseau,
+        montant: transaction.montant,
+        id: draftId,
+        statut: FIRESTORE_CONFIG.STATUS.PENDING,
+        reopenedFromHistoryId: transaction.id,
+        reopenedPaymentMethod: transaction.paymentMethod ?? null,
+        // Validée d'un geste depuis le formulaire, sans règlement : la
+        // correction devra rejouer CE geste, pas en inventer un autre.
+        //
+        // Le drapeau vient du SERVEUR. Le déduire ici de `!paymentMethod`
+        // reviendrait à inventer une jambe de liquidité aux lignes qui n'en ont
+        // jamais porté — un montant corrigé à l'identique déplacerait les soldes.
+        reopenedDirect: direct,
+      })
+      return draftId
+    } catch (error) {
+      console.error('Erreur lors de la réouverture de la transaction:', error)
+      setError(error.message)
+      throw error
+    }
+  }, [publishHistory])
+
+  /**
+   * Enregistre la correction d'une ligne rouverte et la REMET dans l'historique.
+   *
+   * Une transaction venue de l'historique doit y retourner. La laisser dans les
+   * non terminées obligerait la caissière à re-cliquer « Encaisser » et à
+   * re-choisir un mode de règlement qu'elle n'a jamais voulu changer : elle n'a
+   * corrigé qu'un montant.
+   *
+   * DEUX APPELS, ET C'EST SANS DANGER
+   * `updateDraft` ajuste la jambe du brouillon et journalise la correction ;
+   * `validateDraft` rejoue la jambe du règlement avec le mode mémorisé. Chacun
+   * est atomique de son côté. Si le second échouait, le brouillon resterait
+   * dans les non terminées avec des soldes COHÉRENTS pour un brouillon — rien
+   * de faux, juste une étape à reprendre d'un clic.
+   */
+  const saveReopenedCorrection = useCallback(async (transaction, updates) => {
+    try {
+      setError(null)
+      await firestoreService.updateDraft(transaction.id, updates)
+      await firestoreService.validateTransaction(
+        transaction.id,
+        FIRESTORE_CONFIG.STATUS.VALIDATED,
+        transaction.reopenedPaymentMethod ?? null,
+        null,
+        Boolean(transaction.reopenedDirect),
+      )
+    } catch (error) {
+      console.error('Erreur lors de la correction de la transaction:', error)
+      setError(error.message)
+      throw error
+    }
+  }, [])
 
   const startEditTransaction = useCallback((transaction) => {
     setEditingTransaction(transaction)
@@ -378,7 +474,9 @@ export const TransactionsProvider = ({ children }) => {
     validateTransaction,
     addPaymentTranche,
     addRefundTranche,
-    deleteTransaction,
+    trashTransaction,
+    reopenTransaction,
+    saveReopenedCorrection,
     startEditTransaction,
     clearEditTransaction,
     getActionButtons,
