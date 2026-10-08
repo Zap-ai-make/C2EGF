@@ -37,6 +37,7 @@ import {
   buildSettlementAuditBase,
   readIdempotentSettlement,
   readSettlementTransactionContext,
+  cleanSettlementAgentCode,
 } from './settlementShared.js'
 import { STORE_PAYMENT_METHODS } from '../config/storeProfile.js'
 
@@ -67,8 +68,10 @@ export async function addTransactionPaymentHandler(request, { db, FieldValue, lo
   const actorUid = validateAuthUid(request.auth?.uid)
 
   // ── 2. Payload shape ──────────────────────────────────────────────────────
-  const payload = validateInputPayload(request.data, ['draftId', 'amount', 'paymentMethod', 'idempotencyKey'])
+  const payload = validateInputPayload(request.data, ['draftId', 'amount', 'paymentMethod', 'idempotencyKey', 'agentCode'])
   const { draftId, amount, paymentMethod, idempotencyKey } = payload
+  // Facultatif : `null` quand la boutique n'a pas note de destination.
+  const agentCode = cleanSettlementAgentCode(payload.agentCode)
 
   // ── 3. Field validation ───────────────────────────────────────────────────
   if (typeof draftId !== 'string' || !draftId.trim()) {
@@ -126,6 +129,7 @@ export async function addTransactionPaymentHandler(request, { db, FieldValue, lo
         settlementSnap,
         amount,
         paymentMethod,
+        agentCode,
         action: 'addTransactionPayment',
         actorUid,
         storeId,
@@ -189,6 +193,7 @@ export async function addTransactionPaymentHandler(request, { db, FieldValue, lo
         type:              'payment',
         operationType:     'payment',
         ...buildSettlementAuditBase({
+          agentCode,
           settlementId,
           draftId,
           storeId,
@@ -247,6 +252,11 @@ export async function addTransactionPaymentHandler(request, { db, FieldValue, lo
           settlementUpdatedAt: now,
           statut:              buildFinalStatus(effectiveType, paymentMethod),
           paymentMethod,
+          // ⚠ `settlementAgentCode` ET NON `agentCode` : la ligne d'historique
+          //   porte deja `code`, celui du CLIENT. Les deux repondent a des
+          //   questions differentes — « qui est ce client » et « ou est parti
+          //   l'argent » — et un nom court les aurait confondus a la relecture.
+          settlementAgentCode: agentCode,
           effectiveNetwork:    affectedNetwork,
           settlementAmount:    originalAmount,
           validatedAt:         now,

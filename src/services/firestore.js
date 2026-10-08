@@ -21,6 +21,7 @@ import cacheManager, { cacheUtils } from '../utils/cacheManager'
 import { FIRESTORE_CONFIG } from '../constants/firestoreConstants'
 import { CLIENT_ID, getFirestoreCollectionPath } from '../config/clientIsolation'
 import { parseFcfaAmount } from '../utils/fcfaAmount.js'
+import { champsAgent } from '../utils/agentFields.js'
 import { runStoreTransactionCommand } from './storeTransactionCommandService.js'
 import {
   validateFcfaAmount as _validateFcfaAmountFn,
@@ -49,6 +50,35 @@ import { BalanceService } from './balanceService.js'
 import { normalizeSubscriptionObserver, notifySubscriptionError } from './subscriptionObserver.js'
 
 // Service Firestore modulaire avec cache, gestion d'erreurs et optimisations
+
+/**
+ * Les champs agent, prêts à être écrits.
+ *
+ * ⚠ `orange` EST RÉÉCRIT, ET CE N'EST PAS UN DOUBLON DE CONFORT.
+ *
+ * Ce champ porte DEUX rôles depuis toujours : l'étiquette du formulaire disait
+ * « Numéro agent / Code agent », mais la clé `orange` est aussi le COMPTE
+ * RÉSEAU Orange du client — c'est elle que le formulaire de transaction lit
+ * pour écrire le code sur chaque opération (TransactionForm.jsx), et c'est elle
+ * que `getClientAvailableNetworks` interroge pour savoir si le client peut
+ * opérer sur ce réseau.
+ *
+ * Séparer l'identité (code agent / numéro agent) ne supprime donc pas le besoin
+ * du compte réseau. On le dérive : le code agent d'abord, le numéro agent à
+ * défaut — ce qui reproduit exactement ce qui était écrit avant la séparation,
+ * puisque c'était l'un ou l'autre dans la même case.
+ *
+ * Le jour où le compte réseau méritera sa propre saisie, c'est ici qu'il faudra
+ * cesser de le déduire.
+ */
+export function normaliserChampsAgent(donnees) {
+  if (!donnees || (!('codeAgent' in donnees) && !('numeroAgent' in donnees) && !('orange' in donnees))) {
+    return {}
+  }
+
+  const { codeAgent, numeroAgent } = champsAgent(donnees)
+  return { codeAgent, numeroAgent, orange: codeAgent || numeroAgent }
+}
 
 export class FirestoreService {
   constructor() {
@@ -828,6 +858,39 @@ export class FirestoreService {
     })
   }
 
+  /**
+   * Refuse un client dont le code agent ou le numéro agent est déjà enregistré
+   * dans cette boutique.
+   *
+   * Chaque valeur est cherchée dans TROIS champs : les deux nouveaux, et
+   * l'ancien `orange` où vivent toutes les fiches d'avant la séparation. Sans
+   * ce troisième, on pourrait réenregistrer un agent que la boutique connaît
+   * depuis des mois — et se retrouver avec deux fiches pour la même personne.
+   */
+  async _refuserDoublonAgent(normalise, storeId) {
+    const valeurs = [normalise.codeAgent, normalise.numeroAgent].filter(Boolean)
+    if (valeurs.length === 0) return
+
+    for (const valeur of valeurs) {
+      for (const champ of ['codeAgent', 'numeroAgent', 'orange']) {
+        const existants = await this.getCollection(
+          FIRESTORE_CONFIG.COLLECTIONS.CLIENTS,
+          {
+            where: [
+              { field: champ, operator: '==', value: valeur },
+              { field: 'registeredStoreId', operator: '==', value: storeId },
+            ],
+            limitCount: 1,
+          },
+          false, // pas de cache : on veut l'état réel avant écriture
+        )
+        if (existants.length > 0) {
+          throw new Error('Un client avec ce numéro/code agent existe déjà dans cette boutique.')
+        }
+      }
+    }
+  }
+
   async addClient(clientData) {
     const activeStore = this.requireActiveStore()
 
@@ -835,36 +898,24 @@ export class FirestoreService {
       throw new Error('Boutique active non disponible pour la création du client')
     }
 
-    // Anti-doublon : un même numéro/code agent (champ `orange`) ne peut être enregistré
-    // qu'une seule fois par boutique. On ignore les valeurs vides (champ facultatif).
+    const normalise = normaliserChampsAgent(clientData)
+
+    // Anti-doublon : un même code agent ou numéro agent ne peut être enregistré
+    // qu'une seule fois par boutique. On ignore les valeurs vides (facultatives).
     // La collection `clients` est globale et isolée par `registeredStoreId` ⇒ on filtre
-    // sur les deux champs (deux égalités → aucun index composite requis).
-    const agentCode = String(clientData?.orange ?? '').trim()
-    if (agentCode) {
-      const existing = await this.getCollection(
-        FIRESTORE_CONFIG.COLLECTIONS.CLIENTS,
-        {
-          where: [
-            { field: 'orange', operator: '==', value: agentCode },
-            { field: 'registeredStoreId', operator: '==', value: activeStore.id },
-          ],
-          limitCount: 1,
-        },
-        false, // pas de cache : on veut l'état réel avant écriture
-      )
-      if (existing.length > 0) {
-        throw new Error('Un client avec ce numéro/code agent existe déjà dans cette boutique.')
-      }
-    }
+    // sur deux champs (deux égalités → aucun index composite requis).
+    //
+    // TROIS CHAMPS INTERROGÉS, ET LE TROISIÈME EST L'ANCIEN. Une valeur déjà
+    // enregistrée avant la séparation vit dans `orange` ; l'oublier laisserait
+    // réenregistrer un agent que la boutique connaît déjà.
+    await this._refuserDoublonAgent(normalise, activeStore.id)
 
     // Les champs d'appartenance à la boutique sont toujours imposés par le service
     // (jamais hérités des données du formulaire) pour aligner avec la règle Firestore :
     //   allow create: if ... request.resource.data.registeredStoreId == profile().storeId
     return this.addDocument(FIRESTORE_CONFIG.COLLECTIONS.CLIENTS, {
       ...clientData,
-      // On stocke le numéro/code agent normalisé (trim) pour que l'anti-doublon
-      // ci-dessus, qui compare la valeur trimmée, reste fiable dans le temps.
-      ...(clientData?.orange !== undefined ? { orange: agentCode } : {}),
+      ...normalise,
       registeredStoreId: activeStore.id,
       registeredStoreName: activeStore.name,
       dateAjout: new Date().toLocaleDateString('fr-FR')
@@ -873,7 +924,11 @@ export class FirestoreService {
 
   async updateClient(clientId, updates) {
     this.requireActiveStore()
-    return this.updateDocument(FIRESTORE_CONFIG.COLLECTIONS.CLIENTS, clientId, updates)
+    return this.updateDocument(
+      FIRESTORE_CONFIG.COLLECTIONS.CLIENTS,
+      clientId,
+      { ...updates, ...normaliserChampsAgent(updates) },
+    )
   }
 
   async deleteClient(clientId) {
@@ -967,6 +1022,21 @@ export class FirestoreService {
   /** Met une ligne d'historique à la corbeille et rend son montant aux soldes. */
   async trashHistory(historyId) {
     const result = await runStoreTransactionCommand({ action: 'trashHistory', historyId })
+    return result.trashed
+  }
+
+  /**
+   * Défait un retour de ravitaillement.
+   *
+   * ⚠ Ce n'est PAS `trashHistory` avec un autre identifiant, et le serveur
+   *   refuse d'ailleurs explicitement le type « Retour » là-bas. Défaire un
+   *   retour a deux moitiés : recréditer la réserve ET faire remonter le reste
+   *   dû de la livraison. L'inversion générique ne ferait que la première, et
+   *   la livraison resterait soldée à tort — la boutique croirait ne plus rien
+   *   devoir alors qu'elle doit encore.
+   */
+  async trashReplenishmentReturn(returnId) {
+    const result = await runStoreTransactionCommand({ action: 'trashReplenishmentReturn', returnId })
     return result.trashed
   }
 

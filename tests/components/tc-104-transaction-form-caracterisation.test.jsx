@@ -56,10 +56,12 @@ beforeEach(() => {
 })
 
 describe('TC-104 — champs du formulaire', () => {
-  it('propose la recherche d’un compte par nom ou par code agent', () => {
+  it('propose la recherche d’un compte par chacun de ses identifiants', () => {
     renderForm()
+    // Le libellé énumère les cinq champs réellement fouillés (TC-234) : un
+    // « Rechercher un client… » laissait croire qu'on ne cherche que par nom.
     expect(
-      screen.getByPlaceholderText('Rechercher un client ou saisir le numéro/code agent...'),
+      screen.getByPlaceholderText('Nom, prénom, code agent, numéro agent ou numéro personnel…'),
     ).toBeInTheDocument()
   })
 

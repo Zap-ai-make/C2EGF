@@ -35,6 +35,7 @@ import {
   buildSettlementAuditBase,
   readIdempotentSettlement,
   readSettlementTransactionContext,
+  cleanSettlementAgentCode,
 } from './settlementShared.js'
 import { STORE_PAYMENT_METHODS } from '../config/storeProfile.js'
 
@@ -56,8 +57,10 @@ export async function addTransactionRefundHandler(request, { db, FieldValue, log
   const actorUid = validateAuthUid(request.auth?.uid)
 
   // ── 2. Payload shape ──────────────────────────────────────────────────────
-  const payload = validateInputPayload(request.data, ['draftId', 'amount', 'paymentMethod', 'idempotencyKey'])
+  const payload = validateInputPayload(request.data, ['draftId', 'amount', 'paymentMethod', 'idempotencyKey', 'agentCode'])
   const { draftId, amount, paymentMethod, idempotencyKey } = payload
+  // Facultatif : `null` quand la boutique n'a pas note de destination.
+  const agentCode = cleanSettlementAgentCode(payload.agentCode)
 
   // ── 3. Field validation ───────────────────────────────────────────────────
   if (typeof draftId !== 'string' || !draftId.trim()) {
@@ -115,6 +118,7 @@ export async function addTransactionRefundHandler(request, { db, FieldValue, log
         settlementSnap,
         amount,
         paymentMethod,
+        agentCode,
         action: 'addTransactionRefund',
         actorUid,
         storeId,
@@ -184,6 +188,7 @@ export async function addTransactionRefundHandler(request, { db, FieldValue, log
         type:              'refund',
         operationType:     'refund',
         ...buildSettlementAuditBase({
+          agentCode,
           settlementId,
           draftId,
           storeId,

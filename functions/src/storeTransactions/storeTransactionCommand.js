@@ -10,12 +10,14 @@ import {
   mapPaymentMethodToNetwork,
   reverseHistoryTransactionImpact,
   liquidityConsumptionSplit,
+  applyReplenishmentReturnImpact,
 } from '../settlements/financialUtils.js'
 import {
   STORE_NETWORKS,
   STORE_TRANSACTION_TYPES,
   STORE_PAYMENT_METHODS,
   CASHIER_CAN_EDIT_BALANCES,
+  STORE_REPLENISHMENT_SENDERS,
 } from '../config/storeProfile.js'
 
 const SETTLEMENT_FIELDS = [
@@ -29,7 +31,20 @@ const REPLENISHMENT_TYPE = 'Ravitaillement'
 const CLOSURE_TYPE = 'Clôture'
 // Ni l'un ni l'autre n'est un mouvement client : `reverseHistoryTransactionImpact`
 // ne sait pas les défaire, et `cancelHistory` les refuse pour cette raison.
-const UNCANCELLABLE_TYPES = [REPLENISHMENT_TYPE, CLOSURE_TYPE]
+// Le retour de ravitaillement : la boutique rend au dealer ce qu'il lui avait
+// envoye. Il vit dans `history` et non dans une collection a part, pour que la
+// journee se lise comme une suite dans l'onglet Ravitaillement : recu 500 000,
+// rendu 420 000. L'abonnement temps reel et la pagination resservent tels quels.
+const RETURN_TYPE = 'Retour'
+// Le plafond du tableau d'expediteurs memorises sur la boutique. Au-dela, on
+// garde les derniers : cinquante noms distincts releve de la faute de frappe,
+// pas de l'organisation.
+const SENDERS_MAX = 50
+// `trashHistory` et `reopenHistory` refusent ces types. Le retour s'y ajoute :
+// il se defait par `trashReplenishmentReturn`, qui sait AUSSI remonter le reste
+// du de sa livraison. L'inversion generique ne rendrait que le solde, et la
+// livraison resterait soldee a tort.
+const UNCANCELLABLE_TYPES = [REPLENISHMENT_TYPE, CLOSURE_TYPE, RETURN_TYPE]
 const NOTE_MAX = 280
 // La corbeille. Un statut à part, et pas « Annulée » : une annulation est une
 // décision métier, une suppression est un geste de correction. Les confondre
@@ -93,6 +108,31 @@ function splitLiquiditeSiRetraitDirect(balances, transaction) {
   return { liquiditySplit: liquidityConsumptionSplit(balances, transaction.montant) }
 }
 
+/**
+ * L'expediteur d'un ravitaillement, resolu contre le vocabulaire connu.
+ *
+ * POURQUOI UNE COMPARAISON NORMALISEE, ET PAS UNE EGALITE
+ * ───────────────────────────────────────────────────────
+ * Les retours se rattachent a leur livraison, et les livraisons se groupent par
+ * expediteur : c'est ce groupement que la boutique lit le soir pour savoir ce
+ * qu'elle doit a qui. Si « Mme Sawadogo », « mme sawadogo » et « Mme  Sawadogo »
+ * entrent comme trois noms, ils deviennent TROIS CREANCIERS, chacun avec un
+ * total partiel. Personne ne verra l'erreur : les trois totaux sont justes,
+ * c'est leur separation qui est fausse.
+ *
+ * On renvoie donc toujours la forme DEJA CONNUE quand il y en a une, et la
+ * saisie n'ajoute un nom que s'il ne ressemble a aucun autre.
+ */
+function cleanExpediteur(value, connus) {
+  const brut = String(value ?? '').replace(/\s+/g, ' ').trim()
+  if (!brut) fail('STORE_TRANSACTION_INVALID', 'Expediteur manquant.')
+  if (brut.length > 60) fail('STORE_TRANSACTION_INVALID', "Nom d'expediteur trop long.")
+
+  const pliage = (nom) => String(nom).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  const deja = connus.find((nom) => pliage(nom) === pliage(brut))
+  return { nom: deja ?? brut, estNouveau: !deja }
+}
+
 function fail(code, message) { throw new DealerRequestError(code, message) }
 function cleanId(value, field) {
   if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(value.trim())) fail('STORE_TRANSACTION_INVALID', `${field} invalide.`)
@@ -148,7 +188,7 @@ async function readActor(t, db, uid) {
 
 export async function storeTransactionCommandHandler(request, { db, FieldValue, logWriter = write }) {
   const uid = validateAuthUid(request.auth?.uid)
-  const payload = validateInputPayload(request.data, ['action', 'transaction', 'draftId', 'historyId', 'updates', 'paymentMethod', 'amount', 'network', 'balanceType', 'balanceAmount', 'balances', 'note', 'direct'])
+  const payload = validateInputPayload(request.data, ['action', 'transaction', 'draftId', 'historyId', 'updates', 'paymentMethod', 'amount', 'network', 'balanceType', 'balanceAmount', 'balances', 'note', 'direct', 'expediteur', 'replenishmentId', 'returnId'])
   const action = String(payload.action || '')
   const now = FieldValue.serverTimestamp()
 
@@ -225,12 +265,28 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       const note = cleanNote(payload.note)
       const network = STORE_NETWORKS[0]
       const nextBalances = applyReplenishmentImpact(balances, network, payload.balanceType, amount)
+
+      // L'expediteur se resout contre le vocabulaire du profil ET les noms que
+      // la boutique a deja ajoutes. Un nom inedit rejoint la liste de la
+      // boutique : sans cette memoire, « Ajouter un nom » obligerait a le
+      // retaper a chaque livraison, et c'est en le retapant qu'on l'orthographie
+      // autrement.
+      const memorises = Array.isArray(store.ravitaillementExpediteurs) ? store.ravitaillementExpediteurs : []
+      const { nom: expediteur, estNouveau } = cleanExpediteur(payload.expediteur, [...STORE_REPLENISHMENT_SENDERS, ...memorises])
+
       const ref = db.collection(`clients/${storeId}/history`).doc()
       const data = {
         type: REPLENISHMENT_TYPE,
         montant: amount,
         reseau: network,
         balanceType: payload.balanceType,
+        expediteur,
+        // Le reste du, porte par la livraison elle-meme. Son ABSENCE distingue
+        // les lignes d'avant ce lot : elles n'ont pas d'expediteur et leur
+        // reste du est inconnaissable, donc elles comptent pour soldees.
+        returnedAmount: 0,
+        remainingAmount: amount,
+        replenishmentStatus: 'open',
         statut: 'Validée',
         note,
         storeId,
@@ -244,8 +300,11 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
         validatedAt: now,
       }
       t.set(ref, data)
+      if (estNouveau) {
+        t.set(db.doc(`stores/${storeId}`), { ravitaillementExpediteurs: [...memorises, expediteur].slice(-SENDERS_MAX) }, { merge: true })
+      }
       t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
-      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: ref.id, uid, balanceType: payload.balanceType, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
+      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: ref.id, uid, balanceType: payload.balanceType, expediteur, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
       return { id: ref.id, ...data }
     }
 
@@ -550,6 +609,123 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       // redéduire une règle financière — une règle recopiée est une règle qui
       // divergera.
       return { reopened: true, draftId: draftRef.id, direct: estDirecte }
+    }
+
+    // ─── Le retour de ravitaillement ────────────────────────────────────────
+    //
+    // La boutique rend au dealer ce qu'il lui avait envoye. UNE SEULE RESERVE
+    // bouge — c'est toute la raison d'etre de cette action : un depot valide en
+    // deplace deux, et la boutique voulait juste faire sortir un montant.
+    //
+    // La reserve rendue peut differer de celle recue : on recoit du stock
+    // electronique, on rend des especes. Les deux restent comparables parce que
+    // c'est la meme dette, exprimee dans deux vases.
+    if (action === 'returnReplenishment') {
+      const replenishmentId = cleanId(payload.replenishmentId, 'replenishmentId')
+      const amount = cleanAmount(payload.amount)
+      if (!['stock', 'liquidite'].includes(payload.balanceType)) fail('STORE_TRANSACTION_INVALID', 'Vase de retour inconnu.')
+      const note = cleanNote(payload.note)
+
+      const ravitaillementRef = db.doc(`clients/${storeId}/history/${replenishmentId}`)
+      const snap = await t.get(ravitaillementRef)
+      if (!snap.exists) fail('STORE_TRANSACTION_NOT_FOUND', 'Ravitaillement introuvable.')
+      const ravitaillement = snap.data()
+      if (ravitaillement.type !== REPLENISHMENT_TYPE) fail('STORE_TRANSACTION_INVALID', 'Cette ligne n\u2019est pas un ravitaillement.')
+
+      // Une ligne d'avant ce lot n'a pas de reste du, et il est INCONNAISSABLE :
+      // ce qui en a deja ete rendu ne fut jamais enregistre. La rouvrir au
+      // retour reclamerait un montant que la boutique a peut-etre deja remis.
+      if (!Number.isSafeInteger(ravitaillement.remainingAmount)) {
+        fail('STORE_TRANSACTION_INVALID', 'Ce ravitaillement est anterieur au suivi des retours : son reste du est inconnu.')
+      }
+      if (ravitaillement.remainingAmount <= 0) fail('STORE_TRANSACTION_INVALID', 'Ce ravitaillement est deja solde.')
+      if (amount > ravitaillement.remainingAmount) {
+        fail('STORE_TRANSACTION_INVALID', `Montant superieur au reste du. Reste : ${ravitaillement.remainingAmount.toLocaleString('fr-FR')} FCFA`)
+      }
+
+      // Le refus \u00ab reserve insuffisante \u00bb vient d'ici, avec le disponible dans
+      // son message : il est porte par `adjustBalanceValue` pour tout delta
+      // negatif, et il n'y a pas lieu de le reecrire.
+      const network = STORE_NETWORKS[0]
+      const nextBalances = applyReplenishmentReturnImpact(balances, network, payload.balanceType, amount)
+
+      const reste = ravitaillement.remainingAmount - amount
+      const ref = db.collection(`clients/${storeId}/history`).doc()
+      const data = {
+        type: RETURN_TYPE,
+        montant: amount,
+        reseau: network,
+        balanceType: payload.balanceType,
+        replenishmentId,
+        // Recopie, pas lue par jointure : la liste groupe par expediteur, et une
+        // lecture de plus par ligne pour un nom deja connu serait du gaspillage.
+        expediteur: ravitaillement.expediteur || '',
+        statut: 'Validee',
+        note,
+        storeId,
+        storeName: store.name || profile.storeName || '',
+        operatorId: uid,
+        operatorName: profile.name || '',
+        operatorEmail: profile.email || '',
+        date: dateFr(),
+        createdAt: now,
+        updatedAt: now,
+        validatedAt: now,
+      }
+
+      t.set(ref, data)
+      t.update(ravitaillementRef, {
+        returnedAmount: (Number(ravitaillement.returnedAmount) || 0) + amount,
+        remainingAmount: reste,
+        replenishmentStatus: reste === 0 ? 'settled' : 'open',
+        updatedAt: now,
+      })
+      t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
+      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: ref.id, replenishmentId, uid, balanceType: payload.balanceType, expediteur: data.expediteur, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
+      return { id: ref.id, remainingAmount: reste }
+    }
+
+    // Defaire un retour : la reserve est recreditee ET le reste du remonte.
+    //
+    // C'est pour cette seconde moitie que `trashHistory` refuse le type Retour.
+    // L'inversion generique rendrait le solde et laisserait la livraison soldee
+    // a tort : la boutique croirait ne plus rien devoir.
+    if (action === 'trashReplenishmentReturn') {
+      const returnId = cleanId(payload.returnId, 'returnId')
+      const ref = db.doc(`clients/${storeId}/history/${returnId}`)
+      const snap = await t.get(ref)
+      if (!snap.exists) fail('STORE_TRANSACTION_NOT_FOUND', 'Retour introuvable.')
+      const retour = snap.data()
+      if (retour.type !== RETURN_TYPE) fail('STORE_TRANSACTION_INVALID', 'Cette ligne n\u2019est pas un retour.')
+      if (retour.deletedAt) fail('STORE_TRANSACTION_INVALID', 'Ce retour a deja ete supprime.')
+
+      const ravitaillementRef = db.doc(`clients/${storeId}/history/${retour.replenishmentId}`)
+      const snapRav = await t.get(ravitaillementRef)
+      if (!snapRav.exists) fail('STORE_TRANSACTION_NOT_FOUND', 'Ravitaillement introuvable.')
+      const ravitaillement = snapRav.data()
+
+      // Rendre, c'est refaire entrer : l'inverse d'un retour est un
+      // ravitaillement du meme montant dans le meme vase.
+      const nextBalances = applyReplenishmentImpact(balances, retour.reseau || STORE_NETWORKS[0], retour.balanceType, retour.montant)
+      const reste = (Number(ravitaillement.remainingAmount) || 0) + retour.montant
+
+      t.update(ref, {
+        statut: DELETED_STATUS,
+        origin: 'return',
+        deletedAt: now,
+        deletedBy: uid,
+        deletedByName: profile.name || '',
+        updatedAt: now,
+      })
+      t.update(ravitaillementRef, {
+        returnedAmount: Math.max(0, (Number(ravitaillement.returnedAmount) || 0) - retour.montant),
+        remainingAmount: reste,
+        replenishmentStatus: reste > 0 ? 'open' : 'settled',
+        updatedAt: now,
+      })
+      t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
+      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: returnId, replenishmentId: retour.replenishmentId, uid, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
+      return { trashed: true, returnId }
     }
 
     fail('STORE_TRANSACTION_INVALID', 'Commande inconnue.')

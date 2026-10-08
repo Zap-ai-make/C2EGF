@@ -42,7 +42,7 @@ const renderForm = (props = {}) =>
   render(<TransactionForm clients={CLIENTS} onComplete={onComplete} {...props} />)
 
 const saisirTransaction = () => {
-  fireEvent.change(screen.getByPlaceholderText(/Rechercher un client/i), { target: { value: '45441020' } })
+  fireEvent.change(screen.getByPlaceholderText(/code agent/i), { target: { value: '45441020' } })
   fireEvent.change(screen.getByPlaceholderText('Saisir le montant'), { target: { value: '5000' } })
   fireEvent.click(screen.getByRole('radio', { name: 'Dépôt' }))
 }

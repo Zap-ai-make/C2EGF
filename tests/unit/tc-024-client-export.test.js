@@ -18,7 +18,14 @@
  *
  * Colonnes exportées (ordre final) :
  *   Boutique | Nom | Prénom | Numéro d'identité | Numéro personnel |
- *   Numéro agent / Code agent | Localité | Agent commercial | Date d'ajout
+ *   Code agent | Numéro agent | Localité | Agent commercial | Date d'ajout
+ *
+ * ⚠ DIX COLONNES, ET PAS NEUF, DEPUIS LA SÉPARATION (TC-233).
+ *   « Numéro agent / Code agent » tenait deux informations dans une case. À
+ *   l'export, chaque fiche est répartie : 8 chiffres → numéro, sinon code.
+ *   À l'IMPORT, l'ancienne colonne unique reste acceptée et répartie de la même
+ *   façon — la boutique possède déjà des fichiers à ce format, et un import qui
+ *   les refuserait rendrait sa propre base inutilisable.
  *
  * Fichiers source :
  *   - src/utils/excelUtils.js (resolveClientStoreName, exportClientsToXLSM)
@@ -164,8 +171,8 @@ describe('EXCEL_HEADERS', () => {
     expect(EXCEL_HEADERS[0]).toBe('Boutique')
   })
 
-  it('contient 9 colonnes (Boutique + 8 champs client)', () => {
-    expect(EXCEL_HEADERS).toHaveLength(9)
+  it('contient 10 colonnes (Boutique + 9 champs client)', () => {
+    expect(EXCEL_HEADERS).toHaveLength(10)
   })
 
   it('ordre exact des colonnes', () => {
@@ -175,7 +182,8 @@ describe('EXCEL_HEADERS', () => {
       'Prénom',
       "Numéro d'identité",
       'Numéro personnel',
-      'Numéro agent / Code agent',
+      'Code agent',
+      'Numéro agent',
       'Localité',
       'Agent commercial',
       "Date d'ajout",
@@ -300,28 +308,49 @@ describe('exportClientsToXLSM — mapping des données', () => {
     expect(String(rows[1][4])).toMatch(/^0/)
   })
 
-  it('colonne Orange / Code agent (index 5) non altérée', async () => {
+  /**
+   * `validClient.orange` vaut « AG001 » : aucun chiffre, donc pas huit — il part
+   * dans le code agent, et la colonne numéro reste vide. C'est la règle de
+   * TC-233 appliquée à l'export d'une fiche jamais rouverte depuis.
+   */
+  it('colonne Code agent (index 5) reçoit la valeur d’une fiche d’avant', async () => {
     await exportClientsToXLSM([validClient], 'test', storesById)
     const rows = XLSX.__getCapturedRows()
     expect(rows[1][5]).toBe(validClient.orange)
+    expect(rows[1][6]).toBe('')
   })
 
-  it('colonne Localité (index 6) non altérée', async () => {
-    await exportClientsToXLSM([validClient], 'test', storesById)
+  it('colonne Numéro agent (index 6) reçoit un numéro à huit chiffres', async () => {
+    await exportClientsToXLSM([{ ...validClient, orange: '70112233' }], 'test', storesById)
     const rows = XLSX.__getCapturedRows()
-    expect(rows[1][6]).toBe(validClient.localite)
+    expect(rows[1][5]).toBe('')
+    expect(rows[1][6]).toBe('70112233')
   })
 
-  it('colonne Agent commercial (index 7) non altérée', async () => {
-    await exportClientsToXLSM([validClient], 'test', storesById)
+  it('une fiche déjà séparée s’exporte telle quelle', async () => {
+    const client = { ...validClient, orange: undefined, codeAgent: '1234567', numeroAgent: '70112233' }
+    await exportClientsToXLSM([client], 'test', storesById)
     const rows = XLSX.__getCapturedRows()
-    expect(rows[1][7]).toBe(validClient.agentCommercial)
+    expect(rows[1][5]).toBe('1234567')
+    expect(rows[1][6]).toBe('70112233')
   })
 
-  it('colonne Date ajout (index 8) non altérée', async () => {
+  it('colonne Localité (index 7) non altérée', async () => {
     await exportClientsToXLSM([validClient], 'test', storesById)
     const rows = XLSX.__getCapturedRows()
-    expect(rows[1][8]).toBe(validClient.dateAjout)
+    expect(rows[1][7]).toBe(validClient.localite)
+  })
+
+  it('colonne Agent commercial (index 8) non altérée', async () => {
+    await exportClientsToXLSM([validClient], 'test', storesById)
+    const rows = XLSX.__getCapturedRows()
+    expect(rows[1][8]).toBe(validClient.agentCommercial)
+  })
+
+  it('colonne Date ajout (index 9) non altérée', async () => {
+    await exportClientsToXLSM([validClient], 'test', storesById)
+    const rows = XLSX.__getCapturedRows()
+    expect(rows[1][9]).toBe(validClient.dateAjout)
   })
 
   it('nom de la feuille reste "Clients"', async () => {
@@ -360,9 +389,9 @@ describe('exportClientsToXLSM — mapping des données', () => {
     expect(rows[1][0]).toBe('AKAYIS KOUPELA')
   })
 
-  it('largeur des colonnes = 9 entrées (une par colonne)', () => {
-    // Vérification indirecte : EXCEL_HEADERS a 9 entrées, donc !cols aura 9 entrées
-    expect(EXCEL_HEADERS).toHaveLength(9)
+  it('largeur des colonnes = 10 entrées (une par colonne)', () => {
+    // Vérification indirecte : EXCEL_HEADERS a 10 entrées, donc !cols aura 10 entrées
+    expect(EXCEL_HEADERS).toHaveLength(10)
   })
 })
 
@@ -524,7 +553,9 @@ describe('parseWorksheetRows — compatibilité formats d\'import', () => {
     expect(c.prenom).toBe('Ibrahim')
     expect(c.numeroIdentite).toBe('B12345678')
     expect(c.numeroPersonnel).toBe('0123456789')
-    expect(c.orange).toBe('AG001')
+    // L'ancienne colonne unique : « AG001 » n'a pas huit chiffres → code agent.
+    expect(c.codeAgent).toBe('AG001')
+    expect(c.numeroAgent).toBe('')
     expect(c.localite).toBe('Koupela Centre')
     expect(c.agentCommercial).toBe('Fatima Sawadogo')
     expect(c.dateAjout).toBe('01/06/2026')
@@ -538,7 +569,7 @@ describe('parseWorksheetRows — compatibilité formats d\'import', () => {
     const c = result.clients[0]
     expect(c.nom).toBe('OUEDRAOGO')
     expect(c.prenom).toBe('Ibrahim')
-    expect(c.orange).toBe('AG001')
+    expect(c.codeAgent).toBe('AG001')
     expect(c.localite).toBe('Koupela Centre')
   })
 
@@ -652,7 +683,34 @@ describe('parseWorksheetRows — compatibilité formats d\'import', () => {
       ['TRAORE', 'Salif', 'BF111', '70001234', '0012', 'Bobo', 'Agent3', '2024-01-01']
     ])
     const result = parseWorksheetRows(jsonData)
-    expect(result.clients[0].orange).toBe('0012')
+    expect(result.clients[0].codeAgent).toBe('0012')
+  })
+
+  /**
+   * ⚠ LA PROPRIÉTÉ QUI PROTÈGE LES FICHIERS DE LA BOUTIQUE.
+   *   Elle possède déjà des exports à l'ancien format. Les refuser, ou ranger
+   *   leur colonne unique au mauvais endroit, rendrait sa propre base
+   *   inutilisable — et c'est sa seule sauvegarde.
+   */
+  it('13b. l’ancienne colonne unique est répartie par longueur', () => {
+    const jsonData = makeJsonData(OLD_HEADERS, [
+      ['TRAORE', 'Salif', 'BF111', '70001234', '70112233', 'Bobo', 'Agent3', '2024-01-01'],
+      ['KABORE', 'Awa', 'BF222', '70001235', '1234567', 'Bobo', 'Agent3', '2024-01-01'],
+    ])
+    const result = parseWorksheetRows(jsonData)
+
+    expect(result.clients[0]).toMatchObject({ codeAgent: '', numeroAgent: '70112233' })
+    expect(result.clients[1]).toMatchObject({ codeAgent: '1234567', numeroAgent: '' })
+  })
+
+  it('13c. les deux colonnes neuves l’emportent sur l’ancienne', () => {
+    const entetes = [...OLD_HEADERS, 'Code agent', 'Numéro agent']
+    const jsonData = makeJsonData(entetes, [
+      ['TRAORE', 'Salif', 'BF111', '70001234', '9999999', 'Bobo', 'Agent3', '2024-01-01', '1234567', '70112233'],
+    ])
+    const result = parseWorksheetRows(jsonData)
+
+    expect(result.clients[0]).toMatchObject({ codeAgent: '1234567', numeroAgent: '70112233' })
   })
 
   it('14. Valeur Boutique étrangère "AKAYIS POUYTENGA1" → absente de l\'objet client retourné', () => {
@@ -698,7 +756,8 @@ describe('parseWorksheetRows — compatibilité formats d\'import', () => {
     expect(c.nom).toBe('DIALLO')
     expect(c.prenom).toBe('Aïssata')
     expect(c.numeroPersonnel).toBe('')
-    expect(c.orange).toBe('')
+    expect(c.codeAgent).toBe('')
+    expect(c.numeroAgent).toBe('')
     expect(c.localite).toBe('')
   })
 
@@ -1007,7 +1066,9 @@ describe('Test circulaire export → parseWorksheetRows', () => {
     expect(imported.prenom).toBe('Aïssata')
     expect(imported.numeroIdentite).toBe('BF0123456')
     expect(imported.numeroPersonnel).toBe('70001234')
-    expect(imported.orange).toBe('0012')
+    // Aller-retour complet : la fiche part répartie et revient répartie.
+    expect(imported.codeAgent).toBe('0012')
+    expect(imported.numeroAgent).toBe('')
     expect(imported.localite).toBe('Ouagadougou')
     expect(imported.agentCommercial).toBe('Agent Test')
     expect(imported.dateAjout).toBe('2024-01-15')
@@ -1040,7 +1101,7 @@ describe('Test circulaire export → parseWorksheetRows', () => {
 
     expect(result.success).toBe(true)
     expect(result.clients[0].numeroPersonnel).toBe('0070001234')
-    expect(result.clients[0].orange).toBe('00123')
+    expect(result.clients[0].codeAgent).toBe('00123')
   })
 
   it('client sans boutique dans le cycle export/import', async () => {

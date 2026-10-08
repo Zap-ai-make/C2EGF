@@ -86,8 +86,11 @@ describe('TC-102 — en-têtes et structure du tableau', () => {
     for (const header of TABLE_HEADERS) {
       expect(screen.getByRole('columnheader', { name: header.label })).toBeInTheDocument()
     }
-    // Le code agent est la clé d'identification d'un point de vente : on la fige.
-    expect(screen.getByRole('columnheader', { name: 'Numéro agent / Code agent' })).toBeInTheDocument()
+    // ⚠ DEUX COLONNES DEPUIS LA SÉPARATION (TC-233), et c'est tout l'intérêt :
+    //   « Numéro agent / Code agent » tenait deux identifiants dans une case, ce
+    //   qui les rendait impossibles à chercher séparément. On fige les deux.
+    expect(screen.getByRole('columnheader', { name: 'Code agent' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Numéro agent' })).toBeInTheDocument()
   })
 
   it('affiche les données d’une ligne', () => {

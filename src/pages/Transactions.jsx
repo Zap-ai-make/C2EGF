@@ -4,7 +4,7 @@ import { Plus, PackagePlus, Eraser } from 'lucide-react'
 import { useClients } from '../hooks/useClients'
 import { useAuth } from '../context/AuthContext'
 import TransactionForm from '../components/transactions/TransactionForm'
-import RavitaillementForm from '../components/transactions/RavitaillementForm'
+import RavitaillementPanel from '../components/transactions/RavitaillementPanel'
 import ViderSoldesForm from '../components/transactions/ViderSoldesForm'
 import TransactionTable from '../components/transactions/TransactionTable'
 import DealerTransferForm from '../components/transactions/DealerTransferForm'
@@ -13,6 +13,7 @@ import ErrorBoundary from '../components/ui/ErrorBoundary'
 import PageHeader from '../components/ui/PageHeader'
 import Dialog from '../components/ui/Dialog'
 import { useTransactions } from '../context/transactions.jsx'
+import { ravitaillementsEnCours } from '../utils/ravitaillement.js'
 import { COLLABORATIONS_ENABLED } from '../constants/collaborationConstants'
 import { STORE_TRANSACTION_VISIBILITY } from '../constants/storeWorkspace.js'
 import { useIncomingCollaborationsCount } from '../hooks/useIncomingCollaborationsCount'
@@ -57,6 +58,7 @@ function Transactions() {
   const { userProfile } = useAuth()
   const {
     pendingTransactions = [],
+    completedTransactions = [],
     editingTransaction,
     clearEditTransaction,
   } = useTransactions()
@@ -68,6 +70,15 @@ function Transactions() {
   const compteurRecues = useIncomingCollaborationsCount(
     storeId,
     STORE_TRANSACTION_VISIBILITY.collaborations,
+  )
+
+  // Le badge dit « tu dois encore quelque chose à quelqu'un ». Il tient parce
+  // qu'il redescend réellement à zéro : il n'y a pas de commission entre
+  // franchises de la même entreprise, donc le reste dû d'une livraison atteint
+  // zéro exactement. Un compteur qui ne redescend jamais n'est plus lu.
+  const ravitaillementsDus = useMemo(
+    () => ravitaillementsEnCours(completedTransactions).length,
+    [completedTransactions],
   )
 
   const demande = params.get('tab')
@@ -82,17 +93,6 @@ function Transactions() {
       return true
     })
   }, [pendingTransactions])
-
-  const resumeTransactions = useMemo(() => {
-    const total = transactionsEnAttente.length
-    const normaliser = (valeur) => String(valeur || '')
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-    const depots = transactionsEnAttente.filter((transaction) => normaliser(transaction.type) === 'depot').length
-    const retraits = transactionsEnAttente.filter((transaction) => normaliser(transaction.type) === 'retrait').length
-    return `${total} transaction${total > 1 ? 's' : ''} non terminée${total > 1 ? 's' : ''} · ${depots} dépôt${depots > 1 ? 's' : ''}, ${retraits} retrait${retraits > 1 ? 's' : ''}`
-  }, [transactionsEnAttente])
 
   useEffect(() => {
     if (editingTransaction) setFormulaireOuvert(true)
@@ -120,7 +120,6 @@ function Transactions() {
     <div>
       <PageHeader
         title="Transactions"
-        subtitle={mode === 'client' ? resumeTransactions : undefined}
         actions={mode === 'client' ? (
           <button
             type="button"
@@ -178,6 +177,15 @@ function Transactions() {
         >
           <PackagePlus className="h-4 w-4" aria-hidden="true" />
           Ravitaillement
+          {ravitaillementsDus > 0 && (
+            <span
+              className="inline-flex min-w-[1.2rem] items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-bold leading-none bg-brand-100 text-brand-700"
+              aria-label={`${ravitaillementsDus} ravitaillement${ravitaillementsDus > 1 ? 's' : ''} à rendre`}
+              data-testid="badge-ravitaillement"
+            >
+              {ravitaillementsDus > 99 ? '99+' : ravitaillementsDus}
+            </span>
+          )}
         </button>
 
         <button
@@ -215,19 +223,16 @@ function Transactions() {
         </ErrorBoundary>
       )}
 
-      <Dialog
-        open={ravitaillementOuvert}
-        onClose={() => setRavitaillementOuvert(false)}
-        title="Ravitaillement"
-        testId="ravitaillement-dialog"
-      >
-        <ErrorBoundary>
-          <RavitaillementForm
-            onComplete={() => setRavitaillementOuvert(false)}
-            onCancel={() => setRavitaillementOuvert(false)}
-          />
-        </ErrorBoundary>
-      </Dialog>
+      {/* Le bouton ouvrait directement la saisie : la boutique pouvait
+          déclarer ce qu'elle recevait, jamais ce qu'elle rendait. La liste vient
+          donc devant, et la saisie derrière un bouton — on ouvre cet écran dix
+          fois pour rendre, une fois pour déclarer. */}
+      <ErrorBoundary>
+        <RavitaillementPanel
+          open={ravitaillementOuvert}
+          onClose={() => setRavitaillementOuvert(false)}
+        />
+      </ErrorBoundary>
 
       <Dialog
         open={viderOuvert}

@@ -28,23 +28,36 @@ export function generateIdempotencyKey() {
 /**
  * Enregistre un paiement (total ou partiel) sur un draft.
  *
- * @param {{ draftId: string, amount: number, paymentMethod: string, idempotencyKey: string }} params
+ * `agentCode` est FACULTATIF : le code agent sur lequel l'argent a été envoyé,
+ * quand il ne passe pas de la main à la main. Omis, il n'est pas transmis — le
+ * serveur refuse tout champ hors liste blanche, et `undefined` traverserait la
+ * sérialisation de l'appelable en clé présente mais vide.
+ *
+ * @param {{ draftId: string, amount: number, paymentMethod: string, idempotencyKey: string, agentCode?: string }} params
  * @returns {Promise<{ success: boolean, idempotent: boolean, fullySettled: boolean, historyId: string|null }>}
  */
-export async function addTransactionPayment({ draftId, amount, paymentMethod, idempotencyKey }) {
+export async function addTransactionPayment({ draftId, amount, paymentMethod, idempotencyKey, agentCode }) {
   if (!idempotencyKey) throw new Error('addTransactionPayment: idempotencyKey requis.')
-  const result = await callPayment({ draftId, amount, paymentMethod, idempotencyKey })
+  const result = await callPayment({
+    draftId, amount, paymentMethod, idempotencyKey,
+    ...(agentCode ? { agentCode } : {}),
+  })
   return result.data
 }
 
 /**
  * Enregistre un remboursement partiel sur un draft.
  *
- * @param {{ draftId: string, amount: number, paymentMethod: string, idempotencyKey: string }} params
+ * `agentCode` est FACULTATIF, comme pour le paiement : voir ci-dessus.
+ *
+ * @param {{ draftId: string, amount: number, paymentMethod: string, idempotencyKey: string, agentCode?: string }} params
  * @returns {Promise<{ success: boolean, idempotent: boolean }>}
  */
-export async function addTransactionRefund({ draftId, amount, paymentMethod, idempotencyKey }) {
+export async function addTransactionRefund({ draftId, amount, paymentMethod, idempotencyKey, agentCode }) {
   if (!idempotencyKey) throw new Error('addTransactionRefund: idempotencyKey requis.')
-  const result = await callRefund({ draftId, amount, paymentMethod, idempotencyKey })
+  const result = await callRefund({
+    draftId, amount, paymentMethod, idempotencyKey,
+    ...(agentCode ? { agentCode } : {}),
+  })
   return result.data
 }

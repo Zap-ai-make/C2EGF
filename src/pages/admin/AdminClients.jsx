@@ -1,3 +1,4 @@
+import { champsAgent } from '../../utils/agentFields.js'
 import { useState, useCallback, useEffect } from 'react'
 import { listAllClients, listStoreOptions } from '../../services/adminService'
 import PageHeader from '../../components/ui/PageHeader'
@@ -115,6 +116,7 @@ function AdminClients() {
                   <th className="px-4 py-3">Nom</th>
                   <th className="px-4 py-3">Prénom</th>
                   <th className="px-4 py-3">Code agent</th>
+                  <th className="px-4 py-3">Numéro agent</th>
                   <th className="px-4 py-3">Téléphone</th>
                   <th className="px-4 py-3">Boutique d'origine</th>
                 </tr>
@@ -124,7 +126,8 @@ function AdminClients() {
                   <tr key={c.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{c.nom ?? '—'}</td>
                     <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{c.prenom ?? '—'}</td>
-                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap font-mono text-xs">{c.orange || '—'}</td>
+                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap font-mono text-xs">{champsAgent(c).codeAgent || '—'}</td>
+                    <td className="px-4 py-3 text-gray-700 whitespace-nowrap font-mono text-xs">{champsAgent(c).numeroAgent || '—'}</td>
                     <td className="px-4 py-3 text-gray-500 whitespace-nowrap font-mono text-xs">{c.numeroPersonnel || '—'}</td>
                     <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{c.registeredStoreName ?? '—'}</td>
                   </tr>

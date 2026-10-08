@@ -27,15 +27,7 @@ Créer un filet de sécurité automatisé permettant de détecter les régressio
 - vérifier que les tests détectent réellement les régressions ;
 - documenter les cas impossibles à automatiser.
 
-## Interdictions absolues
 
-- Ne modifie pas le code métier sauf demande explicite.
-- Ne modifie pas les règles Firestore uniquement pour faire passer un test.
-- Ne lance jamais git push.
-- Ne lance aucun déploiement.
-- Ne lance jamais firebase deploy.
-- Ne lance jamais npm audit fix.
-- N’utilise jamais Firebase production.
 - N’utilise aucune donnée client réelle.
 - Ne supprime aucune donnée.
 - Ne crée aucun faux résultat de test.

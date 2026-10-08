@@ -26,7 +26,11 @@ export const EXCEL_HEADERS = [
   'Prénom',
   'Numéro d\'identité',
   'Numéro personnel',
-  'Numéro agent / Code agent',
+  // Deux colonnes là où il y en avait une. L'import accepte toujours l'ancienne
+  // « Numéro agent / Code agent » et répartit son contenu par longueur
+  // (excelUtils.js) : les fichiers que la boutique possède déjà restent lisibles.
+  'Code agent',
+  'Numéro agent',
   'Localité',
   'Agent commercial',
   'Date d\'ajout'
@@ -38,7 +42,8 @@ export const TABLE_HEADERS = [
   { key: 'prenom', label: 'Prénom', width: 'min-w-32' },
   { key: 'numeroIdentite', label: 'Numéro d\'identité', width: 'min-w-40' },
   { key: 'numeroPersonnel', label: 'Numéro personnel', width: 'min-w-36' },
-  { key: 'orange', label: 'Numéro agent / Code agent', width: 'min-w-44' },
+  { key: 'codeAgent', label: 'Code agent', width: 'min-w-36' },
+  { key: 'numeroAgent', label: 'Numéro agent', width: 'min-w-36' },
   { key: 'localite', label: 'Localité', width: 'min-w-48' },
   { key: 'agentCommercial', label: 'Agent commercial', width: 'min-w-40' },
   { key: 'dateAjout', label: 'Date d\'ajout', width: 'min-w-32' }

@@ -1,6 +1,7 @@
 import { EXCEL_HEADERS } from '../constants'
 import { CLIENT_ID } from '../config/clientIsolation'
 import { parseFcfaAmount } from './fcfaAmount.js'
+import { champsAgent, repartirValeurAgent } from './agentFields.js'
 
 export const EXCEL_IMPORT_LIMITS = Object.freeze({
   MAX_FILE_BYTES: 5 * 1024 * 1024,
@@ -142,12 +143,16 @@ const HEADER_ALIASES = {
   'numero personnel': 'numeroPersonnel',
   'telephone': 'numeroPersonnel',
   'tel': 'numeroPersonnel',
-  // Numéro agent / Code agent → champ 'orange' dans le modèle client
-  'numero agent / code agent': 'orange',
-  'numero agent': 'orange',
-  'code agent': 'orange',
-  'agent': 'orange',
-  'orange': 'orange',
+  // Code agent et numéro agent : deux colonnes depuis la séparation.
+  'code agent': 'codeAgent',
+  'numero agent': 'numeroAgent',
+  // ⚠ L'ANCIENNE COLONNE RESTE ACCEPTÉE, et ce n'est pas de la compatibilité
+  //   gratuite : la boutique possède déjà des fichiers à ce format, exportés
+  //   avant la séparation. Son contenu est réparti par longueur à la lecture
+  //   (`repartirValeurAgent`), exactement comme les fiches déjà en base.
+  'numero agent / code agent': '_agent_legacy',
+  'agent': '_agent_legacy',
+  'orange': '_agent_legacy',
   // Localité
   'localite': 'localite',
   'locality': 'localite',
@@ -173,7 +178,9 @@ const FIELD_LABELS = {
   'prenom': 'Prénom',
   'numeroIdentite': "Numéro d'identité",
   'numeroPersonnel': 'Numéro personnel',
-  'orange': 'Numéro agent / Code agent',
+  'codeAgent': 'Code agent',
+  'numeroAgent': 'Numéro agent',
+  '_agent_legacy': 'Numéro agent / Code agent',
   'localite': 'Localité',
   'agentCommercial': 'Agent commercial',
   'dateAjout': "Date d'ajout",
@@ -311,6 +318,16 @@ export function parseWorksheetRows(jsonData) {
       client[field] = normalizeCell(rawValue)
     })
 
+    // L'ancienne colonne unique, répartie comme le reste : un fichier exporté
+    // avant la séparation reste importable sans retouche. Les deux colonnes
+    // neuves, si elles sont là, l'emportent — elles sont explicites.
+    if (client._agent_legacy !== undefined) {
+      const reparti = repartirValeurAgent(client._agent_legacy)
+      if (!client.codeAgent) client.codeAgent = reparti.codeAgent
+      if (!client.numeroAgent) client.numeroAgent = reparti.numeroAgent
+      delete client._agent_legacy
+    }
+
     // Garantie de sécurité : ces champs ne doivent jamais venir du fichier
     delete client.registeredStoreId
     delete client.registeredStoreName
@@ -419,7 +436,7 @@ export const exportClientsToXLSM = async (clients, filename = `clients_${CLIENT_
     const XLSX = await import('xlsx')
 
     // Convertir les clients en tableau de données
-    // Les champs numériques (numeroPersonnel, orange/Code agent, numeroIdentite)
+    // Les champs numériques (numeroPersonnel, code/numéro agent, numeroIdentite)
     // sont forcés en type texte pour préserver les zéros initiaux à l'import.
     const forceText = (value) => {
       const str = value !== null && value !== undefined ? String(value) : ''
@@ -433,7 +450,11 @@ export const exportClientsToXLSM = async (clients, filename = `clients_${CLIENT_
       client.prenom,
       forceText(client.numeroIdentite),
       forceText(client.numeroPersonnel),
-      forceText(client.orange),
+      // Une fiche d'avant la séparation est répartie ici, à l'export : le
+      // fichier produit est donc toujours au nouveau format, même si la base
+      // ne l'est pas encore.
+      forceText(champsAgent(client).codeAgent),
+      forceText(champsAgent(client).numeroAgent),
       client.localite,
       client.agentCommercial,
       client.dateAjout
@@ -452,7 +473,8 @@ export const exportClientsToXLSM = async (clients, filename = `clients_${CLIENT_
       { width: 15 }, // Prénom
       { width: 20 }, // Numéro d'identité
       { width: 18 }, // Numéro personnel
-      { width: 12 }, // Orange
+      { width: 14 }, // Code agent
+      { width: 14 }, // Numéro agent
       { width: 30 }, // Localité
       { width: 20 }, // Agent commercial
       { width: 15 }  // Date d'ajout

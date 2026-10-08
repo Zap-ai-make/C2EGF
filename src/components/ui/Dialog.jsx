@@ -1,4 +1,5 @@
 import { useEffect, useRef, useCallback, useId } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
 /**
@@ -146,7 +147,25 @@ function Dialog({ open, onClose, title, description, children, footer, testId, l
 
   if (!open) return null
 
-  return (
+  /**
+   * LE DIALOGUE SORT DE L'ARBRE OU IL EST ÉCRIT.
+   *
+   * Un `position: fixed` ne se règle sur la FENÊTRE que si aucun ancêtre ne
+   * s'interpose. Or `transform`, `filter`, `perspective`, `contain` — et
+   * `backdrop-filter` — font de l'élément qui les porte un BLOC CONTENEUR pour
+   * ses descendants fixés : `inset-0` se résout alors sur lui.
+   *
+   * C'est exactement ce qui est arrivé au panneau d'aide. La barre de navigation
+   * porte `backdrop-blur-sm` (themes.js) ; le dialogue monté dedans s'est replié
+   * en une bande de la hauteur de la barre, voile compris.
+   *
+   * Le portail supprime la question au lieu d'y répondre : un dialogue ne doit
+   * pas dépendre de l'endroit d'où on l'appelle. Aujourd'hui c'est un flou
+   * d'arrière-plan ; demain ce sera un `transform` posé ailleurs, et personne
+   * ne fera le lien. Le piège à focus et la restitution continuent de marcher :
+   * ils travaillent sur des références, pas sur la place dans l'arbre.
+   */
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div
         ref={panneau}
@@ -183,7 +202,8 @@ function Dialog({ open, onClose, title, description, children, footer, testId, l
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

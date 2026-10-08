@@ -15,7 +15,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
-import { Signal, Wallet } from 'lucide-react'
+import { Signal, Wallet, HelpCircle } from 'lucide-react'
 
 import { ClientsContext } from './context/ClientsContext.jsx'
 import { TransactionsContext } from './context/transactions.jsx'
@@ -28,6 +28,7 @@ import { getTransactionStyles } from './utils/helpers.js'
 import PageHeader from './components/ui/PageHeader.jsx'
 import ClientsTable from './components/ClientsTable.jsx'
 import HistoriqueTable from './components/historique/HistoriqueTable.jsx'
+import TransactionTable from './components/transactions/TransactionTable.jsx'
 import StoreAdminDealerRequests from './pages/store/StoreAdminDealerRequests.jsx'
 import AuthPage from './components/auth/AuthPage.jsx'
 import DealerLayout from './layouts/DealerLayout.jsx'
@@ -168,6 +169,36 @@ for (let jourEcoule = 0; jourEcoule < 30; jourEcoule++) {
   }
 }
 
+/**
+ * Trois brouillons aux trois âges qui comptent : sous la minute, au milieu, et
+ * au-delà du seuil de trente minutes qui allume la rangée. Les instants sont
+ * calculés au chargement du banc, pour que les compteurs tournent vraiment.
+ */
+const nonTerminees = [
+  { minutes: 0, type: 'Dépôt', montant: 150_000 },
+  { minutes: 18, type: 'Retrait', montant: 75_000 },
+  { minutes: 47, type: 'Dépôt', montant: 500_000 },
+  // Trois depots du MEME client : la rangee se replie, avec le total.
+  { minutes: 6, type: 'Dépôt', montant: 200_000, client: 0 },
+  { minutes: 22, type: 'Dépôt', montant: 350_000, client: 0 },
+  { minutes: 51, type: 'Dépôt', montant: 125_000, client: 0 },
+].map((modele, rang) => {
+  const depart = new Date(Date.now() - modele.minutes * 60_000)
+  const client = agents[(modele.client ?? rang) * 5]
+  return {
+    id: `nt-${rang}`,
+    clientId: client.id,
+    client,
+    code: client.orange,
+    type: modele.type,
+    reseau: 'Orange',
+    montant: modele.montant,
+    statut: 'Non terminée',
+    createdAt: depart,
+    date: depart.toLocaleString('fr-FR'),
+  }
+})
+
 // ── Doublures du shell ──────────────────────────────────────────────────────
 //
 // NavBar et NetworkCardsDrawer dépendent d'Auth, du routeur et de Firestore :
@@ -193,6 +224,19 @@ function NavDoublure() {
               {item.name}
             </span>
           ))}
+        </div>
+
+        {/* Le compte et l'aide, hors de la rangee : classes recopiees du vrai
+            NavBar, comme le reste de cette doublure. */}
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/25 px-2.5 py-1.5 text-sm font-medium text-white">
+            <HelpCircle className="h-5 w-5" strokeWidth={1.75} />
+            Aide
+          </span>
+          <span className="inline-flex items-center gap-2 rounded-full border border-white/25 py-1 pl-1 pr-3 text-sm font-medium text-white">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand-400 text-[10px] font-bold">CS</span>
+            Profil
+          </span>
         </div>
       </div>
     </nav>
@@ -238,10 +282,21 @@ function SoldesDoublure() {
   return (
     <section aria-label="Soldes opérationnels" className="border-b border-brand-400/30 bg-brand-600">
       <div className="flex w-full flex-col items-center gap-3 px-4 py-3.5 md:flex-row md:justify-center md:gap-5">
-        <span className="shrink-0 text-center text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-200">
-          Soldes
-        </span>
-        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:w-auto md:min-w-[42rem] md:max-w-4xl">
+        <div className="flex w-full items-center justify-between gap-3 md:contents">
+          <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-200 md:order-1 md:text-center">
+            Soldes
+          </span>
+          <div className="flex shrink-0 items-baseline gap-2 md:order-3 md:flex-col md:items-start md:gap-0">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-200">
+              Total caisse
+            </span>
+            <span className="font-mono text-base font-bold tabular-nums text-white md:text-lg">
+              {(balance.stock + balance.liquidite + 20000 - 30000).toLocaleString('fr-FR')}
+              <span className="ml-1 text-[11px] font-semibold text-brand-200">FCFA</span>
+            </span>
+          </div>
+        </div>
+        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:order-2 md:w-auto md:min-w-[42rem] md:max-w-4xl">
           <CarteSolde nom="Orange" libelle="Stock" montant={balance.stock} teinte="#ff6b35" icone={Signal} />
           <CarteSolde nom="Liquidité" libelle="Espèces" montant={balance.liquidite} teinte="#38a169" icone={Wallet} />
         </div>
@@ -319,6 +374,27 @@ function Preview() {
               </span>
             }
           />
+
+          {/* Les non terminées, pour le compteur d'attente : la pastille est
+              posée en ABSOLU sur le bord de la rangée, et c'est le genre de
+              chose que jsdom ne peut pas voir — chevauchement avec la rangée du
+              dessus, pastille sortie du cadre, ligne orange illisible. Trois
+              âges : fraîche, vingt minutes, et au-delà du seuil. */}
+          <PageHeader title="Non terminées — compteur d’attente" />
+          <TransactionsContext.Provider
+            value={{
+              pendingTransactions: nonTerminees,
+              loading: false,
+              getTransactionStyles,
+              getActionButtons: () => ({ modifier: true, encaisser: true }),
+              addPaymentTranche: () => {},
+              addRefundTranche: () => {},
+              startEditTransaction: () => {},
+              trashTransaction: () => {},
+            }}
+          >
+            <TransactionTable />
+          </TransactionsContext.Provider>
 
           <PageHeader title="Historique" />
           <div className="rounded-lg bg-surface p-6 shadow-md">

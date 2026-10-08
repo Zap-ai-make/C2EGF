@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
+import { valeursAgent, libelleAgent } from '../../utils/agentFields.js'
 
 function ClientSearch({ clients, onClientSelect, selectedClient, onManualCodeChange, resetToken = 0 }) {
   const [searchTerm, setSearchTerm] = useState('')
@@ -21,15 +22,19 @@ function ClientSearch({ clients, onClientSelect, selectedClient, onManualCodeCha
     return clients.filter(client => {
       if (!client) return false
 
-      const nom = client.nom?.toLowerCase() || ''
-      const prenom = client.prenom?.toLowerCase() || ''
-      const orange = client.orange?.toLowerCase() || ''
-      const numeroPersonnel = client.numeroPersonnel?.toLowerCase() || ''
+      // CINQ CHAMPS, pas quatre : le code agent et le numéro agent sont
+      // désormais deux choses distinctes, et la caissière connaît parfois
+      // l'une sans l'autre. `valeursAgent` les rend aussi bien d'une fiche
+      // séparée que d'une fiche d'avant, donc chercher un ancien code
+      // continue de trouver.
+      const champs = [
+        client.nom,
+        client.prenom,
+        client.numeroPersonnel,
+        ...valeursAgent(client),
+      ]
 
-      return nom.includes(term) ||
-             prenom.includes(term) ||
-             orange.includes(term) ||
-             numeroPersonnel.includes(term)
+      return champs.some((champ) => String(champ ?? '').toLowerCase().includes(term))
     }).slice(0, 10)
   }, [clients, debouncedSearchTerm])
 
@@ -57,17 +62,15 @@ function ClientSearch({ clients, onClientSelect, selectedClient, onManualCodeCha
   }, [resetToken])
 
   const formatClientDisplay = (client) => {
-    const accounts = []
-    if (client.orange) accounts.push(`Code agent: ${client.orange}`)
-    
-    return `${client.nom} ${client.prenom} | ${accounts.join(' | ')}`
+    const agent = libelleAgent(client)
+    return agent ? `${client.nom} ${client.prenom} | ${agent}` : `${client.nom} ${client.prenom}`
   }
 
   return (
     <div className="relative">
       <input
         type="text"
-        placeholder="Rechercher un client ou saisir le numéro/code agent..."
+        placeholder="Nom, prénom, code agent, numéro agent ou numéro personnel…"
         value={searchTerm}
         onChange={handleInputChange}
         onFocus={() => searchTerm && setIsDropdownOpen(true)}

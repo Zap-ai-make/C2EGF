@@ -20,6 +20,7 @@
  *   clients/{storeId}/sessions           → interne boutique
  */
 
+import { valeursAgent } from '../utils/agentFields.js'
 import {
   collection,
   collectionGroup,
@@ -352,7 +353,7 @@ export async function listAllClients({ lastDoc = null, search = '', storeId = ''
         c.nom?.toLowerCase().includes(q) ||
         c.prenom?.toLowerCase().includes(q) ||
         c.numeroPersonnel?.toLowerCase().includes(q) ||
-        c.orange?.toLowerCase().includes(q) ||             // code / numéro agent
+        valeursAgent(c).some((v) => v.toLowerCase().includes(q)) ||  // code ET numéro agent
         c.registeredStoreName?.toLowerCase().includes(q)
       )
     }
@@ -409,7 +410,7 @@ export async function listConsolidatedHistory({ lastDoc = null, search = '', sto
       const q = search.trim().toLowerCase()
       records = records.filter(r => {
         const cn = [r.client?.prenom, r.client?.nom].filter(Boolean).join(' ').toLowerCase()
-        const code = String(r.code || r.client?.orange || '').toLowerCase()
+        const code = String(r.code || valeursAgent(r.client)[0] || '').toLowerCase()
         return (
           r.clientId?.toLowerCase().includes(q) ||
           r.clientNom?.toLowerCase().includes(q) ||

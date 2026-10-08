@@ -91,7 +91,15 @@ describe('TC-127 — espace boutique simplifié pour le démarrage C2EGF', () =>
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('1 transaction non terminée · 0 dépôt, 1 retrait')).toBeInTheDocument()
+    // LE SOUS-TITRE A DISPARU, LE COMPTE NON.
+    //
+    // Il récitait « 1 transaction non terminée · 0 dépôt, 1 retrait » : trois
+    // chiffres en toutes lettres, à l'autre bout de l'écran des montants qu'ils
+    // dénombrent. Les comptes par type sont descendus sur les cases qui
+    // portent ces montants (TC-103), et le total reste sur l'onglet.
+    //
+    // L'assertion vaut par ce qu'elle interdit : réintroduire la phrase.
+    expect(screen.queryByText(/transactions? non terminées? ·/)).not.toBeInTheDocument()
     expect(screen.getByTestId('onglet-client')).toHaveTextContent('Transaction client1')
     expect(screen.getByRole('button', { name: 'Enregistrer une transaction' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /exporter/i })).not.toBeInTheDocument()

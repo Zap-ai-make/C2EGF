@@ -57,6 +57,21 @@ export const pilotProfile = Object.freeze({
     paymentMethods: [...METHODES_PAIEMENT_SUPPORTEES],       // les 6 méthodes
   }),
 
+  // ── Ravitaillement : qui envoie l'argent à la boutique ─────────────────────
+  // La boutique reçoit du stock ou des espèces de plusieurs personnes dans la
+  // journée, et doit rendre à CHACUNE ce qu'elle a reçu d'elle. L'argent n'est
+  // donc pas fongible d'un expéditeur à l'autre : on ne solde pas une livraison
+  // de l'un avec ce qu'on doit à l'autre.
+  //
+  // Liste fermée plutôt que saisie libre : en texte libre, « Mme Sawadogo »,
+  // « sawadogo » et « Mme S. » deviennent trois créanciers distincts, et les
+  // totaux par personne — la seule chose qu'on lit le soir — sont faux sans que
+  // rien ne le signale. La saisie libre reste possible via « Ajouter un nom »,
+  // mais le nom ajouté est alors MÉMORISÉ pour la boutique et rejoint la liste.
+  replenishment: Object.freeze({
+    senders: [],
+  }),
+
   // ── Édition directe des soldes réseau par la boutique (caissière) ──────────
   // true  = la boutique saisit ses soldes en direct (règle Firestore permissive,
   //         exception V1 assumée, sans piste d'audit serveur).

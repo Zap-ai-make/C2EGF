@@ -142,11 +142,41 @@ describe('TC-123-C — fermer', () => {
 })
 
 describe('TC-123-D — arrière-plan inerte', () => {
+  /**
+   * CE TEST A ÉTÉ RÉÉCRIT, ET LA RAISON COMPTE.
+   *
+   * Il exigeait l'attribut `inert` sur le bouton LUI-MÊME. C'était figer le
+   * mécanisme — « on marque chaque frère, niveau par niveau » — plutôt que la
+   * propriété, qui est « ce qui est derrière ne se tabule pas ».
+   *
+   * Depuis que le dialogue part dans un portail vers `document.body` (voir
+   * Dialog.jsx : un ancêtre `backdrop-filter` en faisait un bloc conteneur et
+   * repliait la modale en bande), le marquage ne descend plus : un seul `inert`
+   * posé sur la racine de l'application rend tout l'arrière-plan inerte d'un
+   * coup. Le bouton n'en porte donc plus l'attribut — il en HÉRITE, ce qui est
+   * la sémantique même d'`inert` et vaut mieux que l'ancien parcours.
+   *
+   * La règle, elle, n'a pas bougé d'un pouce. On la vérifie donc là où elle
+   * vit : sur la chaîne des ancêtres.
+   */
+  const porteurInerte = (element) => {
+    for (let n = element; n && n !== document.documentElement; n = n.parentElement) {
+      if (n.hasAttribute('inert')) return n
+    }
+    return null
+  }
+
   it('[DG-13] rend le contenu derrière inerte puis restaure son état', () => {
     const { rerender } = poser()
     const derriere = screen.getByText('Derrière')
-    expect(derriere).toHaveAttribute('inert')
-    expect(derriere).toHaveAttribute('aria-hidden', 'true')
+
+    const porteur = porteurInerte(derriere)
+    expect(porteur, 'rien derrière le dialogue n’a été rendu inerte').not.toBeNull()
+    expect(porteur).toHaveAttribute('aria-hidden', 'true')
+
+    // ET le dialogue échappe à l'inertie : la rendre à tout le document le
+    // rendrait inutilisable, panne qu'aucune autre assertion ne verrait.
+    expect(porteurInerte(screen.getByTestId('dlg'))).toBeNull()
 
     rerender(
       <>
@@ -154,7 +184,12 @@ describe('TC-123-D — arrière-plan inerte', () => {
         <Dialog open={false} title="Titre" testId="dlg" onClose={() => {}}><Contenu /></Dialog>
       </>,
     )
-    expect(screen.getByRole('button', { name: 'Derrière' })).not.toHaveAttribute('inert')
-    expect(screen.getByRole('button', { name: 'Derrière' })).not.toHaveAttribute('aria-hidden')
+
+    // Restauration : plus un seul ancêtre inerte, et l'`aria-hidden` retiré.
+    const apres = screen.getByRole('button', { name: 'Derrière' })
+    expect(porteurInerte(apres)).toBeNull()
+    for (let n = apres; n && n !== document.documentElement; n = n.parentElement) {
+      expect(n).not.toHaveAttribute('aria-hidden')
+    }
   })
 })

@@ -10,6 +10,7 @@ import {
   getBusinessDayBounds,
   millisecondsUntilNextBusinessDay,
 } from '../utils/businessDate.js'
+import { TYPE_RETOUR } from '../utils/ravitaillement.js'
 
 // Exporté comme ClientsContext : permet de fournir une valeur sans monter le
 // provider réel (bancs d'essai, tests de rendu) — cf. src/preview.jsx.
@@ -289,10 +290,10 @@ export const TransactionsProvider = ({ children }) => {
     }
   }, [])
 
-  const addPaymentTranche = useCallback(async (draftId, amount, paymentMethod, idempotencyKey) => {
+  const addPaymentTranche = useCallback(async (draftId, amount, paymentMethod, idempotencyKey, agentCode) => {
     try {
       setError(null)
-      await addTransactionPayment({ draftId, amount, paymentMethod, idempotencyKey })
+      await addTransactionPayment({ draftId, amount, paymentMethod, idempotencyKey, agentCode })
       return true
     } catch (error) {
       console.error('Erreur de règlement (paiement):', error)
@@ -301,10 +302,10 @@ export const TransactionsProvider = ({ children }) => {
     }
   }, [])
 
-  const addRefundTranche = useCallback(async (draftId, amount, paymentMethod, idempotencyKey) => {
+  const addRefundTranche = useCallback(async (draftId, amount, paymentMethod, idempotencyKey, agentCode) => {
     try {
       setError(null)
-      await addTransactionRefund({ draftId, amount, paymentMethod, idempotencyKey })
+      await addTransactionRefund({ draftId, amount, paymentMethod, idempotencyKey, agentCode })
       return true
     } catch (error) {
       console.error('Erreur de règlement (remboursement):', error)
@@ -331,7 +332,19 @@ export const TransactionsProvider = ({ children }) => {
       if (isDraft) {
         await firestoreService.trashDraft(id)
       } else {
-        const trashed = await firestoreService.trashHistory(id)
+        // Un retour de ravitaillement ne se défait pas comme une transaction
+        // client : il faut AUSSI faire remonter le reste dû de sa livraison.
+        // Le routage vit ici parce que le tableau n'a pas à connaître les deux
+        // commandes — il sait seulement qu'on supprime une ligne.
+        const ligne = [
+          ...liveHistoryRef.current,
+          ...todayHistoryRef.current,
+          ...archiveHistoryRef.current,
+        ].find((item) => item?.id === id)
+
+        const trashed = ligne?.type === TYPE_RETOUR
+          ? await firestoreService.trashReplenishmentReturn(id)
+          : await firestoreService.trashHistory(id)
         if (trashed) {
           // Marquage optimiste : les pages d'archive ne sont pas toutes
           // branchées sur un onSnapshot, et la ligne doit quitter l'onglet

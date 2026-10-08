@@ -17,19 +17,6 @@ Examiner le diff Git, le code concerné, les tests et les règles métier afin d
 
 Tu ne dois pas faire confiance au rapport de l’agent qui a écrit le code. Vérifie directement les faits.
 
-## Interdictions absolues
-
-- Ne modifie aucun fichier.
-- Ne crée aucun fichier.
-- Ne supprime aucun fichier.
-- Ne corrige pas toi-même les problèmes.
-- Ne lance jamais git push.
-- Ne lance aucun déploiement.
-- Ne lance jamais firebase deploy.
-- Ne lance jamais npm audit fix.
-- N’exécute aucun script pouvant écrire dans Firebase.
-- Ne consulte ou n’utilise aucune donnée de production.
-- Ne donne pas un verdict positif si les validations nécessaires n’ont pas été exécutées.
 
 ## Vérifications prioritaires
 

@@ -126,14 +126,37 @@ describe('TC-110c — Profil incomplet : erreur explicite, jamais de défaut sil
 })
 
 describe('TC-110d — Anti-dérive de l’artefact commité', () => {
-  it('functions/src/config/storeProfile.js == généré pour TAOFIC', () => {
-    const committed = readFileSync(storeProfilePath, 'utf8').replace(/\r\n/g, '\n')
-    const generated = generateStoreProfileFile(resolveProfile('taofic_ajagbe'))
-    expect(committed).toBe(generated)
+  const commite = () => readFileSync(storeProfilePath, 'utf8').replace(/\r\n/g, '\n')
+
+  /**
+   * ⚠ CE BLOC A ÉTÉ RÉÉCRIT, ET LA RAISON EST LE CŒUR DU SUJET.
+   *
+   * Il exigeait que l'artefact commité égale CELUI DE TAOFIC, puis notait qu'il
+   * « convient aussi à C2EGF (mêmes axes) ». C'était figer une COÏNCIDENCE :
+   * les deux profils produisaient le même fichier parce qu'aucun axe boutique
+   * ne les distinguait encore.
+   *
+   * S8 y met fin légitimement. C2EGF déclare ses expéditeurs de ravitaillement
+   * — Patron, Mme Sawadogo, Mohamed… — et TAOFIC, qui est une autre entreprise,
+   * n'en a pas. Leur donner les mêmes noms pour sauver l'assertion aurait été
+   * inventer le carnet d'adresses d'un client.
+   *
+   * L'artefact commité appartient à CE dépôt, qui est l'instance C2EGF : c'est
+   * donc sur lui qu'il se vérifie, comme le fait déjà `npm run check:generated`.
+   */
+  it('functions/src/config/storeProfile.js == généré pour C2EGF', () => {
+    expect(commite()).toBe(generateStoreProfileFile(resolveProfile('c2egf_burkina')))
   })
 
-  it('l’artefact commité convient aussi à C2EGF (mêmes axes que TAOFIC)', () => {
-    const committed = readFileSync(storeProfilePath, 'utf8').replace(/\r\n/g, '\n')
-    expect(committed).toBe(generateStoreProfileFile(resolveProfile('c2egf_burkina')))
+  /**
+   * Et la divergence avec TAOFIC est elle-même une propriété à tenir : elle
+   * prouve que le générateur LIT le profil au lieu de recracher des constantes.
+   * Un générateur qui ignorerait l'axe rendrait les deux fichiers identiques —
+   * et cette assertion échouerait, ce qui est exactement ce qu'on veut.
+   */
+  it('le profil d’un autre client produit un artefact DIFFÉRENT', () => {
+    const taofic = generateStoreProfileFile(resolveProfile('taofic_ajagbe'))
+    expect(taofic).not.toBe(commite())
+    expect(taofic).toContain('STORE_REPLENISHMENT_SENDERS = []')
   })
 })

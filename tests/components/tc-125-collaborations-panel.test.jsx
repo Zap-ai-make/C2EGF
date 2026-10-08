@@ -352,7 +352,10 @@ describe('TC-125-D — demander à une consœur', () => {
     const options = optionsClient()
     expect(options).toHaveLength(3)
     expect(options[0]).toHaveTextContent('Ouédraogo Aminata')
-    expect(options[0]).toHaveTextContent('Code agent 70112233')
+    // ⚠ « N° » ET NON « Code agent » : 70112233 fait huit chiffres, c'est donc
+    //   un NUMÉRO agent (TC-233). L'annuaire l'étiquetait « Code agent » pour
+    //   tout le monde — il nommait l'un par le nom de l'autre une fois sur deux.
+    expect(options[0]).toHaveTextContent('N° 70112233')
     expect(options[2]).toHaveTextContent('Kaboré Salif')
   })
 

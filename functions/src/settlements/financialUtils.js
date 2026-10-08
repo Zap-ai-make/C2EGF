@@ -139,6 +139,28 @@ export function applyReplenishmentImpact(balances, network, field, amount) {
   return adjustBalanceValue(balances, network, field, amount)
 }
 
+/**
+ * Le retour : la boutique rend au dealer ce qu'il lui avait envoyé.
+ *
+ * UNE SEULE JAMBE, ET C'EST TOUT L'INTÉRÊT
+ * ──────────────────────────────────────
+ * Un dépôt validé fait DEUX choses — il sort du stock et remplit la liquidité.
+ * C'est précisément pour ça qu'il ne pouvait pas servir à rendre : la boutique
+ * voulait sortir un montant, pas en faire entrer un autre au passage.
+ *
+ * Le retour est l'inverse exact du ravitaillement, au signe près. Rien d'autre
+ * ne bouge, et c'est ce qui le rend aussi trivialement annulable : aucune
+ * cascade de liquidité à reconstituer, contrairement au retrait client.
+ *
+ * Le refus « réserve insuffisante » n'est pas écrit ici : `adjustBalanceValue`
+ * le porte déjà pour tout delta négatif, avec le disponible dans le message.
+ */
+export function applyReplenishmentReturnImpact(balances, network, field, amount) {
+  if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error('Montant de retour invalide.')
+  if (field !== 'stock' && field !== 'liquidite') throw new Error('Vase de retour inconnu.')
+  return adjustBalanceValue(balances, network, field, -amount)
+}
+
 export function applyInitialTransactionImpact(balances, transaction) {
   const amount = transaction.montant
   const pending = ['non terminees'].includes(normalizeType(transaction.statut))

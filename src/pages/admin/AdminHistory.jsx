@@ -1,3 +1,4 @@
+import { valeursAgent } from '../../utils/agentFields.js'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { listConsolidatedHistory, listStoreHistory, listStoreOptions } from '../../services/adminService'
 import { formatCurrency } from '../../utils/formatCurrency'
@@ -13,9 +14,10 @@ function clientName(r) {
   const full = [r.client?.prenom, r.client?.nom].filter(Boolean).join(' ').trim()
   return full || r.clientNom || '—'
 }
-// Code / numéro agent : `code` (agent du réseau de la transaction) ou `client.orange`.
+// Code / numéro agent : `code` (agent du réseau de la transaction) à défaut de quoi
+// le code agent du client, puis son numéro agent (utils/agentFields.js).
 function agentCode(r) {
-  return r.code || r.client?.orange || '—'
+  return r.code || valeursAgent(r.client)[0] || '—'
 }
 
 function statusVariant(statut) {

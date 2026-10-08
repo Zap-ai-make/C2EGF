@@ -4,9 +4,10 @@ import { useToast } from '../../hooks/useToast'
 import { runStoreTransactionCommand } from '../../services/storeTransactionCommandService'
 import { parseFcfaAmount } from '../../utils/fcfaAmount.js'
 import { formatCurrency } from '../../utils/formatCurrency'
+import { AJOUTER_UN_NOM } from '../../utils/ravitaillement.js'
 
 /**
- * Ravitaillement — la centrale réapprovisionne la boutique.
+ * Ravitaillement — le dealer réapprovisionne la boutique.
  *
  * POURQUOI DEUX VASES ET PAS UN MONTANT SEUL
  * ──────────────────────────────────────────
@@ -30,15 +31,33 @@ const VASES = [
 
 const NOTE_MAX = 280
 
-function RavitaillementForm({ onComplete, onCancel }) {
+/**
+ * L'EXPÉDITEUR EST OBLIGATOIRE, ET CE N'EST PAS UNE FORMALITÉ
+ * ─────────────────────────────────────────────────
+ * L'argent vient de personnes différentes, et la boutique doit rendre à CHACUNE
+ * ce qu'elle a reçu d'elle. Une livraison sans expéditeur serait une dette
+ * envers personne : elle n'entrerait dans aucun total du soir.
+ *
+ * Liste fermée plutôt que saisie libre, avec « Ajouter un nom » en échappatoire.
+ * En texte libre, « Mme Sawadogo », « mme sawadogo » et « Mme S. » deviennent
+ * trois créanciers : chacun porte un total juste, et c'est leur séparation qui
+ * est fausse. Le serveur résout de toute façon toute saisie contre les noms
+ * déjà connus — il reste le garant, la liste n'est qu'un confort.
+ */
+function RavitaillementForm({ onComplete, onCancel, expediteurs = [] }) {
   const { showToast } = useToast()
   const [montant, setMontant] = useState('')
   const [vase, setVase] = useState('stock')
   const [note, setNote] = useState('')
+  const [expediteur, setExpediteur] = useState(expediteurs[0] ?? AJOUTER_UN_NOM)
+  const [nouveauNom, setNouveauNom] = useState('')
   const [envoiEnCours, setEnvoiEnCours] = useState(false)
   // Verrou synchrone : un double-clic ne doit pas créditer deux fois, et
   // setEnvoiEnCours ne prend effet qu'au rendu suivant.
   const verrou = useRef(false)
+
+  // Le nom finalement envoyé : celui de la liste, ou celui qu'on vient de taper.
+  const expediteurChoisi = expediteur === AJOUTER_UN_NOM ? nouveauNom.trim() : expediteur
 
   const validation = useMemo(() => {
     const valeur = parseFcfaAmount(montant)
@@ -46,9 +65,11 @@ function RavitaillementForm({ onComplete, onCancel }) {
     return { ok: true, raison: '', valeur }
   }, [montant])
 
+  const peutEnvoyer = validation.ok && Boolean(expediteurChoisi)
+
   const envoyer = useCallback(async (event) => {
     event.preventDefault()
-    if (!validation.ok || verrou.current) return
+    if (!peutEnvoyer || verrou.current) return
     verrou.current = true
     setEnvoiEnCours(true)
     try {
@@ -56,6 +77,7 @@ function RavitaillementForm({ onComplete, onCancel }) {
         action: 'replenish',
         amount: validation.valeur,
         balanceType: vase,
+        expediteur: expediteurChoisi,
         note: note.trim() || undefined,
       })
       const nomVase = VASES.find((v) => v.cle === vase)?.libelle ?? vase
@@ -67,12 +89,46 @@ function RavitaillementForm({ onComplete, onCancel }) {
       setEnvoiEnCours(false)
       verrou.current = false
     }
-  }, [validation, vase, note, showToast, onComplete])
+  }, [peutEnvoyer, validation, vase, expediteurChoisi, note, showToast, onComplete])
 
   const montantInvalide = !validation.ok && montant !== ''
 
   return (
     <form onSubmit={envoyer} className="space-y-5">
+      {/* L'expéditeur AVANT le montant : on sait de qui vient l'argent avant
+          de le compter, et ce champ décide à qui la boutique devra rendre. */}
+      <div>
+        <label htmlFor="ravitaillement-expediteur" className="mb-1 block text-sm font-semibold text-ink">
+          Reçu de
+        </label>
+        <select
+          id="ravitaillement-expediteur"
+          value={expediteur}
+          onChange={(event) => setExpediteur(event.target.value)}
+          data-testid="ravitaillement-expediteur"
+          className="w-full rounded border-2 border-line px-3 py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+        >
+          {expediteurs.map((nom) => (
+            <option key={nom} value={nom}>{nom}</option>
+          ))}
+          <option value={AJOUTER_UN_NOM}>Ajouter un nom…</option>
+        </select>
+
+        {expediteur === AJOUTER_UN_NOM && (
+          <input
+            type="text"
+            value={nouveauNom}
+            maxLength={60}
+            autoFocus
+            onChange={(event) => setNouveauNom(event.target.value)}
+            placeholder="Nom de la personne qui a envoyé"
+            aria-label="Nom de l’expéditeur"
+            data-testid="ravitaillement-nouveau-nom"
+            className="mt-2 w-full rounded border-2 border-line px-3 py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+          />
+        )}
+      </div>
+
       <div>
         <label htmlFor="ravitaillement-montant" className="mb-1 block text-sm font-semibold text-ink">
           Montant (FCFA)
@@ -155,7 +211,7 @@ function RavitaillementForm({ onComplete, onCancel }) {
         </button>
         <button
           type="submit"
-          disabled={!validation.ok || envoiEnCours}
+          disabled={!peutEnvoyer || envoiEnCours}
           data-testid="valider-ravitaillement"
           className={`rounded px-5 py-2 text-sm font-semibold transition-colors ${
             !validation.ok || envoiEnCours

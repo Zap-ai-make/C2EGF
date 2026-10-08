@@ -1,3 +1,4 @@
+import { repartirValeurAgent } from '../../utils/agentFields.js'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Lightbulb, AlertTriangle } from 'lucide-react'
 import ClientSearch from './ClientSearch'
@@ -98,7 +99,12 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel }) {
       id: `manual-${network}-${manualCode}`,
       nom: 'Client',
       prenom: 'Non enregistré',
+      // `orange` reste le COMPTE RÉSEAU — c'est lui que lit la validation
+      // réseau, et lui qui devient le code écrit sur la transaction. Les deux
+      // champs d'identité s'y ajoutent pour que l'écran nomme correctement ce
+      // qui vient d'être tapé, sans rien changer au chemin financier.
       orange: manualCode,
+      ...repartirValeurAgent(manualCode),
       isManual: true
     } : null)
 
@@ -191,7 +197,12 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel }) {
       id: `manual-${network}-${manualCode}`,
       nom: 'Client',
       prenom: 'Non enregistré',
+      // `orange` reste le COMPTE RÉSEAU — c'est lui que lit la validation
+      // réseau, et lui qui devient le code écrit sur la transaction. Les deux
+      // champs d'identité s'y ajoutent pour que l'écran nomme correctement ce
+      // qui vient d'être tapé, sans rien changer au chemin financier.
       orange: manualCode,
+      ...repartirValeurAgent(manualCode),
       isManual: true
     } : null)
 

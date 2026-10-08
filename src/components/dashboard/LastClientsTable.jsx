@@ -1,3 +1,4 @@
+import { champsAgent } from '../../utils/agentFields.js'
 import { UserPlus } from 'lucide-react'
 import { parsefrenchDate } from '../../utils/helpers.js'
 import { CARTE } from '../../constants/dashboardTheme.js'
@@ -20,7 +21,7 @@ function LastClientsTable({ clients = [] }) {
   // Résumé de cinq lignes, pas le fichier complet : le numéro personnel et le
   // prénom en colonne propre appartiennent à l'écran « Clients ». Sept colonnes
   // dans une demi-largeur se tronquaient à droite.
-  const colonnes = ['Agent', 'Code agent', 'Localité', 'Commercial', 'Ajouté le']
+  const colonnes = ['Agent', 'Code agent', 'Numéro agent', 'Localité', 'Commercial', 'Ajouté le']
 
   const dateAffichee = (client) => {
     if (!client.dateAjout) return '—'
@@ -75,7 +76,10 @@ function LastClientsTable({ clients = [] }) {
                     {`${client.nom || ''} ${client.prenom || ''}`.trim() || '—'}
                   </td>
                   <td className="px-4 py-3 text-sm font-semibold tabular-nums text-ink">
-                    {client.orange || '—'}
+                    {champsAgent(client).codeAgent || '—'}
+                  </td>
+                  <td className={`${CELLULE} tabular-nums`}>
+                    {champsAgent(client).numeroAgent || '—'}
                   </td>
                   <td className={CELLULE}>{client.localite || '—'}</td>
                   <td className={CELLULE}>{client.agentCommercial || '—'}</td>

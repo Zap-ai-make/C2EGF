@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import PageHeader from './ui/PageHeader'
 import { useToast } from '../hooks/useToast'
 import { getStorageKey } from '../config/clientIsolation'
+import { champsAgent } from '../utils/agentFields.js'
 import Toast from './Toast'
 
 const EMPTY_CLIENT_FORM = {
@@ -9,7 +10,10 @@ const EMPTY_CLIENT_FORM = {
   prenom: '',
   numeroIdentite: '',
   numeroPersonnel: '',
-  orange: '',
+  // Deux champs distincts depuis la séparation. `orange` n'est plus saisi : il
+  // reste lu sur les fiches d'avant, et jamais réécrit.
+  codeAgent: '',
+  numeroAgent: '',
   moov: '',
   telecel: '',
   coris: '',
@@ -41,7 +45,9 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client',
         prenom: initialData.prenom || '',
         numeroIdentite: initialData.numeroIdentite || '',
         numeroPersonnel: initialData.numeroPersonnel || '',
-        orange: initialData.orange || '',
+        // Une fiche d'avant la séparation arrive avec son seul `orange` : on la
+        // PRÉ-RÉPARTIT ici, pour que la modifier suffise à la ranger pour de bon.
+        ...champsAgent(initialData),
         moov: initialData.moov || '',
         telecel: initialData.telecel || '',
         coris: initialData.coris || '',
@@ -166,14 +172,30 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client',
         </div>
 
         <div>
-          <label htmlFor="client-agent-orange" className="block text-sm font-medium text-gray-700 mb-1">
-            Numéro agent / Code agent
+          <label htmlFor="client-code-agent" className="block text-sm font-medium text-gray-700 mb-1">
+            Code agent
           </label>
           <input
-            id="client-agent-orange"
+            id="client-code-agent"
             type="text"
-            name="orange"
-            value={formData.orange}
+            name="codeAgent"
+            inputMode="numeric"
+            value={formData.codeAgent}
+            onChange={handleChange}
+            className={inputClasses}
+          />
+        </div>
+
+        <div>
+          <label htmlFor="client-numero-agent" className="block text-sm font-medium text-gray-700 mb-1">
+            Numéro agent
+          </label>
+          <input
+            id="client-numero-agent"
+            type="text"
+            name="numeroAgent"
+            inputMode="numeric"
+            value={formData.numeroAgent}
             onChange={handleChange}
             className={inputClasses}
           />

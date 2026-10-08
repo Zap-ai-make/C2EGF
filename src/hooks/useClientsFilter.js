@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { MONTHS } from '../constants'
+import { valeursAgent } from '../utils/agentFields.js'
 
 export const useClientsFilter = (clients) => {
   const [searchTerm, setSearchTerm] = useState('')
@@ -8,13 +9,15 @@ export const useClientsFilter = (clients) => {
   const filteredClients = useMemo(() => {
     const search = searchTerm.trim().toLowerCase()
     return clients.filter(client => {
-      // Recherche sur : nom, prénom, numéro/code agent (champ `orange`) et numéro personnel.
+      // Recherche sur : nom, prénom, code agent, numéro agent et numéro
+      // personnel. `valeursAgent` rend les deux champs d'une fiche séparée
+      // COMME d'une fiche d'avant — chercher un ancien code continue de marcher.
       // Champs potentiellement absents → coalescer en chaîne vide avant toLowerCase().
       const matchesSearch = !search || [
         client.nom,
         client.prenom,
-        client.orange,
         client.numeroPersonnel,
+        ...valeursAgent(client),
       ].some(field => String(field ?? '').toLowerCase().includes(search))
 
       let matchesMonth = true

@@ -131,7 +131,7 @@ describe('TC-222 — trashHistory', () => {
   })
 
   it('[TC-222-04] refuse un ravitaillement', async () => {
-    const { id } = await call({ action: 'replenish', amount: 10_000, balanceType: 'stock' })
+    const { id } = await call({ action: 'replenish', expediteur: 'Patron', amount: 10_000, balanceType: 'stock' })
     await expect(call({ action: 'trashHistory', historyId: id })).rejects.toThrow()
     expect((await ligne(id)).statut).toBe('Validée')
   })
@@ -268,7 +268,7 @@ describe('TC-222 — reopenHistory', () => {
   })
 
   it('[TC-222-16] refuse un ravitaillement, une clôture et une ligne supprimée', async () => {
-    const { id: ravito } = await call({ action: 'replenish', amount: 10_000, balanceType: 'stock' })
+    const { id: ravito } = await call({ action: 'replenish', expediteur: 'Patron', amount: 10_000, balanceType: 'stock' })
     await expect(call({ action: 'reopenHistory', historyId: ravito })).rejects.toThrow()
 
     const supprimee = await saisirPuisValider()

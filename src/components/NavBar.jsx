@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { Menu, X } from 'lucide-react'
+import { Menu, X, HelpCircle } from 'lucide-react'
 import {
   STORE_ACCOUNT_ITEM,
   NAV_GROUPS,
@@ -14,6 +14,7 @@ import { subscribeStorePendingCount } from '../services/storeAdminDealerService'
 import { safeUnsubscribe } from '../services/resilientOnSnapshot'
 import { subscribePendingSettlementsCount } from '../services/collaborationService'
 import { useIncomingCollaborationsCount } from '../hooks/useIncomingCollaborationsCount'
+import AidePanel from './aide/AidePanel.jsx'
 import {
   STORE_NAVIGATION_VISIBILITY,
   STORE_TRANSACTION_VISIBILITY,
@@ -167,6 +168,7 @@ function NavBar() {
   const [pendingCount, setPendingCount] = useState(0)
   const [settlementsCount, setSettlementsCount] = useState(0)
   const [panneauOuvert, setPanneauOuvert] = useState(false)
+  const [aideOuverte, setAideOuverte] = useState(false)
 
   useEffect(() => {
     setPendingCount(0)
@@ -335,10 +337,32 @@ function NavBar() {
 
         <div className="flex-1 md:hidden" />
 
-        {/* ── Le compte, hors de la rangée ──────────────────────────────────
-            Sur mobile il reste visible : c'est une cible tactile, pas une
-            entrée de menu de plus. */}
+        {/* ── Le compte et l'aide, hors de la rangée ───────────────────────
+            Sur mobile ils restent visibles : ce sont des cibles tactiles, pas
+            des entrées de menu de plus.
+
+            L'AIDE EST ICI, ET PAS UN ONGLET DE PLUS.
+            La rangée ne contient que des DESTINATIONS — `navigation.js` en a
+            déjà sorti « Profil » pour cette raison. L'aide n'en est pas une :
+            c'est un recours. L'y poser coûterait une place dans une rangée
+            qu'on vient d'épurer, et surtout le formulaire à moitié rempli que
+            la caissière abandonnerait en y allant — or c'est en pleine saisie
+            qu'elle se bloque. Ici, elle est joignable depuis les trois onglets,
+            y compris l'historique où vivent les gestes les plus récents. */}
         <div className="flex shrink-0 items-center gap-2 md:absolute md:right-4 md:top-1/2 md:-translate-y-1/2">
+          <button
+            type="button"
+            onClick={() => setAideOuverte(true)}
+            data-testid="ouvrir-aide"
+            className="inline-flex items-center gap-1.5 rounded-full border border-white/25 px-2.5 py-1.5 text-sm font-medium text-white transition-colors hover:bg-black/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+          >
+            <HelpCircle className="h-5 w-5" aria-hidden="true" strokeWidth={1.75} />
+            {/* Le mot est masqué sur téléphone faute de place, jamais pour le
+                lecteur d'écran : une icône seule ne dit pas ce qu'elle ouvre. */}
+            <span className="hidden sm:inline">Aide</span>
+            <span className="sr-only sm:hidden">Aide</span>
+          </button>
+
           <NavLink
             to={STORE_ACCOUNT_ITEM.path}
             className={({ isActive }) =>
@@ -358,6 +382,8 @@ function NavBar() {
           <PWAInstallButton />
         </div>
       </div>
+
+      <AidePanel open={aideOuverte} onClose={() => setAideOuverte(false)} />
 
       {panneauOuvert && (
         <div id="nav-panneau-boutique" className="border-t border-white/15 px-3 pb-3 pt-2 md:hidden">

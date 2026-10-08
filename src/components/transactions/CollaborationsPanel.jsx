@@ -1,3 +1,4 @@
+import { libelleAgent, valeursAgent } from '../../utils/agentFields.js'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   subscribeOutgoingCollaborations,
@@ -74,7 +75,7 @@ const nomClient = (c) => [c?.nom, c?.prenom].filter(Boolean).join(' ').trim()
 
 /** La ligne qui départage deux homonymes — et il y en a. */
 const detailClient = (c) => [
-  c?.orange ? `Code agent ${c.orange}` : null,
+  libelleAgent(c) || null,
   c?.numeroPersonnel ? `Tél. ${c.numeroPersonnel}` : null,
 ].filter(Boolean).join(' · ')
 
@@ -110,7 +111,7 @@ function ChoixClient({ clients, choisi, onChoisir }) {
     const terme = normaliser(recherche.trim())
     if (!terme) return source.slice(0, RESULTATS_MAX)
     return source
-      .filter((c) => [c?.nom, c?.prenom, c?.orange, c?.numeroPersonnel]
+      .filter((c) => [c?.nom, c?.prenom, c?.numeroPersonnel, ...valeursAgent(c)]
         .some((valeur) => normaliser(valeur).includes(terme)))
       .slice(0, RESULTATS_MAX)
   }, [clients, recherche])

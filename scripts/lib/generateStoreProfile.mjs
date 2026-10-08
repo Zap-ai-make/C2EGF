@@ -62,6 +62,14 @@ export function generateStoreProfileFile(profile) {
     throw new Error('Profil invalide : cashier.canEditBalances doit être un booléen.')
   }
 
+  // Liste VIDE autorisée, contrairement aux réseaux et aux méthodes : un profil
+  // peut n'avoir aucun expéditeur prédéfini et ne s'appuyer que sur les noms
+  // ajoutés à l'usage. C'est le cas du pilote.
+  const senders = profile?.replenishment?.senders ?? []
+  if (!Array.isArray(senders)) {
+    throw new Error('Profil invalide : replenishment.senders doit être une liste.')
+  }
+
   return `/**
  * storeProfile.js — axes BOUTIQUE du profil client, côté Cloud Functions.
  * ─────────────────────────────────────────────────────────────────────────────
@@ -77,6 +85,13 @@ export function generateStoreProfileFile(profile) {
  *     (méthodes du profil + « Banque »). Volontairement distinct des méthodes de
  *     règlement d'une transaction client.
  *
+ *   • STORE_REPLENISHMENT_SENDERS — expéditeurs prédéfinis d'un ravitaillement.
+ *     Liste OUVERTE : la boutique peut ajouter un nom, qui est alors mémorisé sur
+ *     son document « stores/<storeId> ». Cette liste-ci n'est donc pas un
+ *     garde-fou d'autorisation — un expéditeur est une étiquette, pas une
+ *     permission —, seulement le vocabulaire commun qui évite que trois
+ *     orthographes d'un même nom deviennent trois créanciers.
+ *
  * ⚠ Ces méthodes ne sont validées qu'à la DÉCLARATION d'une tranche, jamais à sa
  * confirmation : une tranche portant un ancien code doit rester confirmable.
  */
@@ -91,5 +106,7 @@ export const CASHIER_CAN_EDIT_BALANCES = ${canEditBalances}
 export const COLLABORATIONS_ENABLED = ${collaborationsEnabled}
 
 export const DEBT_SETTLEMENT_METHODS = [${quoteList(settlementMethods)}]
+
+export const STORE_REPLENISHMENT_SENDERS = [${quoteList(senders)}]
 `
 }

@@ -1,16 +1,20 @@
 /**
- * TC-062 — addClient : anti-doublon sur le numéro/code agent (champ `orange`)
+ * TC-062 — addClient : anti-doublon sur le code agent et le numéro agent
  *
  * Règle métier protégée :
- *   Un même numéro/code agent (`orange`) ne peut être enregistré qu'une seule
+ *   Un même code agent ou numéro agent ne peut être enregistré qu'une seule
  *   fois PAR BOUTIQUE. La collection `clients` étant globale et isolée par le
  *   champ `registeredStoreId`, le contrôle doit filtrer sur les DEUX champs.
  *
- *   - `orange` vide/absent  → aucun contrôle, insertion autorisée.
- *   - `orange` inédit dans la boutique → insertion autorisée.
- *   - `orange` déjà présent dans la boutique → rejet (aucune écriture).
+ *   - valeur vide/absente  → aucun contrôle, insertion autorisée.
+ *   - valeur inédite dans la boutique → insertion autorisée.
+ *   - valeur déjà présente dans la boutique → rejet (aucune écriture).
  *
- * Ces tests figent le comportement AVANT/APRÈS l'ajout du garde-fou (Lot A2).
+ * ⚠ TROIS CHAMPS SONT INTERROGÉS DEPUIS LA SÉPARATION (TC-233), et le
+ *   troisième est l'ANCIEN. Les fiches d'avant vivent toutes dans `orange` :
+ *   ne chercher que dans `codeAgent` et `numeroAgent` laisserait réenregistrer
+ *   un agent que la boutique connaît depuis des mois, et lui donnerait deux
+ *   fiches pour la même personne.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -114,17 +118,49 @@ describe('TC-062 — addClient anti-doublon (numéro/code agent)', () => {
     expect(service.addDocument).toHaveBeenCalledTimes(1)
   })
 
-  it('filtre le contrôle sur orange ET registeredStoreId (isolation boutique)', async () => {
-    await service.addClient({ nom: 'Doe', prenom: 'John', orange: 'AG-123' })
-    expect(service.getCollection).toHaveBeenCalledTimes(1)
-    const [collectionName, options] = service.getCollection.mock.calls[0]
-    expect(collectionName).toBe(FIRESTORE_CONFIG.COLLECTIONS.CLIENTS)
-    expect(options.where).toEqual(
-      expect.arrayContaining([
-        { field: 'orange', operator: '==', value: 'AG-123' },
-        { field: 'registeredStoreId', operator: '==', value: 'store-A' },
-      ]),
+  it('cherche la valeur dans les trois champs, toujours avec registeredStoreId', async () => {
+    await service.addClient({ nom: 'Doe', prenom: 'John', codeAgent: 'AG-123' })
+
+    const champsInterroges = service.getCollection.mock.calls.map(
+      ([, options]) => options.where.find((w) => w.field !== 'registeredStoreId'),
     )
+    expect(champsInterroges).toEqual([
+      { field: 'codeAgent', operator: '==', value: 'AG-123' },
+      { field: 'numeroAgent', operator: '==', value: 'AG-123' },
+      { field: 'orange', operator: '==', value: 'AG-123' },
+    ])
+
+    for (const [collectionName, options] of service.getCollection.mock.calls) {
+      expect(collectionName).toBe(FIRESTORE_CONFIG.COLLECTIONS.CLIENTS)
+      expect(options.where).toContainEqual(
+        { field: 'registeredStoreId', operator: '==', value: 'store-A' },
+      )
+    }
+  })
+
+  /**
+   * Le cas qui justifie le troisième champ : la fiche existante n'a jamais été
+   * rouverte depuis la séparation, son code vit encore dans `orange`.
+   */
+  it('rejette un code déjà enregistré sous l’ancien champ', async () => {
+    service.getCollection
+      .mockResolvedValueOnce([])                                 // codeAgent
+      .mockResolvedValueOnce([])                                 // numeroAgent
+      .mockResolvedValueOnce([{ id: 'ancien', orange: 'AG-123' }]) // orange
+
+    await expect(
+      service.addClient({ nom: 'Doe', prenom: 'John', codeAgent: 'AG-123' }),
+    ).rejects.toThrow(/existe déjà/i)
+    expect(service.addDocument).not.toHaveBeenCalled()
+  })
+
+  it('contrôle le numéro agent comme le code agent', async () => {
+    await service.addClient({ nom: 'Doe', prenom: 'John', numeroAgent: '70112233' })
+
+    const valeurs = service.getCollection.mock.calls.map(
+      ([, options]) => options.where.find((w) => w.field !== 'registeredStoreId').value,
+    )
+    expect(new Set(valeurs)).toEqual(new Set(['70112233']))
   })
 
   it('rejette et n’écrit pas quand orange existe déjà dans la boutique', async () => {
@@ -136,10 +172,10 @@ describe('TC-062 — addClient anti-doublon (numéro/code agent)', () => {
   })
 
   it('ignore les espaces autour du code agent (trim) avant contrôle', async () => {
-    await service.addClient({ nom: 'Doe', prenom: 'John', orange: '  AG-123  ' })
+    await service.addClient({ nom: 'Doe', prenom: 'John', codeAgent: '  AG-123  ' })
     const [, options] = service.getCollection.mock.calls[0]
     expect(options.where).toEqual(
-      expect.arrayContaining([{ field: 'orange', operator: '==', value: 'AG-123' }]),
+      expect.arrayContaining([{ field: 'codeAgent', operator: '==', value: 'AG-123' }]),
     )
   })
 })

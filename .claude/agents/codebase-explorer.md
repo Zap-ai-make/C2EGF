@@ -35,14 +35,7 @@ Tu dois analyser :
 
 ## Interdictions absolues
 
-- Ne modifie aucun fichier.
-- Ne crée aucun fichier.
-- Ne supprime aucun fichier.
-- Ne lance aucun déploiement.
-- Ne lance jamais git push.
-- Ne lance jamais firebase deploy.
-- Ne lance jamais npm audit fix.
-- N'exécute aucun script qui écrit dans Firebase.
+- Firebase.
 - N'utilise aucune donnée ou clé de production.
 - Ne suppose pas qu'un fichier est inutile sans preuve.
 

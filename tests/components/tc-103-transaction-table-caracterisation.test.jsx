@@ -70,12 +70,16 @@ describe('TC-103 — structure du tableau', () => {
   })
 
   /**
-   * ⚠ « Réseau » a cédé la place à « Code », volontairement.
+   * ⚠ DEUX LIBELLÉS ONT CHANGÉ ICI, CHAQUE FOIS VOLONTAIREMENT.
    *
-   * La boutique n'opère qu'un seul réseau : la colonne répétait « Orange » sur
-   * chaque ligne et noyait le code agent entre parenthèses, alors que c'est
-   * lui qu'on lit pour retrouver une transaction. Le compte de colonnes ne
-   * bouge pas ; c'est leur contenu qui gagne.
+   * « Réseau » a d'abord cédé la place à « Code » : la boutique n'opère qu'un
+   * seul réseau, la colonne répétait « Orange » sur chaque ligne et noyait le
+   * code agent entre parenthèses, alors que c'est lui qu'on lit pour retrouver
+   * une transaction.
+   *
+   * Le compteur d'attente (TC-232) n'a PAS ajouté de colonne : c'est une
+   * pastille posée en relief sur la rangée, pas une valeur de la transaction.
+   * Ce test est donc aussi ce qui garantit qu'il n'y retombera pas.
    */
   it('expose les 6 colonnes du contrat métier', () => {
     render(<TransactionTable />)

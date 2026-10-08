@@ -65,6 +65,17 @@ vi.mock('../../src/hooks/useSimpleNetworkData.js', () => ({
 vi.mock('../../src/components/network/NetworkCard.jsx', () => ({
   default: ({ network }) => <div data-testid={`carte-${network}`}>{network}</div>,
 }))
+// La barre des soldes porte le total exact de la caisse, qui compte les
+// transactions non terminees. On la mocke comme `useSimpleNetworkData` juste
+// au-dessus : le shell est teste pour sa structure, pas pour ses sources.
+vi.mock('../../src/context/transactions.jsx', () => ({
+  useTransactions: () => ({
+    pendingTransactions: [
+      { id: 'd1', type: 'Depot', montant: 20_000 },
+      { id: 'r1', type: 'Retrait', montant: 30_000 },
+    ],
+  }),
+}))
 
 import Layout from '../../src/components/Layout.jsx'
 import { APP_NAME } from '../../src/constants/branding.js'
@@ -137,6 +148,27 @@ describe('TC-101 — repères de structure du shell', () => {
     expect(within(soldes).getByTestId('carte-Orange')).toBeInTheDocument()
     expect(within(soldes).getByTestId('carte-Liquidite')).toBeInTheDocument()
   })
+
+  /**
+   * LE TOTAL DE LA CAISSE VIT DANS CETTE BANDE, ET C EST STRUCTUREL.
+   *
+   * C est le seul chiffre que la caissiere compare a ce qu elle a en main. Le
+   * poser ici — et non sur la page Transactions — est ce qui le rend lisible
+   * depuis Clients et Historique sans y etre reecrit. Un lot qui deplacerait
+   * la bande doit l emporter avec elle.
+   *
+   * 140 631 529 de stock + 341 515 014 de liquidite + 20 000 de depots en
+   * attente - 30 000 de retraits en attente.
+   */
+  it('porte le total exact de la caisse, non terminees comprises', () => {
+    renderShell()
+    const soldes = screen.getByLabelText('Soldes opérationnels')
+    const total = within(soldes).getByTestId('total-caisse')
+    expect(total).toHaveTextContent('Total caisse')
+    // Les chiffres sans leurs separateurs : `toLocaleString` pose des espaces
+    // insecables etroits que `toHaveTextContent` ne normalise pas comme le DOM.
+    expect(total.textContent.replace(/\s/g, '')).toContain('482136543')
+  })
 })
 
 describe('TC-101 — points d’entrée de la navigation', () => {
@@ -173,6 +205,32 @@ describe('TC-101 — points d’entrée de la navigation', () => {
     // Et il n'est PAS une destination de la rangée : c'est ce qui lui a fait
     // gagner sa place à droite.
     expect(STORE_NAV_ITEMS.some((item) => item.path === STORE_ACCOUNT_ITEM.path)).toBe(false)
+  })
+
+  /**
+   * L AIDE EST JOIGNABLE DEPUIS LE SHELL, ET N EST PAS UNE DESTINATION.
+   *
+   * Meme raisonnement que pour le compte juste au-dessus, et c est voulu : la
+   * rangee ne porte que des endroits ou l on TRAVAILLE. L aide est un recours.
+   * L y mettre aurait coute une place dans une rangee qu on vient d epurer, et
+   * surtout le formulaire a moitie rempli que la caissiere abandonnerait en y
+   * allant — or c est en pleine saisie qu elle se bloque.
+   *
+   * Etant dans le shell, elle suit la caissiere sur les trois onglets, y
+   * compris l historique ou vivent les gestes les plus recents.
+   */
+  it('offre l’aide depuis le shell, sans en faire une destination', () => {
+    renderShell()
+    const nav = screen.getByRole('navigation')
+
+    const aide = within(nav).getByTestId('ouvrir-aide')
+    expect(aide).toHaveAccessibleName(/Aide/)
+    expect(STORE_NAV_ITEMS.some((item) => /aide/i.test(item.name))).toBe(false)
+
+    // Le panneau n ouvre qu au clic : il ne doit pas encombrer le shell.
+    expect(screen.queryByTestId('panneau-aide')).not.toBeInTheDocument()
+    fireEvent.click(aide)
+    expect(screen.getByTestId('panneau-aide')).toBeInTheDocument()
   })
 
   it('offre un équivalent mobile nommé, couvrant les mêmes destinations', () => {

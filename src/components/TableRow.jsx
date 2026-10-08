@@ -1,6 +1,11 @@
 import { memo } from 'react'
+import { champsAgent } from '../utils/agentFields.js'
 
 const TableRow = memo(({ client, index, onEdit }) => {
+  // Une fiche d'avant la séparation n'a qu'un champ : il se range ici, à la
+  // lecture, sans que la base soit réécrite (utils/agentFields.js).
+  const agent = champsAgent(client)
+
   return (
     <tr className={index % 2 === 0 ? 'bg-surface' : 'bg-canvas'}>
       <td className="px-4 py-3 text-base">
@@ -12,7 +17,8 @@ const TableRow = memo(({ client, index, onEdit }) => {
       <td className="px-4 py-3 text-base">{client.prenom}</td>
       <td className="px-4 py-3 text-base">{client.numeroIdentite}</td>
       <td className="px-4 py-3 text-base">{client.numeroPersonnel}</td>
-      <td className="px-4 py-3 text-base">{client.orange}</td>
+      <td className="px-4 py-3 text-base tabular-nums">{agent.codeAgent}</td>
+      <td className="px-4 py-3 text-base tabular-nums">{agent.numeroAgent}</td>
       <td className="px-4 py-3 text-base max-w-48 break-words">{client.localite}</td>
       <td className="px-4 py-3 text-base">{client.agentCommercial}</td>
       <td className="px-4 py-3 text-base">{client.dateAjout}</td>

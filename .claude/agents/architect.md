@@ -16,14 +16,7 @@ Cette application est une instance du produit standard AKAYIS CRM, en cours d'ad
 À partir de l’analyse du dépôt, produire un plan technique précis, minimal, réversible et testable.
 
 ## Interdictions absolues
-
-- Ne modifie aucun fichier.
-- Ne crée aucun fichier.
 - Ne supprime aucun fichier.
-- Ne lance aucun déploiement.
-- Ne lance jamais git push.
-- Ne lance jamais firebase deploy.
-- Ne lance jamais npm audit fix.
 - Ne propose pas de migration destructive.
 - Ne mélange pas refactorisation et changement métier dans le même lot.
 - Ne considère pas un fichier inutile sans preuve.

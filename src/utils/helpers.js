@@ -378,6 +378,10 @@ export const createExportData = (transactions) => {
     'Type': transaction.type || '',
     'Réseau': transaction.reseau || '',
     'Code': transaction.code || '',
+    // La destination du règlement quand l'argent est parti sur un compte agent.
+    // Sans elle dans l'export, un règlement contesté ne se rapproche de rien —
+    // et c'est précisément pour ça que la boutique note ce code.
+    'Code agent destinataire': transaction.settlementAgentCode || '',
     'Montant (FCFA)': transaction.montant || 0,
     'Statut': transaction.statut || 'Validée',
     'Email utilisateur': transaction.userEmail || ''

@@ -190,6 +190,52 @@ describe('TC-223 — actions sur une ligne d’historique', () => {
     expect(transactionsValue.trashTransaction).not.toHaveBeenCalled()
   })
 
+  /**
+   * LE REFUS DU SERVEUR SE LIT, MOT POUR MOT.
+   *
+   * Ces deux gestes sont refuses pour une dizaine de raisons distinctes — un
+   * reglement partiel, une liquidite deja videe, un historique incomplet, un
+   * retrait anterieur a l enregistrement de la repartition — et chacune se
+   * corrige autrement.
+   *
+   * Le premier jet les avalait toutes dans un `catch` vide, en pariant que le
+   * contexte afficherait l erreur. Il la STOCKE, mais aucun ecran ne la lit :
+   * le clic ne produisait donc rien du tout. Du siege, ou les lignes sont
+   * recentes, tout passait ; en franchise, sur des lignes plus anciennes, on
+   * obtenait un bouton qui semblait casse. Dix diagnostics reduits a un seul
+   * « ca ne marche pas », que personne ne peut rapporter.
+   */
+  it('[TC-223-28] une suppression refusée affiche la raison, dans la confirmation', async () => {
+    transactionsValue = contexteBase([SIMPLE])
+    transactionsValue.trashTransaction = vi.fn()
+      .mockRejectedValue(new Error('Liquidite insuffisante. Disponible: 0 FCFA'))
+    afficherTable([SIMPLE])
+
+    fireEvent.click(screen.getByTestId('supprimer-historique'))
+    fireEvent.click(screen.getByTestId('confirmer-supprimer'))
+
+    const message = await screen.findByTestId('echec-suppression-historique')
+    expect(message).toHaveTextContent('Liquidite insuffisante. Disponible: 0 FCFA')
+    // Le modal RESTE ouvert : il porte le message, et se fermer donnerait a
+    // croire que la suppression a eu lieu.
+    expect(screen.getByTestId('confirmer-suppression-historique')).toBeInTheDocument()
+  })
+
+  it('[TC-223-29] une réouverture refusée affiche la raison, qui n’a pas de modal à elle', async () => {
+    transactionsValue = contexteBase([SIMPLE])
+    // `onReopen` est une prop : on la fait echouer comme le ferait la page.
+    render(
+      <HistoriqueTable
+        transactions={[SIMPLE]}
+        onReopen={() => Promise.reject(new Error('Une transaction partiellement réglée se corrige par un remboursement.'))}
+      />,
+    )
+    fireEvent.click(screen.getByTestId('modifier-historique'))
+
+    const modal = await screen.findByTestId('echec-action-historique')
+    expect(within(modal).getByText(/partiellement réglée/)).toBeInTheDocument()
+  })
+
   // Par la PAGE, pas par le tableau : c'est elle qui enchaîne la réouverture et
   // le déplacement, et c'est l'enchaînement qu'il faut protéger.
   it('[TC-223-05] « Modifier » rouvre la ligne ET emmène sur le formulaire', async () => {
@@ -476,5 +522,32 @@ describe('TC-223 — totaux des non terminées', () => {
     expect(entetes).toContain('Code')
     expect(entetes).not.toContain('Réseau')
     expect(screen.getByText('7242979')).toBeInTheDocument()
+  })
+
+  /**
+   * LE COMPTE COIFFE SON TOTAL.
+   *
+   * Il vivait dans un sous-titre de page qui recitait « 3 transactions non
+   * terminees · 2 depots, 1 retrait », a l autre bout de l ecran des montants
+   * qu il denombrait. TC-127 interdit son retour ; ces deux assertions-ci
+   * fixent ou il est alle.
+   */
+  it('[TC-223-26] chaque case porte le nombre de transactions de son type', () => {
+    poser([
+      brouillon({ id: 'd-1', type: 'Dépôt', montant: 10_000 }),
+      brouillon({ id: 'd-2', type: 'Dépôt', montant: 5_000 }),
+      brouillon({ id: 'd-3', type: 'Retrait', montant: 8_000 }),
+    ])
+
+    expect(screen.getByTestId('nombre-depots-non-terminees')).toHaveTextContent('2')
+    expect(screen.getByTestId('nombre-retraits-non-terminees')).toHaveTextContent('1')
+  })
+
+  it('[TC-223-27] le nombre reste visible a zero, comme le total', () => {
+    // Une case qui disparait quand elle vaut zero oblige a se demander si elle
+    // est absente ou si elle est vide. Zero est une reponse, pas un vide.
+    poser([brouillon({ id: 'd-1', type: 'Retrait', montant: 3_000 })])
+    expect(screen.getByTestId('nombre-depots-non-terminees')).toHaveTextContent('0')
+    expect(screen.getByTestId('nombre-retraits-non-terminees')).toHaveTextContent('1')
   })
 })

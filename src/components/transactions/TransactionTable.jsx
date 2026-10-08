@@ -13,6 +13,10 @@ import OptimisticToast from '../ui/OptimisticToast.jsx'
 import logger from '../../utils/logger.js'
 import { generateIdempotencyKey } from '../../services/settlementService.js'
 import { prefereMouvementReduit } from '../../hooks/useReducedMotion.js'
+import { sommesEnAttente } from '../../utils/caisse.js'
+import { attenteDe } from '../../utils/attente.js'
+import { regrouperParClientEtType } from '../../utils/regroupement.js'
+import { ChevronRight } from 'lucide-react'
 
 const TransactionTable = memo(function TransactionTable() {
   const { pendingTransactions, getActionButtons, getTransactionStyles, addPaymentTranche, addRefundTranche, startEditTransaction, trashTransaction, loading } = useTransactions()
@@ -32,30 +36,76 @@ const TransactionTable = memo(function TransactionTable() {
       return true
     })
   }, [pendingTransactions])
-  /**
-   * Ce qui reste à encaisser et à payer, par type.
-   *
-   * Calculé sur la liste DÉDUPLIQUÉE : compter deux fois une ligne que React
-   * voit en double gonflerait un total que la caissière compare à sa caisse.
-   * Le libellé est normalisé — accents et casse — parce que l'historique
-   * contient des « Dépôt » et des « Depot » selon leur époque d'écriture.
-   */
-  const totauxEnAttente = useMemo(() => {
-    const normaliser = (valeur) => String(valeur || '')
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      .toLowerCase()
 
-    return uniquePendingTransactions.reduce((somme, transaction) => {
-      const montant = Number(transaction.montant) || 0
-      const type = normaliser(transaction.type)
-      if (type === 'depot') somme.depots += montant
-      else if (type === 'retrait') somme.retraits += montant
-      return somme
-    }, { depots: 0, retraits: 0 })
-  }, [uniquePendingTransactions])
+  /**
+   * UN SEUL MINUTEUR POUR TOUT LE TABLEAU.
+   *
+   * Chaque ligne affiche depuis combien de temps elle attend, mais toutes
+   * affichent la MÊME seconde : un `setInterval` par ligne ferait tourner
+   * soixante horloges pour un seul chiffre. Et il ne tourne pas du tout quand
+   * il n'y a rien à compter — l'écran des non terminées est souvent vide.
+   */
+  const [maintenant, setMaintenant] = useState(() => Date.now())
+  const riendACompter = uniquePendingTransactions.length === 0
+
+  useEffect(() => {
+    if (riendACompter) return undefined
+    setMaintenant(Date.now())
+    const minuteur = setInterval(() => setMaintenant(Date.now()), 1000)
+    return () => clearInterval(minuteur)
+  }, [riendACompter])
+  /**
+   * Ce qui reste a encaisser et a payer, par type.
+   *
+   * Le calcul vit dans `utils/caisse.js` : la barre des soldes affiche le meme
+   * agregat, et deux normalisations de « Depot » finiraient par diverger.
+   */
+  const totauxEnAttente = useMemo(
+    () => sommesEnAttente(uniquePendingTransactions),
+    [uniquePendingTransactions],
+  )
 
   const [activeDropdown, setActiveDropdown] = useState(null)
+  // Le code agent SUR LEQUEL l'argent part, quand il ne passe pas de la main a
+  // la main. Facultatif de bout en bout : vide, il n'est pas transmis.
+  const [codeAgentReglement, setCodeAgentReglement] = useState('')
+
+  /**
+   * Un client qui depose six fois occupait six rangees. Une seule desormais,
+   * avec le total — et les six en dessous quand on la deplie.
+   *
+   * Le depliage plutot qu'une modale : les actions de reglement ouvrent un menu
+   * positionne en PORTAIL, avec son propre z-index. Les enfermer dans un
+   * dialogue les ferait se battre avec son piege a focus, alors qu'ici toute la
+   * mecanique existante continue de fonctionner sans y toucher.
+   */
+  const [groupesDeplies, setGroupesDeplies] = useState(() => new Set())
+
+  const basculerGroupe = useCallback((cle) => {
+    setGroupesDeplies((precedent) => {
+      const suivant = new Set(precedent)
+      if (suivant.has(cle)) suivant.delete(cle)
+      else suivant.add(cle)
+      return suivant
+    })
+  }, [])
+
+  const rangees = useMemo(
+    () => regrouperParClientEtType(uniquePendingTransactions),
+    [uniquePendingTransactions],
+  )
+
+  const lignesAffichees = useMemo(() => {
+    const sortie = []
+    for (const rangee of rangees) {
+      if (rangee.seule) { sortie.push({ seule: rangee.seule }); continue }
+      sortie.push({ entete: rangee.groupe })
+      if (groupesDeplies.has(rangee.groupe.cle)) {
+        for (const ligne of rangee.groupe.lignes) sortie.push({ seule: ligne, enfant: true })
+      }
+    }
+    return sortie
+  }, [rangees, groupesDeplies])
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 })
   const [currentActionType, setCurrentActionType] = useState(null)
   const [processingActions, setProcessingActions] = useState(new Set())
@@ -119,7 +169,7 @@ const TransactionTable = memo(function TransactionTable() {
     }
   }, [pendingTransactions, startEditTransaction, activeDropdown, setActiveDropdown, setCurrentActionType, setDropdownPosition, processingActions])
 
-  const handlePaymentMethodSelect = useCallback(async (transactionId, method, actionType, amount, idempotencyKey) => {
+  const handlePaymentMethodSelect = useCallback(async (transactionId, method, actionType, amount, idempotencyKey, agentCode) => {
     const actionKey = `${transactionId}-${actionType}-${method}`
     if (processingActions.has(actionKey)) return
 
@@ -135,15 +185,16 @@ const TransactionTable = memo(function TransactionTable() {
       setSelectedMethod(null)
       setSettlementAmount('')
       setAmountError('')
+      setCodeAgentReglement('')
 
       if (actionType === 'rembourser') {
-        await addRefundTranche(transactionId, amount, method, idempotencyKey)
+        await addRefundTranche(transactionId, amount, method, idempotencyKey, agentCode)
       } else {
-        await addPaymentTranche(transactionId, amount, method, idempotencyKey)
+        await addPaymentTranche(transactionId, amount, method, idempotencyKey, agentCode)
       }
 
       // Succès : supprimer la clé (la prochaine action génèrera une nouvelle clé)
-      const fingerprint = `${transactionId}-${actionType}-${method}-${amount}`
+      const fingerprint = `${transactionId}-${actionType}-${method}-${amount}-${agentCode ?? ''}`
       delete pendingKeyRef.current[fingerprint]
     } catch (error) {
       logger.user.error('Settlement error', error)
@@ -211,16 +262,22 @@ const TransactionTable = memo(function TransactionTable() {
       }
     }
 
-    // Clé d'idempotence stable : générée une fois par (draftId, actionType, method, amount)
-    // et réutilisée pour les retries de cette même action.
-    const fingerprint = `${activeDropdown}-${currentActionType}-${selectedMethod}-${amount}`
+    // Clé d'idempotence stable : générée une fois par (draftId, actionType,
+    // method, amount, codeAgent) et réutilisée pour les retries de CETTE action.
+    //
+    // ⚠ LE CODE AGENT EN FAIT PARTIE, et ce n'est pas optionnel. Sans lui,
+    //   corriger un code mal tapé puis reconfirmer réutiliserait la même clé :
+    //   le serveur reconnaîtrait un rejeu, renverrait le règlement déjà
+    //   enregistré, et le code corrigé ne serait jamais écrit — en silence.
+    const codeAgent = codeAgentReglement.trim()
+    const fingerprint = `${activeDropdown}-${currentActionType}-${selectedMethod}-${amount}-${codeAgent}`
     if (!pendingKeyRef.current[fingerprint]) {
       pendingKeyRef.current[fingerprint] = generateIdempotencyKey()
     }
     const idempotencyKey = pendingKeyRef.current[fingerprint]
 
-    await handlePaymentMethodSelect(activeDropdown, selectedMethod, currentActionType, amount, idempotencyKey)
-  }, [settlementAmount, selectedMethod, activeDropdown, currentActionType, pendingTransactions, handlePaymentMethodSelect])
+    await handlePaymentMethodSelect(activeDropdown, selectedMethod, currentActionType, amount, idempotencyKey, codeAgent || undefined)
+  }, [settlementAmount, selectedMethod, activeDropdown, currentActionType, codeAgentReglement, pendingTransactions, handlePaymentMethodSelect])
 
   // Fermer le dropdown quand on clique ailleurs
   useEffect(() => {
@@ -251,6 +308,81 @@ const TransactionTable = memo(function TransactionTable() {
     }
   }, [activeDropdown])
 
+  /**
+   * L'en-tete d'un groupe : le client, le type, le TOTAL.
+   *
+   * Aucun bouton de reglement ici, et ce n'est pas un oubli : « Encaisser »
+   * porte un montant et une methode, qui ne valent que pour UNE transaction.
+   * Encaisser un groupe d'un seul geste voudrait dire choisir la meme methode
+   * pour six operations que la caissiere n'a pas encore regardees.
+   *
+   * Le compteur d'attente, lui, montre la PLUS LONGUE du groupe : c'est elle
+   * qui decide si la rangee doit s'allumer.
+   */
+  const renderEnteteGroupe = (groupe) => {
+    const styles = getTransactionStyles(groupe.type)
+    const ouvert = groupesDeplies.has(groupe.cle)
+    const nombre = groupe.lignes.length
+    const attentes = groupe.lignes.map((ligne) => attenteDe(ligne, maintenant)).filter(Boolean)
+    const plusLongue = attentes.length
+      ? attentes.reduce((pire, courante) => (courante.ms > pire.ms ? courante : pire))
+      : null
+
+    return (
+      <tr
+        key={`groupe-${groupe.cle}`}
+        className={`border-b border-line/60 transition-colors hover:bg-brand-50/60 ${
+          plusLongue?.enRetard ? 'bg-warn-soft' : 'bg-surface-2/60'
+        }`}
+        data-testid={`groupe-${groupe.cle}`}
+      >
+        <td className="relative px-4 pb-3 pt-7 text-base">
+          {plusLongue && (
+            <span
+              className={`absolute left-3 top-1 z-10 inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[11px] font-bold leading-none tabular-nums shadow-sm ${
+                plusLongue.enRetard
+                  ? 'border-warn bg-warn text-white'
+                  : 'border-line bg-surface text-ink-muted'
+              }`}
+              data-testid={`attente-groupe-${groupe.cle}`}
+            >
+              {plusLongue.texte}
+            </span>
+          )}
+          {formatTransactionDateTime(groupe.lignes[0])}
+        </td>
+        <td className="px-4 py-3 text-base font-semibold">
+          {getClientName(groupe.client)}
+        </td>
+        <td className={`px-4 py-3 text-base font-medium ${styles.textColor}`}>
+          {groupe.type}
+          <span className="ml-1 text-xs font-normal text-ink-muted">× {nombre}</span>
+        </td>
+        <td className="px-4 py-3 text-base text-ink-muted">—</td>
+        <td className={`px-4 py-3 text-right text-base font-bold tabular-nums ${styles.textColor}`}>
+          {groupe.total.toLocaleString('fr-FR')} FCFA
+        </td>
+        <td className="px-4 py-3 text-base">
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={() => basculerGroupe(groupe.cle)}
+              aria-expanded={ouvert}
+              data-testid={`basculer-${groupe.cle}`}
+              className="inline-flex items-center gap-1 rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+            >
+              <ChevronRight
+                className={`h-3.5 w-3.5 transition-transform ${ouvert ? 'rotate-90' : ''}`}
+                aria-hidden="true"
+              />
+              {ouvert ? 'Masquer' : `Voir les ${nombre}`}
+            </button>
+          </div>
+        </td>
+      </tr>
+    )
+  }
+
   return (
     <div className="mt-8">
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -267,24 +399,40 @@ const TransactionTable = memo(function TransactionTable() {
 
             La couleur reprend celle des types dans le tableau — vert pour ce
             qui entre, rouge pour ce qui sort —, mais elle ne porte jamais le
-            sens seule : chaque case est étiquetée. */}
-        <span
-          className="inline-flex items-baseline gap-1.5 rounded-md border border-inflow/30 bg-inflow-soft px-2.5 py-1"
-          data-testid="total-depots-non-terminees"
-        >
-          <span className="text-xs font-medium text-inflow">Dépôts</span>
-          <span className="font-mono text-sm font-semibold tabular-nums text-inflow">
-            {totauxEnAttente.depots.toLocaleString('fr-FR')}
+            sens seule : chaque case est étiquetée.
+
+            Le COMPTE coiffe son total. Il vivait dans un sous-titre qui
+            récitait « 3 transactions non terminées · 2 dépôts, 1 retrait »,
+            à l'autre bout de l'écran des montants qu'il dénombrait : il
+            fallait lire une phrase pour apprendre ce qu'un chiffre posé au
+            bon endroit dit d'un coup d'œil. */}
+        <span className="inline-flex flex-col items-center gap-0.5" data-testid="case-depots-non-terminees">
+          <span className="font-mono text-xs font-bold leading-none tabular-nums text-inflow" data-testid="nombre-depots-non-terminees">
+            {totauxEnAttente.nbDepots}
+          </span>
+          <span
+            className="inline-flex items-baseline gap-1.5 rounded-md border border-inflow/30 bg-inflow-soft px-2.5 py-1"
+            data-testid="total-depots-non-terminees"
+          >
+            <span className="text-xs font-medium text-inflow">Dépôts</span>
+            <span className="font-mono text-sm font-semibold tabular-nums text-inflow">
+              {totauxEnAttente.depots.toLocaleString('fr-FR')}
+            </span>
           </span>
         </span>
 
-        <span
-          className="inline-flex items-baseline gap-1.5 rounded-md border border-danger/30 bg-danger-soft px-2.5 py-1"
-          data-testid="total-retraits-non-terminees"
-        >
-          <span className="text-xs font-medium text-danger">Retraits</span>
-          <span className="font-mono text-sm font-semibold tabular-nums text-danger">
-            {totauxEnAttente.retraits.toLocaleString('fr-FR')}
+        <span className="inline-flex flex-col items-center gap-0.5" data-testid="case-retraits-non-terminees">
+          <span className="font-mono text-xs font-bold leading-none tabular-nums text-danger" data-testid="nombre-retraits-non-terminees">
+            {totauxEnAttente.nbRetraits}
+          </span>
+          <span
+            className="inline-flex items-baseline gap-1.5 rounded-md border border-danger/30 bg-danger-soft px-2.5 py-1"
+            data-testid="total-retraits-non-terminees"
+          >
+            <span className="text-xs font-medium text-danger">Retraits</span>
+            <span className="font-mono text-sm font-semibold tabular-nums text-danger">
+              {totauxEnAttente.retraits.toLocaleString('fr-FR')}
+            </span>
           </span>
         </span>
       </div>
@@ -334,17 +482,49 @@ const TransactionTable = memo(function TransactionTable() {
                   </td>
                 </tr>
               ) : (
-                uniquePendingTransactions.map((transaction) => {
+                lignesAffichees.map((item) => {
+                  if (item.entete) return renderEnteteGroupe(item.entete)
+
+                  const transaction = item.seule
+                  const enfant = item.enfant === true
                   const actions = getActionButtons(transaction)
                   const styles = getTransactionStyles(transaction.type)
                   const isProcessingTransaction = [...processingActions].some(key => key.startsWith(`${transaction.id}-`))
+                  const attente = attenteDe(transaction, maintenant)
 
                   return (
-                    <tr 
+                    <tr
                       key={transaction.id}
-                      className="border-b border-line/60 transition-colors hover:bg-brand-50/60"
+                      // La teinte n'est pas décorative : passé une demi-heure,
+                      // la ligne se signale d'elle-même au lieu d'attendre
+                      // qu'on relise six horodatages pour trouver le plus vieux.
+                      className={`border-b border-line/60 transition-colors hover:bg-brand-50/60 ${
+                        attente?.enRetard ? 'bg-warn-soft' : ''
+                      }`}
+                      data-testid={enfant ? 'ligne-de-groupe' : undefined}
                     >
-                      <td className="px-4 py-3 text-base">
+                      <td className={`relative px-4 pb-3 pt-7 text-base ${
+                        enfant ? 'border-l-4 border-l-brand-300 pl-6' : ''
+                      }`}>
+                        {/* LE COMPTEUR EST UNE PASTILLE, PAS UNE COLONNE.
+                            Il ne décrit pas la transaction — il décrit ce qui
+                            lui arrive pendant qu'on la regarde. Une septième
+                            colonne l'aurait rangé avec le montant et le code,
+                            des valeurs figées ; posé en relief sur le bord de
+                            la rangée, il se lit comme une étiquette collée
+                            dessus, et c'est ce qu'il est. */}
+                        {attente && (
+                          <span
+                            className={`absolute left-3 top-1 z-10 inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[11px] font-bold leading-none tabular-nums shadow-sm ${
+                              attente.enRetard
+                                ? 'border-warn bg-warn text-white'
+                                : 'border-line bg-surface text-ink-muted'
+                            }`}
+                            data-testid={`attente-${transaction.id}`}
+                          >
+                            {attente.texte}
+                          </span>
+                        )}
                         {formatTransactionDateTime(transaction)}
                       </td>
                       <td className="px-4 py-3 text-base font-medium">
@@ -557,6 +737,24 @@ const TransactionTable = memo(function TransactionTable() {
                 {amountError && (
                   <p className="mt-1 text-xs text-danger">{amountError}</p>
                 )}
+
+                {/* FACULTATIF, ET DIT COMME TEL. Ce champ ne sert que lorsque
+                    l'argent part sur un compte agent au lieu d'être remis en
+                    main propre ; l'immense majorité des règlements le laissent
+                    vide, et rien ne doit donner l'impression qu'il bloque. */}
+                <label htmlFor="reglement-code-agent" className="mt-3 block text-xs text-gray-500">
+                  Envoyé sur le code agent <span className="text-gray-400">(facultatif)</span>
+                </label>
+                <input
+                  id="reglement-code-agent"
+                  type="text"
+                  value={codeAgentReglement}
+                  maxLength={32}
+                  placeholder="Laisser vide si remis en espèces"
+                  onChange={(e) => setCodeAgentReglement(e.target.value)}
+                  data-testid="reglement-code-agent"
+                  className="mt-1 w-full rounded border border-line px-2 py-1 text-sm tabular-nums focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                />
 
                 <button
                   onClick={handleConfirmPayment}
