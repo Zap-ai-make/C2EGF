@@ -67,12 +67,16 @@ export const TransactionsProvider = ({ children }) => {
   const [error, setError] = useState(null)
   const liveHistoryRef = useRef([])
   const todayHistoryRef = useRef([])
+  // Les ravitaillements encore dus. Une dette ne se perime pas avec la
+  // pagination : cette source-la ignore la fenetre des 100 lignes.
+  const dettesRavitaillementRef = useRef([])
   const archiveHistoryRef = useRef([])
   const historyCursorRef = useRef(null)
 
   const publishHistory = useCallback(() => {
     setCompletedTransactions(mergeHistoryPages(
       archiveHistoryRef.current,
+      dettesRavitaillementRef.current,
       liveHistoryRef.current,
       todayHistoryRef.current,
     ))
@@ -82,6 +86,7 @@ export const TransactionsProvider = ({ children }) => {
   useEffect(() => {
     liveHistoryRef.current = []
     todayHistoryRef.current = []
+    dettesRavitaillementRef.current = []
     archiveHistoryRef.current = []
     historyCursorRef.current = null
     setHistoryLoadingMore(false)
@@ -101,7 +106,7 @@ export const TransactionsProvider = ({ children }) => {
     }
 
     let isMounted = true
-    let unsubscribeDrafts, unsubscribeHistory, unsubscribeToday, rolloverTimeout
+    let unsubscribeDrafts, unsubscribeHistory, unsubscribeToday, unsubscribeDettes, rolloverTimeout
 
     const initializeTransactions = async () => {
       try {
@@ -178,6 +183,18 @@ export const TransactionsProvider = ({ children }) => {
         }
         subscribeToday()
 
+        // Ce que la boutique doit encore au dealer, quelle que soit son
+        // anciennete. Sans cette ecoute, une livraison sortie de la fenetre
+        // disparaissait de « ce qu'il reste a rendre » et du badge : le logiciel
+        // annoncait une dette soldee qui ne l'etait pas.
+        const onDettes = (historyData) => {
+          if (!isMounted) return
+          dettesRavitaillementRef.current = historyData
+          publishHistory()
+        }
+        onDettes.onError = onSubscriptionError
+        unsubscribeDettes = firestoreService.subscribeToOpenReplenishments(onDettes)
+
         if (isMounted) {
           setLoading(false)
         }
@@ -212,6 +229,7 @@ export const TransactionsProvider = ({ children }) => {
         unsubscribeHistory()
       }
       if (unsubscribeToday && typeof unsubscribeToday === 'function') unsubscribeToday()
+      if (unsubscribeDettes && typeof unsubscribeDettes === 'function') unsubscribeDettes()
       if (rolloverTimeout) clearTimeout(rolloverTimeout)
     }
   }, [user, userProfile?.storeId, activeStore?.id, authLoading, publishHistory])

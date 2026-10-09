@@ -1058,6 +1058,12 @@ export class FirestoreService {
     return this._historyService.subscribeToHistory(callback, filters)
   }
 
+  // Les ravitaillements encore dus, hors fenetre de pagination : voir
+  // HistoryService.subscribeToOpenReplenishments.
+  subscribeToOpenReplenishments(callback) {
+    return this._historyService.subscribeToOpenReplenishments(callback)
+  }
+
   // Helper pour mapper les méthodes de paiement aux réseaux
   mapPaymentMethodToNetwork(paymentMethod) {
     return _mapPaymentMethodToNetworkFn(paymentMethod)

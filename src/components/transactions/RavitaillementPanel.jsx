@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { useToast } from '../../hooks/useToast'
 import { useTransactions } from '../../context/transactions.jsx'
 import { useSimpleNetworkData } from '../../hooks/useSimpleNetworkData'
@@ -57,10 +57,18 @@ const RESEAU = NETWORK_OPTIONS[0]
 
 function FormulaireRetour({ ravitaillement, onFait, onAnnuler }) {
   const { showToast } = useToast()
-  const { getStock, getLiquidite } = useSimpleNetworkData()
+  const { getStock, getNetworkLiquidite } = useSimpleNetworkData()
   const [montant, setMontant] = useState('')
   const [vase, setVase] = useState(ravitaillement.balanceType ?? 'stock')
   const [envoiEnCours, setEnvoiEnCours] = useState(false)
+  // ⚠ VERROU SYNCHRONE, ET PAS SEULEMENT `envoiEnCours`.
+  //   `setEnvoiEnCours` ne prend effet qu'au rendu suivant : deux clics dans le
+  //   même tick voient tous deux `peutEnvoyer === true` et partent tous deux.
+  //   Et l'action serveur `returnReplenishment` n'a pas de clé d'idempotence —
+  //   rien ne rattraperait le second envoi, qui viderait la réserve deux fois
+  //   et solderait une dette qui ne l'est pas. Le formulaire voisin
+  //   (RavitaillementForm) porte le même verrou, pour la même raison.
+  const verrou = useRef(false)
 
   const reste = Number(ravitaillement.remainingAmount) || 0
 
@@ -75,10 +83,17 @@ function FormulaireRetour({ ravitaillement, onFait, onAnnuler }) {
    * Les confondre dans un seul « montant invalide » rendrait les deux
    * situations indiscernables — alors qu'elles se corrigent autrement : l'une
    * en rendant moins, l'autre en rendant dans l'AUTRE réserve.
+   *
+   * ⚠ LES DEUX RÉSERVES SE LISENT SUR LE MÊME RÉSEAU, celui que le serveur
+   *   débitera. La carte « Liquidité » de l'accueil additionne les espèces de
+   *   tous les réseaux ; s'en servir ici ouvrirait le bouton sur un montant que
+   *   le solde réellement débité ne contient pas, et le refus arriverait APRÈS
+   *   le clic. Sans effet sur un profil à un seul réseau — c'est justement
+   *   pourquoi il fallait l'écrire ici plutôt que de s'y fier.
    */
   const disponible = vase === 'stock'
     ? Number(getStock(RESEAU)) || 0
-    : Number(getLiquidite()) || 0
+    : Number(getNetworkLiquidite(RESEAU)) || 0
 
   const valeur = parseFcfaAmount(montant)
   const tropGrand = valeur !== null && valeur > reste
@@ -87,7 +102,8 @@ function FormulaireRetour({ ravitaillement, onFait, onAnnuler }) {
 
   const envoyer = useCallback(async (event) => {
     event.preventDefault()
-    if (!peutEnvoyer) return
+    if (!peutEnvoyer || verrou.current) return
+    verrou.current = true
     setEnvoiEnCours(true)
     try {
       await runStoreTransactionCommand({
@@ -104,6 +120,7 @@ function FormulaireRetour({ ravitaillement, onFait, onAnnuler }) {
       showToast(err?.message || "Le retour n'a pas pu être enregistré.", 'error')
     } finally {
       setEnvoiEnCours(false)
+      verrou.current = false
     }
   }, [peutEnvoyer, ravitaillement.id, valeur, vase, showToast, onFait])
 

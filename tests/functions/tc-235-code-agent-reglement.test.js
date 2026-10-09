@@ -206,3 +206,75 @@ describe('TC-235 — l’idempotence', () => {
     expect(rejeu.idempotent).toBe(true)
   })
 })
+
+describe('TC-235 — un règlement en plusieurs tranches', () => {
+  /** Le cumul des destinations, tel que la ligne d'historique le porte. */
+  const destinations = async (historyId) => (await ligneHistorique(historyId)).settlementAgentCode
+
+  /**
+   * ⚠ LE DÉFAUT QUE CETTE SECTION FERME.
+   *   `settlementAgentCode` n'était écrit qu'à la DERNIÈRE tranche, avec le
+   *   code de cette tranche-là. Un dépôt de 10 000 réglé en trois fois sur
+   *   trois comptes différents ressortait donc dans l'export comme si les
+   *   10 000 étaient partis sur le dernier : les deux premiers tiers étaient
+   *   attribués au mauvais destinataire, et un rapprochement contesté partait
+   *   d'un chiffre faux.
+   */
+  it('[TC-235-16] les trois codes se retrouvent sur la ligne, pas seulement le dernier', async () => {
+    await payer(base({ amount: 3_000, idempotencyKey: 'cle-1', agentCode: '1111111' }))
+    await payer(base({ amount: 3_000, idempotencyKey: 'cle-2', agentCode: '2222222' }))
+    const fin = await payer(base({ amount: 4_000, idempotencyKey: 'cle-3', agentCode: '3333333' }))
+
+    expect(fin.fullySettled).toBe(true)
+    expect(await destinations(fin.historyId)).toBe('1111111 + 2222222 + 3333333')
+  })
+
+  /** Régler deux fois sur le même compte n'est pas deux destinations. */
+  it('[TC-235-17] le même code sur deux tranches n’est cité qu’une fois', async () => {
+    await payer(base({ amount: 5_000, idempotencyKey: 'cle-1', agentCode: '1111111' }))
+    const fin = await payer(base({ amount: 5_000, idempotencyKey: 'cle-2', agentCode: '1111111' }))
+
+    expect(await destinations(fin.historyId)).toBe('1111111')
+  })
+
+  /**
+   * Le champ reste FACULTATIF tranche par tranche : la caissière envoie la
+   * première moitié sur un compte et remet la seconde en main propre. Taire le
+   * premier code parce que le dernier manque perdrait la seule trace qui
+   * existait.
+   */
+  it('[TC-235-18] une tranche sans code n’efface pas celui des précédentes', async () => {
+    await payer(base({ amount: 5_000, idempotencyKey: 'cle-1', agentCode: '1111111' }))
+    const fin = await payer(base({ amount: 5_000, idempotencyKey: 'cle-2' }))
+
+    expect(await destinations(fin.historyId)).toBe('1111111')
+  })
+
+  /**
+   * Et sans aucun code, le document garde la forme qu'il avait avant ce champ :
+   * un `agentCodes: []` dans le résumé ferait croire à une destination vide
+   * plutôt qu'à une absence de destination.
+   */
+  it('[TC-235-19] aucun code sur aucune tranche : rien n’est inscrit', async () => {
+    await payer(base({ amount: 5_000, idempotencyKey: 'cle-1' }))
+    const fin = await payer(base({ amount: 5_000, idempotencyKey: 'cle-2' }))
+
+    const ligne = await ligneHistorique(fin.historyId)
+    expect(ligne.settlementAgentCode).toBeNull()
+    expect(ligne.settlementSummary.agentCodes).toBeUndefined()
+  })
+
+  /**
+   * Un remboursement ne solde jamais : il ne construit donc aucune ligne
+   * d'historique. Sa destination doit quand même traverser le résumé jusqu'à
+   * la tranche qui, elle, en construira une.
+   */
+  it('[TC-235-20] le code d’un remboursement survit jusqu’à la ligne finale', async () => {
+    await payer(base({ amount: 6_000, idempotencyKey: 'cle-1', agentCode: '1111111' }))
+    await rembourser(base({ amount: 2_000, idempotencyKey: 'cle-remb', agentCode: '9999999' }))
+    const fin = await payer(base({ amount: 6_000, idempotencyKey: 'cle-2', agentCode: '1111111' }))
+
+    expect(fin.fullySettled).toBe(true)
+    expect(await destinations(fin.historyId)).toBe('1111111 + 9999999')
+  })
+})

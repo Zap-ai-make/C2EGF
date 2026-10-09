@@ -1,3 +1,5 @@
+import { montantRestant } from './argentDehors.js'
+
 /**
  * La caisse : ce que la boutique tient, et ce qui est encore en route.
  *
@@ -30,7 +32,14 @@ export function sommesEnAttente(transactions = []) {
     if (!transaction || vues.has(transaction.id)) continue
     vues.add(transaction.id)
 
-    const montant = Number(transaction.montant) || 0
+    // ⚠ LE RESTE DÛ, PAS LE MONTANT D'ORIGINE.
+    //   Une transaction partiellement réglée a déjà vu ses tranches encaissées
+    //   passer dans les soldes : les recompter en entier ferait annoncer au
+    //   bandeau un total supérieur à ce qu'il y a dans la caisse, et la
+    //   caissière chercherait l'écart chez elle. `montantRestant` fait déjà
+    //   cette lecture pour « l'argent dehors » du dealer ; deux lectures
+    //   différentes du même argent finiraient par donner deux chiffres.
+    const montant = Number(montantRestant(transaction)) || 0
     const type = normaliser(transaction.type)
     if (type === 'depot') { somme.depots += montant; somme.nbDepots += 1 }
     else if (type === 'retrait') { somme.retraits += montant; somme.nbRetraits += 1 }

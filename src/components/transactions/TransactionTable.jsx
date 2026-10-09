@@ -151,6 +151,10 @@ const TransactionTable = memo(function TransactionTable() {
         setSelectedMethod(null)
         setSettlementAmount('')
         setAmountError('')
+        // Le code agent aussi : un code saisi puis abandonne sur la
+        // transaction d'un client partirait sinon comme destination du
+        // reglement du suivant, dans son historique et dans l'export.
+        setCodeAgentReglement('')
       } else {
         const button = event.currentTarget
         const rect = button.getBoundingClientRect()
@@ -165,6 +169,10 @@ const TransactionTable = memo(function TransactionTable() {
         setSelectedMethod(null)
         setSettlementAmount('')
         setAmountError('')
+        // Le code agent aussi : un code saisi puis abandonne sur la
+        // transaction d'un client partirait sinon comme destination du
+        // reglement du suivant, dans son historique et dans l'export.
+        setCodeAgentReglement('')
       }
     }
   }, [pendingTransactions, startEditTransaction, activeDropdown, setActiveDropdown, setCurrentActionType, setDropdownPosition, processingActions])
@@ -294,6 +302,10 @@ const TransactionTable = memo(function TransactionTable() {
         setSelectedMethod(null)
         setSettlementAmount('')
         setAmountError('')
+        // Le code agent aussi : un code saisi puis abandonne sur la
+        // transaction d'un client partirait sinon comme destination du
+        // reglement du suivant, dans son historique et dans l'export.
+        setCodeAgentReglement('')
       }
     }
     

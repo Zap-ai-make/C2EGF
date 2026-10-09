@@ -367,11 +367,25 @@ export const matchesDateFilter = (transaction, filter, todayOnly = false) => {
   return true
 }
 
+/** Les mouvements qui viennent du dealer, pas d'un client. */
+const TYPES_DEALER = ['Ravitaillement', 'Retour', 'Clôture']
+
 /**
- * Crée les données d'export pour Excel
+ * Crée les données d'export pour Excel.
+ *
+ * ⚠ LES LIGNES DU DEALER EN SONT ÉCARTÉES, et c'est une correction.
+ *   Un retour de ravitaillement partage l'onglet des transactions clients —
+ *   la boutique relit sa journée d'un seul tenant — mais il n'est pas une
+ *   opération client : il n'a ni client ni code réseau, et son montant ne
+ *   répond pas à « combien les clients ont-ils déposé aujourd'hui ? ».
+ *   L'y laisser gonflait le total du fichier remis au gérant d'un montant
+ *   qu'aucune de ses lignes clients ne justifie. L'AFFICHAGE les garde ;
+ *   seul l'export les retire.
  */
 export const createExportData = (transactions) => {
-  return transactions.map((transaction, index) => ({
+  return transactions
+    .filter((transaction) => !TYPES_DEALER.includes(transaction?.type))
+    .map((transaction, index) => ({
     'N°': index + 1,
     'Date & Heure': transaction.date || '',
     'Client': getClientName(transaction.client),

@@ -19,7 +19,8 @@ vi.mock('../../src/context/transactions.jsx', () => ({
 vi.mock('../../src/hooks/useSimpleNetworkData', () => ({
   useSimpleNetworkData: () => ({
     getStock: () => soldes.stock,
-    getLiquidite: () => soldes.liquidite,
+    // Le panneau lit la liquidite DU RESEAU debite, pas la somme des reseaux.
+    getNetworkLiquidite: () => soldes.liquidite,
   }),
 }))
 

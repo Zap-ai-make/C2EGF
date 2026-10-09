@@ -209,4 +209,35 @@ export class HistoryService {
       }
     )
   }
+
+  /**
+   * Les ravitaillements encore dus — TOUS, et non ceux de la page chargée.
+   *
+   * POURQUOI UNE ÉCOUTE À PART
+   * ──────────────────────
+   * `subscribeToHistory` sert une FENÊTRE : les 100 dernières lignes, plus la
+   * journée en cours. C'est la bonne réponse pour relire l'historique, et la
+   * mauvaise pour une DETTE : une livraison reçue il y a trois semaines sort de
+   * la fenêtre dès que cent opérations ont suivi, et la boutique lisait alors
+   * « Rien à rendre pour le moment » en devant encore de l'argent. Un montant dû
+   * ne se périme pas avec la pagination.
+   *
+   * ⚠ NI TRI NI LIMITE, ET C'EST VOLONTAIRE. Un filtre d'égalité seul se sert
+   *   de l'index automatique de Firestore ; y ajouter `orderBy('createdAt')`
+   *   exigerait un index composite — donc un déploiement — pour trier une
+   *   poignée de lignes que `ravitaillementsEnCours` reclasse déjà en mémoire.
+   *
+   * Le statut est écrit par le serveur dès la création (`replenishmentStatus:
+   * 'open'`) et repasse à `settled` au dernier retour : la ligne quitte alors
+   * cette écoute d'elle-même.
+   */
+  subscribeToOpenReplenishments(callback) {
+    this._requireActiveStore()
+
+    return this._subscribeToCollection(
+      FIRESTORE_CONFIG.COLLECTIONS.HISTORY,
+      callback,
+      { where: [{ field: 'replenishmentStatus', operator: '==', value: 'open' }] },
+    )
+  }
 }

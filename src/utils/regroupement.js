@@ -22,6 +22,8 @@
  * par ne plus replier les mêmes lignes, et personne ne le remarquerait.
  */
 
+import { FIRESTORE_CONFIG } from '../constants/firestoreConstants.js'
+
 /** Accents et casse retirés : l'historique porte des « Dépôt » et des « Depot ». */
 const normaliser = (valeur) => String(valeur ?? '')
   .normalize('NFD')
@@ -29,8 +31,25 @@ const normaliser = (valeur) => String(valeur ?? '')
   .trim()
   .toLowerCase()
 
+/**
+ * Une ligne annulée ne se regroupe pas, et ce n'est pas un détail d'affichage.
+ *
+ * `cancelHistory` a RENDU son montant aux soldes : l'argent n'a pas bougé. Dans
+ * un groupe, elle disparaissait deux fois — son montant s'ajoutait au total, et
+ * la colonne Statut qui affichait « Annulée » cède la place au compte
+ * d'opérations. Le lecteur voyait donc un total trop grand, sans rien pour s'en
+ * douter. Seule, elle garde son badge et ne fausse aucune somme.
+ *
+ * La corbeille (`deletedAt`) ne passe déjà pas par ici — `useHistoriqueFilters`
+ * l'écarte en amont. On la refuse quand même : le tableau des non terminées
+ * marque ses suppressions de façon optimiste, avant que le serveur réponde.
+ */
+const horsRegroupement = (transaction) => Boolean(transaction?.deletedAt)
+  || normaliser(transaction?.statut) === normaliser(FIRESTORE_CONFIG.STATUS.CANCELLED)
+
 /** Deux transactions du même client et du même type partagent cette clé. */
 const cleDe = (transaction) => {
+  if (horsRegroupement(transaction)) return null
   const client = String(transaction?.clientId ?? '').trim()
   if (!client) return null
   return `${client}::${normaliser(transaction.type)}`

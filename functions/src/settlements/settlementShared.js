@@ -45,6 +45,43 @@ export function cleanSettlementAgentCode(valeur) {
   return propre
 }
 
+/**
+ * Les codes agents d'un reglement, cumules de tranche en tranche.
+ *
+ * POURQUOI UNE LISTE, ET PAS UN CHAMP
+ * ─────────────────────────────────
+ * Un depot de 300 000 peut se regler en trois fois, sur trois comptes agents
+ * differents. La ligne d'historique ne porte qu'UN champ de destination, et il
+ * n'etait ecrit qu'a la derniere tranche : l'export annoncait alors que les
+ * 300 000 etaient partis sur le dernier code, ce qui est faux pour les deux
+ * premiers tiers. Un rapprochement conteste partait donc d'un chiffre errone.
+ *
+ * Le cumul vit dans `settlementSummary`, aux cotes de l'impact par reseau, pour
+ * la meme raison que lui : il doit survivre a la tranche qui l'a cree.
+ *
+ * Dedoublonne et dans l'ordre de saisie : regler deux fois sur le meme compte
+ * n'est pas deux destinations, et le premier code cite doit rester le premier.
+ */
+export function accumulerCodesAgent(prevSummary, agentCode) {
+  const deja = Array.isArray(prevSummary?.agentCodes) ? prevSummary.agentCodes.filter(Boolean) : []
+  if (!agentCode || deja.includes(agentCode)) return deja
+  return [...deja, agentCode]
+}
+
+/**
+ * Ce que la ligne d'historique affiche comme destination.
+ *
+ * Un seul code reste un code — le cas de l'immense majorite des reglements, et
+ * l'export ne change pas d'allure. Plusieurs se citent tous : taire les autres
+ * pour garder un champ court reviendrait a designer un seul destinataire pour
+ * de l'argent parti a plusieurs.
+ */
+export function libelleCodesAgent(agentCodes) {
+  const codes = (Array.isArray(agentCodes) ? agentCodes : []).filter(Boolean)
+  if (codes.length === 0) return null
+  return codes.join(' + ')
+}
+
 export async function readSettlementTransactionContext({
   db,
   transaction,

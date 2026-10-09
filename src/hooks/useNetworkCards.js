@@ -90,6 +90,16 @@ export const useNetworkCards = () => {
     return totalLiquidite
   }
 
+  /**
+   * La liquidite d'UN SEUL reseau, et non la somme.
+   *
+   * `getLiquidite` repond a la question de la carte « Liquidite » : combien la
+   * boutique a-t-elle d'especes en tout. Une operation qui DEBITE un reseau
+   * precis ne peut pas s'appuyer dessus — la somme autoriserait un montant que
+   * le solde debite ne contient pas, et le serveur refuserait apres le clic.
+   */
+  const getNetworkLiquidite = (network) => networkData[network]?.liquidite || 0
+
   // Éditer la liquidité totale (pour la carte Liquidité)
   const updateLiquidity = (newTotalAmount) => {
     const currentTotal = totalLiquidite
@@ -123,6 +133,7 @@ export const useNetworkCards = () => {
     removeFromLiquidity,
     getStock,
     getLiquidite,
+    getNetworkLiquidite,
     getTotalLiquidity,
     formatAmount
   }

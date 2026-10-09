@@ -8,7 +8,7 @@ import { parseFcfaAmount } from '../utils/fcfaAmount.js'
  * Plus de logique complexe de transactions !
  */
 export const useSimpleNetworkData = () => {
-  const { cardsData, getStock, getLiquidite, formatAmount } = useNetworkCards()
+  const { cardsData, getStock, getLiquidite, getNetworkLiquidite, formatAmount } = useNetworkCards()
 
   // Interface de compatibilité pour le formulaire
   const validateAmount = (network, amount, transactionType) => {
@@ -54,6 +54,7 @@ export const useSimpleNetworkData = () => {
     validateAmount,
     getStock,
     getLiquidite,
+    getNetworkLiquidite,
     getFormattedStock
   }
 }

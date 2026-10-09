@@ -38,6 +38,8 @@ import {
   readIdempotentSettlement,
   readSettlementTransactionContext,
   cleanSettlementAgentCode,
+  accumulerCodesAgent,
+  libelleCodesAgent,
 } from './settlementShared.js'
 import { STORE_PAYMENT_METHODS } from '../config/storeProfile.js'
 
@@ -53,13 +55,16 @@ function buildFinalStatus(type, paymentMethod) {
  * Met à jour le settlementSummary du draft pour ce réseau.
  * Le summary est maintenu incrémentalement pour permettre l'annulation exacte.
  */
-function updateSummaryForPayment(prevSummary, network, amount) {
+function updateSummaryForPayment(prevSummary, network, amount, agentCodes) {
   const prev = (prevSummary?.netByNetwork || {})[network] || { paid: 0, refunded: 0 }
   return {
     netByNetwork: {
       ...(prevSummary?.netByNetwork || {}),
       [network]: { paid: prev.paid + amount, refunded: prev.refunded },
     },
+    // Absente quand aucune tranche n'a note de destination : un reglement sans
+    // code agent garde la forme de document qu'il avait avant ce champ.
+    ...(agentCodes.length ? { agentCodes } : {}),
   }
 }
 
@@ -185,7 +190,8 @@ export async function addTransactionPaymentHandler(request, { db, FieldValue, lo
 
       // ── settlementSummary incrémental ─────────────────────────────────────
       const prevSummary  = draft.settlementSummary ?? null
-      const newSummary   = updateSummaryForPayment(prevSummary, affectedNetwork, amount)
+      const codesAgent   = accumulerCodesAgent(prevSummary, agentCode)
+      const newSummary   = updateSummaryForPayment(prevSummary, affectedNetwork, amount, codesAgent)
 
       // ── Document settlement ───────────────────────────────────────────────
       const settlementData = {
@@ -256,7 +262,10 @@ export async function addTransactionPaymentHandler(request, { db, FieldValue, lo
           //   porte deja `code`, celui du CLIENT. Les deux repondent a des
           //   questions differentes — « qui est ce client » et « ou est parti
           //   l'argent » — et un nom court les aurait confondus a la relecture.
-          settlementAgentCode: agentCode,
+          //
+          //   TOUTES les tranches, et non la derniere : `agentCode` seul aurait
+          //   attribue le montant entier au dernier compte credite.
+          settlementAgentCode: libelleCodesAgent(codesAgent),
           effectiveNetwork:    affectedNetwork,
           settlementAmount:    originalAmount,
           validatedAt:         now,
