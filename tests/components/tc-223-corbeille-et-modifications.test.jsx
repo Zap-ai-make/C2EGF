@@ -180,12 +180,21 @@ describe('TC-223 — actions sur une ligne d’historique', () => {
     await waitFor(() => expect(transactionsValue.trashTransaction).toHaveBeenCalledWith('h-1'))
   })
 
-  it('[TC-223-04] annuler la confirmation ne supprime rien', async () => {
+  /**
+   * ⚠ « FERMER », ET PLUS « ANNULER ».
+   *   Le geste lui-même s'appelle désormais « Annuler » — c'est le mot de la
+   *   boutique. Le bouton qui REFERME la confirmation ne pouvait donc plus
+   *   porter le même nom : deux « Annuler » côte à côte, dont l'un agit et
+   *   l'autre renonce, est un piège à clic. « Fermer » non plus : la croix du
+   *   dialogue le porte déjà. Le bouton se nomme donc par ce qu'il PRÉSERVE.
+   *   Le comportement protégé ici n'a pas bougé : renoncer ne défait rien.
+   */
+  it('[TC-223-04] renoncer à la confirmation ne défait rien', async () => {
     transactionsValue = contexteBase([SIMPLE])
     afficherTable([SIMPLE])
 
     fireEvent.click(screen.getByTestId('supprimer-historique'))
-    fireEvent.click(screen.getByRole('button', { name: 'Annuler' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Garder' }))
 
     expect(transactionsValue.trashTransaction).not.toHaveBeenCalled()
   })
@@ -451,7 +460,7 @@ describe('TC-223 — colonnes d’opérateur', () => {
     expect(entetes).not.toContain('Utilisateur')
     expect(entetes).not.toContain('Email utilisateur')
     expect(entetes).toEqual([
-      'Date & heure', 'Client', 'Type', 'Code', 'Montant', 'Statut', 'Actions',
+      'Date & heure', 'Client', 'Type', 'Code', 'Montant', 'Statut', 'Durée', 'Actions',
     ])
   })
 

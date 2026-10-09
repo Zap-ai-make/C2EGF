@@ -161,6 +161,43 @@ export function applyReplenishmentReturnImpact(balances, network, field, amount)
   return adjustBalanceValue(balances, network, field, -amount)
 }
 
+/**
+ * Defait une cloture : chaque reserve balayee revient d'ou elle venait.
+ *
+ * LA CLOTURE PORTE SON PROPRE INVERSE
+ * ───────────────────────────────────
+ * Elle enregistre `soldes` — le stock et la liquidite de CHAQUE reseau au
+ * moment ou elle les a mis a zero. Rien n'est donc recalcule ici : on rend
+ * exactement ce qui a ete pris, reseau par reseau. Reconstituer ces montants
+ * autrement (depuis le total, depuis les transactions du jour) donnerait un
+ * chiffre plausible et faux des que deux reseaux sont en jeu.
+ *
+ * ⚠ ON AJOUTE, ON NE RESTAURE PAS UN ETAT. L'effet d'une cloture fut un delta
+ *   negatif ; son inverse est le delta positif. Ecraser les soldes courants
+ *   avec ceux d'avant la cloture effacerait tout ce qui s'est passe depuis.
+ *   C'est la meme regle que pour toutes les autres inversions du dossier.
+ */
+export function reverseClosureImpact(balances, soldes) {
+  if (!Array.isArray(soldes) || soldes.length === 0) {
+    throw new Error('Cloture sans detail des soldes : son inverse est inconnaissable.')
+  }
+
+  return soldes.reduce((courant, solde) => {
+    const network = solde?.network
+    if (typeof network !== 'string' || !network) {
+      throw new Error('Cloture mal formee : un solde sans reseau.')
+    }
+    const stock = Number(solde.stock) || 0
+    const liquidite = Number(solde.liquidite) || 0
+    if (stock < 0 || liquidite < 0) {
+      throw new Error('Cloture mal formee : un solde negatif.')
+    }
+
+    const avecStock = stock > 0 ? adjustBalanceValue(courant, network, 'stock', stock) : courant
+    return liquidite > 0 ? adjustBalanceValue(avecStock, network, 'liquidite', liquidite) : avecStock
+  }, balances)
+}
+
 export function applyInitialTransactionImpact(balances, transaction) {
   const amount = transaction.montant
   const pending = ['non terminees'].includes(normalizeType(transaction.statut))

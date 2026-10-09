@@ -1,3 +1,14 @@
+/*
+ * « ANNULER » À L'ÉCRAN, « Supprimée » DANS LES DONNÉES — ET C'EST VOULU.
+ *
+ * La boutique dit « annuler » : c'est son mot pour ce geste, et c'est celui
+ * que porte l'interface. Le registre, lui, continue d'écrire deux statuts
+ * distincts — « Supprimée » pour une saisie fausse qu'on corrige, « Annulée »
+ * pour une décision métier assumée. Les confondre en base effacerait une
+ * information que personne ne pourrait reconstituer ensuite ; les distinguer
+ * à l'écran n'apportait rien à qui veut seulement défaire sa ligne.
+ */
+
 import { Trash2 } from 'lucide-react'
 import { useTransactions } from '../../context/transactions.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
@@ -10,7 +21,7 @@ const PROVENANCES = {
 }
 
 /**
- * La corbeille — ce qui a été supprimé, des deux provenances, sans retour.
+ * La corbeille — ce qui a été annulé, des deux provenances, sans retour.
  *
  * UNE SEULE LISTE, ET C'EST LE POINT
  * ──────────────────────────────────
@@ -35,7 +46,9 @@ function CorbeilleTable({ transactions = [] }) {
   const { getTransactionStyles } = useTransactions()
   const { themeClasses } = useTheme()
 
-  const headers = ['Date & heure', 'Client', 'Type', 'Réseau', 'Montant', 'Provenance', 'Supprimée']
+  // « Annulée » comme ailleurs : c'est l'instant du geste, et le geste
+  // porte ce nom à l'écran. Le document, lui, garde son `deletedAt`.
+  const headers = ['Date & heure', 'Client', 'Type', 'Réseau', 'Montant', 'Provenance', 'Annulée']
 
   if (transactions.length === 0) {
     return (
@@ -43,7 +56,7 @@ function CorbeilleTable({ transactions = [] }) {
         <EmptyState
           icon={Trash2}
           title="La corbeille est vide"
-          message="Les transactions supprimées, qu’elles viennent des non terminées ou de l’historique, apparaîtront ici."
+          message="Les transactions annulées, qu’elles viennent des non terminées ou de l’historique, apparaîtront ici."
         />
       </div>
     )

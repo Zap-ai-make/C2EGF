@@ -20,6 +20,11 @@
  *     permission —, seulement le vocabulaire commun qui évite que trois
  *     orthographes d'un même nom deviennent trois créanciers.
  *
+ *   • STORE_TIME_ZONE          — fuseau de référence de la boutique. Horodate les
+ *     lignes à la date que la boutique lit, et tranche l'appartenance d'une
+ *     clôture à la journée en cours — jamais le fuseau de la machine qui
+ *     exécute la fonction, qui n'est celui de personne.
+ *
  * ⚠ Ces méthodes ne sont validées qu'à la DÉCLARATION d'une tranche, jamais à sa
  * confirmation : une tranche portant un ancien code doit rester confirmable.
  */
@@ -36,3 +41,5 @@ export const COLLABORATIONS_ENABLED = true
 export const DEBT_SETTLEMENT_METHODS = ['Orange Money', 'Cash', 'Banque']
 
 export const STORE_REPLENISHMENT_SENDERS = ['Patron', 'Mme Sawadogo', 'Mohamed', 'DG', 'Maï', 'Yasmine']
+
+export const STORE_TIME_ZONE = 'Africa/Ouagadougou'

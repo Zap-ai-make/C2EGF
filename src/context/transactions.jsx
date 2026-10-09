@@ -342,6 +342,37 @@ export const TransactionsProvider = ({ children }) => {
    * Dans les deux cas le serveur rend le montant aux soldes et la ligne
    * réapparaît dans la corbeille.
    */
+  /**
+   * Annuler une clôture, et marquer la ligne tout de suite.
+   *
+   * Le marquage optimiste a la même raison d'être que pour la corbeille :
+   * l'onglet Ravitaillement lit `completedTransactions`, et sans lui le bouton
+   * « Annuler » resterait affiché sur une clôture déjà annulée — le gérant
+   * recliquerait, et le serveur refuserait sans qu'il comprenne pourquoi.
+   */
+  const cancelClosure = useCallback(async (id) => {
+    try {
+      setError(null)
+      const annulee = await firestoreService.cancelClosure(id)
+      if (annulee) {
+        const marquer = (items) => items.map((item) => (
+          item.id === id
+            ? { ...item, statut: FIRESTORE_CONFIG.STATUS.CANCELLED, cancelledAt: new Date() }
+            : item
+        ))
+        archiveHistoryRef.current = marquer(archiveHistoryRef.current)
+        liveHistoryRef.current = marquer(liveHistoryRef.current)
+        todayHistoryRef.current = marquer(todayHistoryRef.current)
+        publishHistory()
+      }
+      return annulee
+    } catch (error) {
+      console.error('Erreur lors de l’annulation de la clôture :', error)
+      setError(error.message)
+      throw error
+    }
+  }, [publishHistory])
+
   const trashTransaction = useCallback(async (id) => {
     try {
       setError(null)
@@ -506,6 +537,7 @@ export const TransactionsProvider = ({ children }) => {
     addPaymentTranche,
     addRefundTranche,
     trashTransaction,
+    cancelClosure,
     reopenTransaction,
     saveReopenedCorrection,
     startEditTransaction,

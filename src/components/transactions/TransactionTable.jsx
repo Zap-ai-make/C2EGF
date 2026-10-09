@@ -1,4 +1,15 @@
-﻿import { useState, useRef, useEffect, useMemo, memo, useCallback } from 'react'
+﻿/*
+ * « ANNULER » À L'ÉCRAN, « Supprimée » DANS LES DONNÉES — ET C'EST VOULU.
+ *
+ * La boutique dit « annuler » : c'est son mot pour ce geste, et c'est celui
+ * que porte l'interface. Le registre, lui, continue d'écrire deux statuts
+ * distincts — « Supprimée » pour une saisie fausse qu'on corrige, « Annulée »
+ * pour une décision métier assumée. Les confondre en base effacerait une
+ * information que personne ne pourrait reconstituer ensuite ; les distinguer
+ * à l'écran n'apportait rien à qui veut seulement défaire sa ligne.
+ */
+
+import { useState, useRef, useEffect, useMemo, memo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useTransactions } from '../../context/transactions.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
@@ -598,8 +609,8 @@ const TransactionTable = memo(function TransactionTable() {
                             </button>
                           )}
 
-                          {/* « Supprimer » ferme la rangée, après les gestes
-                              qui font avancer la transaction : la détruire
+                          {/* « Annuler » ferme la rangée, après les gestes
+                              qui font avancer la transaction : la défaire
                               n'est pas une étape du flux normal. */}
                           <button
                             type="button"
@@ -608,7 +619,7 @@ const TransactionTable = memo(function TransactionTable() {
                             data-testid="supprimer-non-terminee"
                             className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink-muted transition-colors hover:border-danger hover:text-danger disabled:cursor-not-allowed disabled:hover:border-line disabled:hover:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
                           >
-                            Supprimer
+                            Annuler
                           </button>
                         </div>
                       </td>
@@ -794,16 +805,20 @@ const TransactionTable = memo(function TransactionTable() {
       <Dialog
         open={Boolean(aSupprimer)}
         onClose={() => setASupprimer(null)}
-        title="Supprimer cette transaction ?"
+        title="Annuler cette transaction ?"
         testId="confirmer-suppression-non-terminee"
         footer={(
           <div className="flex justify-end gap-3">
+            {/* « Garder », et non « Fermer » ni « Annuler » : la croix du dialogue
+                porte déjà « Fermer », et « Annuler » est maintenant le nom du
+                geste qui AGIT. Un bouton se nomme par ce qu'il fait — celui-ci
+                garde la ligne. */}
             <button
               type="button"
               onClick={() => setASupprimer(null)}
               className="rounded border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             >
-              Annuler
+              Garder
             </button>
             <button
               type="button"
@@ -815,8 +830,8 @@ const TransactionTable = memo(function TransactionTable() {
                   setASupprimer(null)
                 } catch (error) {
                   // On garde le modal ouvert : disparaître sans rien dire
-                  // laisserait croire que la suppression a eu lieu.
-                  setRollbackToast({ show: true, message: error?.message || 'Suppression impossible', type: 'error' })
+                  // laisserait croire que l'annulation a eu lieu.
+                  setRollbackToast({ show: true, message: error?.message || 'Annulation impossible', type: 'error' })
                 } finally {
                   setSuppressionEnCours(false)
                 }
@@ -825,7 +840,7 @@ const TransactionTable = memo(function TransactionTable() {
               data-testid="confirmer-supprimer-non-terminee"
               className="rounded bg-danger px-4 py-2 text-sm font-semibold text-white transition-colors hover:brightness-110 disabled:cursor-wait disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             >
-              {suppressionEnCours ? 'Suppression…' : 'Supprimer'}
+              {suppressionEnCours ? 'Annulation…' : 'Annuler la transaction'}
             </button>
           </div>
         )}

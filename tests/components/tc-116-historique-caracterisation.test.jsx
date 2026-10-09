@@ -133,7 +133,9 @@ describe('TC-116-A — structure de la page', () => {
     const headers = Array.from(document.querySelectorAll('thead th')).map((th) => th.textContent.trim())
     expect(headers).toEqual([
       // « Réseau » retiré : une seule valeur possible dans cette boutique.
-      'Date & heure', 'Client', 'Type', 'Code', 'Montant', 'Statut',
+      // « Durée » ajoutée : le chronomètre des non terminées, arrêté — une ligne
+      // réglée dit désormais combien de temps son client a attendu.
+      'Date & heure', 'Client', 'Type', 'Code', 'Montant', 'Statut', 'Durée',
       ...(STORE_HISTORY_CONFIG.operatorColumns !== false ? ['Utilisateur', 'Email utilisateur'] : []),
       'Actions',
     ])

@@ -1019,6 +1019,19 @@ export class FirestoreService {
     return result.cancelled
   }
 
+  /**
+   * Annule une clôture : chaque réserve balayée revient d'où elle venait.
+   *
+   * ⚠ Ce n'est PAS `cancelHistory` avec un autre identifiant, et le serveur
+   *   refuse d'ailleurs explicitement le type « Clôture » là-bas. L'inversion
+   *   générique lit UN réseau et UN montant ; une clôture en a autant que la
+   *   boutique opère de réseaux, chacun avec son stock et sa liquidité.
+   */
+  async cancelClosure(historyId) {
+    const result = await runStoreTransactionCommand({ action: 'cancelClosure', historyId })
+    return result.cancelled
+  }
+
   /** Met une ligne d'historique à la corbeille et rend son montant aux soldes. */
   async trashHistory(historyId) {
     const result = await runStoreTransactionCommand({ action: 'trashHistory', historyId })

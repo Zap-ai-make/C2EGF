@@ -70,6 +70,17 @@ export function generateStoreProfileFile(profile) {
     throw new Error('Profil invalide : replenishment.senders doit être une liste.')
   }
 
+  // Le fuseau de référence. Le serveur en a besoin pour DEUX choses qui ne
+  // tolèrent pas le fuseau de la machine qui exécute la fonction : horodater une
+  // ligne à la date que la boutique lit, et décider si une clôture appartient à
+  // la journée en cours. Il était écrit en dur dans storeTransactionCommand.js,
+  // ce qui est exactement la lecture de variation hors profil qu'AGENTS.md
+  // interdit : un client ailleurs qu'au Burkina aurait dateé ses lignes faux.
+  const timezone = profile?.regional?.timezone
+  if (typeof timezone !== 'string' || !timezone.trim()) {
+    throw new Error('Profil invalide : regional.timezone doit être une chaîne non vide.')
+  }
+
   return `/**
  * storeProfile.js — axes BOUTIQUE du profil client, côté Cloud Functions.
  * ─────────────────────────────────────────────────────────────────────────────
@@ -92,6 +103,11 @@ export function generateStoreProfileFile(profile) {
  *     permission —, seulement le vocabulaire commun qui évite que trois
  *     orthographes d'un même nom deviennent trois créanciers.
  *
+ *   • STORE_TIME_ZONE          — fuseau de référence de la boutique. Horodate les
+ *     lignes à la date que la boutique lit, et tranche l'appartenance d'une
+ *     clôture à la journée en cours — jamais le fuseau de la machine qui
+ *     exécute la fonction, qui n'est celui de personne.
+ *
  * ⚠ Ces méthodes ne sont validées qu'à la DÉCLARATION d'une tranche, jamais à sa
  * confirmation : une tranche portant un ancien code doit rester confirmable.
  */
@@ -108,5 +124,7 @@ export const COLLABORATIONS_ENABLED = ${collaborationsEnabled}
 export const DEBT_SETTLEMENT_METHODS = [${quoteList(settlementMethods)}]
 
 export const STORE_REPLENISHMENT_SENDERS = [${quoteList(senders)}]
+
+export const STORE_TIME_ZONE = '${timezone}'
 `
 }

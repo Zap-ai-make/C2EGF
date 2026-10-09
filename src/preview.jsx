@@ -28,6 +28,7 @@ import { getTransactionStyles } from './utils/helpers.js'
 import PageHeader from './components/ui/PageHeader.jsx'
 import ClientsTable from './components/ClientsTable.jsx'
 import HistoriqueTable from './components/historique/HistoriqueTable.jsx'
+import { ArchiveDealer } from './components/historique/HistoriqueArchives.jsx'
 import TransactionTable from './components/transactions/TransactionTable.jsx'
 import StoreAdminDealerRequests from './pages/store/StoreAdminDealerRequests.jsx'
 import AuthPage from './components/auth/AuthPage.jsx'
@@ -141,21 +142,30 @@ const concentration = {
   })),
 }
 
-const dateFr = (decalage, heure) => {
-  const d = new Date()
-  d.setDate(d.getDate() - decalage)
-  const jj = String(d.getDate()).padStart(2, '0')
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  return `${jj}/${mm}/${d.getFullYear()} ${heure}`
-}
-
 // Les gros agents passent 4 a 5 fois par jour : on reproduit cette cadence.
 const operations = []
 let compteur = 0
 for (let jourEcoule = 0; jourEcoule < 30; jourEcoule++) {
   for (let rang = 0; rang < 120; rang++) {
     const agent = agents[(rang * 7 + jourEcoule) % agents.length]
-    const heure = String(7 + (rang % 11)).padStart(2, '0') + ':' + String((rang * 13) % 60).padStart(2, '0')
+    // ⚠ UN SEUL INSTANT POUR LES DEUX CHAMPS.
+    //   La colonne « Date & heure » lit `date`, la durée lit `createdAt` : deux
+    //   sources indépendantes donnaient un banc qui se contredit lui-même — une
+    //   ligne de 06:13 dont le chronomètre affichait « 12:16 → 12:17 ». On part
+    //   donc de l'instant, et les deux champs en découlent.
+    const debut = new Date()
+    debut.setDate(debut.getDate() - jourEcoule)
+    debut.setHours(7 + (rang % 11), (rang * 13) % 60, 0, 0)
+
+    // Une ligne sur quatre est validée D'UN GESTE au formulaire : elle n'est
+    // jamais passée par les non terminées, donc pas de `validatedAt` et pas de
+    // durée. C'est le cas qu'il faut voir à l'œil — une colonne « Durée »
+    // entièrement remplie serait un banc qui ment sur la répartition réelle.
+    const directe = rang % 4 === 0
+    // De quarante secondes à près de deux heures : c'est l'étendue réelle, et
+    // c'est elle qui dit si la colonne reste lisible aux deux extrêmes.
+    const attente = 40_000 + ((rang * 137_911) % 6_800_000)
+
     operations.push({
       id: 'op-' + compteur++,
       clientId: agent.id,
@@ -164,10 +174,53 @@ for (let jourEcoule = 0; jourEcoule < 30; jourEcoule++) {
       reseau: 'Orange',
       montant: 25000 + ((rang * 8117) % 900000),
       statut: 'Validée',
-      date: dateFr(jourEcoule, heure),
+      date: debut.toLocaleString('fr-FR'),
+      createdAt: debut,
+      ...(directe ? { directValidation: true } : { validatedAt: new Date(debut.getTime() + attente) }),
     })
   }
 }
+
+/**
+ * Les mouvements de la boutique, pour l'onglet Ravitaillement.
+ *
+ * Trois états de clôture, parce que ce sont les trois rendus possibles de la
+ * dernière colonne et qu'ils ne se voient qu'ensemble : celle du jour porte un
+ * bouton, celle d'hier un badge « Validée », celle qu'on a défaite un badge
+ * « Annulée ». Une colonne qui alterne bouton et pastille est exactement le
+ * genre d'alignement que jsdom ne peut pas juger.
+ */
+const mouvementsBoutique = (() => {
+  const ceMatin = new Date()
+  ceMatin.setHours(8, 30, 0, 0)
+  const hier = new Date(ceMatin.getTime() - 26 * 3_600_000)
+  const instant = (d) => ({ toDate: () => d, toMillis: () => d.getTime() })
+
+  return [
+    {
+      id: 'clo-jour', type: 'Clôture', montant: 1_002_000, statut: 'Validée',
+      soldes: [{ network: 'Orange', stock: 600_066, liquidite: 401_934 }],
+      createdAt: instant(ceMatin), date: ceMatin.toLocaleDateString('fr-FR'),
+    },
+    {
+      id: 'rav-1', type: 'Ravitaillement', montant: 5_000_000, statut: 'Validée',
+      expediteur: 'Mme Sawadogo', balanceType: 'stock',
+      createdAt: instant(new Date(ceMatin.getTime() - 3_600_000)),
+      date: ceMatin.toLocaleDateString('fr-FR'),
+    },
+    {
+      id: 'clo-hier', type: 'Clôture', montant: 870_500, statut: 'Validée',
+      soldes: [{ network: 'Orange', stock: 500_000, liquidite: 370_500 }],
+      createdAt: instant(hier), date: hier.toLocaleDateString('fr-FR'),
+    },
+    {
+      id: 'clo-annulee', type: 'Clôture', montant: 240_000, statut: 'Annulée',
+      soldes: [{ network: 'Orange', stock: 240_000, liquidite: 0 }],
+      createdAt: instant(new Date(hier.getTime() - 3_600_000)),
+      date: hier.toLocaleDateString('fr-FR'),
+    },
+  ]
+})()
 
 /**
  * Trois brouillons aux trois âges qui comptent : sous la minute, au milieu, et
@@ -397,13 +450,27 @@ function Preview() {
           </TransactionsContext.Provider>
 
           <PageHeader title="Historique" />
-          <div className="rounded-lg bg-surface p-6 shadow-md">
+          <div className="rounded-lg bg-surface p-6 shadow-md" data-testid="apercu-historique">
             <HistoriqueTable transactions={operations.slice(0, 40)} />
           </div>
 
           <PageHeader title="Historique — aucune opération" />
           <div className="rounded-lg bg-surface p-6 shadow-md">
             <HistoriqueTable transactions={[]} />
+          </div>
+
+          {/* L'onglet Ravitaillement : ce que la boutique s'est appliqué à
+              elle-même. Il était une LISTE ; c'est désormais un tableau, parce
+              que ces lignes se lisent en colonnes — combien est entré, combien
+              est sorti. La dernière colonne alterne bouton et pastille selon
+              que la clôture est encore défaisable. */}
+          <PageHeader title="Ravitaillement — mouvements de la boutique" />
+          <div className="overflow-hidden rounded-xl border border-line bg-surface" data-testid="apercu-mouvements">
+            <TransactionsContext.Provider
+              value={{ completedTransactions: mouvementsBoutique, cancelClosure: () => Promise.resolve(true) }}
+            >
+              <ArchiveDealer currentUser={{ uid: 'banc' }} userProfile={{ storeId: 'store-ouaga' }} />
+            </TransactionsContext.Provider>
           </div>
 
           {/* Septième destination de la boutique. L'écran RÉEL — pas une

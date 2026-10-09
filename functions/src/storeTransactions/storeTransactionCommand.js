@@ -11,6 +11,7 @@ import {
   reverseHistoryTransactionImpact,
   liquidityConsumptionSplit,
   applyReplenishmentReturnImpact,
+  reverseClosureImpact,
 } from '../settlements/financialUtils.js'
 import {
   STORE_NETWORKS,
@@ -18,6 +19,7 @@ import {
   STORE_PAYMENT_METHODS,
   CASHIER_CAN_EDIT_BALANCES,
   STORE_REPLENISHMENT_SENDERS,
+  STORE_TIME_ZONE,
 } from '../config/storeProfile.js'
 
 const SETTLEMENT_FIELDS = [
@@ -170,7 +172,22 @@ function cleanTransaction(input) {
   }
 }
 function dateFr() {
-  return new Intl.DateTimeFormat('fr-FR', { timeZone: 'Africa/Ouagadougou' }).format(new Date())
+  return new Intl.DateTimeFormat('fr-FR', { timeZone: STORE_TIME_ZONE }).format(new Date())
+}
+
+/**
+ * La journee de la boutique a laquelle appartient un instant, en « AAAA-MM-JJ ».
+ *
+ * Le fuseau vient du profil, jamais de la machine qui execute la fonction : un
+ * conteneur en UTC rangerait les lignes de 23 h 30 dans le lendemain, et la
+ * cloture de ce soir deviendrait « celle d'hier » une demi-heure apres avoir
+ * ete ecrite. Le format ISO de `fr-CA` se compare tel quel, sans arithmetique
+ * de fuseau a reecrire.
+ */
+function journeeDe(instant) {
+  const date = instant?.toDate ? instant.toDate() : (instant instanceof Date ? instant : new Date(instant))
+  if (Number.isNaN(date.getTime())) return null
+  return new Intl.DateTimeFormat('fr-CA', { timeZone: STORE_TIME_ZONE }).format(date)
 }
 
 async function readActor(t, db, uid) {
@@ -434,6 +451,58 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       return { id: ref.id, ...data }
     }
 
+    // Defaire une cloture : chaque reserve balayee revient d'ou elle venait.
+    //
+    // POURQUOI UNE ACTION A PART, ET PAS `cancelHistory`
+    // ─────────────────────────────────────────────────
+    // L'inversion generique ne sait defaire qu'un depot ou un retrait : elle lit
+    // un type, un reseau et un montant. Une cloture n'a pas un reseau mais TOUS,
+    // et pas un montant mais deux par reseau. `cancelHistory` la refuse
+    // d'ailleurs explicitement, et continue de la refuser — ce qui vaut mieux
+    // qu'un refus silencieux de rendre quoi que ce soit.
+    //
+    // CE QUE LE SERVEUR REFUSE, ET POURQUOI CHAQUE REFUS EXISTE
+    // ─────────────────────────────────────────────────────
+    //   • Une cloture d'un autre jour. Son montant reviendrait s'ajouter aux
+    //     soldes d'aujourd'hui : l'arithmetique serait juste — c'est bien
+    //     l'inverse de son effet — mais le gerant lirait un stock qui ne
+    //     correspond a aucune journee. Annuler une cloture repare un geste de la
+    //     journee en cours ; au-dela, c'est une ecriture de correction.
+    //   • Une cloture sans `soldes`. Son inverse est INCONNAISSABLE : le detail
+    //     par reseau ne fut jamais ecrit, et le total ne suffit pas a le
+    //     reconstituer des que la boutique opere plus d'un reseau.
+    //   • Une cloture deja defaite. Rendre deux fois creerait de l'argent.
+    if (action === 'cancelClosure') {
+      const historyId = cleanId(payload.historyId, 'historyId')
+      const ref = db.doc(`clients/${storeId}/history/${historyId}`)
+      const snap = await t.get(ref)
+      if (!snap.exists) fail('STORE_TRANSACTION_NOT_FOUND', 'Clôture introuvable.')
+      const cloture = snap.data()
+      if (cloture.type !== CLOSURE_TYPE) fail('STORE_TRANSACTION_INVALID', 'Cette ligne n’est pas une clôture.')
+      if ([DELETED_STATUS, CANCELLED_STATUS].includes(cloture.statut)) fail('STORE_TRANSACTION_INVALID', 'Cette clôture a déjà été annulée.')
+
+      const jourCloture = journeeDe(cloture.createdAt)
+      if (!jourCloture || jourCloture !== journeeDe(new Date())) {
+        fail('STORE_TRANSACTION_INVALID', 'Seule une clôture du jour s’annule. Celle-ci appartient à une journée close.')
+      }
+      if (!Array.isArray(cloture.soldes) || cloture.soldes.length === 0) {
+        fail('STORE_TRANSACTION_INVALID', 'Cette clôture est antérieure au détail par réseau : ce qu’elle a balayé est inconnaissable.')
+      }
+
+      const nextBalances = reverseClosureImpact(balances, cloture.soldes)
+
+      t.update(ref, {
+        statut: CANCELLED_STATUS,
+        cancelledAt: now,
+        cancelledBy: uid,
+        cancelledByName: profile.name || '',
+        updatedAt: now,
+      })
+      t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
+      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, historyId, uid, soldes: cloture.soldes, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
+      return { cancelled: true }
+    }
+
     if (action === 'cancelHistory') {
       const historyId = cleanId(payload.historyId, 'historyId')
       const ref = db.doc(`clients/${storeId}/history/${historyId}`)
@@ -469,7 +538,10 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       const snap = await t.get(ref)
       if (!snap.exists) fail('STORE_TRANSACTION_NOT_FOUND', 'Transaction introuvable.')
       const history = snap.data()
-      refuserSiIntouchable(history, 'supprimée')
+      // « annulée », le mot du bouton. Ce refus remonte tel quel dans un toast :
+      // le lire « ne peut pas être supprimée » sous un bouton « Annuler »
+      // laisserait croire à deux gestes distincts, dont un seul aurait échoué.
+      refuserSiIntouchable(history, 'annulée')
       const nextBalances = reverseHistoryTransactionImpact(balances, history)
       t.update(ref, {
         statut: DELETED_STATUS,

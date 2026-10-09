@@ -11,6 +11,7 @@ import ModificationsDialog from './ModificationsDialog.jsx'
 import { STORE_HISTORY_CONFIG } from '../../constants/storeWorkspace.js'
 import { TYPE_RAVITAILLEMENT, TYPE_RETOUR } from '../../utils/ravitaillement.js'
 import { regrouperParClientEtType } from '../../utils/regroupement.js'
+import { dureeDe, formaterHeure } from '../../utils/attente.js'
 import { ChevronRight } from 'lucide-react'
 
 /**
@@ -213,6 +214,8 @@ function HistoriqueTable({ transactions = [], onReopen }) {
     'Code',
     'Montant',
     'Statut',
+    // Le chronomètre des non terminées, arrêté. Voir `dureeDe`.
+    'Durée',
     ...(COLONNES_OPERATEUR ? ['Utilisateur', 'Email utilisateur'] : []),
     'Actions'
   ]
@@ -260,6 +263,9 @@ function HistoriqueTable({ transactions = [], onReopen }) {
         <td className="whitespace-nowrap px-4 py-3 text-sm text-ink-muted">
           {nombre} opérations
         </td>
+        {/* Pas de durée pour un groupe : les lignes qu'il replie ont chacune la
+            sienne, et une moyenne ne répondrait à la question de personne. */}
+        <td className="whitespace-nowrap px-4 py-3 text-base text-ink-muted">—</td>
         {COLONNES_OPERATEUR && (
           <>
             <td className="whitespace-nowrap px-4 py-3 text-base text-ink-muted">—</td>
@@ -290,6 +296,7 @@ function HistoriqueTable({ transactions = [], onReopen }) {
   // Une seule définition du markup de ligne, partagée par les deux branches.
   const renderRow = (transaction, index, ref, enfant = false) => {
     const styles = getTransactionStyles(transaction.type)
+    const duree = dureeDe(transaction)
     return (
       <tr
         ref={ref}
@@ -342,6 +349,22 @@ function HistoriqueTable({ transactions = [], onReopen }) {
         <td className="whitespace-nowrap px-4 py-3 text-base">
           <StatusBadge status={tonStatut(transaction.statut)} label={transaction.statut || 'Validée'} />
         </td>
+        {/* Combien de temps le client a attendu. Vide sur une ligne validée
+            d'un geste : elle n'est jamais passée par les non terminées, donc
+            aucun chronomètre n'a tourné — et un « 00:00:00 » ferait lire une
+            mesure là où il n'y a rien à mesurer. */}
+        <td className="whitespace-nowrap px-4 py-3 text-base">
+          {duree ? (
+            <span className="flex flex-col leading-tight" data-testid="duree-transaction">
+              <span className="font-mono text-sm font-semibold tabular-nums text-ink">{duree.texte}</span>
+              <span className="text-xs text-ink-muted tabular-nums">
+                {formaterHeure(duree.debut)} → {formaterHeure(duree.fin)}
+              </span>
+            </span>
+          ) : (
+            <span className="text-ink-muted">—</span>
+          )}
+        </td>
         {COLONNES_OPERATEUR && (
           <>
             <td className="whitespace-nowrap px-4 py-3 text-base">
@@ -364,7 +387,7 @@ function HistoriqueTable({ transactions = [], onReopen }) {
               </span>
             )}
 
-            {/* Un retour, lui, se supprime — par la commande qui recrédite la
+            {/* Un retour, lui, se défait — par la commande qui recrédite la
                 réserve ET fait remonter le reste dû. Pas de « Modifier » : il
                 n'a ni client ni code à corriger, et le serveur le refuse. */}
             {transaction.type === TYPE_RETOUR && (
@@ -375,7 +398,7 @@ function HistoriqueTable({ transactions = [], onReopen }) {
                 data-testid="supprimer-retour"
                 className="rounded border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink-muted transition-colors hover:border-danger hover:text-danger disabled:cursor-not-allowed disabled:hover:border-line disabled:hover:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
               >
-                Supprimer
+                Annuler
               </button>
             )}
 
@@ -415,7 +438,7 @@ function HistoriqueTable({ transactions = [], onReopen }) {
           data-testid="supprimer-historique"
           className="rounded border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink-muted transition-colors hover:border-danger hover:text-danger disabled:cursor-not-allowed disabled:hover:border-line disabled:hover:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         >
-          Supprimer
+          Annuler
         </button>
               </>
             )}
@@ -498,16 +521,20 @@ function HistoriqueTable({ transactions = [], onReopen }) {
       <Dialog
         open={Boolean(aSupprimer)}
         onClose={fermerSuppression}
-        title={aSupprimer?.type === TYPE_RETOUR ? 'Supprimer ce retour ?' : 'Supprimer cette transaction ?'}
+        title={aSupprimer?.type === TYPE_RETOUR ? 'Annuler ce retour ?' : 'Annuler cette transaction ?'}
         testId="confirmer-suppression-historique"
         footer={(
           <div className="flex justify-end gap-3">
+            {/* « Garder », et non « Fermer » ni « Annuler » : la croix du dialogue
+                porte déjà « Fermer », et « Annuler » est maintenant le nom du
+                geste qui AGIT. Un bouton se nomme par ce qu'il fait — celui-ci
+                garde la ligne. */}
             <button
               type="button"
               onClick={fermerSuppression}
               className="rounded border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             >
-              Annuler
+              Garder
             </button>
             <button
               type="button"
@@ -516,7 +543,7 @@ function HistoriqueTable({ transactions = [], onReopen }) {
               data-testid="confirmer-supprimer"
               className="rounded bg-danger px-4 py-2 text-sm font-semibold text-white transition-colors hover:brightness-110 disabled:cursor-wait disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             >
-              {enCours ? 'Suppression…' : 'Supprimer'}
+              {enCours ? 'Annulation…' : (aSupprimer?.type === TYPE_RETOUR ? 'Annuler le retour' : 'Annuler la transaction')}
             </button>
           </div>
         )}

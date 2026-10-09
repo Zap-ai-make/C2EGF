@@ -1,4 +1,5 @@
 import { parsefrenchDate } from './helpers.js'
+import { BUSINESS_TIME_ZONE } from './businessDate.js'
 
 /**
  * Depuis combien de temps une transaction n'est pas terminée.
@@ -94,4 +95,62 @@ export function attenteDe(transaction, maintenant) {
 
   const ms = Math.max(0, (Number(maintenant) || 0) - depart)
   return { ms, texte: formaterAttente(ms), enRetard: ms >= SEUIL_ALERTE_MS }
+}
+
+/**
+ * L'instant où la transaction a QUITTÉ les non terminées, en millisecondes.
+ *
+ * ⚠ `validatedAt` ET RIEN D'AUTRE, et c'est tout le discernement de ce fichier.
+ *   Une transaction validée d'un geste au formulaire n'est jamais passée par les
+ *   non terminées : le serveur l'écrit directement dans l'historique (action
+ *   `add`, branche `VALIDATED`), avec un `createdAt` et PAS de `validatedAt`.
+ *   Elle n'a donc pas de chronomètre — personne n'a attendu. Toute ligne qui
+ *   porte `validatedAt` a, elle, séjourné dans les brouillons : c'est la seule
+ *   marque fiable, et elle est déjà dans les données.
+ */
+export function instantDArrivee(transaction) {
+  const brut = transaction?.validatedAt
+  if (!brut) return null
+  if (typeof brut.toMillis === 'function') return brut.toMillis()
+  const date = brut instanceof Date ? brut : new Date(brut)
+  return Number.isNaN(date.getTime()) ? null : date.getTime()
+}
+
+/** Une heure seule, « 14:24 » — la date vit déjà dans la colonne d'à côté. */
+export function formaterHeure(ms) {
+  const date = new Date(ms)
+  if (Number.isNaN(date.getTime())) return '-'
+  return date.toLocaleTimeString('fr-FR', {
+    timeZone: BUSINESS_TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+/**
+ * Combien de temps une transaction TERMINÉE a mis — départ, arrivée, durée.
+ *
+ * C'est le chronomètre des non terminées, arrêté. Le badge qui tournait dans le
+ * tableau disait « ce client attend depuis » ; une fois réglée, la ligne part
+ * dans l'historique et la même mesure devient « ce client a attendu ». Sans
+ * cela, le seul chiffre que la boutique voulait vraiment — combien de temps
+ * ça a pris — disparaissait à l'instant où il devenait définitif.
+ *
+ * Renvoie `null` dans deux cas, et aucun n'est un échec :
+ *   — pas de `validatedAt` : la ligne n'a jamais attendu (validation directe) ;
+ *   — une durée nulle : créée et validée dans la même écriture serveur, comme
+ *     un ravitaillement ou un retour. Afficher « 00:00:00 » ferait lire une
+ *     mesure là où il n'y a rien à mesurer.
+ *
+ * @returns {{debut: number, fin: number, ms: number, texte: string}|null}
+ */
+export function dureeDe(transaction) {
+  const debut = instantDeDepart(transaction)
+  const fin = instantDArrivee(transaction)
+  if (debut === null || fin === null) return null
+
+  const ms = Math.max(0, fin - debut)
+  if (ms === 0) return null
+
+  return { debut, fin, ms, texte: formaterAttente(ms) }
 }

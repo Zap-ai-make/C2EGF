@@ -35,6 +35,10 @@ const validProfile = {
   transactions: { types: ['Dépôt', 'Retrait'], paymentMethods: ['Orange Money', 'Cash'] },
   cashier: { canEditBalances: false },
   collaborations: { enabled: true },
+  // Le fuseau est un axe OBLIGATOIRE depuis que le serveur horodate et borne
+  // l'annulation d'une clôture à la journée en cours : sans lui, il retomberait
+  // sur celui de la machine qui exécute la fonction, qui n'est celui de personne.
+  regional: { timezone: 'Africa/Ouagadougou' },
 }
 
 describe('TC-110 — Génération de storeProfile depuis le profil client', () => {
@@ -122,6 +126,18 @@ describe('TC-110c — Profil incomplet : erreur explicite, jamais de défaut sil
   it('collaborations.enabled non booléen → erreur', () => {
     expect(() => generateStoreProfileFile({ ...validProfile, collaborations: { enabled: 'oui' } }))
       .toThrow(/collaborations\.enabled doit être un booléen/)
+  })
+
+  it('refuse un profil sans fuseau horaire', () => {
+    expect(() => generateStoreProfileFile({ ...validProfile, regional: undefined }))
+      .toThrow(/regional\.timezone/)
+    expect(() => generateStoreProfileFile({ ...validProfile, regional: { timezone: '  ' } }))
+      .toThrow(/regional\.timezone/)
+  })
+
+  it('reporte le fuseau du profil dans le module généré', () => {
+    expect(generateStoreProfileFile(validProfile))
+      .toContain("export const STORE_TIME_ZONE = 'Africa/Ouagadougou'")
   })
 })
 
