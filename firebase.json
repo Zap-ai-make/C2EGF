@@ -5,7 +5,8 @@
   },
   "functions": {
     "source": "functions",
-    "runtime": "nodejs22"
+    "runtime": "nodejs22",
+    "disallowLegacyRuntimeConfig": true
   },
   "emulators": {
     "auth": {
