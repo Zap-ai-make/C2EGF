@@ -21,7 +21,7 @@ import cacheManager, { cacheUtils } from '../utils/cacheManager'
 import { FIRESTORE_CONFIG } from '../constants/firestoreConstants'
 import { CLIENT_ID, getFirestoreCollectionPath } from '../config/clientIsolation'
 import { parseFcfaAmount } from '../utils/fcfaAmount.js'
-import { champsAgent } from '../utils/agentFields.js'
+import { champsAgent, messageDoublonAgent } from '../utils/agentFields.js'
 import { runStoreTransactionCommand } from './storeTransactionCommandService.js'
 import {
   validateFcfaAmount as _validateFcfaAmountFn,
@@ -860,12 +860,32 @@ export class FirestoreService {
 
   /**
    * Refuse un client dont le code agent ou le numéro agent est déjà enregistré
-   * dans cette boutique.
+   * — DANS TOUTE LA BASE, et non dans la seule boutique de l'opérateur.
    *
    * Chaque valeur est cherchée dans TROIS champs : les deux nouveaux, et
    * l'ancien `orange` où vivent toutes les fiches d'avant la séparation. Sans
    * ce troisième, on pourrait réenregistrer un agent que la boutique connaît
    * depuis des mois — et se retrouver avec deux fiches pour la même personne.
+   *
+   * ⚠ LE FILTRE PAR BOUTIQUE A ÉTÉ RETIRÉ, ET C'EST LA CORRECTION. Il était là
+   *   parce que `globalClients` est une collection globale isolée par
+   *   `registeredStoreId` — un raisonnement juste pour l'ÉCRITURE, qui ne vaut
+   *   pas pour ce CONTRÔLE. Mesuré sur la base le 2026-10-12 : 174 des 175
+   *   grappes de doublons restantes étaient à cheval sur plusieurs boutiques.
+   *   Le contrôle ne voyait donc jamais la fiche qui existait déjà, et laissait
+   *   créer un deuxième enregistrement du même commerce. Huit nouvelles grappes
+   *   sont apparues dans les 24 h qui ont suivi la purge, par ce chemin.
+   *
+   * ⚠ LA LECTURE GLOBALE EST AUTORISÉE PAR LES RÈGLES. `firestore.rules` dit
+   *   `match /globalClients/{clientId} { allow read: if hasProfile() ... }` :
+   *   la lecture n'est pas restreinte à la boutique, seules création, mise à
+   *   jour et suppression le sont. Ce contrôle ne demande donc aucun droit
+   *   nouveau. Il ne demande pas d'index non plus : une seule égalité reste.
+   *
+   * L'ARBITRAGE : un agent légitimement client de deux boutiques C2EGF est
+   * désormais refusé à la seconde. C'est le prix assumé, et il est documenté
+   * dans `messageDoublonAgent` — qui nomme la boutique détentrice pour que le
+   * refus dise qui appeler.
    */
   async _refuserDoublonAgent(normalise, storeId) {
     const valeurs = [normalise.codeAgent, normalise.numeroAgent].filter(Boolean)
@@ -876,16 +896,13 @@ export class FirestoreService {
         const existants = await this.getCollection(
           FIRESTORE_CONFIG.COLLECTIONS.CLIENTS,
           {
-            where: [
-              { field: champ, operator: '==', value: valeur },
-              { field: 'registeredStoreId', operator: '==', value: storeId },
-            ],
+            where: [{ field: champ, operator: '==', value: valeur }],
             limitCount: 1,
           },
           false, // pas de cache : on veut l'état réel avant écriture
         )
         if (existants.length > 0) {
-          throw new Error('Un client avec ce numéro/code agent existe déjà dans cette boutique.')
+          throw new Error(messageDoublonAgent(existants[0], storeId))
         }
       }
     }
@@ -901,13 +918,10 @@ export class FirestoreService {
     const normalise = normaliserChampsAgent(clientData)
 
     // Anti-doublon : un même code agent ou numéro agent ne peut être enregistré
-    // qu'une seule fois par boutique. On ignore les valeurs vides (facultatives).
-    // La collection `clients` est globale et isolée par `registeredStoreId` ⇒ on filtre
-    // sur deux champs (deux égalités → aucun index composite requis).
-    //
-    // TROIS CHAMPS INTERROGÉS, ET LE TROISIÈME EST L'ANCIEN. Une valeur déjà
-    // enregistrée avant la séparation vit dans `orange` ; l'oublier laisserait
-    // réenregistrer un agent que la boutique connaît déjà.
+    // qu'une seule fois DANS TOUTE LA BASE — un identifiant agent désigne un
+    // commerce, pas une relation avec une boutique. Les valeurs vides sont
+    // ignorées (le champ est facultatif). Voir `_refuserDoublonAgent` pour ce
+    // que le filtre par boutique coûtait, et ce que son retrait arbitre.
     await this._refuserDoublonAgent(normalise, activeStore.id)
 
     // Les champs d'appartenance à la boutique sont toujours imposés par le service

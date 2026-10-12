@@ -89,3 +89,48 @@ export function libelleAgent(client) {
   if (numeroAgent) morceaux.push(`N° ${numeroAgent}`)
   return morceaux.join(' · ')
 }
+
+/**
+ * Le refus opposé à qui saisit un identifiant agent déjà pris.
+ *
+ * POURQUOI CE MESSAGE NOMME LE PORTEUR ET SA BOUTIQUE
+ * ───────────────────────────────────────────────────
+ * Le refus précédent disait « Un client avec ce numéro/code agent existe déjà
+ * dans cette boutique. » Deux problèmes, et le second a coûté 175 grappes de
+ * doublons.
+ *
+ * ⚠ 1. IL NE DISAIT PAS OÙ CHERCHER. Un opérateur qui ne retrouve pas la fiche
+ *      annoncée conclut que le logiciel se trompe, et contourne : il retire un
+ *      chiffre, il écrit le nom autrement. Nommer le porteur rend le refus
+ *      vérifiable en trois secondes — et un refus vérifiable est un refus qu'on
+ *      ne contourne pas.
+ *
+ * ⚠ 2. « DANS CETTE BOUTIQUE » ÉTAIT LA CAUSE DU PROBLÈME. L'audit du
+ *      2026-10-12 a mesuré que 174 des 175 grappes restantes étaient À CHEVAL
+ *      SUR PLUSIEURS BOUTIQUES : le contrôle ne regardait que la boutique de
+ *      l'opérateur, donc il laissait passer tout ce que les autres avaient
+ *      enregistré. Un identifiant agent désigne un commerce, pas une relation
+ *      commerciale avec une boutique : il est unique dans TOUTE la base.
+ *
+ * L'ARBITRAGE ASSUMÉ : un agent qui serait légitimement client de deux
+ * boutiques C2EGF est désormais refusé à la seconde. Les données disent que
+ * c'est au mieux 1 cas sur 175 — et c'est pour lui que le message nomme la
+ * boutique détentrice, afin que le refus indique qui appeler au lieu de laisser
+ * l'opérateur sans issue.
+ */
+export function messageDoublonAgent(existant, storeIdCourant) {
+  const nom = `${existant?.nom ?? ''} ${existant?.prenom ?? ''}`.trim()
+  // « celui de une fiche » : l'élision se décide ici, pas à l'interpolation.
+  const porteur = nom ? `de « ${nom} »` : "d'une fiche sans nom"
+  const boutique = texte(existant?.registeredStoreName) || texte(existant?.registeredStoreId)
+
+  if (existant?.registeredStoreId && existant.registeredStoreId === storeIdCourant) {
+    return `Ce code/numéro agent existe déjà : c'est celui ${porteur}, dans cette boutique.`
+      + ' Ouvrir sa fiche au lieu d\'en créer une seconde.'
+  }
+
+  const chez = boutique ? ` par ${boutique}` : ' par une autre boutique'
+  return `Ce code/numéro agent existe déjà : c'est celui ${porteur}, enregistré${chez}.`
+    + ' Un identifiant agent désigne un commerce, il ne peut pas être enregistré deux fois.'
+    + `${boutique ? ` Si c'est bien un nouveau client ici, voir avec ${boutique}.` : ''}`
+}

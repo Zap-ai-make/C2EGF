@@ -18,6 +18,20 @@
 *firebase-adminsdk*.json
 service-account*.json
 
+# Exports de données clients. `scripts/auditClients.mjs --csv` produit le nom,
+# le prénom, le téléphone et le code agent de chaque fiche : un fichier de
+# plusieurs milliers de personnes réelles. Ce n'est pas un secret au sens d'une
+# clé — on ne le révoque pas, on ne le régénère pas — et c'est précisément ce
+# qui rend sa fuite irréparable. Il s'écrit à la racine par commodité, donc il
+# s'ignore ici par défaut.
+# ⚠ TOUT CSV DE LA RACINE, pas une liste de noms. `--csv` accepte le nom qu'on
+#   lui donne : énumérer « doublons.csv » et deux variantes laissait passer
+#   « verif.csv », « export2.csv », et le fichier qu'on nommera demain dans
+#   l'urgence. Un motif qui dépend du soin apporté au nom du fichier ne protège
+#   rien. Ancré à la racine (« / » de tête) pour ne pas avaler un jeu de test
+#   versionné dans tests/ ou un actif de données dans src/.
+/*.csv
+
 # ── Artefacts de la stack (React + Vite + Firebase) ───────────────────────
 
 # Dépendances

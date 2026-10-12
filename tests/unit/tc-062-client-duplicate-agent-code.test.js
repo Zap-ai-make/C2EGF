@@ -3,12 +3,23 @@
  *
  * Règle métier protégée :
  *   Un même code agent ou numéro agent ne peut être enregistré qu'une seule
- *   fois PAR BOUTIQUE. La collection `clients` étant globale et isolée par le
- *   champ `registeredStoreId`, le contrôle doit filtrer sur les DEUX champs.
+ *   fois DANS TOUTE LA BASE. Un identifiant agent désigne un commerce, pas une
+ *   relation commerciale avec une boutique.
  *
  *   - valeur vide/absente  → aucun contrôle, insertion autorisée.
- *   - valeur inédite dans la boutique → insertion autorisée.
- *   - valeur déjà présente dans la boutique → rejet (aucune écriture).
+ *   - valeur inédite       → insertion autorisée.
+ *   - valeur déjà présente → rejet (aucune écriture), où qu'elle soit.
+ *
+ * ⚠ CE FICHIER PROTÉGEAIT L'INVERSE JUSQU'AU 2026-10-12, ET C'ÉTAIT LE BUG.
+ *   Il exigeait que chaque requête porte un filtre `registeredStoreId`, au
+ *   motif que `globalClients` est une collection globale isolée par ce champ.
+ *   Le raisonnement vaut pour l'ÉCRITURE ; appliqué à ce CONTRÔLE, il le rendait
+ *   aveugle à tout ce que les autres boutiques avaient enregistré.
+ *
+ *   Mesuré sur la base réelle : 174 des 175 grappes de doublons restantes
+ *   étaient à cheval sur plusieurs boutiques, et huit nouvelles grappes sont
+ *   apparues dans les 24 h suivant la purge. Un test vert garantissait le
+ *   défaut. C'est le cas où il faut changer le test, pas le code.
  *
  * ⚠ TROIS CHAMPS SONT INTERROGÉS DEPUIS LA SÉPARATION (TC-233), et le
  *   troisième est l'ANCIEN. Les fiches d'avant vivent toutes dans `orange` :
@@ -118,23 +129,22 @@ describe('TC-062 — addClient anti-doublon (numéro/code agent)', () => {
     expect(service.addDocument).toHaveBeenCalledTimes(1)
   })
 
-  it('cherche la valeur dans les trois champs, toujours avec registeredStoreId', async () => {
+  it('cherche la valeur dans les trois champs, SANS filtre de boutique', async () => {
     await service.addClient({ nom: 'Doe', prenom: 'John', codeAgent: 'AG-123' })
 
-    const champsInterroges = service.getCollection.mock.calls.map(
-      ([, options]) => options.where.find((w) => w.field !== 'registeredStoreId'),
-    )
-    expect(champsInterroges).toEqual([
-      { field: 'codeAgent', operator: '==', value: 'AG-123' },
-      { field: 'numeroAgent', operator: '==', value: 'AG-123' },
-      { field: 'orange', operator: '==', value: 'AG-123' },
+    expect(service.getCollection.mock.calls.map(([, o]) => o.where)).toEqual([
+      [{ field: 'codeAgent', operator: '==', value: 'AG-123' }],
+      [{ field: 'numeroAgent', operator: '==', value: 'AG-123' }],
+      [{ field: 'orange', operator: '==', value: 'AG-123' }],
     ])
 
+    // ⚠ LE TEST QUI TIENT LA CORRECTION. Un filtre de boutique réintroduit ici
+    //   rendrait le contrôle aveugle aux 174 grappes inter-boutiques.
     for (const [collectionName, options] of service.getCollection.mock.calls) {
       expect(collectionName).toBe(FIRESTORE_CONFIG.COLLECTIONS.CLIENTS)
-      expect(options.where).toContainEqual(
-        { field: 'registeredStoreId', operator: '==', value: 'store-A' },
-      )
+      expect(options.where.map((w) => w.field)).not.toContain('registeredStoreId')
+      // Une seule égalité : aucun index composite à déclarer.
+      expect(options.where).toHaveLength(1)
     }
   })
 
@@ -157,18 +167,66 @@ describe('TC-062 — addClient anti-doublon (numéro/code agent)', () => {
   it('contrôle le numéro agent comme le code agent', async () => {
     await service.addClient({ nom: 'Doe', prenom: 'John', numeroAgent: '70112233' })
 
-    const valeurs = service.getCollection.mock.calls.map(
-      ([, options]) => options.where.find((w) => w.field !== 'registeredStoreId').value,
-    )
+    const valeurs = service.getCollection.mock.calls.map(([, options]) => options.where[0].value)
     expect(new Set(valeurs)).toEqual(new Set(['70112233']))
   })
 
-  it('rejette et n’écrit pas quand orange existe déjà dans la boutique', async () => {
+  it('rejette et n’écrit pas quand orange existe déjà', async () => {
     service.getCollection.mockResolvedValueOnce([{ id: 'existing', orange: 'AG-123' }])
     await expect(
       service.addClient({ nom: 'Doe', prenom: 'John', orange: 'AG-123' }),
     ).rejects.toThrow(/existe déjà/i)
     expect(service.addDocument).not.toHaveBeenCalled()
+  })
+
+  /**
+   * ⚠ LE CAS QUE L'ANCIENNE VERSION LAISSAIT PASSER, et le seul qui compte
+   *   vraiment : la fiche existe dans une AUTRE boutique. 174 grappes sur 175.
+   */
+  it('rejette un identifiant détenu par une autre boutique', async () => {
+    service.getCollection.mockResolvedValueOnce([{
+      id: 'ailleurs',
+      nom: 'OUEDRAOGO',
+      prenom: 'SALIF',
+      codeAgent: 'AG-123',
+      registeredStoreId: 'store-B',
+      registeredStoreName: 'C2EGF KAMBOINSSIN',
+    }])
+
+    await expect(
+      service.addClient({ nom: 'Doe', prenom: 'John', codeAgent: 'AG-123' }),
+    ).rejects.toThrow(/existe déjà/i)
+    expect(service.addDocument).not.toHaveBeenCalled()
+  })
+
+  /**
+   * Le refus doit être VÉRIFIABLE. « existe déjà dans cette boutique », sans
+   * dire chez qui, pousse l'opérateur à conclure que le logiciel se trompe et à
+   * contourner : un chiffre en moins, un nom écrit autrement.
+   */
+  it('nomme le porteur et sa boutique dans le refus', async () => {
+    service.getCollection.mockResolvedValueOnce([{
+      id: 'ailleurs',
+      nom: 'OUEDRAOGO',
+      prenom: 'SALIF',
+      registeredStoreId: 'store-B',
+      registeredStoreName: 'C2EGF KAMBOINSSIN',
+    }])
+
+    await expect(
+      service.addClient({ nom: 'Doe', prenom: 'John', codeAgent: 'AG-123' }),
+    ).rejects.toThrow(/OUEDRAOGO SALIF[\s\S]*C2EGF KAMBOINSSIN/)
+  })
+
+  /** Dans sa propre boutique, le refus dit quoi faire : ouvrir la fiche. */
+  it('renvoie vers la fiche existante quand elle est dans la même boutique', async () => {
+    service.getCollection.mockResolvedValueOnce([{
+      id: 'ici', nom: 'ZIDA', prenom: 'ALI', registeredStoreId: 'store-A',
+    }])
+
+    await expect(
+      service.addClient({ nom: 'Doe', prenom: 'John', codeAgent: 'AG-123' }),
+    ).rejects.toThrow(/ZIDA ALI[\s\S]*dans cette boutique/)
   })
 
   it('ignore les espaces autour du code agent (trim) avant contrôle', async () => {
