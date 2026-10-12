@@ -10,8 +10,10 @@ import {
   STATUTS,
   COLONNE_CODE,
   COLONNE_NUMERO,
+  resoudreCode,
+  longueursDeCode,
 } from '../../scripts/lib/importNumerosAgent.mjs'
-import { analyserCsv, detecterSeparateur } from '../../scripts/lib/lireTableur.mjs'
+import { analyserCsv, detecterSeparateur, valeurCellule } from '../../scripts/lib/lireTableur.mjs'
 import { champsAgent } from '../../src/utils/agentFields.js'
 
 /**
@@ -49,17 +51,17 @@ const ligne = (code, numero, n = 2) => ({ ligne: n, code, numero })
 
 describe('TC-250 — le numéro agent, normalisé', () => {
   it('[TC-250-01] garde huit chiffres tels quels', () => {
-    expect(normaliserNumeroAgent('01234567')).toEqual({ numero: '01234567' })
+    expect(normaliserNumeroAgent('01234567')).toEqual({ numero: '01234567', zerosRestitues: 0 })
   })
 
   /** La seule complétion autorisée par la consigne. */
   it('[TC-250-02] complète sept chiffres par un zéro devant', () => {
-    expect(normaliserNumeroAgent('1234567')).toEqual({ numero: '01234567' })
+    expect(normaliserNumeroAgent('1234567')).toEqual({ numero: '01234567', zerosRestitues: 1 })
   })
 
   it('[TC-250-03] retire les espaces autour', () => {
-    expect(normaliserNumeroAgent('  01234567  ')).toEqual({ numero: '01234567' })
-    expect(normaliserNumeroAgent('\t1234567\n')).toEqual({ numero: '01234567' })
+    expect(normaliserNumeroAgent('  01234567  ')).toEqual({ numero: '01234567', zerosRestitues: 0 })
+    expect(normaliserNumeroAgent('\t1234567\n')).toEqual({ numero: '01234567', zerosRestitues: 1 })
   })
 
   /**
@@ -67,7 +69,7 @@ describe('TC-250 — le numéro agent, normalisé', () => {
    * une saisie parfaitement lisible ; la longueur protège du reste.
    */
   it('[TC-250-04] accepte un numéro écrit avec des espaces intérieurs', () => {
-    expect(normaliserNumeroAgent('01 23 45 67')).toEqual({ numero: '01234567' })
+    expect(normaliserNumeroAgent('01 23 45 67')).toEqual({ numero: '01234567', zerosRestitues: 0 })
   })
 
   it('[TC-250-05] ignore une case vide', () => {
@@ -265,14 +267,14 @@ describe('TC-250 — ce que chaque ligne devient', () => {
    *   le récupère. On ne le devine donc pas — on dit que la variante existe.
    *   Le deviner écrirait sur une fiche voisine, sans trace.
    */
-  it('[TC-250-26] signale la signature « Excel a mangé le zéro » sans la corriger', () => {
+  it('[TC-250-26] sur une case TEXTE, signale la variante sans la corriger', () => {
     const { lignes, ecritures } = planifierImport([ligne('123456', '01234567')], [
       fiche({ id: 'cible', codeAgent: '0123456', numeroAgent: '' }),
     ])
 
     expect(lignes[0].statut).toBe(STATUTS.INTROUVABLE)
     expect(lignes[0].detail).toMatch(/0123456/)
-    expect(lignes[0].detail).toMatch(/mang/)
+    expect(lignes[0].detail).toMatch(/TEXTE/)
     expect(ecritures).toEqual([])
   })
 
@@ -502,8 +504,8 @@ describe('TC-250 — lire le fichier sans perdre un zéro', () => {
   })
 
   it('[TC-250-47] rend vide un fichier vide', () => {
-    expect(analyserCsv('')).toEqual({ entetes: [], lignes: [] })
-    expect(analyserCsv('   \n  ')).toEqual({ entetes: [], lignes: [] })
+    expect(analyserCsv('')).toEqual({ entetes: [], lignes: [], numeriques: [] })
+    expect(analyserCsv('   \n  ')).toEqual({ entetes: [], lignes: [], numeriques: [] })
   })
 
   /** Une ligne plus courte que l'en-tête ne doit pas rendre `undefined`. */
@@ -535,5 +537,194 @@ describe('TC-250 — les cas vides', () => {
     const bilan = compterBilan([])
     expect(bilan.total).toBe(0)
     expect(bilan.misAJour + bilan.inchanges + bilan.conflits + bilan.ignores).toBe(0)
+  })
+})
+
+/**
+ * TC-250 — EXCEL, ET LE ZÉRO QU'IL MANGE.
+ *
+ * C'est le format de travail de la boutique, donc ce n'est pas un cas secondaire.
+ * Une cellule Excel porte trois informations, et il faut les trois :
+ *
+ *   t  le type      — « s » texte, « n » nombre
+ *   v  la valeur    — ce qu'Excel a stocké
+ *   w  l'affichage  — la valeur passée par le format de la cellule
+ *
+ * Se fier à `w` casse les formats scientifique et milliers ; se fier à `v` jette
+ * le zéro qu'un format « 0000000 » avait conservé.
+ */
+describe('TC-250 — ce qu’une cellule Excel garde vraiment', () => {
+  /** Le cas qui sauve le zéro sans rien deviner : le format le porte. */
+  it('[TC-250-53] récupère le zéro d’un format « 0000000 »', () => {
+    expect(valeurCellule({ t: 'n', v: 123456, w: '0123456', z: '0000000' }))
+      .toEqual({ texte: '0123456', numerique: true })
+  })
+
+  /** Format Général : le zéro est perdu dans le fichier, mais on le SAIT. */
+  it('[TC-250-54] marque la case comme numérique quand le zéro est perdu', () => {
+    expect(valeurCellule({ t: 'n', v: 123456, w: '123456', z: 'General' }))
+      .toEqual({ texte: '123456', numerique: true })
+  })
+
+  /**
+   * ⚠ `w` EST UN PIÈGE SUR CES DEUX FORMATS. « 1,234,567 » casserait la
+   *   correspondance exacte du code, et « 1.23E+05 » ne ressemble à rien.
+   */
+  it('[TC-250-55] écarte un `w` à séparateur de milliers ou scientifique', () => {
+    expect(valeurCellule({ t: 'n', v: 1234567, w: '1,234,567' }).texte).toBe('1234567')
+    expect(valeurCellule({ t: 'n', v: 123456, w: '1.23E+05' }).texte).toBe('123456')
+  })
+
+  /** Une case texte est rendue telle quelle, et jamais marquée numérique. */
+  it('[TC-250-56] rend une case texte intacte', () => {
+    expect(valeurCellule({ t: 's', v: '0123456', w: '0123456' }))
+      .toEqual({ texte: '0123456', numerique: false })
+  })
+
+  /**
+   * ⚠ UNE DATE N'EST PAS UN CODE. Excel transforme volontiers une saisie en date ;
+   *   la rendre telle quelle la fait échouer au contrôle numérique et SIGNALER,
+   *   au lieu d'être réinterprétée en silence.
+   */
+  it('[TC-250-57] ne rattrape jamais une cellule date', () => {
+    const cellule = valeurCellule({ t: 'd', v: new Date('2026-01-23'), w: '23/01/2026' })
+    expect(cellule.numerique).toBe(false)
+    expect(normaliserNumeroAgent(cellule.texte, cellule.numerique).refus).toBe('date')
+  })
+
+  it('[TC-250-58] une case absente est vide, et non « undefined »', () => {
+    expect(valeurCellule(undefined)).toEqual({ texte: '', numerique: false })
+    expect(valeurCellule(null)).toEqual({ texte: '', numerique: false })
+  })
+})
+
+describe('TC-250 — restituer le zéro depuis la base, jamais le deviner', () => {
+  const index = (codes) => indexerParCodeAgent(
+    codes.map((c, i) => fiche({ id: `f${i}`, codeAgent: c, numeroAgent: '' })),
+  )
+
+  it('[TC-250-59] les longueurs de code viennent de la base, pas d’une hypothèse', () => {
+    expect(longueursDeCode(index(['0123456', '12', '0012345678']))).toEqual([2, 7, 10])
+  })
+
+  /** Le code exact gagne toujours : aucun remplissage ne s'applique. */
+  it('[TC-250-60] une correspondance exacte n’est jamais complétée', () => {
+    expect(resoudreCode('123456', index(['123456', '0123456'])))
+      .toEqual({ code: '123456', zerosRestitues: 0 })
+  })
+
+  /** Une seule variante en base : ce n'est plus une devinette, c'est une lecture. */
+  it('[TC-250-61] restitue le zéro quand la variante est UNIQUE', () => {
+    expect(resoudreCode('123456', index(['0123456'])))
+      .toEqual({ code: '0123456', zerosRestitues: 1 })
+  })
+
+  it('[TC-250-62] restitue plusieurs zéros si la base l’exige', () => {
+    expect(resoudreCode('123', index(['0000123'])))
+      .toEqual({ code: '0000123', zerosRestitues: 4 })
+  })
+
+  /**
+   * ⚠ LA LIMITE DE L'HONNÊTETÉ. Si « 0123456 » ET « 00123456 » existent, choisir
+   *   serait tirer au sort sur la fiche d'un commerce. On s'arrête et on nomme
+   *   les deux.
+   */
+  it('[TC-250-63] refuse de choisir entre deux variantes', () => {
+    const r = resoudreCode('123456', index(['0123456', '00123456']))
+    expect(r.ambigu).toEqual(['0123456', '00123456'])
+    expect(r.code).toBeUndefined()
+  })
+
+  it('[TC-250-64] rend introuvable quand aucune variante n’existe', () => {
+    expect(resoudreCode('999999', index(['0123456']))).toEqual({ introuvable: true })
+  })
+})
+
+describe('TC-250 — l’import d’un fichier Excel abîmé', () => {
+  const numerique = (code, numero, n = 2) => ({
+    ligne: n, code, numero, codeNumerique: true, numeroNumerique: true,
+  })
+
+  /** Le cas réel : la colonne était en Général, les zéros ont sauté. */
+  it('[TC-250-65] complète la bonne fiche après restitution du zéro', () => {
+    const { lignes, ecritures, bilan } = planifierImport([numerique('123456', '1234567')], [
+      fiche({ id: 'cible', codeAgent: '0123456', numeroAgent: '' }),
+    ])
+
+    expect(lignes[0].statut).toBe(STATUTS.A_COMPLETER)
+    expect(lignes[0].codeUtilise).toBe('0123456')
+    expect(lignes[0].detail).toMatch(/restitué/)
+    expect(ecritures[0].id).toBe('cible')
+    expect(bilan.zerosRestitues).toEqual({ codes: 1, numeros: 1 })
+  })
+
+  /**
+   * ⚠ LE CODE ÉCRIT VIENT DE LA FICHE, JAMAIS DU FICHIER. Recopier le code du
+   *   fichier ferait entrer dans la fiche la version tronquée par le tableur.
+   */
+  it('[TC-250-66] écrit le code de la BASE, pas celui du fichier', () => {
+    const { ecritures } = planifierImport([numerique('123456', '1234567')], [
+      fiche({ id: 'cible', codeAgent: '0123456', numeroAgent: '' }),
+    ])
+    expect(ecritures[0].maj.codeAgent).toBe('0123456')
+  })
+
+  /** Un numéro de six chiffres dans une case NOMBRE se complète jusqu'à huit. */
+  it('[TC-250-67] complète un numéro numérique jusqu’à huit chiffres', () => {
+    expect(normaliserNumeroAgent('234567', true)).toEqual({ numero: '00234567', zerosRestitues: 2 })
+    expect(normaliserNumeroAgent('7', true)).toEqual({ numero: '00000007', zerosRestitues: 7 })
+  })
+
+  /** Mais une case TEXTE de six chiffres reste refusée : c'est une saisie. */
+  it('[TC-250-68] ne complète pas un numéro de six chiffres écrit en TEXTE', () => {
+    const refus = normaliserNumeroAgent('234567', false)
+    expect(refus.refus).toBe('longueur')
+    expect(refus.detail).toMatch(/texte/)
+  })
+
+  /** Au-delà de huit chiffres, rien ne justifie un numéro agent. */
+  it('[TC-250-69] refuse plus de huit chiffres, même en case NOMBRE', () => {
+    expect(normaliserNumeroAgent('123456789', true).refus).toBe('longueur')
+  })
+
+  it('[TC-250-70] signale l’ambiguïté sans rien écrire', () => {
+    const { lignes, ecritures, bilan } = planifierImport([numerique('123456', '01234567')], [
+      fiche({ id: 'a', codeAgent: '0123456', numeroAgent: '' }),
+      fiche({ id: 'b', codeAgent: '00123456', numeroAgent: '' }),
+    ])
+
+    expect(lignes[0].statut).toBe(STATUTS.ZERO_AMBIGU)
+    expect(lignes[0].detail).toMatch(/0123456, 00123456/)
+    expect(ecritures).toEqual([])
+    expect(bilan.detailIgnores.zeroAmbigu).toBe(1)
+  })
+
+  /**
+   * ⚠ LE DOUBLON QUE LA RESTITUTION POURRAIT CRÉER. Deux lignes « 123456 » et
+   *   « 0123456 » désignent LA MÊME fiche dès que le zéro est restitué. Les
+   *   compter sur le code brut laisserait passer deux écritures sur une seule
+   *   fiche, dont la seconde écraserait la première.
+   */
+  it('[TC-250-71] voit la répétition créée par la restitution', () => {
+    const { lignes, ecritures } = planifierImport([
+      { ligne: 2, code: '123456', numero: '01234567', codeNumerique: true },
+      { ligne: 3, code: '0123456', numero: '07654321', codeNumerique: false },
+    ], [fiche({ id: 'cible', codeAgent: '0123456', numeroAgent: '' })])
+
+    expect(lignes.map((l) => l.statut)).toEqual([STATUTS.CODE_REPETE, STATUTS.CODE_REPETE])
+    expect(ecritures).toEqual([])
+  })
+
+  /** L'idempotence doit tenir aussi quand un zéro a été restitué. */
+  it('[TC-250-72] un second import du fichier abîmé ne change plus rien', () => {
+    const lignesFichier = [numerique('123456', '1234567')]
+    const base = [fiche({ id: 'cible', codeAgent: '0123456', numeroAgent: '' })]
+
+    const un = planifierImport(lignesFichier, base)
+    const apres = base.map((f) => ({ ...f, ...un.ecritures[0].maj }))
+    const deux = planifierImport(lignesFichier, apres)
+
+    expect(deux.bilan).toMatchObject({ misAJour: 0, inchanges: 1, conflits: 0, ignores: 0 })
+    expect(deux.ecritures).toEqual([])
   })
 })

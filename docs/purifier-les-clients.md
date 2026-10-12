@@ -179,7 +179,9 @@ node scripts/importerNumerosAgent.mjs --annuler=backups/import-numeros-<horodata
 ```
 
 `.xlsx` et `.csv` sont acceptés. Le CSV détecte son séparateur (`;`, `,`, tabulation),
-avale le BOM d'Excel et gère les guillemets.
+avale le BOM d'Excel et gère les guillemets. Un classeur à plusieurs feuilles lit
+la première **et dit lesquelles il n'a pas lues** ; `--feuille=<nom>` en choisit
+une autre.
 
 ## Les six règles, et comment chacune est tenue
 
@@ -217,21 +219,46 @@ puis vidée exprès », et l'annulation aurait causé le dégât qu'elle venait 
 
 ### Excel mange les zéros initiaux
 
-Une cellule stockée en **nombre** a perdu son zéro dans le fichier lui-même :
-aucune option de lecture ne le récupère. Le script ne le devine pas — le deviner
-écrirait sur la fiche d'un commerce voisin. Il cherche le code tel quel, et si la
-variante zéro-complétée existe en base, il le **dit** :
+C'est le format de travail de la boutique, donc le zéro perdu n'est pas un cas
+secondaire : c'est **le** problème. Une cellule Excel porte trois informations,
+et il faut les trois.
 
-```
-L42  123456  —
-     actuel «  » → proposé « 01234567 »  [introuvable]
-     aucune fiche avec ce code — mais « 0123456 » existe en base : le tableur a
-     probablement mangé le zéro initial. Reformater la colonne en TEXTE et réexporter.
-```
+| Cellule | `t` | `v` | `w` | Le zéro |
+|---|---|---|---|---|
+| texte `0123456` | `s` | `"0123456"` | `"0123456"` | **conservé** |
+| nombre, format `0000000` | `n` | `123456` | `"0123456"` | **récupérable par le format** |
+| nombre, format Général | `n` | `123456` | `"123456"` | perdu dans le fichier |
+| nombre, milliers | `n` | `1234567` | `"1,234,567"` | `w` est piégé, `v` est juste |
+| nombre, scientifique | `n` | `123456` | `"1.23E+05"` | idem |
 
-Le code agent n'est **jamais** complété automatiquement, contrairement au numéro :
-le numéro a une longueur garantie (8), le code n'en a aucune — la base en contient
-de 1 à 10 chiffres.
+Se fier à `w` casse les deux derniers cas ; se fier à `v` jette le zéro que le
+format `0000000` avait conservé. La règle retenue : **prendre `w` quand il n'est
+que des chiffres et au moins aussi long que `v`**, sinon prendre `v`.
+
+Quand le zéro est vraiment perdu — cellule en format Général —, il n'est pas
+deviné : **il est retrouvé dans la base.** Le code est complété jusqu'aux
+longueurs qui existent réellement en base, et la variante n'est retenue que si
+elle est **unique** :
+
+- correspondance exacte → c'est elle, aucun remplissage ;
+- **une seule** variante → c'est le même code, restitué et signalé ;
+- **plusieurs** variantes → `ZÉRO AMBIGU`, on s'arrête. `0999888` et `00999888`
+  existent tous les deux : choisir serait tirer au sort sur la fiche d'un commerce ;
+- aucune → introuvable, et le rapport dit si une variante existait.
+
+Une cellule **texte** n'est jamais rattrapée : `123456` écrit en texte est ce que
+la boutique a saisi, et le compléter serait corriger une saisie plutôt que
+réparer un dégât du tableur. La même dissymétrie vaut pour le numéro : une case
+nombre se complète jusqu'à huit chiffres, une case texte seulement depuis sept.
+
+Le script annonce avant d'écrire combien de lignes ont traversé Excel en nombre,
+liste toutes les restitutions, et le bilan les recompte. Et **le code écrit dans
+la fiche vient toujours de la base**, jamais du fichier : recopier le code du
+fichier y ferait entrer la version tronquée.
+
+Dernier cas : Excel convertit volontiers une saisie en **date**. `23/01/2026` est
+reconnu comme tel et refusé sous ce motif — pas sous « plusieurs numéros », qui
+enverrait chercher une barre de séparation dans une case qui n'en a jamais eu.
 
 ## Garanties vérifiées
 
@@ -244,5 +271,7 @@ de 1 à 10 chiffres.
   disque et vérifié **avant** la première écriture. L'annulation refuse de toucher
   une fiche modifiée depuis l'import : une saisie humaine est toujours plus récente
   et plus juste que ce que le script avait mis.
-- **52 tests unitaires** (`tests/unit/tc-250-import-numeros-agent.test.js`) et
-  22 contrôles de bout en bout sur émulateur.
+- **72 tests unitaires** (`tests/unit/tc-250-import-numeros-agent.test.js`) et
+  34 contrôles de bout en bout sur émulateur, dont un classeur abîmé exactement
+  comme Excel l'abîme : zéros mangés, format `0000000`, cellule texte, cas
+  ambigu, deux feuilles.

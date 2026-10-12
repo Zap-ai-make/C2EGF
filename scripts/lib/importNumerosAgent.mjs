@@ -9,14 +9,14 @@
  *
  * TROIS CHAMPS DISTINCTS, ET ILS NE SE CONFONDENT JAMAIS
  * ──────────────────────────────────────────────────────
- *   · Code agent      — 7 chiffres en général. Sert à RETROUVER la fiche.
- *   · Numéro agent    — 8 chiffres. C'est ce qu'on AJOUTE.
+ *   · Code agent       — 7 chiffres en général. Sert à RETROUVER la fiche.
+ *   · Numéro agent     — 8 chiffres. C'est ce qu'on AJOUTE.
  *   · Numéro personnel — le téléphone du commerçant. JAMAIS touché, jamais lu
  *                        comme un numéro agent. C'est une colonne piège : un
  *                        fichier qui la contient ne doit pas la voir prise pour
  *                        l'autre, d'où le refus explicite dans `trouverColonnes`.
  *
- * ⚠ CE QUE CE MODULE NE FAIT JAMAIS
+ * ⚠ CE MODULE NE FAIT JAMAIS
  *   · créer une fiche — un code inconnu est signalé, pas inséré ;
  *   · rapprocher par le nom — seul le code agent identifie, à l'exact ;
  *   · écraser une valeur — un numéro déjà présent et différent est un CONFLIT ;
@@ -40,11 +40,12 @@ export const STATUTS = Object.freeze({
   CONFLIT: 'conflit',
   NUMERO_IGNORE: 'numero-ignore',
   INTROUVABLE: 'introuvable',
+  ZERO_AMBIGU: 'zero-ambigu',
   CODE_REPETE: 'code-repete',
   PLUSIEURS_CLIENTS: 'plusieurs-clients',
 })
 
-/** Les quatre seuls statuts qui écrivent... enfin, le seul. */
+/** Le seul statut qui écrit. */
 const ECRIT = new Set([STATUTS.A_COMPLETER])
 
 const texte = (valeur) => (valeur === null || valeur === undefined ? '' : String(valeur))
@@ -52,16 +53,13 @@ const texte = (valeur) => (valeur === null || valeur === undefined ? '' : String
 /**
  * Le code agent d'une ligne de fichier : du TEXTE, zéros initiaux compris.
  *
- * ⚠ AUCUN REMPLISSAGE À GAUCHE ICI, CONTRAIREMENT AU NUMÉRO. La consigne autorise
- *   à compléter un numéro de 7 chiffres par un zéro ; elle ne dit rien du code, et
- *   pour une bonne raison : le numéro est VALIDÉ par sa longueur (8), alors que le
- *   code n'a pas de longueur garantie — la base en contient de 1 à 10 chiffres.
- *   Compléter un code à l'aveugle le ferait pointer vers la fiche d'un autre
- *   commerce, et l'import écrirait un numéro sur le mauvais client.
+ * ⚠ AUCUN REMPLISSAGE À L'AVEUGLE ICI, contrairement au numéro. Le numéro est
+ *   validé par sa longueur (8) ; le code n'a aucune longueur garantie — la base
+ *   en contient de 1 à 10 chiffres. Compléter un code sans vérification le ferait
+ *   pointer vers la fiche d'un autre commerce.
  *
- *   Le cas « Excel a mangé le zéro » est donc traité autrement : on cherche le
- *   code tel quel, et si on ne le trouve pas, `planifierImport` REGARDE si une
- *   variante zéro-complétée existe — et le dit, au lieu de le deviner.
+ *   Le zéro mangé par Excel est rattrapé autrement, par `resoudreCode` : en
+ *   cherchant la variante dans la BASE, et seulement si elle est unique.
  */
 export const normaliserCodeAgent = (valeur) => texte(valeur).trim()
 
@@ -71,22 +69,49 @@ const SEPARATEURS = /[/,;|]|\bet\b|\bou\b|\n/i
 /**
  * Le numéro agent d'une ligne, ou le motif du refus.
  *
- * @returns {{numero: string}|{refus: string, detail: string}}
+ * @param valeur           la case, telle que le tableur l'a rendue
+ * @param celluleNumerique Excel a-t-il stocké cette case comme un NOMBRE ?
+ * @returns {{numero: string, zerosRestitues: number}|{refus: string, detail: string}}
  *
  * ⚠ POURQUOI LES ESPACES INTÉRIEURS DISPARAISSENT AUSSI. La consigne dit « retire
  *   les espaces autour ». Mais « 01 23 45 67 » est UN numéro écrit avec des
- *   espaces, et le refuser ferait rejeter une saisie parfaitement lisible. Les
- *   enlever tous est sans risque ici parce que la LONGUEUR tranche ensuite : deux
- *   numéros collés par un espace (« 1234567 7654321 ») donnent 14 chiffres et
- *   sont refusés. L'espace ne peut donc pas servir à faire passer un multiple.
+ *   espaces, et le refuser rejetterait une saisie parfaitement lisible. Les
+ *   enlever tous est sans risque parce que la LONGUEUR tranche ensuite : deux
+ *   numéros collés par un espace (« 1234567 7654321 ») font 14 chiffres et sont
+ *   refusés. L'espace ne peut donc pas servir à faire passer un multiple.
  *
- * ⚠ LE CAS MULTIPLE EST RÉEL, PAS THÉORIQUE. La base contient « 06629924/55772628 »
- *   et « 07796503/66553459/75928339 » dans des champs de numéro. Un tel contenu
- *   ne désigne pas un numéro agent : on l'ignore plutôt que d'en choisir un.
+ * ⚠ LE CAS MULTIPLE EST RÉEL. La base contient « 06629924/55772628 » et
+ *   « 07796503/66553459/75928339 » dans des champs de numéro. Un tel contenu ne
+ *   désigne pas un numéro agent : on l'ignore plutôt que d'en choisir un.
+ *
+ * ⚠ LA DISSYMÉTRIE TEXTE / NOMBRE EST VOULUE, et c'est elle qui rend Excel sûr.
+ *   Une case TEXTE contient ce que la boutique a écrit : sept chiffres se
+ *   complètent (la consigne le dit), six chiffres sont une erreur de saisie et
+ *   sont REFUSÉS. Une case NOMBRE, elle, a traversé Excel : ses zéros de tête ont
+ *   pu être mangés par le tableur, et comme la cible fait exactement huit
+ *   chiffres, les restituer n'invente rien — « 234567 » dans une case nombre ne
+ *   peut avoir été que « 00234567 ». Chaque restitution est comptée et affichée.
  */
-export function normaliserNumeroAgent(valeur) {
+export function normaliserNumeroAgent(valeur, celluleNumerique = false) {
   const brut = texte(valeur).trim()
   if (brut === '') return { refus: 'vide', detail: 'case vide' }
+
+  // ⚠ LA CELLULE QU'EXCEL A CONVERTIE EN DATE, reconnue AVANT le test « plusieurs
+  //   numéros ». Sans ce cas, « 23/01/2026 » était refusé pour la bonne raison
+  //   (on n'écrit rien) mais avec le mauvais motif : « plusieurs numéros »,
+  //   envoyant la boutique chercher une barre de séparation dans une case qui
+  //   n'en avait jamais eu. Un refus doit dire ce qui s'est réellement passé.
+  //
+  //   Le cas arrive aussi en CSV : un fichier exporté depuis un classeur où la
+  //   conversion a déjà eu lieu porte la date, pas le code. Le contrôle est donc
+  //   ici, dans la normalisation, et non dans la lecture du classeur.
+  if (/^\d{1,4}[/.-]\d{1,2}[/.-]\d{1,4}$/.test(brut)) {
+    return {
+      refus: 'date',
+      detail: `« ${brut} » est une date : le tableur a converti la saisie.`
+        + ' Reformater la colonne en TEXTE dans le classeur et réexporter.',
+    }
+  }
 
   if (SEPARATEURS.test(brut)) {
     return { refus: 'multiple', detail: `plusieurs numéros : « ${brut} »` }
@@ -97,13 +122,24 @@ export function normaliserNumeroAgent(valeur) {
     return { refus: 'non-numerique', detail: `caractères non numériques : « ${brut} »` }
   }
 
-  // 7 chiffres → un zéro devant. C'est la seule complétion autorisée.
-  const numero = sansEspaces.length === LONGUEUR_NUMERO - 1 ? `0${sansEspaces}` : sansEspaces
-  if (numero.length !== LONGUEUR_NUMERO) {
-    return { refus: 'longueur', detail: `${sansEspaces.length} chiffre(s) au lieu de 7 ou 8 : « ${brut} »` }
+  if (sansEspaces.length > LONGUEUR_NUMERO) {
+    return { refus: 'longueur', detail: `${sansEspaces.length} chiffres au lieu de ${LONGUEUR_NUMERO} : « ${brut} »` }
   }
 
-  return { numero }
+  // Une case NOMBRE se complète jusqu'à huit ; une case TEXTE, seulement de sept.
+  const complementAutorise = celluleNumerique || sansEspaces.length === LONGUEUR_NUMERO - 1
+  if (sansEspaces.length < LONGUEUR_NUMERO && !complementAutorise) {
+    return {
+      refus: 'longueur',
+      detail: `${sansEspaces.length} chiffres au lieu de ${LONGUEUR_NUMERO} : « ${brut} »`
+        + ' (case texte : non complétée, car son contenu est celui qui a été saisi)',
+    }
+  }
+
+  return {
+    numero: sansEspaces.padStart(LONGUEUR_NUMERO, '0'),
+    zerosRestitues: LONGUEUR_NUMERO - sansEspaces.length,
+  }
 }
 
 /**
@@ -127,6 +163,44 @@ export function indexerParCodeAgent(fiches = []) {
     parCode.get(codeAgent).push(fiche)
   }
   return parCode
+}
+
+/** Les longueurs de code qui existent réellement en base, croissantes. */
+export const longueursDeCode = (parCode) => [...new Set([...parCode.keys()].map((c) => c.length))]
+  .sort((a, b) => a - b)
+
+/**
+ * ⚠ LE ZÉRO QU'EXCEL A MANGÉ, RETROUVÉ DANS LA BASE PLUTÔT QUE DEVINÉ.
+ *
+ *   Une case NOMBRE a perdu ses zéros de tête dans le fichier lui-même : aucune
+ *   lecture ne les récupère. Mais on n'a pas besoin de les deviner — la base les
+ *   connaît. On complète donc le code jusqu'aux longueurs QUI EXISTENT en base,
+ *   et on ne retient la variante que si elle est UNIQUE.
+ *
+ *   · exact trouvé            → c'est lui, le remplissage ne s'applique pas ;
+ *   · une seule variante      → c'est le même code, on le dit et on continue ;
+ *   · plusieurs variantes     → AMBIGU, on s'arrête (« 0123456 » et « 00123456 »
+ *                               existent tous les deux : choisir serait tirer au
+ *                               sort sur la fiche d'un commerce) ;
+ *   · aucune                  → introuvable, comme avant.
+ *
+ * ⚠ CE RATTRAPAGE NE S'APPLIQUE QU'AUX CASES NOMBRE. Sur une case TEXTE,
+ *   « 123456 » est ce que la boutique a écrit : le compléter serait corriger une
+ *   saisie, pas réparer un dégât du tableur.
+ */
+export function resoudreCode(code, parCode, longueurs = longueursDeCode(parCode)) {
+  if (parCode.has(code)) return { code, zerosRestitues: 0 }
+
+  const variantes = longueurs
+    .filter((longueur) => longueur > code.length)
+    .map((longueur) => code.padStart(longueur, '0'))
+    .filter((variante) => parCode.has(variante))
+
+  if (variantes.length === 1) {
+    return { code: variantes[0], zerosRestitues: variantes[0].length - code.length }
+  }
+  if (variantes.length > 1) return { ambigu: variantes }
+  return { introuvable: true }
 }
 
 /**
@@ -174,62 +248,102 @@ const nomDe = (fiche) => `${fiche?.nom ?? ''} ${fiche?.prenom ?? ''}`.trim() || 
 /**
  * Ce que l'import ferait, ligne par ligne — et rien de plus.
  *
- * @param {Array<{code: string, numero: string, ligne: number}>} lignes
+ * @param {Array<{ligne: number, code: string, numero: string,
+ *                codeNumerique?: boolean, numeroNumerique?: boolean}>} lignes
  * @param {Array<object>} fiches  les fiches de `globalClients`
  */
 export function planifierImport(lignes = [], fiches = []) {
   const parCode = indexerParCodeAgent(fiches)
+  const longueurs = longueursDeCode(parCode)
 
-  // ⚠ LES RÉPÉTITIONS SE COMPTENT AVANT DE DÉCIDER. Un code présent deux fois
-  //   dans le fichier est une erreur de fabrication du fichier : même si les deux
-  //   lignes proposent le même numéro, les traiter ferait dépendre le résultat de
-  //   l'ordre des lignes. On les signale toutes les deux et on n'écrit ni l'une ni
-  //   l'autre — c'est aussi ce qui rend un second passage identique au premier.
+  // ⚠ LES RÉPÉTITIONS SE COMPTENT AVANT DE DÉCIDER, et sur le code RÉSOLU : deux
+  //   lignes portant « 123456 » et « 0123456 » désignent la même fiche dès que le
+  //   zéro est restitué, et c'est donc bien une répétition. Les compter sur le
+  //   code brut laisserait passer deux écritures sur la même fiche, dont la
+  //   seconde écraserait la première — exactement ce que « sans doublon » exclut.
+  const resolu = new Map()
+  const resoudre = (brute) => {
+    const code = normaliserCodeAgent(brute.code)
+    if (!code) return null
+    const cle = `${code}|${brute.codeNumerique ? 'n' : 's'}`
+    if (!resolu.has(cle)) {
+      resolu.set(cle, brute.codeNumerique ? resoudreCode(code, parCode, longueurs) : (
+        parCode.has(code) ? { code, zerosRestitues: 0 } : { introuvable: true }
+      ))
+    }
+    return { code, ...resolu.get(cle) }
+  }
+
   const occurrences = new Map()
-  for (const { code } of lignes) {
-    const c = normaliserCodeAgent(code)
-    if (c) occurrences.set(c, (occurrences.get(c) || 0) + 1)
+  for (const brute of lignes) {
+    const r = resoudre(brute)
+    // On ne compte que les codes qui désignent une fiche : deux lignes
+    // introuvables partageant un code n'ont pas besoin qu'on leur dise
+    // « répété », « introuvable » est la réponse la plus utile des deux.
+    if (!r || r.ambigu || r.introuvable) continue
+    occurrences.set(r.code, (occurrences.get(r.code) || 0) + 1)
   }
 
   const resultats = []
 
   for (const brute of lignes) {
     const code = normaliserCodeAgent(brute.code)
-    const base = { ligne: brute.ligne, code, nom: '', actuel: '', propose: '' }
+    const base = {
+      ligne: brute.ligne, code, nom: '', actuel: '', propose: '', zerosRestitues: 0, codeUtilise: code,
+    }
 
     if (!code) {
       resultats.push({ ...base, statut: STATUTS.NUMERO_IGNORE, detail: 'code agent vide' })
       continue
     }
 
-    const numero = normaliserNumeroAgent(brute.numero)
+    const numero = normaliserNumeroAgent(brute.numero, Boolean(brute.numeroNumerique))
     if (numero.refus) {
       resultats.push({ ...base, statut: STATUTS.NUMERO_IGNORE, detail: numero.detail })
       continue
     }
     base.propose = numero.numero
+    base.zerosRestitues = numero.zerosRestitues
 
-    if (occurrences.get(code) > 1) {
+    const r = resoudre(brute)
+
+    if (r.ambigu) {
       resultats.push({
         ...base,
-        statut: STATUTS.CODE_REPETE,
-        detail: `code présent ${occurrences.get(code)} fois dans le fichier`,
+        statut: STATUTS.ZERO_AMBIGU,
+        detail: `le tableur a mangé le ou les zéros de tête, et ${r.ambigu.length} codes de la base`
+          + ` correspondent : ${r.ambigu.join(', ')}. Reformater la colonne en TEXTE et réexporter.`,
       })
       continue
     }
 
-    const candidates = parCode.get(code)
-    if (!candidates || candidates.length === 0) {
-      // ⚠ LA SIGNATURE D'EXCEL. Un code stocké en NOMBRE dans le tableur a perdu
-      //   son zéro initial avant même d'arriver ici — le fichier ne le contient
-      //   plus. On ne le devine pas : on regarde si la variante zéro-complétée
-      //   existe en base, et on le DIT. Deviner écrirait sur une fiche voisine.
-      const variante = `0${code}`
-      const indice = parCode.has(variante)
-        ? ` — mais « ${variante} » existe en base : le tableur a probablement mangé le zéro initial.`
-          + ' Reformater la colonne en TEXTE et réexporter.'
+    if (r.introuvable) {
+      // Sur une case TEXTE, on ne rattrape rien — mais on peut tout de même DIRE
+      // qu'une variante zéro-complétée existe, pour que la boutique sache quoi
+      // corriger dans son fichier.
+      const variantes = longueurs
+        .filter((l) => l > code.length)
+        .map((l) => code.padStart(l, '0'))
+        .filter((v) => parCode.has(v))
+      const indice = variantes.length > 0
+        ? ` — mais ${variantes.map((v) => `« ${v} »`).join(' et ')} existe(nt) en base.`
+          + ' Si la colonne est en TEXTE, c\'est le fichier qui porte un code tronqué ;'
+          + ' la reformater en TEXTE puis réexporter règle les deux cas.'
         : ''
       resultats.push({ ...base, statut: STATUTS.INTROUVABLE, detail: `aucune fiche avec ce code${indice}` })
+      continue
+    }
+
+    base.codeUtilise = r.code
+    const candidates = parCode.get(r.code)
+
+    if (occurrences.get(r.code) > 1) {
+      resultats.push({
+        ...base,
+        statut: STATUTS.CODE_REPETE,
+        detail: `code présent ${occurrences.get(r.code)} fois dans le fichier`
+          + (r.zerosRestitues > 0 ? ` (après restitution du zéro : « ${r.code} »)` : ''),
+      })
       continue
     }
 
@@ -247,6 +361,9 @@ export function planifierImport(lignes = [], fiches = []) {
     const actuelBrut = champsAgent(fiche).numeroAgent
     base.nom = nomDe(fiche)
     base.actuel = actuelBrut
+    const zeroCode = r.zerosRestitues > 0
+      ? `code « ${code} » → « ${r.code} », ${r.zerosRestitues} zéro(s) restitué(s) depuis la base`
+      : ''
 
     if (actuelBrut !== '') {
       // ⚠ COMPARAISON SUR LA FORME NORMALISÉE, PAS SUR LA CHAÎNE BRUTE. Sinon un
@@ -259,20 +376,32 @@ export function planifierImport(lignes = [], fiches = []) {
           ...base,
           statut: STATUTS.INCHANGE,
           fiche,
-          detail: actuelBrut === numero.numero ? '' : `déjà présent, écrit « ${actuelBrut} »`,
+          detail: [actuelBrut === numero.numero ? '' : `déjà présent, écrit « ${actuelBrut} »`, zeroCode]
+            .filter(Boolean).join(' · '),
         })
       } else {
         resultats.push({
           ...base,
           statut: STATUTS.CONFLIT,
           fiche,
-          detail: `la fiche porte déjà « ${actuelBrut} », le fichier propose « ${numero.numero} »`,
+          detail: [`la fiche porte déjà « ${actuelBrut} », le fichier propose « ${numero.numero} »`, zeroCode]
+            .filter(Boolean).join(' · '),
         })
       }
       continue
     }
 
-    resultats.push({ ...base, statut: STATUTS.A_COMPLETER, fiche, detail: '' })
+    const zeroNumero = numero.zerosRestitues > 0
+      ? `numéro complété de ${numero.zerosRestitues} zéro(s) de tête`
+      : ''
+    resultats.push({
+      ...base,
+      statut: STATUTS.A_COMPLETER,
+      fiche,
+      zerosRestitues: numero.zerosRestitues,
+      zerosCode: r.zerosRestitues,
+      detail: [zeroCode, zeroNumero].filter(Boolean).join(' · '),
+    })
   }
 
   return { lignes: resultats, bilan: compterBilan(resultats), ecritures: ecrituresDe(resultats) }
@@ -291,8 +420,13 @@ export function compterBilan(resultats = []) {
 
   const ignores = parStatut[STATUTS.NUMERO_IGNORE]
     + parStatut[STATUTS.INTROUVABLE]
+    + parStatut[STATUTS.ZERO_AMBIGU]
     + parStatut[STATUTS.CODE_REPETE]
     + parStatut[STATUTS.PLUSIEURS_CLIENTS]
+
+  // Les restitutions de zéro ne sont pas un seau : ce sont des lignes qui
+  // s'écrivent, mais que la boutique doit avoir VUES avant d'écrire.
+  const aEcrire = resultats.filter((r) => r.statut === STATUTS.A_COMPLETER)
 
   return {
     total: resultats.length,
@@ -303,8 +437,13 @@ export function compterBilan(resultats = []) {
     detailIgnores: {
       numeroIgnore: parStatut[STATUTS.NUMERO_IGNORE],
       introuvable: parStatut[STATUTS.INTROUVABLE],
+      zeroAmbigu: parStatut[STATUTS.ZERO_AMBIGU],
       codeRepete: parStatut[STATUTS.CODE_REPETE],
       plusieursClients: parStatut[STATUTS.PLUSIEURS_CLIENTS],
+    },
+    zerosRestitues: {
+      codes: aEcrire.filter((r) => (r.zerosCode ?? 0) > 0).length,
+      numeros: aEcrire.filter((r) => (r.zerosRestitues ?? 0) > 0).length,
     },
   }
 }
@@ -327,6 +466,11 @@ export function compterBilan(resultats = []) {
  *   que le numéro. La fiche se retrouve rangée pour de bon, ce que
  *   `agentFields.js` annonce déjà comme l'effet de « la première modification ».
  *   `orange` n'est pas touché : rien n'est effacé, et l'annulation reste possible.
+ *
+ * ⚠ LE CODE ÉCRIT VIENT DE LA FICHE, JAMAIS DU FICHIER. Même quand un zéro a été
+ *   restitué pour retrouver la fiche, c'est `champsAgent(fiche).codeAgent` qui
+ *   est écrit — la base est la référence. Recopier le code du fichier ferait
+ *   entrer dans la fiche la version tronquée par le tableur.
  *
  * ⚠ `avant` NOTE LA PRÉSENCE DES CLÉS, pas seulement leur valeur. Annuler en
  *   remettant `codeAgent: ''` au lieu de SUPPRIMER la clé laisserait la fiche en

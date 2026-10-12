@@ -37,6 +37,7 @@
  *
  * Options :
  *   --fichier=    le .xlsx ou .csv à lire (deux colonnes : Code agent, Numéro agent)
+ *   --feuille=    la feuille du classeur à lire (défaut : la première)
  *   --csv=        écrit l'aperçu COMPLET dans un CSV (16 000 lignes ne se lisent pas au terminal)
  *   --annuler=    remet en place une sauvegarde d'import
  *   --backup-dir= où écrire la sauvegarde (défaut : backups/import-numeros-<horodatage>)
@@ -63,6 +64,7 @@ const valeur = (prefixe, defaut) => {
 const execute = argv.includes('--execute')
 const allowProductionFlag = argv.includes('--allow-production')
 const fichierArg = valeur('--fichier=', null)
+const feuilleVoulue = valeur('--feuille=', null)
 const csvSortie = valeur('--csv=', null)
 const dossierAnnulation = valeur('--annuler=', null)
 const backupDirArg = valeur('--backup-dir=', null)
@@ -286,7 +288,7 @@ const extension = extname(fichierArg).toLowerCase()
 let tableur
 try {
   if (extension === '.xlsx' || extension === '.xlsm' || extension === '.xls') {
-    tableur = await lireClasseur(await readFile(fichierArg))
+    tableur = await lireClasseur(await readFile(fichierArg), feuilleVoulue)
   } else if (extension === '.csv' || extension === '.txt') {
     tableur = analyserCsv(await readFile(fichierArg, 'utf8'))
   } else {
@@ -296,8 +298,20 @@ try {
   echouer(`Fichier illisible : ${fichierArg}\n  (${error.message})`)
 }
 
+if (tableur.erreur) echouer(tableur.erreur)
+
 console.log(`Fichier : ${fichierArg}`)
-if (tableur.feuille) console.log(`Feuille : « ${tableur.feuille} » (la première)`)
+// ⚠ ON DIT QUELLE FEUILLE A ÉTÉ LUE, ET QUELLES AUTRES EXISTENT. Un classeur de
+//   travail en a souvent plusieurs ; lire la première sans le dire ferait croire
+//   à un fichier vide ou incomplet alors que les données sont dans la suivante.
+if (tableur.feuilles?.length > 1) {
+  const autres = tableur.feuilles.filter((f) => f !== tableur.feuille)
+  console.log(`Feuille lue : « ${tableur.feuille} »`)
+  console.log(`  ⚠ ${tableur.feuilles.length} feuilles dans le classeur. Non lues : ${autres.map((f) => `« ${f} »`).join(', ')}.`)
+  console.log('    Pour en lire une autre : --feuille=<nom>')
+} else if (tableur.feuille) {
+  console.log(`Feuille lue : « ${tableur.feuille} »`)
+}
 if (tableur.separateur) console.log(`Séparateur : « ${tableur.separateur} »`)
 console.log(`En-têtes : ${tableur.entetes.map((e) => `« ${e} »`).join(', ') || '(aucun)'}`)
 console.log(`Lignes de données : ${nombre(tableur.lignes.length)}`)
@@ -306,11 +320,25 @@ const colonnes = trouverColonnes(tableur.entetes)
 if (colonnes.erreur) echouer(colonnes.erreur)
 console.log(`Colonnes retenues : code = « ${colonnes.code} », numéro = « ${colonnes.numero} »`)
 
+// `numeriques` dit, case par case, si Excel l'a stockée comme un NOMBRE — donc
+// si ses zéros de tête ont pu être mangés. C'est ce qui autorise `resoudreCode`
+// à les restituer depuis la base au lieu de les deviner.
 const lignes = tableur.lignes.map((ligne, index) => ({
   ligne: index + 2, // +2 : l'en-tête est la ligne 1, et les tableurs comptent de 1
   code: ligne[colonnes.code],
   numero: ligne[colonnes.numero],
+  codeNumerique: Boolean(tableur.numeriques?.[index]?.[colonnes.code]),
+  numeroNumerique: Boolean(tableur.numeriques?.[index]?.[colonnes.numero]),
 }))
+
+const casesNumeriques = lignes.filter((l) => l.codeNumerique || l.numeroNumerique).length
+if (casesNumeriques > 0) {
+  console.log('')
+  console.log(`⚠ ${nombre(casesNumeriques)} ligne(s) ont au moins une case stockée en NOMBRE par le tableur.`)
+  console.log('  Leurs zéros de tête ont pu être mangés. Ils seront restitués depuis la base')
+  console.log('  quand la correspondance est UNIQUE, et signalés sinon. Formater les deux')
+  console.log('  colonnes en TEXTE dans le classeur évite la question entièrement.')
+}
 
 titre('LECTURE DE LA BASE')
 const snap = await db.collection('globalClients').get()
@@ -330,8 +358,19 @@ console.log(`  EN CONFLIT      : ${nombre(bilan.conflits)}  — un AUTRE numéro
 console.log(`  IGNORÉES        : ${nombre(bilan.ignores)}`)
 console.log(`      ${nombre(bilan.detailIgnores.numeroIgnore)}  numéro vide, invalide ou multiple`)
 console.log(`      ${nombre(bilan.detailIgnores.introuvable)}  code agent introuvable en base`)
+console.log(`      ${nombre(bilan.detailIgnores.zeroAmbigu)}  zéro mangé par le tableur, restitution AMBIGUË`)
 console.log(`      ${nombre(bilan.detailIgnores.codeRepete)}  code répété dans le fichier`)
 console.log(`      ${nombre(bilan.detailIgnores.plusieursClients)}  code porté par plusieurs fiches`)
+
+// ⚠ LES RESTITUTIONS DE ZÉRO SE LISENT AVANT D'ÉCRIRE, PAS APRÈS. Ce sont les
+//   seules lignes où le script a complété une donnée du fichier : elles
+//   s'écrivent, mais la boutique doit les avoir vues. `--csv` en donne la liste.
+if (bilan.zerosRestitues.codes > 0 || bilan.zerosRestitues.numeros > 0) {
+  console.log('')
+  console.log('Zéros de tête restitués (le tableur les avait mangés) :')
+  console.log(`  ${nombre(bilan.zerosRestitues.codes)} code(s) agent retrouvé(s) par une correspondance UNIQUE en base`)
+  console.log(`  ${nombre(bilan.zerosRestitues.numeros)} numéro(s) agent complété(s) jusqu'à 8 chiffres`)
+}
 
 const LIBELLES = {
   [STATUTS.A_COMPLETER]: 'à mettre à jour',
@@ -339,6 +378,7 @@ const LIBELLES = {
   [STATUTS.CONFLIT]: 'CONFLIT',
   [STATUTS.NUMERO_IGNORE]: 'numéro ignoré',
   [STATUTS.INTROUVABLE]: 'introuvable',
+  [STATUTS.ZERO_AMBIGU]: 'ZÉRO AMBIGU',
   [STATUTS.CODE_REPETE]: 'code répété',
   [STATUTS.PLUSIEURS_CLIENTS]: 'plusieurs fiches',
 }
@@ -360,6 +400,12 @@ const montrer = (entete, liste, maximum) => {
 // Les conflits en ENTIER : ce sont les seuls qui demandent une décision, et en
 // cacher un derrière un « … et 12 autres » le ferait passer inaperçu.
 montrer('⚠ CONFLITS — un numéro différent est déjà en place (jamais écrasé) :', parStatut(STATUTS.CONFLIT), 200)
+montrer('⚠ ZÉRO AMBIGU — plusieurs codes de la base correspondent (rien n’est écrit) :', parStatut(STATUTS.ZERO_AMBIGU), 50)
+montrer(
+  'Zéros restitués — à relire avant d’écrire :',
+  parStatut(STATUTS.A_COMPLETER).filter((l) => (l.zerosCode ?? 0) > 0 || (l.zerosRestitues ?? 0) > 0),
+  25,
+)
 montrer('Codes introuvables en base :', parStatut(STATUTS.INTROUVABLE), 15)
 montrer('Codes portés par plusieurs fiches :', parStatut(STATUTS.PLUSIEURS_CLIENTS), 15)
 montrer('Codes répétés dans le fichier :', parStatut(STATUTS.CODE_REPETE), 15)
@@ -368,9 +414,10 @@ montrer('Exemples de mises à jour :', parStatut(STATUTS.A_COMPLETER), 10)
 
 if (csvSortie) {
   const csv = (v) => String(v ?? '').replace(/[;\r\n]/g, ' ')
-  const entetes = `ligne;statut;${COLONNE_CODE};nom;numero agent actuel;numero agent propose;detail`
+  const entetes = `ligne;statut;${COLONNE_CODE} du fichier;${COLONNE_CODE} retenu;nom;numero agent actuel;numero agent propose;detail`
   const corps = plan.lignes.map((l) => [
-    l.ligne, LIBELLES[l.statut], csv(l.code), csv(l.nom), csv(l.actuel), csv(l.propose), csv(l.detail),
+    l.ligne, LIBELLES[l.statut], csv(l.code), csv(l.codeUtilise), csv(l.nom),
+    csv(l.actuel), csv(l.propose), csv(l.detail),
   ].join(';'))
   // BOM : sans lui, Excel ouvre les accents en charabia.
   await writeFile(csvSortie, '﻿' + [entetes, ...corps].join('\r\n'), 'utf8')
@@ -463,6 +510,9 @@ console.log(`MIS À JOUR  : ${nombre(misAJour)} fiche(s)`)
 console.log(`INCHANGÉS   : ${nombre(bilan.inchanges)}`)
 console.log(`IGNORÉS     : ${nombre(bilan.ignores)}`)
 console.log(`EN CONFLIT  : ${nombre(bilan.conflits)}  (aucun écrasé)`)
+if (bilan.zerosRestitues.codes > 0 || bilan.zerosRestitues.numeros > 0) {
+  console.log(`dont zéros restitués : ${nombre(bilan.zerosRestitues.codes)} code(s), ${nombre(bilan.zerosRestitues.numeros)} numéro(s)`)
+}
 console.log('')
 console.log(`Sauvegarde : ${backupDir}`)
 console.log(`Pour annuler : node scripts/importerNumerosAgent.mjs --annuler=${backupDir} --execute --allow-production`)
