@@ -125,7 +125,8 @@ journaliser**, une transaction par grappe.
    les sépare des 67 justifiés.
 3. **Le numéro agent n'a jamais été collecté** pour 97 % des fiches. Rien n'est
    perdu (les valeurs à huit chiffres de `orange` sont bien des téléphones : 4 %
-   seulement ont une tête qu'aucun téléphone de la base n'utilise) — il faut le saisir.
+   seulement ont une tête qu'aucun téléphone de la base n'utilise) — il faut le
+   saisir, ou l'importer : voir « Importer les numéros agent » ci-dessous.
 4. **18 numéros de remplissage** portant 182 fiches, dont un porté par 66 fiches
    aux 53 noms distincts. Les règles « téléphone » les excluent déjà, mais ils
    restent en base.
@@ -142,3 +143,106 @@ journaliser**, une transaction par grappe.
 | `tests/unit/tc-248-fusion-clients.test.js` | qui survit, ce qui se reporte, ce qui se supprime |
 | `tests/unit/tc-249-arbitrage-codes-agent.test.js` | la lecture du temps et de l'orthographe |
 | `tests/unit/tc-062-client-duplicate-agent-code.test.js` | le garde-fou — réécrit, il protégeait le défaut |
+
+---
+
+# Importer les numéros agent
+
+> Ajouté le 2026-10-12. Complète le **Numéro agent** des fiches existantes depuis
+> un fichier à deux colonnes, sans créer un seul doublon.
+
+## Les trois champs ne se confondent jamais
+
+| Champ | Rôle dans l'import |
+|---|---|
+| **Code agent** | sert à **retrouver** la fiche, à l'exact, zéros initiaux compris |
+| **Numéro agent** | c'est ce qu'on **ajoute**, et seulement s'il est vide |
+| **Numéro personnel** | **jamais touché**, et jamais lu comme un numéro agent |
+
+Les deux derniers font huit chiffres : les confondre écrirait le téléphone du
+commerçant dans sa case agent sans qu'aucune règle de longueur ne s'en plaigne.
+Le script **refuse** donc un fichier dont la colonne « Numéro agent » manque,
+même s'il contient « Numéro personnel », et le dit en clair.
+
+## Les commandes
+
+```powershell
+# Aperçu — aucune écriture. 16 000 lignes ne se lisent pas au terminal : --csv les écrit toutes.
+node scripts/importerNumerosAgent.mjs --fichier=numeros.xlsx --csv=apercu.csv
+
+# Application, quatre verrous comme la fusion
+$env:AKAYIS_ALLOW_AGENT_IMPORT='true'
+node scripts/importerNumerosAgent.mjs --fichier=numeros.xlsx --execute --allow-production
+
+# Annulation
+node scripts/importerNumerosAgent.mjs --annuler=backups/import-numeros-<horodatage> --execute --allow-production
+```
+
+`.xlsx` et `.csv` sont acceptés. Le CSV détecte son séparateur (`;`, `,`, tabulation),
+avale le BOM d'Excel et gère les guillemets.
+
+## Les six règles, et comment chacune est tenue
+
+1. **Correspondance exacte du code agent, zéros conservés.** Le code d'une fiche
+   est lu par `champsAgent()` — la fonction de l'écran —, donc une fiche d'avant la
+   séparation est trouvée par la valeur de son ancien champ `orange`. Aucun
+   rapprochement par le nom, nulle part.
+2. **Le numéro agent n'est complété que s'il est vide.** La mise à jour ne porte
+   que sur deux champs ; `numeroPersonnel`, `orange` et tout le reste sont intacts.
+3. **Tout est stocké en texte.** 7 chiffres → un zéro devant. Espaces retirés.
+4. **Vide, invalide ou multiple → ignoré.** « 06629924/55772628 » existe vraiment
+   dans cette base : on ne choisit pas l'un des deux, on ignore la ligne.
+5. **Même numéro → rien. Numéro différent → conflit, jamais écrasé.** La
+   comparaison porte sur la forme normalisée, pour qu'un espace résiduel ne crée
+   pas un faux conflit à vérifier à la main.
+6. **Aucune fiche créée.** Codes introuvables, répétés dans le fichier, ou portés
+   par plusieurs fiches : signalés, jamais devinés.
+
+## Les deux pièges qui ne se verraient pas
+
+### Écrire le numéro seul effacerait le code agent de l'écran
+
+`champsAgent()` décide qu'une fiche est « rangée » par la **présence** des clés
+`codeAgent`/`numeroAgent`, pas par leur valeur. Une fiche héritée n'en a aucune :
+son code vient de `orange`. Écrire `numeroAgent` tout seul y ferait apparaître une
+clé — et l'application cesserait aussitôt de lire `orange`.
+
+**Le code agent disparaîtrait de l'écran, sur des milliers de fiches, sans erreur
+et sans compteur.** L'import écrit donc les deux champs ensemble : le code tel que
+`champsAgent()` le lit aujourd'hui, et le numéro. `orange` n'est pas touché.
+
+C'est la même raison qui oblige l'**annulation** à *supprimer* les clés plutôt
+qu'à les vider : remettre `codeAgent: ''` laisserait la fiche en mode « rangée
+puis vidée exprès », et l'annulation aurait causé le dégât qu'elle venait réparer.
+
+### Excel mange les zéros initiaux
+
+Une cellule stockée en **nombre** a perdu son zéro dans le fichier lui-même :
+aucune option de lecture ne le récupère. Le script ne le devine pas — le deviner
+écrirait sur la fiche d'un commerce voisin. Il cherche le code tel quel, et si la
+variante zéro-complétée existe en base, il le **dit** :
+
+```
+L42  123456  —
+     actuel «  » → proposé « 01234567 »  [introuvable]
+     aucune fiche avec ce code — mais « 0123456 » existe en base : le tableur a
+     probablement mangé le zéro initial. Reformater la colonne en TEXTE et réexporter.
+```
+
+Le code agent n'est **jamais** complété automatiquement, contrairement au numéro :
+le numéro a une longueur garantie (8), le code n'en a aucune — la base en contient
+de 1 à 10 chiffres.
+
+## Garanties vérifiées
+
+- **Idempotence** : un second import du même fichier ne modifie rien. Vérifié sur
+  émulateur, de bout en bout : le second passage rend « 0 à mettre à jour ».
+- **Par lots** : 400 écritures par batch (limite Firestore : 500), groupées par
+  boutique, chacune avec son journal d'audit **dans le même batch**. Mesuré :
+  1 050 fiches en 8,2 s sur quatre lots — soit environ deux minutes pour 16 000.
+- **Annulation** : l'état d'avant de chaque fiche est sauvegardé, relu depuis le
+  disque et vérifié **avant** la première écriture. L'annulation refuse de toucher
+  une fiche modifiée depuis l'import : une saisie humaine est toujours plus récente
+  et plus juste que ce que le script avait mis.
+- **52 tests unitaires** (`tests/unit/tc-250-import-numeros-agent.test.js`) et
+  22 contrôles de bout en bout sur émulateur.

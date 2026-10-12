@@ -1,0 +1,479 @@
+/**
+ * importerNumerosAgent.mjs — compléter le « Numéro agent » des fiches existantes.
+ *
+ * APERÇU PAR DÉFAUT. Sans `--execute`, ce script ne touche à rien : il lit le
+ * fichier, lit la base, et décrit ligne par ligne ce qui se passerait.
+ *
+ * CE QU'IL FAIT, ET RIEN D'AUTRE
+ * ──────────────────────────────
+ *   · retrouve la fiche par CORRESPONDANCE EXACTE du code agent, zéros compris ;
+ *   · remplit le numéro agent SEULEMENT s'il est vide ;
+ *   · ne crée aucune fiche, ne rapproche jamais par le nom ;
+ *   · n'efface rien — `numeroPersonnel` et l'ancien `orange` restent intacts ;
+ *   · signale conflits, codes introuvables, codes répétés et codes ambigus.
+ *
+ * LES QUATRE VERROUS POUR ÉCRIRE EN PRODUCTION
+ * ────────────────────────────────────────────
+ *   1. --execute
+ *   2. --allow-production
+ *   3. AKAYIS_ALLOW_AGENT_IMPORT='true'
+ *   4. le projectId tapé au clavier, sur un vrai terminal
+ *
+ * ⚠ LE VERROU 3 EST PROPRE À CETTE OPÉRATION. Déverrouiller une fusion de
+ *   clients ne doit pas déverrouiller un import, et réciproquement.
+ *
+ * L'ANNULATION
+ * ────────────
+ * Chaque exécution écrit une sauvegarde contenant, pour chaque fiche touchée,
+ * l'état EXACT d'avant — y compris le fait que les clés existaient ou non.
+ * `--annuler=<dossier>` le remet en place, et refuse de toucher une fiche
+ * modifiée depuis l'import.
+ *
+ * Usage :
+ *   node scripts/importerNumerosAgent.mjs --fichier=numeros.xlsx
+ *   node scripts/importerNumerosAgent.mjs --fichier=numeros.csv --csv=apercu.csv
+ *   node scripts/importerNumerosAgent.mjs --fichier=numeros.xlsx --execute --allow-production
+ *   node scripts/importerNumerosAgent.mjs --annuler=backups/import-numeros-… --execute --allow-production
+ *
+ * Options :
+ *   --fichier=    le .xlsx ou .csv à lire (deux colonnes : Code agent, Numéro agent)
+ *   --csv=        écrit l'aperçu COMPLET dans un CSV (16 000 lignes ne se lisent pas au terminal)
+ *   --annuler=    remet en place une sauvegarde d'import
+ *   --backup-dir= où écrire la sauvegarde (défaut : backups/import-numeros-<horodatage>)
+ *   --taille-lot= nombre d'écritures par lot (défaut : 400, maximum 450)
+ */
+
+import { initializeApp, cert, applicationDefault } from 'firebase-admin/app'
+import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises'
+import { join, extname } from 'node:path'
+import { resolveResetProject, PRODUCTION_PROJECT_ID } from './lib/assertResetProject.mjs'
+import { echouerAvecAide } from './lib/aideIdentifiants.mjs'
+import { analyserCsv, lireClasseur } from './lib/lireTableur.mjs'
+import {
+  planifierImport, trouverColonnes, STATUTS, COLONNE_CODE, COLONNE_NUMERO,
+} from './lib/importNumerosAgent.mjs'
+
+const argv = process.argv.slice(2)
+const valeur = (prefixe, defaut) => {
+  const trouve = argv.find((a) => a.startsWith(prefixe))
+  return trouve ? trouve.slice(prefixe.length) : defaut
+}
+
+const execute = argv.includes('--execute')
+const allowProductionFlag = argv.includes('--allow-production')
+const fichierArg = valeur('--fichier=', null)
+const csvSortie = valeur('--csv=', null)
+const dossierAnnulation = valeur('--annuler=', null)
+const backupDirArg = valeur('--backup-dir=', null)
+const TAILLE_LOT = Math.min(Number(valeur('--taille-lot=', '400')) || 400, 450)
+
+const echouer = (message) => {
+  console.error('')
+  console.error(message)
+  process.exit(1)
+}
+
+if (!fichierArg && !dossierAnnulation) {
+  echouer(
+    'Rien à faire : préciser --fichier=<.xlsx|.csv> ou --annuler=<dossier>.\n'
+    + `Le fichier doit porter deux colonnes : « ${COLONNE_CODE} » et « ${COLONNE_NUMERO} ».`,
+  )
+}
+if (fichierArg && dossierAnnulation) {
+  echouer('--fichier et --annuler s\'excluent : importer ou annuler, pas les deux.')
+}
+
+// ── Identifiants ────────────────────────────────────────────────────────────
+const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS
+let serviceAccount = null
+
+if (serviceAccountPath) {
+  try {
+    serviceAccount = JSON.parse(await readFile(serviceAccountPath, 'utf8'))
+  } catch (error) {
+    echouerAvecAide(`Identifiants illisibles :\n  ${serviceAccountPath}\n  (${error.message})`)
+  }
+} else if (!process.env.GCLOUD_PROJECT) {
+  echouerAvecAide('Ni GOOGLE_APPLICATION_CREDENTIALS ni GCLOUD_PROJECT ne sont définis.')
+}
+
+let projectId
+let isProduction
+try {
+  ;({ projectId, isProduction } = resolveResetProject({
+    serviceAccount,
+    envProjectId: process.env.GCLOUD_PROJECT,
+    execute,
+    allowProductionFlag,
+    // ⚠ Variable PROPRE à l'import : voir l'en-tête, verrou 3.
+    envAllowProductionReset: process.env.AKAYIS_ALLOW_AGENT_IMPORT,
+  }))
+} catch (error) {
+  echouerAvecAide(`Projet refusé : ${error.message}`)
+}
+
+if (!isProduction && !projectId.startsWith('demo-')) {
+  echouer(
+    `Projet refusé : « ${projectId} ».\n`
+    + 'Ce script n\'écrit que dans la production de ce dépôt ou un projet demo-*.',
+  )
+}
+
+// ── Verrou 4 : la confirmation au clavier ───────────────────────────────────
+if (execute && isProduction) {
+  if (!process.stdin.isTTY) {
+    echouer(
+      'REFUS : écrire en PRODUCTION exige une confirmation tapée au clavier.\n'
+      + "Le flux d'entrée n'est pas un terminal (pipe, CI). Opération bloquée.",
+    )
+  }
+  const { createInterface } = await import('node:readline/promises')
+  const rl = createInterface({ input: process.stdin, output: process.stderr })
+  const quoi = dossierAnnulation
+    ? 'ANNULATION d\'un import de numéros agent'
+    : 'MISE À JOUR du numéro agent de fiches clients'
+  const reponse = await rl.question(
+    `ATTENTION : ${quoi} en PRODUCTION.\n`
+    + `Tapez exactement le projectId (${PRODUCTION_PROJECT_ID}) pour confirmer : `,
+  )
+  rl.close()
+  if (reponse.trim() !== PRODUCTION_PROJECT_ID) {
+    echouer('Confirmation invalide. Aucune écriture effectuée.')
+  }
+}
+
+initializeApp({ credential: serviceAccount ? cert(serviceAccount) : applicationDefault() })
+const db = getFirestore()
+
+const nombre = (n) => Number(n).toLocaleString('fr-FR')
+const titre = (texte) => {
+  console.log('')
+  console.log(texte)
+  console.log('─'.repeat(texte.length))
+}
+
+console.log(`Projet : ${projectId}${isProduction ? '  (PRODUCTION)' : ''}`)
+console.log(`Mode   : ${execute ? '⚠ EXECUTE — la base va être modifiée' : 'aperçu (aucune écriture)'}`)
+
+/**
+ * Les écritures d'un lot, appliquées dans UN batch avec leur journal d'audit.
+ *
+ * ⚠ LE JOURNAL EST DANS LE MÊME BATCH QUE LES ÉCRITURES QU'IL DÉCRIT. Écrit à
+ *   part, il pourrait manquer alors que les fiches ont changé — ou l'inverse. Les
+ *   identifiants restent dans le lot (≤ 450) pour que le document du journal ne
+ *   puisse pas dépasser la taille maximale d'un document Firestore.
+ */
+async function appliquerLot(lot, storeId, champsDe, action, backupDir) {
+  const batch = db.batch()
+  for (const ecriture of lot) {
+    batch.update(db.doc(`globalClients/${ecriture.id}`), champsDe(ecriture))
+  }
+  if (storeId) {
+    batch.set(db.collection(`clients/${storeId}/auditLogs`).doc(), {
+      action,
+      actorUid: null,
+      actorRole: 'script',
+      actorScript: 'scripts/importerNumerosAgent.mjs',
+      fiches: lot.map((e) => e.id),
+      nombreFiches: lot.length,
+      sauvegarde: backupDir,
+      createdAt: FieldValue.serverTimestamp(),
+    })
+  }
+  await batch.commit()
+}
+
+/** Les écritures groupées par boutique, puis découpées en lots. */
+function enLots(ecritures) {
+  const parBoutique = new Map()
+  for (const ecriture of ecritures) {
+    const cle = ecriture.storeId ?? ''
+    if (!parBoutique.has(cle)) parBoutique.set(cle, [])
+    parBoutique.get(cle).push(ecriture)
+  }
+
+  const lots = []
+  for (const [storeId, liste] of parBoutique) {
+    for (let i = 0; i < liste.length; i += TAILLE_LOT) {
+      lots.push({ storeId: storeId || null, lot: liste.slice(i, i + TAILLE_LOT) })
+    }
+  }
+  return lots
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// ANNULATION
+// ════════════════════════════════════════════════════════════════════════════
+if (dossierAnnulation) {
+  titre('ANNULATION D\'UN IMPORT')
+  let sauvegarde
+  try {
+    sauvegarde = JSON.parse(await readFile(join(dossierAnnulation, 'ecritures.json'), 'utf8'))
+  } catch (error) {
+    echouer(`Sauvegarde illisible : ${join(dossierAnnulation, 'ecritures.json')}\n  (${error.message})`)
+  }
+  console.log(`${nombre(sauvegarde.length)} fiche(s) à remettre dans leur état d'avant.`)
+
+  // ⚠ ON NE REMET PAS EN PLACE À L'AVEUGLE. Si une fiche a été modifiée depuis
+  //   l'import — par la boutique, à l'écran —, la valeur en base n'est plus celle
+  //   que l'import avait écrite. L'annuler écraserait une saisie humaine, qui est
+  //   toujours plus récente et plus juste que ce que le script avait mis.
+  const aRemettre = []
+  const modifiees = []
+  for (const ecriture of sauvegarde) {
+    const snap = await db.doc(`globalClients/${ecriture.id}`).get()
+    if (!snap.exists) { modifiees.push(`${ecriture.id} : fiche supprimée depuis`); continue }
+    const actuel = snap.data()
+    if (String(actuel.numeroAgent ?? '') !== String(ecriture.maj.numeroAgent)) {
+      modifiees.push(`${ecriture.id} : numéro agent « ${actuel.numeroAgent ?? ''} » ≠ « ${ecriture.maj.numeroAgent} » écrit par l'import`)
+      continue
+    }
+    aRemettre.push(ecriture)
+  }
+
+  console.log(`  ${nombre(aRemettre.length)} inchangée(s) depuis l'import → annulables`)
+  console.log(`  ${nombre(modifiees.length)} modifiée(s) depuis → LAISSÉES EN PLACE`)
+  if (modifiees.length > 0) {
+    for (const ligne of modifiees.slice(0, 15)) console.log(`    · ${ligne}`)
+    if (modifiees.length > 15) console.log(`    … et ${nombre(modifiees.length - 15)} autre(s).`)
+  }
+
+  if (!execute) {
+    titre('APERÇU — AUCUNE ÉCRITURE')
+    console.log('Ajouter --execute --allow-production pour annuler réellement.')
+    process.exit(0)
+  }
+
+  // ⚠ SUPPRIMER LA CLÉ, ET NON L'ÉCRIRE VIDE. `champsAgent` décide qu'une fiche
+  //   est « rangée » par la PRÉSENCE des clés. Remettre `codeAgent: ''` sur une
+  //   fiche qui n'avait aucune des deux clés la laisserait en mode « rangée puis
+  //   vidée exprès » : son `orange` ne serait plus lu, et le code agent
+  //   disparaîtrait de l'écran. L'annulation aurait causé le dégât.
+  const champsDAnnulation = (ecriture) => ({
+    codeAgent: ecriture.avant.codeAgentPresent ? ecriture.avant.codeAgent : FieldValue.delete(),
+    numeroAgent: ecriture.avant.numeroAgentPresent ? ecriture.avant.numeroAgent : FieldValue.delete(),
+  })
+
+  let remises = 0
+  const incidents = []
+  for (const { storeId, lot } of enLots(aRemettre)) {
+    try {
+      await appliquerLot(lot, storeId, champsDAnnulation, 'AGENT_IMPORT_REVERTED', dossierAnnulation)
+      remises += lot.length
+    } catch (error) {
+      incidents.push(`lot de ${lot.length} fiche(s) (${storeId ?? 'sans boutique'}) : ${error.message}`)
+    }
+  }
+
+  titre('RÉSULTAT')
+  console.log(`${nombre(remises)} fiche(s) remise(s) dans leur état d'avant`)
+  console.log(`${nombre(modifiees.length)} fiche(s) laissée(s) en place (modifiées depuis)`)
+  if (incidents.length > 0) {
+    console.log('')
+    console.log(`⚠ ${nombre(incidents.length)} lot(s) en échec :`)
+    for (const incident of incidents) console.log(`  ✗ ${incident}`)
+    console.log('Chaque lot est un batch : ceux-ci sont restés INTACTS. Le script est relançable.')
+  }
+  process.exit(incidents.length > 0 ? 1 : 0)
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// IMPORT
+// ════════════════════════════════════════════════════════════════════════════
+titre('LECTURE DU FICHIER')
+const extension = extname(fichierArg).toLowerCase()
+let tableur
+try {
+  if (extension === '.xlsx' || extension === '.xlsm' || extension === '.xls') {
+    tableur = await lireClasseur(await readFile(fichierArg))
+  } else if (extension === '.csv' || extension === '.txt') {
+    tableur = analyserCsv(await readFile(fichierArg, 'utf8'))
+  } else {
+    echouer(`Extension non reconnue : « ${extension || '(aucune)'} ». Attendu .xlsx ou .csv.`)
+  }
+} catch (error) {
+  echouer(`Fichier illisible : ${fichierArg}\n  (${error.message})`)
+}
+
+console.log(`Fichier : ${fichierArg}`)
+if (tableur.feuille) console.log(`Feuille : « ${tableur.feuille} » (la première)`)
+if (tableur.separateur) console.log(`Séparateur : « ${tableur.separateur} »`)
+console.log(`En-têtes : ${tableur.entetes.map((e) => `« ${e} »`).join(', ') || '(aucun)'}`)
+console.log(`Lignes de données : ${nombre(tableur.lignes.length)}`)
+
+const colonnes = trouverColonnes(tableur.entetes)
+if (colonnes.erreur) echouer(colonnes.erreur)
+console.log(`Colonnes retenues : code = « ${colonnes.code} », numéro = « ${colonnes.numero} »`)
+
+const lignes = tableur.lignes.map((ligne, index) => ({
+  ligne: index + 2, // +2 : l'en-tête est la ligne 1, et les tableurs comptent de 1
+  code: ligne[colonnes.code],
+  numero: ligne[colonnes.numero],
+}))
+
+titre('LECTURE DE LA BASE')
+const snap = await db.collection('globalClients').get()
+const fiches = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+console.log(`${nombre(fiches.length)} fiche(s) lue(s) dans globalClients.`)
+
+const plan = planifierImport(lignes, fiches)
+const { bilan } = plan
+
+// ── L'aperçu ────────────────────────────────────────────────────────────────
+titre('APERÇU')
+console.log(`${nombre(bilan.total)} ligne(s) du fichier :`)
+console.log('')
+console.log(`  À METTRE À JOUR : ${nombre(bilan.misAJour)}  — numéro agent vide, numéro valide`)
+console.log(`  INCHANGÉES      : ${nombre(bilan.inchanges)}  — le même numéro est déjà en place`)
+console.log(`  EN CONFLIT      : ${nombre(bilan.conflits)}  — un AUTRE numéro est en place, jamais écrasé`)
+console.log(`  IGNORÉES        : ${nombre(bilan.ignores)}`)
+console.log(`      ${nombre(bilan.detailIgnores.numeroIgnore)}  numéro vide, invalide ou multiple`)
+console.log(`      ${nombre(bilan.detailIgnores.introuvable)}  code agent introuvable en base`)
+console.log(`      ${nombre(bilan.detailIgnores.codeRepete)}  code répété dans le fichier`)
+console.log(`      ${nombre(bilan.detailIgnores.plusieursClients)}  code porté par plusieurs fiches`)
+
+const LIBELLES = {
+  [STATUTS.A_COMPLETER]: 'à mettre à jour',
+  [STATUTS.INCHANGE]: 'inchangée',
+  [STATUTS.CONFLIT]: 'CONFLIT',
+  [STATUTS.NUMERO_IGNORE]: 'numéro ignoré',
+  [STATUTS.INTROUVABLE]: 'introuvable',
+  [STATUTS.CODE_REPETE]: 'code répété',
+  [STATUTS.PLUSIEURS_CLIENTS]: 'plusieurs fiches',
+}
+
+const parStatut = (statut) => plan.lignes.filter((l) => l.statut === statut)
+
+const montrer = (entete, liste, maximum) => {
+  if (liste.length === 0) return
+  console.log('')
+  console.log(entete)
+  for (const l of liste.slice(0, maximum)) {
+    console.log(`  L${l.ligne}  ${l.code}  ${l.nom || '—'}`)
+    console.log(`        actuel « ${l.actuel} » → proposé « ${l.propose} »  [${LIBELLES[l.statut]}]`)
+    if (l.detail) console.log(`        ${l.detail}`)
+  }
+  if (liste.length > maximum) console.log(`  … et ${nombre(liste.length - maximum)} autre(s).`)
+}
+
+// Les conflits en ENTIER : ce sont les seuls qui demandent une décision, et en
+// cacher un derrière un « … et 12 autres » le ferait passer inaperçu.
+montrer('⚠ CONFLITS — un numéro différent est déjà en place (jamais écrasé) :', parStatut(STATUTS.CONFLIT), 200)
+montrer('Codes introuvables en base :', parStatut(STATUTS.INTROUVABLE), 15)
+montrer('Codes portés par plusieurs fiches :', parStatut(STATUTS.PLUSIEURS_CLIENTS), 15)
+montrer('Codes répétés dans le fichier :', parStatut(STATUTS.CODE_REPETE), 15)
+montrer('Numéros ignorés :', parStatut(STATUTS.NUMERO_IGNORE), 15)
+montrer('Exemples de mises à jour :', parStatut(STATUTS.A_COMPLETER), 10)
+
+if (csvSortie) {
+  const csv = (v) => String(v ?? '').replace(/[;\r\n]/g, ' ')
+  const entetes = `ligne;statut;${COLONNE_CODE};nom;numero agent actuel;numero agent propose;detail`
+  const corps = plan.lignes.map((l) => [
+    l.ligne, LIBELLES[l.statut], csv(l.code), csv(l.nom), csv(l.actuel), csv(l.propose), csv(l.detail),
+  ].join(';'))
+  // BOM : sans lui, Excel ouvre les accents en charabia.
+  await writeFile(csvSortie, '﻿' + [entetes, ...corps].join('\r\n'), 'utf8')
+  console.log('')
+  console.log(`Aperçu complet écrit dans ${csvSortie} (${nombre(corps.length)} ligne(s)).`)
+}
+
+if (!execute) {
+  titre('APERÇU — AUCUNE ÉCRITURE')
+  console.log('Aucune fiche modifiée, aucune sauvegarde créée.')
+  console.log('Pour appliquer, voir l\'en-tête du script : quatre verrous.')
+  process.exit(0)
+}
+
+if (plan.ecritures.length === 0) {
+  titre('RIEN À FAIRE')
+  console.log('Aucune ligne à mettre à jour. La base est déjà conforme au fichier.')
+  process.exit(0)
+}
+
+// ── Sauvegarde, puis RELECTURE, puis vérification ───────────────────────────
+const horodatage = new Date().toISOString().replace(/[:.]/g, '-')
+const backupDir = backupDirArg ?? join('backups', `import-numeros-${horodatage}`)
+
+try {
+  const existant = await readdir(backupDir)
+  if (existant.length > 0) echouer(`ABANDON : ${backupDir} existe déjà et n'est pas vide.`)
+} catch { /* le dossier n'existe pas : c'est le cas normal */ }
+
+await mkdir(backupDir, { recursive: true })
+titre('SAUVEGARDE')
+console.log(`Vers ${backupDir} ...`)
+
+await writeFile(join(backupDir, 'ecritures.json'), JSON.stringify(plan.ecritures, null, 2), 'utf8')
+await writeFile(join(backupDir, 'manifest.json'), JSON.stringify({
+  projectId,
+  script: 'scripts/importerNumerosAgent.mjs',
+  argv,
+  fichier: fichierArg,
+  creeLe: new Date().toISOString(),
+  bilan,
+  ecritures: plan.ecritures.length,
+}, null, 2), 'utf8')
+
+// ⚠ RELECTURE DEPUIS LE DISQUE, comme pour la fusion. Vérifier la variable en
+//   mémoire ne prouve rien : ce qu'il faut savoir, c'est que le FICHIER est
+//   lisible et complet, parce que c'est lui qui servira à annuler.
+const relues = JSON.parse(await readFile(join(backupDir, 'ecritures.json'), 'utf8'))
+const manques = []
+if (relues.length !== plan.ecritures.length) {
+  manques.push(`${relues.length} écriture(s) relue(s) pour ${plan.ecritures.length} prévue(s)`)
+}
+const parId = new Map(relues.map((e) => [e.id, e]))
+for (const ecriture of plan.ecritures) {
+  const sauvee = parId.get(ecriture.id)
+  if (!sauvee) { manques.push(`fiche absente de la sauvegarde : ${ecriture.id}`); continue }
+  // La PRÉSENCE des clés est ce qui rend l'annulation fidèle : sans elle, on
+  // remettrait une chaîne vide là où il n'y avait pas de champ du tout.
+  if (sauvee.avant?.codeAgentPresent === undefined || sauvee.avant?.numeroAgentPresent === undefined) {
+    manques.push(`fiche ${ecriture.id} : état d'avant incomplet, annulation impossible`)
+  }
+}
+if (manques.length > 0) {
+  console.error('ABANDON : la sauvegarde ne permettrait pas d\'annuler :')
+  for (const manque of manques.slice(0, 20)) console.error(`  ✗ ${manque}`)
+  echouer('Aucune écriture effectuée.')
+}
+console.log(`Relu : ${nombre(relues.length)} écriture(s), état d'avant complet. L'import peut écrire.`)
+
+// ── Écriture, par lots ──────────────────────────────────────────────────────
+titre('MISE À JOUR')
+const lots = enLots(plan.ecritures)
+console.log(`${nombre(plan.ecritures.length)} fiche(s) en ${nombre(lots.length)} lot(s) de ${TAILLE_LOT} au plus ...`)
+
+let misAJour = 0
+const incidents = []
+for (const { storeId, lot } of lots) {
+  try {
+    await appliquerLot(lot, storeId, (e) => e.maj, 'AGENT_NUMBER_IMPORTED', backupDir)
+    misAJour += lot.length
+    if (lots.length > 1) process.stdout.write(`\r  ${nombre(misAJour)} / ${nombre(plan.ecritures.length)}`)
+  } catch (error) {
+    incidents.push(`lot de ${lot.length} fiche(s) (${storeId ?? 'sans boutique'}) : ${error.message}`)
+  }
+}
+if (lots.length > 1) process.stdout.write('\n')
+
+titre('BILAN')
+console.log(`MIS À JOUR  : ${nombre(misAJour)} fiche(s)`)
+console.log(`INCHANGÉS   : ${nombre(bilan.inchanges)}`)
+console.log(`IGNORÉS     : ${nombre(bilan.ignores)}`)
+console.log(`EN CONFLIT  : ${nombre(bilan.conflits)}  (aucun écrasé)`)
+console.log('')
+console.log(`Sauvegarde : ${backupDir}`)
+console.log(`Pour annuler : node scripts/importerNumerosAgent.mjs --annuler=${backupDir} --execute --allow-production`)
+if (incidents.length > 0) {
+  console.log('')
+  console.log(`⚠ ${nombre(incidents.length)} lot(s) en échec :`)
+  for (const incident of incidents) console.log(`  ✗ ${incident}`)
+  console.log('Chaque lot est un batch : ceux-ci sont restés INTACTS, les autres sont')
+  console.log('complets. Relancer le script reprend exactement ce qui manque.')
+  process.exit(1)
+}
+console.log('')
+console.log('Relancer le même fichier ne changera plus rien : les fiches complétées')
+console.log('sont désormais « inchangées ». C\'est vérifiable avec un simple aperçu.')
