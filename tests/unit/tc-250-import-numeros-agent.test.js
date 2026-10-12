@@ -12,6 +12,7 @@ import {
   COLONNE_NUMERO,
   resoudreCode,
   longueursDeCode,
+  normaliserEntete,
 } from '../../scripts/lib/importNumerosAgent.mjs'
 import { analyserCsv, detecterSeparateur, valeurCellule } from '../../scripts/lib/lireTableur.mjs'
 import { champsAgent } from '../../src/utils/agentFields.js'
@@ -726,5 +727,115 @@ describe('TC-250 — l’import d’un fichier Excel abîmé', () => {
 
     expect(deux.bilan).toMatchObject({ misAJour: 0, inchanges: 1, conflits: 0, ignores: 0 })
     expect(deux.ecritures).toEqual([])
+  })
+})
+
+/**
+ * TC-250 — L'EN-TÊTE, TOLÉRANT SUR LE STYLE ET STRICT SUR LE SENS.
+ *
+ * ⚠ CE BLOC EXISTE À CAUSE D'UN REFUS RÉEL. Le 2026-10-12, un fichier parfaitement
+ *   juste a été rejeté parce qu'il portait les NOMS DE CHAMPS du code
+ *   (`codeAgent`, `numeroAgent`) au lieu des intitulés de l'écran. C'est ce qu'un
+ *   agent développeur écrit naturellement, et ça ne créait aucune ambiguïté : le
+ *   refus ne protégeait de rien et obligeait à deviner une convention.
+ *
+ *   La seule confusion dont il faut protéger, c'est « Numéro personnel » pris pour
+ *   « Numéro agent » : deux champs distincts, tous deux à huit chiffres, qu'aucun
+ *   contrôle de longueur ne départagerait. Cette distinction-là n'a rien à voir
+ *   avec le style du séparateur, et doit survivre à toute normalisation.
+ */
+describe('TC-250 — les styles d’en-tête acceptés', () => {
+  const codeEtNumero = (code, numero) => trouverColonnes([code, numero])
+
+  it('[TC-250-73] accepte les noms de champs du code', () => {
+    expect(codeEtNumero('codeAgent', 'numeroAgent'))
+      .toEqual({ code: 'codeAgent', numero: 'numeroAgent' })
+  })
+
+  it('[TC-250-74] accepte le tiret bas, le tiret et le point', () => {
+    expect(codeEtNumero('code_agent', 'numero_agent').erreur).toBeUndefined()
+    expect(codeEtNumero('code-agent', 'numero-agent').erreur).toBeUndefined()
+    expect(codeEtNumero('code.agent', 'numero.agent').erreur).toBeUndefined()
+  })
+
+  it('[TC-250-75] accepte le PascalCase', () => {
+    expect(codeEtNumero('CodeAgent', 'NumeroAgent').erreur).toBeUndefined()
+  })
+
+  /** « Code agent (7 chiffres) » est un en-tête annoté, pas un autre en-tête. */
+  it('[TC-250-76] retire une annotation entre parenthèses', () => {
+    expect(codeEtNumero('Code agent (7 chiffres)', 'Numéro agent (8 chiffres)').erreur)
+      .toBeUndefined()
+  })
+
+  it('[TC-250-77] accepte les majuscules et les accents manquants', () => {
+    expect(codeEtNumero('CODE AGENT', 'NUMERO AGENT').erreur).toBeUndefined()
+    expect(codeEtNumero('  Code Agent  ', 'numéro agent').erreur).toBeUndefined()
+  })
+
+  /**
+   * ⚠ LA LIGNE QUE LA TOLÉRANCE NE FRANCHIT PAS, dans tous les styles.
+   */
+  it('[TC-250-78] ne prend jamais le numéro personnel, quel que soit le style', () => {
+    for (const personnel of ['Numéro personnel', 'numeroPersonnel', 'numero_personnel', 'NUMERO PERSONNEL']) {
+      const refus = trouverColonnes([COLONNE_CODE, personnel])
+      expect(refus.erreur).toMatch(/Numéro agent/)
+      expect(refus.code).toBeUndefined()
+    }
+  })
+
+  /** Pas de rapprochement par inclusion : un en-tête voisin reste un autre. */
+  it('[TC-250-79] ne confond pas un en-tête qui en contient un autre', () => {
+    expect(trouverColonnes([COLONNE_CODE, 'Ancien numéro agent']).erreur).toMatch(/Numéro agent/)
+    expect(trouverColonnes(['Code agent precedent', COLONNE_NUMERO]).erreur).toMatch(/Code agent/)
+  })
+
+  /** Deux écritures du même en-tête restent une ambiguïté à refuser. */
+  it('[TC-250-80] refuse deux styles du MÊME en-tête dans un fichier', () => {
+    expect(trouverColonnes(['Code agent', 'codeAgent', COLONNE_NUMERO]).erreur)
+      .toMatch(/2 fois|Ambigu/)
+  })
+
+  it('[TC-250-81] normalise de la même façon des deux côtés de la comparaison', () => {
+    expect(normaliserEntete('numeroAgent')).toBe(normaliserEntete('Numéro agent'))
+    expect(normaliserEntete('numeroPersonnel')).not.toBe(normaliserEntete('Numéro agent'))
+  })
+})
+
+/**
+ * ⚠ PLUSIEURS FICHIERS RÉUNIS, parce que c'est une question de correctness et
+ *   non de confort : un même code présent dans deux lots désigne UNE fiche, et
+ *   deux écritures dessus feraient que la seconde écrase la première.
+ */
+describe('TC-250 — plusieurs lots réunis avant la planification', () => {
+  it('[TC-250-82] voit un code répété d’un fichier à l’autre', () => {
+    const { lignes, ecritures } = planifierImport([
+      { fichier: 'lot1.csv', ligne: 2, code: '0123456', numero: '01234567' },
+      { fichier: 'lot2.csv', ligne: 2, code: '0123456', numero: '09999999' },
+    ], [fiche({ id: 'cible', codeAgent: '0123456', numeroAgent: '' })])
+
+    expect(lignes.map((l) => l.statut)).toEqual([STATUTS.CODE_REPETE, STATUTS.CODE_REPETE])
+    expect(ecritures).toEqual([])
+  })
+
+  /** Le fichier voyage avec la ligne : « L2 » tout seul ne désigne rien. */
+  it('[TC-250-83] nomme le fichier d’origine de chaque ligne', () => {
+    const { lignes } = planifierImport([
+      { fichier: 'lot1.csv', ligne: 2, code: '0000111', numero: '01111111' },
+      { fichier: 'lot2.csv', ligne: 7, code: '0000222', numero: '02222222' },
+    ], [
+      fiche({ id: 'a', codeAgent: '0000111', numeroAgent: '' }),
+      fiche({ id: 'b', codeAgent: '0000222', numeroAgent: '' }),
+    ])
+
+    expect(lignes.map((l) => `${l.fichier}:${l.ligne}`)).toEqual(['lot1.csv:2', 'lot2.csv:7'])
+  })
+
+  it('[TC-250-84] une ligne sans fichier reste lisible', () => {
+    const { lignes } = planifierImport(
+      [{ ligne: 2, code: '0000111', numero: '01111111' }],
+      [fiche({ id: 'a', codeAgent: '0000111', numeroAgent: '' })],
+    )
+    expect(lignes[0].fichier).toBe('')
   })
 })

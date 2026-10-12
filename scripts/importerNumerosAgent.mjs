@@ -31,12 +31,15 @@
  *
  * Usage :
  *   node scripts/importerNumerosAgent.mjs --fichier=numeros.xlsx
+ *   node scripts/importerNumerosAgent.mjs --fichier=lot1.xlsx --fichier=lot2.xlsx
  *   node scripts/importerNumerosAgent.mjs --fichier=numeros.csv --csv=apercu.csv
  *   node scripts/importerNumerosAgent.mjs --fichier=numeros.xlsx --execute --allow-production
  *   node scripts/importerNumerosAgent.mjs --annuler=backups/import-numeros-… --execute --allow-production
  *
  * Options :
- *   --fichier=    le .xlsx ou .csv à lire (deux colonnes : Code agent, Numéro agent)
+ *   --fichier=    le .xlsx ou .csv à lire. RÉPÉTABLE, ou séparé par des virgules :
+ *                 les lots sont réunis avant la planification, pour qu'un code
+ *                 présent dans deux fichiers soit vu comme répété.
  *   --feuille=    la feuille du classeur à lire (défaut : la première)
  *   --csv=        écrit l'aperçu COMPLET dans un CSV (16 000 lignes ne se lisent pas au terminal)
  *   --annuler=    remet en place une sauvegarde d'import
@@ -63,7 +66,18 @@ const valeur = (prefixe, defaut) => {
 
 const execute = argv.includes('--execute')
 const allowProductionFlag = argv.includes('--allow-production')
-const fichierArg = valeur('--fichier=', null)
+// ⚠ PLUSIEURS FICHIERS, ET CE N'EST PAS UN CONFORT. `valeur()` ne rend que la
+//   PREMIÈRE occurrence : passer « --fichier=a --fichier=b » aurait lu `a` et
+//   ignoré `b` EN SILENCE. Pire, traiter deux fichiers en deux exécutions
+//   séparées empêche de voir qu'un même code agent figure dans les deux — deux
+//   écritures sur la même fiche, dont la seconde écrase la première. Les lots
+//   doivent donc être réunis AVANT la planification, pour que la détection des
+//   répétitions porte sur l'ensemble.
+const fichiers = argv
+  .filter((a) => a.startsWith('--fichier='))
+  .flatMap((a) => a.slice('--fichier='.length).split(','))
+  .map((f) => f.trim())
+  .filter(Boolean)
 const feuilleVoulue = valeur('--feuille=', null)
 const csvSortie = valeur('--csv=', null)
 const dossierAnnulation = valeur('--annuler=', null)
@@ -76,14 +90,112 @@ const echouer = (message) => {
   process.exit(1)
 }
 
-if (!fichierArg && !dossierAnnulation) {
+const nombre = (n) => Number(n).toLocaleString('fr-FR')
+const titre = (texte) => {
+  console.log('')
+  console.log(texte)
+  console.log('─'.repeat(texte.length))
+}
+
+if (fichiers.length === 0 && !dossierAnnulation) {
   echouer(
     'Rien à faire : préciser --fichier=<.xlsx|.csv> ou --annuler=<dossier>.\n'
     + `Le fichier doit porter deux colonnes : « ${COLONNE_CODE} » et « ${COLONNE_NUMERO} ».`,
   )
 }
-if (fichierArg && dossierAnnulation) {
+if (fichiers.length > 0 && dossierAnnulation) {
   echouer('--fichier et --annuler s\'excluent : importer ou annuler, pas les deux.')
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// LECTURE DU FICHIER — AVANT TOUTE CHOSE, ET SANS AUCUN IDENTIFIANT
+// ════════════════════════════════════════════════════════════════════════════
+//
+// ⚠ L'ORDRE EST UNE CORRECTION, PAS UN DÉTAIL. Cette lecture venait APRÈS le
+//   contrôle des identifiants : savoir si un fichier était bien formé exigeait
+//   donc un accès à la production. Celui qui FABRIQUE le fichier n'a pas cet
+//   accès — et c'est précisément lui qui a besoin de la réponse. Résultat : le
+//   fichier faisait l'aller-retour, et le seul diagnostic disponible était
+//   « ça refuse ».
+//
+//   Le fichier est local, le contrôle est local : il passe donc en premier. Un
+//   fichier mal formé est désormais refusé sans Firebase, sans identifiants, et
+//   avec les en-têtes réellement lus sous les yeux.
+let lignes = []
+let tableurs = []
+
+for (const chemin of fichiers) {
+  const extension = extname(chemin).toLowerCase()
+  let tableur
+  try {
+    if (extension === '.xlsx' || extension === '.xlsm' || extension === '.xls') {
+      tableur = await lireClasseur(await readFile(chemin), feuilleVoulue)
+    } else if (extension === '.csv' || extension === '.txt') {
+      tableur = analyserCsv(await readFile(chemin, 'utf8'))
+    } else {
+      echouer(`Extension non reconnue : « ${extension || '(aucune)'} » pour ${chemin}.\nAttendu .xlsx ou .csv.`)
+    }
+  } catch (error) {
+    echouer(`Fichier illisible : ${chemin}\n  (${error.message})`)
+  }
+  if (tableur.erreur) echouer(`${chemin} : ${tableur.erreur}`)
+
+  titre(`FICHIER : ${chemin}`)
+  // ⚠ ON DIT QUELLE FEUILLE A ÉTÉ LUE, ET QUELLES AUTRES EXISTENT. Un classeur
+  //   de travail en a souvent plusieurs ; lire la première sans le dire ferait
+  //   croire à un fichier vide alors que les données sont dans la suivante.
+  if (tableur.feuilles?.length > 1) {
+    const autres = tableur.feuilles.filter((f) => f !== tableur.feuille)
+    console.log(`Feuille lue : « ${tableur.feuille} »`)
+    console.log(`  ⚠ ${tableur.feuilles.length} feuilles dans le classeur. Non lues : ${autres.map((f) => `« ${f} »`).join(', ')}.`)
+    console.log('    Pour en lire une autre : --feuille=<nom>')
+  } else if (tableur.feuille) {
+    console.log(`Feuille lue : « ${tableur.feuille} »`)
+  }
+  if (tableur.separateur) console.log(`Séparateur : « ${tableur.separateur} »`)
+  console.log(`En-têtes : ${tableur.entetes.map((e) => `« ${e} »`).join(', ') || '(aucun)'}`)
+  console.log(`Lignes de données : ${nombre(tableur.lignes.length)}`)
+
+  const colonnes = trouverColonnes(tableur.entetes)
+  if (colonnes.erreur) echouer(`${chemin} :\n${colonnes.erreur}`)
+  console.log(`Colonnes retenues : code = « ${colonnes.code} », numéro = « ${colonnes.numero} »`)
+
+  // `numeriques` dit, case par case, si le tableur l'a stockée comme un NOMBRE —
+  // donc si ses zéros de tête ont pu être mangés. C'est ce qui autorise
+  // `resoudreCode` à les restituer depuis la base au lieu de les deviner.
+  const ajout = tableur.lignes.map((ligne, index) => ({
+    fichier: chemin,
+    ligne: index + 2, // +2 : l'en-tête est la ligne 1, et les tableurs comptent de 1
+    code: ligne[colonnes.code],
+    numero: ligne[colonnes.numero],
+    codeNumerique: Boolean(tableur.numeriques?.[index]?.[colonnes.code]),
+    numeroNumerique: Boolean(tableur.numeriques?.[index]?.[colonnes.numero]),
+  }))
+
+  const numeriques = ajout.filter((l) => l.codeNumerique || l.numeroNumerique).length
+  if (numeriques > 0) {
+    console.log('')
+    console.log(`⚠ ${nombre(numeriques)} ligne(s) ont au moins une case stockée en NOMBRE par le tableur.`)
+    console.log('  Leurs zéros de tête ont pu être mangés. Ils seront restitués depuis la base')
+    console.log('  quand la correspondance est UNIQUE, et signalés sinon. Formater les deux')
+    console.log('  colonnes en TEXTE dans le classeur évite la question entièrement.')
+  }
+
+  lignes = lignes.concat(ajout)
+  tableurs.push({ chemin, lignes: ajout.length })
+}
+
+if (fichiers.length > 1) {
+  titre('LES FICHIERS RÉUNIS')
+  for (const t of tableurs) console.log(`  ${nombre(t.lignes)} ligne(s)  ${t.chemin}`)
+  console.log(`  ${nombre(lignes.length)} ligne(s) au total`)
+  console.log('')
+  console.log('Les lots sont réunis AVANT la planification : un même code agent présent')
+  console.log('dans deux fichiers est donc vu comme répété, et aucun des deux n\'est écrit.')
+}
+
+if (lignes.length === 0 && !dossierAnnulation) {
+  echouer('Aucune ligne de données dans le ou les fichiers fournis.')
 }
 
 // ── Identifiants ────────────────────────────────────────────────────────────
@@ -147,13 +259,6 @@ if (execute && isProduction) {
 
 initializeApp({ credential: serviceAccount ? cert(serviceAccount) : applicationDefault() })
 const db = getFirestore()
-
-const nombre = (n) => Number(n).toLocaleString('fr-FR')
-const titre = (texte) => {
-  console.log('')
-  console.log(texte)
-  console.log('─'.repeat(texte.length))
-}
 
 console.log(`Projet : ${projectId}${isProduction ? '  (PRODUCTION)' : ''}`)
 console.log(`Mode   : ${execute ? '⚠ EXECUTE — la base va être modifiée' : 'aperçu (aucune écriture)'}`)
@@ -283,63 +388,6 @@ if (dossierAnnulation) {
 // ════════════════════════════════════════════════════════════════════════════
 // IMPORT
 // ════════════════════════════════════════════════════════════════════════════
-titre('LECTURE DU FICHIER')
-const extension = extname(fichierArg).toLowerCase()
-let tableur
-try {
-  if (extension === '.xlsx' || extension === '.xlsm' || extension === '.xls') {
-    tableur = await lireClasseur(await readFile(fichierArg), feuilleVoulue)
-  } else if (extension === '.csv' || extension === '.txt') {
-    tableur = analyserCsv(await readFile(fichierArg, 'utf8'))
-  } else {
-    echouer(`Extension non reconnue : « ${extension || '(aucune)'} ». Attendu .xlsx ou .csv.`)
-  }
-} catch (error) {
-  echouer(`Fichier illisible : ${fichierArg}\n  (${error.message})`)
-}
-
-if (tableur.erreur) echouer(tableur.erreur)
-
-console.log(`Fichier : ${fichierArg}`)
-// ⚠ ON DIT QUELLE FEUILLE A ÉTÉ LUE, ET QUELLES AUTRES EXISTENT. Un classeur de
-//   travail en a souvent plusieurs ; lire la première sans le dire ferait croire
-//   à un fichier vide ou incomplet alors que les données sont dans la suivante.
-if (tableur.feuilles?.length > 1) {
-  const autres = tableur.feuilles.filter((f) => f !== tableur.feuille)
-  console.log(`Feuille lue : « ${tableur.feuille} »`)
-  console.log(`  ⚠ ${tableur.feuilles.length} feuilles dans le classeur. Non lues : ${autres.map((f) => `« ${f} »`).join(', ')}.`)
-  console.log('    Pour en lire une autre : --feuille=<nom>')
-} else if (tableur.feuille) {
-  console.log(`Feuille lue : « ${tableur.feuille} »`)
-}
-if (tableur.separateur) console.log(`Séparateur : « ${tableur.separateur} »`)
-console.log(`En-têtes : ${tableur.entetes.map((e) => `« ${e} »`).join(', ') || '(aucun)'}`)
-console.log(`Lignes de données : ${nombre(tableur.lignes.length)}`)
-
-const colonnes = trouverColonnes(tableur.entetes)
-if (colonnes.erreur) echouer(colonnes.erreur)
-console.log(`Colonnes retenues : code = « ${colonnes.code} », numéro = « ${colonnes.numero} »`)
-
-// `numeriques` dit, case par case, si Excel l'a stockée comme un NOMBRE — donc
-// si ses zéros de tête ont pu être mangés. C'est ce qui autorise `resoudreCode`
-// à les restituer depuis la base au lieu de les deviner.
-const lignes = tableur.lignes.map((ligne, index) => ({
-  ligne: index + 2, // +2 : l'en-tête est la ligne 1, et les tableurs comptent de 1
-  code: ligne[colonnes.code],
-  numero: ligne[colonnes.numero],
-  codeNumerique: Boolean(tableur.numeriques?.[index]?.[colonnes.code]),
-  numeroNumerique: Boolean(tableur.numeriques?.[index]?.[colonnes.numero]),
-}))
-
-const casesNumeriques = lignes.filter((l) => l.codeNumerique || l.numeroNumerique).length
-if (casesNumeriques > 0) {
-  console.log('')
-  console.log(`⚠ ${nombre(casesNumeriques)} ligne(s) ont au moins une case stockée en NOMBRE par le tableur.`)
-  console.log('  Leurs zéros de tête ont pu être mangés. Ils seront restitués depuis la base')
-  console.log('  quand la correspondance est UNIQUE, et signalés sinon. Formater les deux')
-  console.log('  colonnes en TEXTE dans le classeur évite la question entièrement.')
-}
-
 titre('LECTURE DE LA BASE')
 const snap = await db.collection('globalClients').get()
 const fiches = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
@@ -385,12 +433,14 @@ const LIBELLES = {
 
 const parStatut = (statut) => plan.lignes.filter((l) => l.statut === statut)
 
+const plusieurs = fichiers.length > 1
 const montrer = (entete, liste, maximum) => {
   if (liste.length === 0) return
   console.log('')
   console.log(entete)
   for (const l of liste.slice(0, maximum)) {
-    console.log(`  L${l.ligne}  ${l.code}  ${l.nom || '—'}`)
+    const ou = plusieurs && l.fichier ? `${l.fichier} ` : ''
+    console.log(`  ${ou}L${l.ligne}  ${l.code}  ${l.nom || '—'}`)
     console.log(`        actuel « ${l.actuel} » → proposé « ${l.propose} »  [${LIBELLES[l.statut]}]`)
     if (l.detail) console.log(`        ${l.detail}`)
   }
@@ -414,9 +464,9 @@ montrer('Exemples de mises à jour :', parStatut(STATUTS.A_COMPLETER), 10)
 
 if (csvSortie) {
   const csv = (v) => String(v ?? '').replace(/[;\r\n]/g, ' ')
-  const entetes = `ligne;statut;${COLONNE_CODE} du fichier;${COLONNE_CODE} retenu;nom;numero agent actuel;numero agent propose;detail`
+  const entetes = `fichier;ligne;statut;${COLONNE_CODE} du fichier;${COLONNE_CODE} retenu;nom;numero agent actuel;numero agent propose;detail`
   const corps = plan.lignes.map((l) => [
-    l.ligne, LIBELLES[l.statut], csv(l.code), csv(l.codeUtilise), csv(l.nom),
+    csv(l.fichier), l.ligne, LIBELLES[l.statut], csv(l.code), csv(l.codeUtilise), csv(l.nom),
     csv(l.actuel), csv(l.propose), csv(l.detail),
   ].join(';'))
   // BOM : sans lui, Excel ouvre les accents en charabia.
@@ -456,7 +506,7 @@ await writeFile(join(backupDir, 'manifest.json'), JSON.stringify({
   projectId,
   script: 'scripts/importerNumerosAgent.mjs',
   argv,
-  fichier: fichierArg,
+  fichiers,
   creeLe: new Date().toISOString(),
   bilan,
   ecritures: plan.ecritures.length,

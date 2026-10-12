@@ -204,23 +204,51 @@ export function resoudreCode(code, parCode, longueurs = longueursDeCode(parCode)
 }
 
 /**
+ * L'en-tête d'une colonne, réduit à ses MOTS — pour que la même intention écrite
+ * de six façons différentes soit reconnue une fois.
+ *
+ * ⚠ CE QU'ON TOLÈRE EST GRATUIT ; CE QU'ON REFUSE EST ESSENTIEL. La raison d'être
+ *   de la stricte comparaison, c'est d'empêcher qu'un « Numéro personnel » soit
+ *   pris pour un « Numéro agent » : deux champs distincts, tous deux à huit
+ *   chiffres, donc une confusion qu'aucun contrôle de longueur ne rattraperait.
+ *
+ *   Or le style du séparateur n'a RIEN à voir avec ce risque. « numeroAgent »,
+ *   « numero_agent » et « Numéro agent » désignent sans ambiguïté la même chose,
+ *   et les refuser ne protégeait de rien — ça obligeait seulement celui qui
+ *   fabrique le fichier à deviner une convention. Vu le 2026-10-12 : un fichier
+ *   produit avec les NOMS DE CHAMPS du code (`codeAgent`, `numeroAgent`) au lieu
+ *   des intitulés de l'écran était rejeté, alors qu'il était parfaitement juste.
+ *
+ *   On normalise donc camelCase, tiret bas, tiret, point, et on retire une
+ *   annotation entre parenthèses (« Code agent (7 chiffres) »). Après ça, la
+ *   comparaison reste EXACTE — jamais par inclusion, qui ferait passer
+ *   « Ancien numéro agent » pour « Numéro agent ».
+ */
+export const normaliserEntete = (valeur) => plier(
+  String(valeur ?? '')
+    .replace(/\([^)]*\)/g, ' ')
+    // Le découpage du camelCase se fait AVANT le passage en minuscules, sinon il
+    // n'y a plus de majuscule sur laquelle couper.
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[_\-.]+/g, ' '),
+)
+
+/**
  * Les deux colonnes attendues, trouvées dans les en-têtes réels du fichier.
  *
- * Le rapprochement se fait sur l'en-tête PLIÉ (sans accents, sans casse, espaces
- * réduits) : « Numero agent », « NUMÉRO AGENT  » et « Numéro Agent » sont le même
- * intitulé mal tapé, et refuser le fichier pour ça n'aiderait personne.
+ * Le rapprochement se fait sur l'en-tête normalisé (voir `normaliserEntete`).
  *
- * ⚠ MAIS « NUMÉRO PERSONNEL » N'EST PAS « NUMÉRO AGENT ». Ce sont les deux
- *   colonnes les plus faciles à confondre, et les confondre écrirait le téléphone
- *   du commerçant dans sa case numéro agent — sur des milliers de fiches, sans
- *   qu'aucune règle de longueur ne s'en plaigne (les deux font 8 chiffres). Le
- *   rapprochement est donc EXACT après pliage, jamais par inclusion.
+ * ⚠ « NUMÉRO PERSONNEL » N'EST JAMAIS « NUMÉRO AGENT ». Ce sont les deux colonnes
+ *   les plus faciles à confondre, et les confondre écrirait le téléphone du
+ *   commerçant dans sa case numéro agent — sur des milliers de fiches, sans
+ *   qu'aucune règle de longueur ne s'en plaigne. C'est cette distinction-là que
+ *   la comparaison exacte protège, et elle survit à toute normalisation de style.
  *
  * @returns {{code: string, numero: string}|{erreur: string}}
  */
 export function trouverColonnes(entetes = []) {
-  const vus = entetes.map((e) => ({ brut: e, plie: plier(e) }))
-  const chercher = (attendu) => vus.filter((v) => v.plie === plier(attendu))
+  const vus = entetes.map((e) => ({ brut: e, plie: normaliserEntete(e) }))
+  const chercher = (attendu) => vus.filter((v) => v.plie === normaliserEntete(attendu))
 
   for (const [attendu, nom] of [[COLONNE_CODE, 'code'], [COLONNE_NUMERO, 'numéro']]) {
     const trouves = chercher(attendu)
@@ -289,6 +317,9 @@ export function planifierImport(lignes = [], fiches = []) {
   for (const brute of lignes) {
     const code = normaliserCodeAgent(brute.code)
     const base = {
+      // `fichier` voyage avec la ligne : quand plusieurs lots sont réunis, « L42 »
+      // tout seul ne désigne rien — il y a une ligne 42 dans chaque fichier.
+      fichier: brute.fichier ?? '',
       ligne: brute.ligne, code, nom: '', actuel: '', propose: '', zerosRestitues: 0, codeUtilise: code,
     }
 

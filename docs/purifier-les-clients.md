@@ -164,11 +164,26 @@ commerçant dans sa case agent sans qu'aucune règle de longueur ne s'en plaigne
 Le script **refuse** donc un fichier dont la colonne « Numéro agent » manque,
 même s'il contient « Numéro personnel », et le dit en clair.
 
+Les en-têtes sont en revanche **tolérants sur le style** : `codeAgent`,
+`code_agent`, `CODE AGENT`, `Code agent (7 chiffres)` sont tous reconnus. Le style
+du séparateur n'a rien à voir avec le risque de confusion, et refuser un fichier
+juste pour ça obligeait seulement celui qui le fabrique à deviner une convention.
+Le rapprochement reste **exact** après normalisation, jamais par inclusion : un
+« Ancien numéro agent » n'est pas un « Numéro agent ».
+
+La validation du fichier se fait **avant toute authentification** : savoir si un
+fichier est bien formé ne demande aucun accès à la production. C'est celui qui
+fabrique le fichier qui a besoin de la réponse, et il n'a pas cet accès.
+
 ## Les commandes
 
 ```powershell
 # Aperçu — aucune écriture. 16 000 lignes ne se lisent pas au terminal : --csv les écrit toutes.
 node scripts/importerNumerosAgent.mjs --fichier=numeros.xlsx --csv=apercu.csv
+
+# Plusieurs lots : --fichier est RÉPÉTABLE, et les lots sont réunis avant
+# la planification — un code présent dans deux fichiers est vu comme répété.
+node scripts/importerNumerosAgent.mjs --fichier=lot1.xlsx --fichier=lot2.xlsx
 
 # Application, quatre verrous comme la fusion
 $env:AKAYIS_ALLOW_AGENT_IMPORT='true'
@@ -271,7 +286,7 @@ enverrait chercher une barre de séparation dans une case qui n'en a jamais eu.
   disque et vérifié **avant** la première écriture. L'annulation refuse de toucher
   une fiche modifiée depuis l'import : une saisie humaine est toujours plus récente
   et plus juste que ce que le script avait mis.
-- **72 tests unitaires** (`tests/unit/tc-250-import-numeros-agent.test.js`) et
+- **84 tests unitaires** (`tests/unit/tc-250-import-numeros-agent.test.js`) et
   34 contrôles de bout en bout sur émulateur, dont un classeur abîmé exactement
   comme Excel l'abîme : zéros mangés, format `0000000`, cellule texte, cas
   ambigu, deux feuilles.
