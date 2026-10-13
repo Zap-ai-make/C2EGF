@@ -174,11 +174,11 @@ C'est elle que les tests unitaires éprouvent cas par cas.
 **Totaux** — et ils posent une question que la pagination rend aiguë :
 
 > ⚠ **LES TOTAUX PORTENT SUR TOUT L'HISTORIQUE, PAS SUR LA PAGE CHARGÉE.** Un
-> « 12 300 000 déposés » qui grandit à chaque « charger plus » ne veut rien dire,
-> et pire : il se lit comme un total alors qu'il n'en est pas un. Le serveur les
-> calcule donc avec une requête d'agrégation (`count()` et `sum()`, disponibles
-> côté Admin SDK) sur l'ENSEMBLE des lignes du client, indépendamment de la page.
-> Ils sont renvoyés tels quels à chaque appel, et le panneau n'y touche pas.
+> « 437 opérations » qui grandit à chaque « charger plus » ne veut rien dire, et
+> pire : il se lit comme un total alors qu'il n'en est pas un. Le serveur les
+> calcule donc avec une requête d'agrégation (`count()`, disponible côté Admin
+> SDK) sur l'ENSEMBLE des lignes du client, indépendamment de la page. Ils sont
+> renvoyés tels quels à chaque appel, et le panneau n'y touche pas.
 >
 > Si l'agrégation s'avérait indisponible sur ce projet, le repli est de ne PAS
 > afficher de totaux plutôt que d'en afficher de faux.
@@ -186,14 +186,33 @@ C'est elle que les tests unitaires éprouvent cas par cas.
 
 
 ```
-operations        nombre de lignes non supprimées
-totalDepots       somme des montants des dépôts non supprimés
-totalRetraits     idem retraits
+operations        nombre d'opérations enregistrées pour cet agent
+nonDatees         celles qui ne portent pas de date et ne peuvent donc pas être listées
 resteAEncaisser   dépôts non terminés : ce que l'agent doit encore APPORTER
 resteAPayer       retraits non terminés : ce que la boutique doit encore REMETTRE
 nbEnAttente       nombre de non terminées
-parBoutique       [{ storeId, storeName, operations, depots, retraits }]
+parBoutique       [{ storeId, storeName, operations }]
 ```
+
+> ⚠ **CE SONT DES COMPTES, PAS DES SOMMES, ET C'EST UNE DÉCISION PRISE APRÈS
+> MESURE** (2026-10-13, relecture de la Cloud Function). Cette spec portait
+> « 12 300 000 déposés · 8 100 000 retirés ». Ces deux nombres ne peuvent pas
+> être rendus exacts à bon compte : `cancelHistory` pose `statut: 'Annulée'` et
+> `trashHistory` pose `statut: 'Supprimée'`, tous deux APRÈS avoir rendu l'argent
+> aux soldes — mais le `montant` reste sur le document. Les sommer ferait dire au
+> panneau qu'un agent a déposé une somme qui n'existe plus.
+>
+> Les exclure demanderait de soustraire des agrégats filtrés sur le statut ET sur
+> le type, donc un index composite de plus et **deux énumérations** — celle des
+> accents du type, celle des statuts d'annulation — dont chacune sous-estimerait
+> en silence ce qu'elle ne connaît pas. On préfère ne rien afficher.
+>
+> Ce qui reste est exact et sans index supplémentaire : les COMPTES, qui disent
+> combien d'opérations existent et où l'agent travaille — une ligne annulée est
+> bien une opération qui a eu lieu —, et les deux montants d'attente, qui sont
+> les seuls chiffres financiers du panneau et viennent des non terminées, lues en
+> entier. Si les sommes générales se révèlent nécessaires, elles coûtent un index
+> et une soustraction : c'est un lot séparé, pas un oubli.
 
 > ⚠ **DEUX RESTES, PAS UN.** « Ce qui reste dû » ne veut rien dire tant qu'on ne
 > dit pas dans quel sens : un dépôt non terminé est de l'argent que l'agent doit
@@ -236,7 +255,7 @@ Ouvert par la nouvelle colonne, fermé par `Échap` et par le fond.
 OUEDRAOGO SALIF                                    [x]
 Code 0123456 · N° 01234567 · POUYTENGA
 
-437 opérations · 12 300 000 déposés · 8 100 000 retirés
+437 opérations enregistrées
 OUAGA 312 · BOBO 98 · KOUPELA 27
 
 ┌ EN COURS ─────────────────────────────────────────┐
