@@ -27,8 +27,18 @@ export function useHistoriqueClient(clientId) {
   // Le client EN COURS de chargement : une réponse arrivée après un changement
   // de client ne doit pas s'afficher sous le nom du nouveau.
   const clientRef = useRef(null)
+  // ⚠ UNE SEULE REQUÊTE EN VOL À LA FOIS, ET CE N'EST PAS UNE OPTIMISATION.
+  //   `StrictMode` double-invoque l'effet de montage en développement : sans
+  //   cette garde, chaque ouverture du panneau part en DEUX appels de Cloud
+  //   Function, payés deux fois. Et deux clics rapprochés sur « Charger plus »
+  //   repartent tous les deux avec le même curseur. `clientRef` ne couvre pas ce
+  //   cas : il protège d'un changement de client, pas d'un second appel pour le
+  //   même. Même garde que `useRealtimePaginatedRequests.js:78`.
+  const enVolRef = useRef(false)
 
   const charger = useCallback(async (id, curseur) => {
+    if (enVolRef.current) return
+    enVolRef.current = true
     clientRef.current = id
     setEtat(curseur ? 'chargementPage' : 'chargement')
     setErreur(null)
@@ -52,6 +62,10 @@ export function useHistoriqueClient(clientId) {
       if (clientRef.current !== id) return
       setErreur(err?.message || 'Impossible de charger l’historique.')
       setEtat('erreur')
+    } finally {
+      // Toujours relâchée, même en erreur : sinon le hook reste bloqué à
+      // jamais et `reessayer` ne repart plus.
+      enVolRef.current = false
     }
   }, [])
 
@@ -59,6 +73,7 @@ export function useHistoriqueClient(clientId) {
     if (!clientId) {
       clientRef.current = null
       curseurRef.current = null
+      enVolRef.current = false
       setEtat('inactif')
       setLignes([])
       setEnCours([])
@@ -67,6 +82,10 @@ export function useHistoriqueClient(clientId) {
       return
     }
     curseurRef.current = null
+    // Un changement de client est légitime même si une requête de l'ANCIEN est
+    // encore en vol : on relâche la garde pour que le nouveau parte quand même.
+    // La réponse tardive de l'ancien est déjà écartée par `clientRef` ci-dessus.
+    enVolRef.current = false
     setLignes([])
     setEnCours([])
     setTotaux(null)

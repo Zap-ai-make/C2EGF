@@ -117,6 +117,62 @@ describe('TC-258 — les pages suivantes', () => {
 
     expect(chargerHistoriqueClient).toHaveBeenCalledTimes(1)
   })
+
+  /**
+   * ⚠ `StrictMode` DOUBLE-INVOQUE L'EFFET DE MONTAGE en développement. Sans
+   *   garde, chaque ouverture du panneau part en deux appels de Cloud Function,
+   *   payés deux fois pour un résultat identique.
+   */
+  it('[TC-258-10] deux chargerPlus rapprochés ne partent qu’une fois', async () => {
+    chargerHistoriqueClient.mockResolvedValueOnce(page(['a'], { encore: true, curseurSuivant: { chemin: 'clients/store-a/history/a' } }))
+    let resoudre
+    chargerHistoriqueClient.mockImplementationOnce(() => new Promise((r) => { resoudre = r }))
+    const { result } = renderHook(() => useHistoriqueClient('c1'))
+
+    await waitFor(() => expect(result.current.etat).toBe('pret'))
+    const appelsAvant = chargerHistoriqueClient.mock.calls.length
+
+    await act(async () => {
+      result.current.chargerPlus()
+      result.current.chargerPlus()
+      resoudre(page(['b'], { totaux: null }))
+    })
+
+    expect(chargerHistoriqueClient.mock.calls.length).toBe(appelsAvant + 1)
+  })
+
+  /** Une erreur ne doit pas laisser le hook bloqué : la garde se relâche toujours. */
+  it('[TC-258-11] après une erreur, un nouvel essai repart bien', async () => {
+    chargerHistoriqueClient.mockRejectedValueOnce(new Error('réseau'))
+    chargerHistoriqueClient.mockResolvedValueOnce(page(['a']))
+    const { result } = renderHook(() => useHistoriqueClient('c1'))
+
+    await waitFor(() => expect(result.current.etat).toBe('erreur'))
+    await act(async () => { await result.current.reessayer() })
+    await waitFor(() => expect(result.current.etat).toBe('pret'))
+    expect(result.current.lignes).toHaveLength(1)
+  })
+
+  /**
+   * ⚠ LE CAS QUE LA GARDE NE DOIT PAS CASSER : changer de client pendant qu'une
+   *   page suivante est en vol. Le nouveau client doit se charger, et la réponse
+   *   tardive de l'ancien ne doit rien afficher sous son nom.
+   */
+  it('[TC-258-12] changer de client pendant une page suivante charge bien le nouveau', async () => {
+    chargerHistoriqueClient.mockResolvedValueOnce(page(['a'], { encore: true, curseurSuivant: { chemin: 'clients/store-a/history/a' } }))
+    let resoudreAncien
+    chargerHistoriqueClient.mockImplementationOnce(() => new Promise((r) => { resoudreAncien = r }))
+    chargerHistoriqueClient.mockResolvedValueOnce(page(['z']))
+
+    const { result, rerender } = renderHook(({ id }) => useHistoriqueClient(id), { initialProps: { id: 'c1' } })
+    await waitFor(() => expect(result.current.etat).toBe('pret'))
+
+    act(() => { result.current.chargerPlus() })
+    rerender({ id: 'c2' })
+    await act(async () => { resoudreAncien(page(['vieux'], { totaux: null })) })
+
+    await waitFor(() => expect(result.current.lignes.map((l) => l.id)).toEqual(['z']))
+  })
 })
 
 describe('TC-258 — changer de client', () => {
