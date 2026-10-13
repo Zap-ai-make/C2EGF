@@ -45,7 +45,15 @@ const CIBLES_FOCUSABLES = [
  *   à `max-w-md`, la dernière colonne du second sortait du cadre, et c'était
  *   celle qu'on venait chercher.
  */
-function Dialog({ open, onClose, title, description, children, footer, testId, largeur = 'max-w-md', spacious = false }) {
+/**
+ * `cote` ancre le panneau à droite, sur toute la hauteur, au lieu de le centrer.
+ *
+ * ⚠ C'EST UNE VARIANTE, PAS UN SECOND COMPOSANT. Le piège à focus, la fermeture
+ *   par Échap, `aria-modal` et la restauration du focus sont ici et doivent le
+ *   rester : un panneau latéral écrit à côté les réimplémenterait, et en
+ *   oublierait une partie.
+ */
+function Dialog({ open, onClose, title, description, children, footer, testId, largeur = 'max-w-md', spacious = false, cote = false }) {
   const panneau = useRef(null)
   const corps = useRef(null)
   const focusPrecedent = useRef(null)
@@ -174,7 +182,9 @@ function Dialog({ open, onClose, title, description, children, footer, testId, l
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
         data-testid={testId}
-        className={`max-h-full w-full ${largeur} overflow-y-auto rounded-xl border border-line bg-surface shadow-xl`}
+        className={cote
+          ? `fixed inset-y-0 right-0 z-50 flex w-full ${largeur} flex-col overflow-hidden bg-surface shadow-xl`
+          : `max-h-full w-full ${largeur} overflow-y-auto rounded-xl border border-line bg-surface shadow-xl`}
       >
         <div className={`flex items-start justify-between gap-4 border-b border-line ${spacious ? 'px-7 py-5' : 'px-5 py-4'}`}>
           <div className="min-w-0">
