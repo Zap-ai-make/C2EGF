@@ -186,6 +186,48 @@ describe('TC-258 — changer de client', () => {
 
     await waitFor(() => expect(result.current.lignes.map((l) => l.id)).toEqual(['z']))
   })
+
+  /**
+   * ⚠ LA RÉGRESSION QUE LE VERROU PAR IDENTIFIANT AVAIT CRÉÉE. Fermer le panneau
+   *   puis rouvrir le MÊME client avant la réponse : le second appel était refusé
+   *   par un verrou que plus personne ne surveillait, et l'écran annonçait
+   *   « aucune opération » sur un agent qui en a.
+   */
+  it('[TC-258-14] rouvrir le même client après fermeture relance bien le chargement', async () => {
+    let resoudrePremier
+    chargerHistoriqueClient.mockImplementationOnce(() => new Promise((r) => { resoudrePremier = r }))
+    chargerHistoriqueClient.mockResolvedValueOnce(page(['a']))
+
+    const { result, rerender } = renderHook(({ id }) => useHistoriqueClient(id), { initialProps: { id: 'c1' } })
+    rerender({ id: null })
+    rerender({ id: 'c1' })
+
+    await waitFor(() => expect(result.current.etat).toBe('pret'))
+    expect(result.current.lignes.map((l) => l.id)).toEqual(['a'])
+
+    // La réponse de la requête abandonnée ne doit rien changer après coup.
+    await act(async () => { resoudrePremier(page(['vieux'])) })
+    expect(result.current.lignes.map((l) => l.id)).toEqual(['a'])
+  })
+
+  /**
+   * ⚠ ALLER-RETOUR : la réponse de la PREMIÈRE requête pour un client ne doit ni
+   *   s'afficher à la place de la seconde, ni rendre le verrou qu'elle détient.
+   */
+  it('[TC-258-15] revenir sur un client n’affiche pas la réponse de l’aller', async () => {
+    let resoudreAller
+    chargerHistoriqueClient.mockImplementationOnce(() => new Promise((r) => { resoudreAller = r }))
+    chargerHistoriqueClient.mockResolvedValueOnce(page(['z']))
+    chargerHistoriqueClient.mockResolvedValueOnce(page(['retour']))
+
+    const { result, rerender } = renderHook(({ id }) => useHistoriqueClient(id), { initialProps: { id: 'c1' } })
+    rerender({ id: 'c2' })
+    rerender({ id: 'c1' })
+
+    await waitFor(() => expect(result.current.lignes.map((l) => l.id)).toEqual(['retour']))
+    await act(async () => { resoudreAller(page(['aller'])) })
+    expect(result.current.lignes.map((l) => l.id)).toEqual(['retour'])
+  })
 })
 
 describe('TC-258 — StrictMode', () => {
@@ -197,14 +239,10 @@ describe('TC-258 — StrictMode', () => {
    *
    * ⚠ MÉCANIQUE ADAPTÉE, INTENTION CONSERVÉE : `wrapper: ({children}) =>
    *   <StrictMode>{children}</StrictMode>` NE mord PAS ici — vérifié
-   *   empiriquement (voir rapport) : `renderHook` insère son propre composant
-   *   fonction AU-DESSUS du wrapper fourni, et `StrictMode` ne double alors
-   *   plus les effets de ses descendants dans cette version de
-   *   `@testing-library/react`. L'option `reactStrictMode: true`, elle, fait
-   *   de `StrictMode` l'élément RACINE passé à `root.render()` — c'est la
-   *   seule forme qui déclenche réellement le double montage ici. Un vrai
-   *   montage sous `src/main.jsx` (où `<StrictMode>` EST la racine) reproduit
-   *   ce même chemin : c'est cette forme que ce test doit reproduire.
+   *   empiriquement (voir rapport). `reactStrictMode: true` est l'option
+   *   native de `renderHook` pour ce besoin ; vérifiée empiriquement comme
+   *   reproduisant bien le double montage — c'est aussi la forme la plus
+   *   proche de `src/main.jsx`, où `<StrictMode>` est la racine montée.
    */
   it('[TC-258-13] un double montage StrictMode ne part qu’une fois', async () => {
     chargerHistoriqueClient.mockResolvedValue(page(['a']))

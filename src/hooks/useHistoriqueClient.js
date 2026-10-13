@@ -24,35 +24,39 @@ export function useHistoriqueClient(clientId) {
   const [totaux, setTotaux] = useState(null)
   const [encore, setEncore] = useState(false)
   const curseurRef = useRef(null)
-  // Le client EN COURS de chargement : une réponse arrivée après un changement
-  // de client ne doit pas s'afficher sous le nom du nouveau.
-  const clientRef = useRef(null)
+  // Le jeton de la requête EN COURS. Incrémenté à chaque appel : une réponse ne
+  // s'applique que si son jeton est encore le jeton courant.
+  const jetonRef = useRef(0)
   /**
-   * ⚠ LE VERROU RETIENT POUR QUI IL A ÉTÉ POSÉ, et pas seulement qu'il est posé.
-   *   Un booléen ne suffisait pas, pour deux raisons qui se ressemblent :
+   * ⚠ LE VERROU PORTE UN JETON, PAS SEULEMENT UN IDENTIFIANT DE CLIENT.
+   *   Un verrou qui ne retient que le client suffit à refuser un second appel
+   *   pour ce client — mais pas à savoir LAQUELLE de deux requêtes successives
+   *   le détient. Deux conséquences, toutes deux vécues :
    *
-   *   · `StrictMode` rejoue l'effet de montage sans que rien ne distingue ce
-   *     rejeu d'un vrai changement de client. Un verrou booléen qu'on relâche
-   *     « parce que le client a changé » se relâche donc aussi au rejeu, et
-   *     laisse partir un second appel de Cloud Function, payé pour rien.
-   *   · La réponse tardive d'une requête périmée relâchait le verrou d'une
-   *     requête qui, elle, était toujours en vol.
+   *   · fermer le panneau puis rouvrir LE MÊME client avant que la première
+   *     requête ne réponde : le second appel était refusé par un verrou que plus
+   *     personne ne surveillait, et l'écran restait vide en annonçant « aucune
+   *     opération » — sur un agent qui en a.
+   *   · aller sur un autre client puis revenir : la réponse de la PREMIÈRE
+   *     requête rendait le verrou de la seconde, encore en vol.
    *
-   *   En y mettant l'identifiant du client, les deux disparaissent : un second
-   *   appel pour le MÊME client est refusé, un appel pour un AUTRE client passe,
-   *   et seule la requête qui détient le verrou peut le rendre.
+   *   Le jeton s'incrémente à chaque appel. Une réponse ne s'applique que si son
+   *   jeton est encore le jeton courant, et ne rend le verrou que si elle le
+   *   détient toujours. `StrictMode` reste couvert : son rejeu demande le MÊME
+   *   client sans que le jeton ait changé, donc il est refusé.
    */
-  const enVolRef = useRef(null)
+  const enVolRef = useRef(null) // { id, jeton } de la requête qui détient le verrou
 
   const charger = useCallback(async (id, curseur) => {
-    if (enVolRef.current === id) return
-    enVolRef.current = id
-    clientRef.current = id
+    if (enVolRef.current?.id === id) return
+    const jeton = jetonRef.current + 1
+    jetonRef.current = jeton
+    enVolRef.current = { id, jeton }
     setEtat(curseur ? 'chargementPage' : 'chargement')
     setErreur(null)
     try {
       const reponse = await chargerHistoriqueClient(id, curseur)
-      if (clientRef.current !== id) return
+      if (jetonRef.current !== jeton) return
 
       setLignes((precedentes) => {
         const base = curseur ? precedentes : []
@@ -67,20 +71,23 @@ export function useHistoriqueClient(clientId) {
       setEncore(Boolean(reponse.encore))
       setEtat('pret')
     } catch (err) {
-      if (clientRef.current !== id) return
+      if (jetonRef.current !== jeton) return
       setErreur(err?.message || 'Impossible de charger l’historique.')
       setEtat('erreur')
     } finally {
-      // Seul le détenteur rend le verrou : une réponse périmée ne doit pas
-      // libérer la requête qui lui a succédé.
-      if (enVolRef.current === id) enVolRef.current = null
+      // Seul le jeton qui détient encore le verrou peut le rendre : une
+      // réponse périmée ne doit pas libérer la requête qui lui a succédé.
+      if (enVolRef.current?.jeton === jeton) enVolRef.current = null
     }
   }, [])
 
   useEffect(() => {
     if (!clientId) {
-      clientRef.current = null
       curseurRef.current = null
+      // On quitte : plus aucune requête ne détient légitimement le verrou, et
+      // l'effet ne se redéclenchera pas tout seul si l'on revient sur le MÊME
+      // client. Sans cette libération, rouvrir la même fiche n'affiche rien.
+      enVolRef.current = null
       setEtat('inactif')
       setLignes([])
       setEnCours([])
