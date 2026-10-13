@@ -290,3 +290,128 @@ enverrait chercher une barre de séparation dans une case qui n'en a jamais eu.
   34 contrôles de bout en bout sur émulateur, dont un classeur abîmé exactement
   comme Excel l'abîme : zéros mangés, format `0000000`, cellule texte, cas
   ambigu, deux feuilles.
+
+---
+
+# Importer les agents commerciaux
+
+> Ajouté le 2026-10-13, après l'import des numéros. Même fichier à deux colonnes,
+> même mécanique, mais **« Agent commercial » est un nom** — et un nom n'a pas de
+> forme qui le valide.
+
+```powershell
+# Aperçu — aucune écriture
+node scripts/importerAgentsCommerciaux.mjs --dossier=commerciaux --csv=apercu.csv
+
+# Application, les mêmes quatre verrous
+$env:AKAYIS_ALLOW_AGENT_IMPORT='true'
+node scripts/importerAgentsCommerciaux.mjs --dossier=commerciaux --execute --allow-production
+
+# Annulation
+node scripts/importerAgentsCommerciaux.mjs --annuler=backups/import-commerciaux-<horodatage> --execute --allow-production
+```
+
+Le fichier porte **« Code agent »** (retrouve la fiche) et **« Agent commercial »**
+(ce qu'on ajoute). Toutes les options de l'import de numéros s'appliquent :
+`--dossier=`, `--fichier=`, `--feuille=`, `--csv=`, `--taille-lot=`.
+
+Donner un fichier au mauvais script n'est plus un mystère : le refus **nomme la
+commande** qui sait le lire, puisque les en-têtes disent de quel champ il s'agit.
+
+## Ce qui change quand la valeur est un nom
+
+L'import de numéros s'appuie partout sur la longueur : huit chiffres valident,
+sept se complètent, six sont une erreur. **Rien de tel ici** — « KONE » et
+« OUEDRAOGO W. Jean-Baptiste » sont tous deux justes, et une faute de frappe est
+un nom parfaitement valide. Les refus portent donc sur ce qui n'est *pas* un nom :
+
+| Cas | Décision |
+|---|---|
+| `23/01/2026` | refusé : date convertie par le tableur |
+| `N/A`, `NÉANT`, `RAS`, `aucun`, `xxx` | refusé : dit « pas de commercial ». Écrit en base, ce serait un commercial de plus dans le tableau de bord |
+| `KONE / OUEDRAOGO`, `KONE et OUEDRAOGO` | refusé : une fiche n'a qu'un commercial |
+| `OUEDRAOGO, Salif` | **accepté** — c'est « Nom, Prénom », la forme la plus courante. La virgule n'est pas un séparateur ici, contrairement au numéro |
+| `70112233`, `-`, `0` | refusé : aucune lettre, donc ce n'est pas un nom |
+| plus de 60 caractères | refusé : une phrase est tombée dans la colonne |
+
+`N/A` porte une barre, donc le contrôle « plusieurs commerciaux » le verrait comme
+deux noms. Il est reconnu **avant** — le bon refus pour la bonne raison, sinon on
+part chercher un second commercial dans une case qui n'en nomme aucun.
+
+## Le piège propre à ce champ : couper un commercial en deux
+
+`calculerCommerciaux()` groupe les agents par la **chaîne exacte** de
+`agentCommercial`. Écrire `ouedraogo s.` à côté des fiches qui portent
+`OUEDRAOGO S.` crée un **second commercial** dans le tableau de bord, avec une
+part du portefeuille et du volume de l'autre. Aucune règle de forme ne s'en
+plaindrait : les deux chaînes sont des noms valides.
+
+C'est l'analogue exact du zéro restitué depuis la base, et la réponse est la
+même — **la base est la référence, pas le fichier** :
+
+- une orthographe **domine strictement** en base → le fichier est aligné dessus,
+  la ligne est comptée et listée dans l'aperçu ;
+- deux orthographes **à égalité** → on ne tranche pas. Choisir serait tirer au
+  sort le nom affiché sur des centaines de fiches : le fichier est gardé tel quel
+  et le partage est signalé ;
+- nom **absent de la base** → gardé tel quel, et marqué comme nouveau.
+
+Deux sections de l'aperçu existent uniquement pour ça, parce qu'une faute de
+frappe ne se voit **pas** ligne par ligne :
+
+- **RÉPARTITION** — combien de fiches par commercial, parmi les lignes à écrire ;
+- **les noms que la base ne porte sur aucune fiche** — un nouveau commercial est
+  normal ; `OUEDRAGO S.` avec une fiche au compteur ne l'est pas. C'est le seul
+  endroit où cette faute-là se montre.
+
+## Ce qui n'est PAS écrit
+
+**Une seule clé : `agentCommercial`.** Le piège de l'import de numéros ne se pose
+pas ici — `agentCommercial` n'entre pas dans le calcul de `champsAgent()`, donc
+l'écrire sur une fiche héritée ne fait pas cesser la lecture de `orange`. Y
+ajouter `codeAgent`/`numeroAgent` « pour ranger la fiche au passage » serait une
+écriture que personne n'a demandée, sur des milliers de fiches, dans un import qui
+parle d'autre chose. Le banc d'essai le vérifie fiche par fiche.
+
+## La mécanique est commune aux deux imports
+
+| Fichier | Rôle |
+|---|---|
+| `scripts/lib/champsImportables.mjs` | **ce qui diffère** : colonnes, validation, comparaison, clés écrites |
+| `scripts/lib/importChampsAgent.mjs` | la décision ligne par ligne, pure, sans I/O |
+| `scripts/lib/executerImportAgent.mjs` | verrous, sauvegarde relue, lots de 400, annulation |
+| `scripts/importerNumerosAgent.mjs` | point d'entrée « Numéro agent » |
+| `scripts/importerAgentsCommerciaux.mjs` | point d'entrée « Agent commercial » |
+
+La partie dangereuse — les quatre verrous, la sauvegarde relue depuis le disque
+avant la première écriture, les lots avec leur journal d'audit dans le même batch,
+l'annulation qui refuse de toucher une fiche modifiée depuis — est **identique**
+pour les deux. En avoir deux copies voudrait dire corriger deux fois chaque défaut
+qu'on y trouvera, et n'en corriger qu'une le jour où on l'oublie.
+
+`scripts/importerNumerosAgent.mjs` **garde son nom** : les imports déjà passés en
+production ont affiché « Pour annuler : node scripts/importerNumerosAgent.mjs
+--annuler=… », et cette ligne doit continuer de marcher telle quelle.
+
+### La forme des sauvegardes a changé, les anciennes restent annulables
+
+`avant` est devenu une table `clé → { present, valeur }`, pour accueillir un champ
+de plus. Les sauvegardes écrites **avant le 2026-10-13** portent la forme à plat
+(`codeAgentPresent`, …) : l'annulation sait lire les deux. Ce n'est pas de la
+compatibilité décorative — c'est la seule façon d'annuler l'import des 15 000
+numéros déjà passé en production, et un banc d'essai dédié le vérifie.
+
+Pointer une sauvegarde de numéros vers le script des commerciaux (ou l'inverse)
+est **refusé**, en nommant le bon script : les deux laissent des dossiers voisins,
+et se tromper supprimerait des clés que ce script n'a jamais écrites.
+
+## Garanties vérifiées
+
+- **50 tests unitaires** (`tests/unit/tc-251-import-agents-commerciaux.test.js`)
+  et **36 contrôles de bout en bout** sur émulateur : aperçu sans écriture,
+  alignement d'orthographe, conflit non écrasé, fiche héritée dont `orange` et
+  l'absence des clés agent survivent, journal d'audit, second passage à zéro
+  écriture, annulation rendant l'**absence** de la clé, fiche modifiée depuis
+  laissée en place, mauvaise sauvegarde refusée, fichier de numéros redirigé.
+- **Non-régression de l'import de numéros** : même banc, plus l'annulation d'une
+  sauvegarde à l'ancienne forme.

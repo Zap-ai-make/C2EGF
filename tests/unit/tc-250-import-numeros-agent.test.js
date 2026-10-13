@@ -13,7 +13,7 @@ import {
   resoudreCode,
   longueursDeCode,
   normaliserEntete,
-} from '../../scripts/lib/importNumerosAgent.mjs'
+} from '../../scripts/lib/importChampsAgent.mjs'
 import { analyserCsv, detecterSeparateur, valeurCellule } from '../../scripts/lib/lireTableur.mjs'
 import { champsAgent } from '../../src/utils/agentFields.js'
 
@@ -46,7 +46,7 @@ const fiche = (over = {}) => ({
   ...over,
 })
 
-const ligne = (code, numero, n = 2) => ({ ligne: n, code, numero })
+const ligne = (code, numero, n = 2) => ({ ligne: n, code, valeur: numero })
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -128,13 +128,13 @@ describe('TC-250 — le code agent, jamais complété', () => {
 describe('TC-250 — les colonnes du fichier', () => {
   it('[TC-250-12] trouve les deux colonnes exactes', () => {
     expect(trouverColonnes([COLONNE_CODE, COLONNE_NUMERO]))
-      .toEqual({ code: COLONNE_CODE, numero: COLONNE_NUMERO })
+      .toEqual({ code: COLONNE_CODE, valeur: COLONNE_NUMERO })
   })
 
   /** Un intitulé mal accentué ou mal capitalisé reste le même intitulé. */
   it('[TC-250-13] tolère l’accent, la casse et les espaces', () => {
     const trouvees = trouverColonnes(['  CODE AGENT ', 'Numero Agent'])
-    expect(trouvees).toEqual({ code: '  CODE AGENT ', numero: 'Numero Agent' })
+    expect(trouvees).toEqual({ code: '  CODE AGENT ', valeur: 'Numero Agent' })
   })
 
   /**
@@ -397,14 +397,20 @@ describe('TC-250 — ce qui est réellement écrit', () => {
       fiche({ id: 'h', orange: '7654321' }),
     ]).lignes)
     expect(heritee.avant).toEqual({
-      codeAgentPresent: false, numeroAgentPresent: false, codeAgent: null, numeroAgent: null,
+      champs: {
+        codeAgent: { present: false, valeur: null },
+        numeroAgent: { present: false, valeur: null },
+      },
     })
 
     const [rangee] = ecrituresDe(planifierImport([ligne('0123456', '01234567')], [
       fiche({ id: 'r', codeAgent: '0123456', numeroAgent: '' }),
     ]).lignes)
     expect(rangee.avant).toEqual({
-      codeAgentPresent: true, numeroAgentPresent: true, codeAgent: '0123456', numeroAgent: '',
+      champs: {
+        codeAgent: { present: true, valeur: '0123456' },
+        numeroAgent: { present: true, valeur: '' },
+      },
     })
   })
 
@@ -643,7 +649,7 @@ describe('TC-250 — restituer le zéro depuis la base, jamais le deviner', () =
 
 describe('TC-250 — l’import d’un fichier Excel abîmé', () => {
   const numerique = (code, numero, n = 2) => ({
-    ligne: n, code, numero, codeNumerique: true, numeroNumerique: true,
+    ligne: n, code, valeur: numero, codeNumerique: true, valeurNumerique: true,
   })
 
   /** Le cas réel : la colonne était en Général, les zéros ont sauté. */
@@ -656,7 +662,7 @@ describe('TC-250 — l’import d’un fichier Excel abîmé', () => {
     expect(lignes[0].codeUtilise).toBe('0123456')
     expect(lignes[0].detail).toMatch(/restitué/)
     expect(ecritures[0].id).toBe('cible')
-    expect(bilan.zerosRestitues).toEqual({ codes: 1, numeros: 1 })
+    expect(bilan.ajustements).toEqual({ codes: 1, valeurs: 1 })
   })
 
   /**
@@ -708,8 +714,8 @@ describe('TC-250 — l’import d’un fichier Excel abîmé', () => {
    */
   it('[TC-250-71] voit la répétition créée par la restitution', () => {
     const { lignes, ecritures } = planifierImport([
-      { ligne: 2, code: '123456', numero: '01234567', codeNumerique: true },
-      { ligne: 3, code: '0123456', numero: '07654321', codeNumerique: false },
+      { ligne: 2, code: '123456', valeur: '01234567', codeNumerique: true },
+      { ligne: 3, code: '0123456', valeur: '07654321', codeNumerique: false },
     ], [fiche({ id: 'cible', codeAgent: '0123456', numeroAgent: '' })])
 
     expect(lignes.map((l) => l.statut)).toEqual([STATUTS.CODE_REPETE, STATUTS.CODE_REPETE])
@@ -749,7 +755,7 @@ describe('TC-250 — les styles d’en-tête acceptés', () => {
 
   it('[TC-250-73] accepte les noms de champs du code', () => {
     expect(codeEtNumero('codeAgent', 'numeroAgent'))
-      .toEqual({ code: 'codeAgent', numero: 'numeroAgent' })
+      .toEqual({ code: 'codeAgent', valeur: 'numeroAgent' })
   })
 
   it('[TC-250-74] accepte le tiret bas, le tiret et le point', () => {
@@ -810,8 +816,8 @@ describe('TC-250 — les styles d’en-tête acceptés', () => {
 describe('TC-250 — plusieurs lots réunis avant la planification', () => {
   it('[TC-250-82] voit un code répété d’un fichier à l’autre', () => {
     const { lignes, ecritures } = planifierImport([
-      { fichier: 'lot1.csv', ligne: 2, code: '0123456', numero: '01234567' },
-      { fichier: 'lot2.csv', ligne: 2, code: '0123456', numero: '09999999' },
+      { fichier: 'lot1.csv', ligne: 2, code: '0123456', valeur: '01234567' },
+      { fichier: 'lot2.csv', ligne: 2, code: '0123456', valeur: '09999999' },
     ], [fiche({ id: 'cible', codeAgent: '0123456', numeroAgent: '' })])
 
     expect(lignes.map((l) => l.statut)).toEqual([STATUTS.CODE_REPETE, STATUTS.CODE_REPETE])
@@ -821,8 +827,8 @@ describe('TC-250 — plusieurs lots réunis avant la planification', () => {
   /** Le fichier voyage avec la ligne : « L2 » tout seul ne désigne rien. */
   it('[TC-250-83] nomme le fichier d’origine de chaque ligne', () => {
     const { lignes } = planifierImport([
-      { fichier: 'lot1.csv', ligne: 2, code: '0000111', numero: '01111111' },
-      { fichier: 'lot2.csv', ligne: 7, code: '0000222', numero: '02222222' },
+      { fichier: 'lot1.csv', ligne: 2, code: '0000111', valeur: '01111111' },
+      { fichier: 'lot2.csv', ligne: 7, code: '0000222', valeur: '02222222' },
     ], [
       fiche({ id: 'a', codeAgent: '0000111', numeroAgent: '' }),
       fiche({ id: 'b', codeAgent: '0000222', numeroAgent: '' }),
@@ -833,7 +839,7 @@ describe('TC-250 — plusieurs lots réunis avant la planification', () => {
 
   it('[TC-250-84] une ligne sans fichier reste lisible', () => {
     const { lignes } = planifierImport(
-      [{ ligne: 2, code: '0000111', numero: '01111111' }],
+      [{ ligne: 2, code: '0000111', valeur: '01111111' }],
       [fiche({ id: 'a', codeAgent: '0000111', numeroAgent: '' })],
     )
     expect(lignes[0].fichier).toBe('')

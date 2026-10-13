@@ -1,16 +1,24 @@
 /**
- * importNumerosAgent.mjs — compléter le « Numéro agent » des fiches existantes.
+ * importChampsAgent.mjs — compléter un champ des fiches clients existantes.
  *
- * PUR : aucune I/O, aucun Firebase, aucun tableur. `scripts/importerNumerosAgent.mjs`
+ * PUR : aucune I/O, aucun Firebase, aucun tableur. `executerImportAgent.mjs`
  * apporte les lignes du fichier et les fiches de la base ; ce module ne fait que
  * décider, ligne par ligne. Même séparation que `fusionClients.mjs`, et pour la
  * même raison : une décision qui écrit en production doit pouvoir être éprouvée
  * cas par cas sans base ni fichier.
  *
+ * DEUX CHAMPS IMPORTABLES, UNE SEULE MÉCANIQUE
+ * ────────────────────────────────────────────
+ * Ce module ne connaît ni les numéros ni les noms de commerciaux : il reçoit une
+ * DESCRIPTION de champ (`champsImportables.mjs`) et applique la même mécanique —
+ * retrouver la fiche par son code, détecter les répétitions, refuser d'écraser.
+ * Ce qui diffère entre « Numéro agent » et « Agent commercial » est écrit là-bas,
+ * et seulement là-bas.
+ *
  * TROIS CHAMPS DISTINCTS, ET ILS NE SE CONFONDENT JAMAIS
  * ──────────────────────────────────────────────────────
  *   · Code agent       — 7 chiffres en général. Sert à RETROUVER la fiche.
- *   · Numéro agent     — 8 chiffres. C'est ce qu'on AJOUTE.
+ *   · Numéro agent     — 8 chiffres.
  *   · Numéro personnel — le téléphone du commerçant. JAMAIS touché, jamais lu
  *                        comme un numéro agent. C'est une colonne piège : un
  *                        fichier qui la contient ne doit pas la voir prise pour
@@ -19,20 +27,29 @@
  * ⚠ CE MODULE NE FAIT JAMAIS
  *   · créer une fiche — un code inconnu est signalé, pas inséré ;
  *   · rapprocher par le nom — seul le code agent identifie, à l'exact ;
- *   · écraser une valeur — un numéro déjà présent et différent est un CONFLIT ;
+ *   · écraser une valeur — une case déjà remplie autrement est un CONFLIT ;
  *   · effacer quoi que ce soit, `orange` et `numeroPersonnel` compris.
  */
 
-import { champsAgent } from '../../src/utils/agentFields.js'
 import { plier } from './doublonsClients.mjs'
+import { champsAgent } from '../../src/utils/agentFields.js'
+import { CHAMP_NUMERO, COLONNE_CODE } from './champsImportables.mjs'
 
-/** Les intitulés du formulaire, à la lettre. */
-export const COLONNE_CODE = 'Code agent'
-export const COLONNE_NUMERO = 'Numéro agent'
-export const COLONNE_INTERDITE = 'Numéro personnel'
-
-/** La longueur d'un numéro agent, reprise de l'application. */
-export const LONGUEUR_NUMERO = 8
+export {
+  COLONNE_CODE,
+  COLONNE_NUMERO,
+  COLONNE_INTERDITE,
+  COLONNE_COMMERCIAL,
+  LONGUEUR_NUMERO,
+  CHAMP_NUMERO,
+  CHAMP_COMMERCIAL,
+  CHAMPS,
+  champParCle,
+  normaliserNumeroAgent,
+  normaliserAgentCommercial,
+  indexerCommerciaux,
+  alignerSurLaBase,
+} from './champsImportables.mjs'
 
 export const STATUTS = Object.freeze({
   A_COMPLETER: 'a-completer',
@@ -63,85 +80,6 @@ const texte = (valeur) => (valeur === null || valeur === undefined ? '' : String
  */
 export const normaliserCodeAgent = (valeur) => texte(valeur).trim()
 
-/** Ce qui sépare visiblement deux numéros dans une même case. */
-const SEPARATEURS = /[/,;|]|\bet\b|\bou\b|\n/i
-
-/**
- * Le numéro agent d'une ligne, ou le motif du refus.
- *
- * @param valeur           la case, telle que le tableur l'a rendue
- * @param celluleNumerique Excel a-t-il stocké cette case comme un NOMBRE ?
- * @returns {{numero: string, zerosRestitues: number}|{refus: string, detail: string}}
- *
- * ⚠ POURQUOI LES ESPACES INTÉRIEURS DISPARAISSENT AUSSI. La consigne dit « retire
- *   les espaces autour ». Mais « 01 23 45 67 » est UN numéro écrit avec des
- *   espaces, et le refuser rejetterait une saisie parfaitement lisible. Les
- *   enlever tous est sans risque parce que la LONGUEUR tranche ensuite : deux
- *   numéros collés par un espace (« 1234567 7654321 ») font 14 chiffres et sont
- *   refusés. L'espace ne peut donc pas servir à faire passer un multiple.
- *
- * ⚠ LE CAS MULTIPLE EST RÉEL. La base contient « 06629924/55772628 » et
- *   « 07796503/66553459/75928339 » dans des champs de numéro. Un tel contenu ne
- *   désigne pas un numéro agent : on l'ignore plutôt que d'en choisir un.
- *
- * ⚠ LA DISSYMÉTRIE TEXTE / NOMBRE EST VOULUE, et c'est elle qui rend Excel sûr.
- *   Une case TEXTE contient ce que la boutique a écrit : sept chiffres se
- *   complètent (la consigne le dit), six chiffres sont une erreur de saisie et
- *   sont REFUSÉS. Une case NOMBRE, elle, a traversé Excel : ses zéros de tête ont
- *   pu être mangés par le tableur, et comme la cible fait exactement huit
- *   chiffres, les restituer n'invente rien — « 234567 » dans une case nombre ne
- *   peut avoir été que « 00234567 ». Chaque restitution est comptée et affichée.
- */
-export function normaliserNumeroAgent(valeur, celluleNumerique = false) {
-  const brut = texte(valeur).trim()
-  if (brut === '') return { refus: 'vide', detail: 'case vide' }
-
-  // ⚠ LA CELLULE QU'EXCEL A CONVERTIE EN DATE, reconnue AVANT le test « plusieurs
-  //   numéros ». Sans ce cas, « 23/01/2026 » était refusé pour la bonne raison
-  //   (on n'écrit rien) mais avec le mauvais motif : « plusieurs numéros »,
-  //   envoyant la boutique chercher une barre de séparation dans une case qui
-  //   n'en avait jamais eu. Un refus doit dire ce qui s'est réellement passé.
-  //
-  //   Le cas arrive aussi en CSV : un fichier exporté depuis un classeur où la
-  //   conversion a déjà eu lieu porte la date, pas le code. Le contrôle est donc
-  //   ici, dans la normalisation, et non dans la lecture du classeur.
-  if (/^\d{1,4}[/.-]\d{1,2}[/.-]\d{1,4}$/.test(brut)) {
-    return {
-      refus: 'date',
-      detail: `« ${brut} » est une date : le tableur a converti la saisie.`
-        + ' Reformater la colonne en TEXTE dans le classeur et réexporter.',
-    }
-  }
-
-  if (SEPARATEURS.test(brut)) {
-    return { refus: 'multiple', detail: `plusieurs numéros : « ${brut} »` }
-  }
-
-  const sansEspaces = brut.replace(/\s+/g, '')
-  if (!/^\d+$/.test(sansEspaces)) {
-    return { refus: 'non-numerique', detail: `caractères non numériques : « ${brut} »` }
-  }
-
-  if (sansEspaces.length > LONGUEUR_NUMERO) {
-    return { refus: 'longueur', detail: `${sansEspaces.length} chiffres au lieu de ${LONGUEUR_NUMERO} : « ${brut} »` }
-  }
-
-  // Une case NOMBRE se complète jusqu'à huit ; une case TEXTE, seulement de sept.
-  const complementAutorise = celluleNumerique || sansEspaces.length === LONGUEUR_NUMERO - 1
-  if (sansEspaces.length < LONGUEUR_NUMERO && !complementAutorise) {
-    return {
-      refus: 'longueur',
-      detail: `${sansEspaces.length} chiffres au lieu de ${LONGUEUR_NUMERO} : « ${brut} »`
-        + ' (case texte : non complétée, car son contenu est celui qui a été saisi)',
-    }
-  }
-
-  return {
-    numero: sansEspaces.padStart(LONGUEUR_NUMERO, '0'),
-    zerosRestitues: LONGUEUR_NUMERO - sansEspaces.length,
-  }
-}
-
 /**
  * Les fiches de la base rangées par code agent.
  *
@@ -151,8 +89,7 @@ export function normaliserNumeroAgent(valeur, celluleNumerique = false) {
  *   l'import chercherait dans une base que la boutique ne voit pas.
  *
  *   Conséquence voulue : une fiche dont `orange` fait 8 chiffres est rangée comme
- *   un NUMÉRO agent, pas un code. Elle n'est donc pas trouvable par code — et
- *   c'est juste, puisqu'elle a déjà un numéro.
+ *   un NUMÉRO agent, pas un code. Elle n'est donc pas trouvable par code.
  */
 export function indexerParCodeAgent(fiches = []) {
   const parCode = new Map()
@@ -244,19 +181,21 @@ export const normaliserEntete = (valeur) => plier(
  *   qu'aucune règle de longueur ne s'en plaigne. C'est cette distinction-là que
  *   la comparaison exacte protège, et elle survit à toute normalisation de style.
  *
- * @returns {{code: string, numero: string}|{erreur: string}}
+ * @param {string[]} entetes
+ * @param {object}   champ   la description du champ à remplir
+ * @returns {{code: string, valeur: string}|{erreur: string}}
  */
-export function trouverColonnes(entetes = []) {
+export function trouverColonnes(entetes = [], champ = CHAMP_NUMERO) {
   const vus = entetes.map((e) => ({ brut: e, plie: normaliserEntete(e) }))
   const chercher = (attendu) => vus.filter((v) => v.plie === normaliserEntete(attendu))
 
-  for (const [attendu, nom] of [[COLONNE_CODE, 'code'], [COLONNE_NUMERO, 'numéro']]) {
+  for (const [attendu, role] of [[COLONNE_CODE, 'code'], [champ.colonne, 'valeur']]) {
     const trouves = chercher(attendu)
     if (trouves.length === 0) {
-      const personnel = chercher(COLONNE_INTERDITE)
-      const indice = nom === 'numéro' && personnel.length > 0
-        ? `\nLe fichier contient « ${personnel[0].brut} » : ce n'est PAS le numéro agent,`
-          + ' ce sont deux champs distincts et aucun des deux ne remplace l\'autre.'
+      const interdite = champ.colonneInterdite ? chercher(champ.colonneInterdite) : []
+      const indice = role === 'valeur' && interdite.length > 0
+        ? `\nLe fichier contient « ${interdite[0].brut} » : ce n'est PAS le ${champ.libelle},`
+          + " ce sont deux champs distincts et aucun des deux ne remplace l'autre."
         : ''
       return {
         erreur: `Colonne « ${attendu} » absente.\nEn-têtes lus : ${entetes.map((e) => `« ${e} »`).join(', ') || '(aucun)'}${indice}`,
@@ -267,7 +206,20 @@ export function trouverColonnes(entetes = []) {
     }
   }
 
-  return { code: chercher(COLONNE_CODE)[0].brut, numero: chercher(COLONNE_NUMERO)[0].brut }
+  return { code: chercher(COLONNE_CODE)[0].brut, valeur: chercher(champ.colonne)[0].brut }
+}
+
+/**
+ * Les colonnes de valeur reconnues parmi les en-têtes, pour deviner quel champ un
+ * fichier vient remplir.
+ *
+ * ⚠ DEVINER N'EST PERMIS QUE SI LA RÉPONSE EST UNIQUE. Un fichier qui porte les
+ *   deux colonnes ne dit pas lequel des deux champs il vient remplir : c'est à
+ *   l'opérateur de trancher avec `--champ=`, pas au script de choisir.
+ */
+export function champsPresents(entetes = [], champs = []) {
+  const plies = new Set(entetes.map(normaliserEntete))
+  return champs.filter((champ) => plies.has(normaliserEntete(champ.colonne)))
 }
 
 /** Le nom affichable d'une fiche, pour l'aperçu. */
@@ -276,13 +228,17 @@ const nomDe = (fiche) => `${fiche?.nom ?? ''} ${fiche?.prenom ?? ''}`.trim() || 
 /**
  * Ce que l'import ferait, ligne par ligne — et rien de plus.
  *
- * @param {Array<{ligne: number, code: string, numero: string,
- *                codeNumerique?: boolean, numeroNumerique?: boolean}>} lignes
+ * @param {Array<{ligne: number, code: string, valeur: string, fichier?: string,
+ *                codeNumerique?: boolean, valeurNumerique?: boolean}>} lignes
  * @param {Array<object>} fiches  les fiches de `globalClients`
+ * @param {object}        champ   la description du champ à remplir
  */
-export function planifierImport(lignes = [], fiches = []) {
+export function planifierImport(lignes = [], fiches = [], champ = CHAMP_NUMERO) {
   const parCode = indexerParCodeAgent(fiches)
   const longueurs = longueursDeCode(parCode)
+  // Ce que la base doit fournir avant de normaliser : rien pour un numéro, les
+  // orthographes déjà en place pour un agent commercial.
+  const contexte = champ.contexte(fiches)
 
   // ⚠ LES RÉPÉTITIONS SE COMPTENT AVANT DE DÉCIDER, et sur le code RÉSOLU : deux
   //   lignes portant « 123456 » et « 0123456 » désignent la même fiche dès que le
@@ -320,7 +276,14 @@ export function planifierImport(lignes = [], fiches = []) {
       // `fichier` voyage avec la ligne : quand plusieurs lots sont réunis, « L42 »
       // tout seul ne désigne rien — il y a une ligne 42 dans chaque fichier.
       fichier: brute.fichier ?? '',
-      ligne: brute.ligne, code, nom: '', actuel: '', propose: '', zerosRestitues: 0, codeUtilise: code,
+      ligne: brute.ligne,
+      code,
+      nom: '',
+      actuel: '',
+      propose: '',
+      ajuste: false,
+      zerosCode: 0,
+      codeUtilise: code,
     }
 
     if (!code) {
@@ -328,13 +291,15 @@ export function planifierImport(lignes = [], fiches = []) {
       continue
     }
 
-    const numero = normaliserNumeroAgent(brute.numero, Boolean(brute.numeroNumerique))
-    if (numero.refus) {
-      resultats.push({ ...base, statut: STATUTS.NUMERO_IGNORE, detail: numero.detail })
+    const lue = champ.normaliser(brute.valeur, Boolean(brute.valeurNumerique), contexte)
+    if (lue.refus) {
+      resultats.push({ ...base, statut: STATUTS.NUMERO_IGNORE, detail: lue.detail })
       continue
     }
-    base.propose = numero.numero
-    base.zerosRestitues = numero.zerosRestitues
+    base.propose = lue.valeur
+    base.ajuste = Boolean(lue.ajuste)
+    base.nouveau = Boolean(lue.nouveau)
+    base.concurrentes = lue.concurrentes ?? null
 
     const r = resoudre(brute)
 
@@ -358,7 +323,7 @@ export function planifierImport(lignes = [], fiches = []) {
         .filter((v) => parCode.has(v))
       const indice = variantes.length > 0
         ? ` — mais ${variantes.map((v) => `« ${v} »`).join(' et ')} existe(nt) en base.`
-          + ' Si la colonne est en TEXTE, c\'est le fichier qui porte un code tronqué ;'
+          + " Si la colonne est en TEXTE, c'est le fichier qui porte un code tronqué ;"
           + ' la reformater en TEXTE puis réexporter règle les deux cas.'
         : ''
       resultats.push({ ...base, statut: STATUTS.INTROUVABLE, detail: `aucune fiche avec ce code${indice}` })
@@ -389,25 +354,21 @@ export function planifierImport(lignes = [], fiches = []) {
     }
 
     const fiche = candidates[0]
-    const actuelBrut = champsAgent(fiche).numeroAgent
+    const actuelBrut = champ.lire(fiche)
     base.nom = nomDe(fiche)
     base.actuel = actuelBrut
+    base.zerosCode = r.zerosRestitues
     const zeroCode = r.zerosRestitues > 0
       ? `code « ${code} » → « ${r.code} », ${r.zerosRestitues} zéro(s) restitué(s) depuis la base`
       : ''
 
     if (actuelBrut !== '') {
-      // ⚠ COMPARAISON SUR LA FORME NORMALISÉE, PAS SUR LA CHAÎNE BRUTE. Sinon un
-      //   espace résiduel ou un zéro manquant en base ferait un « conflit » là où
-      //   il n'y a qu'une écriture différente du même numéro — et la boutique
-      //   partirait vérifier à la main des centaines de faux problèmes.
-      const actuel = normaliserNumeroAgent(actuelBrut)
-      if (!actuel.refus && actuel.numero === numero.numero) {
+      if (champ.memeValeur(actuelBrut, lue.valeur)) {
         resultats.push({
           ...base,
           statut: STATUTS.INCHANGE,
           fiche,
-          detail: [actuelBrut === numero.numero ? '' : `déjà présent, écrit « ${actuelBrut} »`, zeroCode]
+          detail: [actuelBrut === lue.valeur ? '' : `déjà présent, écrit « ${actuelBrut} »`, zeroCode]
             .filter(Boolean).join(' · '),
         })
       } else {
@@ -415,27 +376,26 @@ export function planifierImport(lignes = [], fiches = []) {
           ...base,
           statut: STATUTS.CONFLIT,
           fiche,
-          detail: [`la fiche porte déjà « ${actuelBrut} », le fichier propose « ${numero.numero} »`, zeroCode]
+          detail: [`la fiche porte déjà « ${actuelBrut} », le fichier propose « ${lue.valeur} »`, zeroCode]
             .filter(Boolean).join(' · '),
         })
       }
       continue
     }
 
-    const zeroNumero = numero.zerosRestitues > 0
-      ? `numéro complété de ${numero.zerosRestitues} zéro(s) de tête`
-      : ''
     resultats.push({
       ...base,
       statut: STATUTS.A_COMPLETER,
       fiche,
-      zerosRestitues: numero.zerosRestitues,
-      zerosCode: r.zerosRestitues,
-      detail: [zeroCode, zeroNumero].filter(Boolean).join(' · '),
+      detail: [zeroCode, lue.note].filter(Boolean).join(' · '),
     })
   }
 
-  return { lignes: resultats, bilan: compterBilan(resultats), ecritures: ecrituresDe(resultats) }
+  return {
+    lignes: resultats,
+    bilan: compterBilan(resultats),
+    ecritures: ecrituresDe(resultats, champ),
+  }
 }
 
 /**
@@ -455,8 +415,9 @@ export function compterBilan(resultats = []) {
     + parStatut[STATUTS.CODE_REPETE]
     + parStatut[STATUTS.PLUSIEURS_CLIENTS]
 
-  // Les restitutions de zéro ne sont pas un seau : ce sont des lignes qui
-  // s'écrivent, mais que la boutique doit avoir VUES avant d'écrire.
+  // Les ajustements ne sont pas un seau : ce sont des lignes qui s'écrivent, mais
+  // que la boutique doit avoir VUES avant d'écrire, parce que le script y a
+  // changé quelque chose — un zéro restitué, une orthographe alignée.
   const aEcrire = resultats.filter((r) => r.statut === STATUTS.A_COMPLETER)
 
   return {
@@ -472,9 +433,9 @@ export function compterBilan(resultats = []) {
       codeRepete: parStatut[STATUTS.CODE_REPETE],
       plusieursClients: parStatut[STATUTS.PLUSIEURS_CLIENTS],
     },
-    zerosRestitues: {
+    ajustements: {
       codes: aEcrire.filter((r) => (r.zerosCode ?? 0) > 0).length,
-      numeros: aEcrire.filter((r) => (r.zerosRestitues ?? 0) > 0).length,
+      valeurs: aEcrire.filter((r) => r.ajuste).length,
     },
   }
 }
@@ -482,48 +443,36 @@ export function compterBilan(resultats = []) {
 /**
  * Les écritures à faire, et l'état d'AVANT de chacune.
  *
- * ⚠ ON ÉCRIT LES DEUX CHAMPS, PAS SEULEMENT LE NUMÉRO. C'est le point le plus
- *   dangereux de tout cet import, et il ne se voit pas.
+ * ⚠ `avant` NOTE LA PRÉSENCE DES CLÉS, pas seulement leur valeur. Pour l'import
+ *   de numéros, annuler en remettant `codeAgent: ''` au lieu de SUPPRIMER la clé
+ *   laisserait la fiche en mode « rangée puis vidée exprès » : son `orange` ne
+ *   serait plus lu, et l'annulation aurait causé le dégât qu'elle venait réparer.
+ *   La règle vaut pour tout champ : on restitue l'ABSENCE autant que la valeur.
  *
- *   `champsAgent` décide qu'une fiche est « déjà rangée » par la PRÉSENCE des
- *   clés `codeAgent`/`numeroAgent`, pas par leur valeur. Une fiche d'avant la
- *   séparation n'a aucune des deux : son identifiant est lu depuis `orange`.
- *   Écrire `numeroAgent` tout seul y ferait apparaître une clé — et dès lors
- *   l'application cesserait de lire `orange`, donc LE CODE AGENT DISPARAÎTRAIT
- *   DE L'ÉCRAN. Sur 15 000 fiches, un import censé ajouter une information en
- *   aurait effacé une autre, sans erreur et sans compteur.
- *
- *   On écrit donc le code tel que `champsAgent` le lit AUJOURD'HUI, en même temps
- *   que le numéro. La fiche se retrouve rangée pour de bon, ce que
- *   `agentFields.js` annonce déjà comme l'effet de « la première modification ».
- *   `orange` n'est pas touché : rien n'est effacé, et l'annulation reste possible.
- *
- * ⚠ LE CODE ÉCRIT VIENT DE LA FICHE, JAMAIS DU FICHIER. Même quand un zéro a été
- *   restitué pour retrouver la fiche, c'est `champsAgent(fiche).codeAgent` qui
- *   est écrit — la base est la référence. Recopier le code du fichier ferait
- *   entrer dans la fiche la version tronquée par le tableur.
- *
- * ⚠ `avant` NOTE LA PRÉSENCE DES CLÉS, pas seulement leur valeur. Annuler en
- *   remettant `codeAgent: ''` au lieu de SUPPRIMER la clé laisserait la fiche en
- *   mode « rangée puis vidée exprès » : son `orange` ne serait plus lu, et
- *   l'annulation aurait causé le dégât qu'elle venait réparer.
+ * ⚠ LA FORME DE `avant` A CHANGÉ LE 2026-10-13 pour accueillir un second champ :
+ *   `avant.champs` est maintenant une table clé → { present, valeur }. Les
+ *   sauvegardes écrites avant cette date portent `codeAgentPresent` et consorts à
+ *   plat ; `executerImportAgent.mjs` sait lire les deux, afin qu'un import déjà
+ *   passé en production reste annulable.
  */
-export function ecrituresDe(resultats = []) {
+export function ecrituresDe(resultats = [], champ = CHAMP_NUMERO) {
   return resultats
     .filter((r) => ECRIT.has(r.statut) && r.fiche)
-    .map((r) => ({
-      id: r.fiche.id,
-      storeId: r.fiche.registeredStoreId ?? null,
-      nom: r.nom,
-      maj: {
-        codeAgent: champsAgent(r.fiche).codeAgent,
-        numeroAgent: r.propose,
-      },
-      avant: {
-        codeAgentPresent: Object.prototype.hasOwnProperty.call(r.fiche, 'codeAgent'),
-        numeroAgentPresent: Object.prototype.hasOwnProperty.call(r.fiche, 'numeroAgent'),
-        codeAgent: r.fiche.codeAgent ?? null,
-        numeroAgent: r.fiche.numeroAgent ?? null,
-      },
-    }))
+    .map((r) => {
+      const maj = champ.champsAEcrire(r.fiche, r.propose)
+      const avant = {}
+      for (const cle of Object.keys(maj)) {
+        avant[cle] = {
+          present: Object.prototype.hasOwnProperty.call(r.fiche, cle),
+          valeur: r.fiche[cle] ?? null,
+        }
+      }
+      return {
+        id: r.fiche.id,
+        storeId: r.fiche.registeredStoreId ?? null,
+        nom: r.nom,
+        maj,
+        avant: { champs: avant },
+      }
+    })
 }
