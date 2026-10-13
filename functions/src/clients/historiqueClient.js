@@ -2,30 +2,30 @@
  * historiqueClient.js — ce qu'une boutique voit du travail d'une autre.
  *
  * PUR : aucune I/O, aucun Firestore. `listClientHistory.js` apporte les
- * documents ; ce module decide ce qu'ils deviennent. Meme separation que
- * `aggregateOutstandingDrafts`, et pour la meme raison : une lecture qui
- * traverse la frontiere entre boutiques doit etre eprouvable cas par cas.
+ * documents ; ce module décide ce qu'ils deviennent. Même séparation que
+ * `aggregateOutstandingDrafts`, et pour la même raison : une lecture qui
+ * traverse la frontière entre boutiques doit être éprouvable cas par cas.
  *
- * CE MODULE NE PEUT RIEN IMPORTER DE `src/`. Le dossier `functions/` est
- *   deploye seul : un import vers l application casserait le deploiement. D ou
- *   la reimplementation de `montantRestant`, qui existe aussi dans
- *   `src/utils/argentDehors.js`. `listOutstandingDrafts.js` fait de meme.
+ * ⚠ CE MODULE NE PEUT RIEN IMPORTER DE `src/`. Le dossier `functions/` est
+ *   déployé seul : un import vers l'application casserait le déploiement. D'où
+ *   la réimplémentation de `montantRestant`, qui existe aussi dans
+ *   `src/utils/argentDehors.js`. `listOutstandingDrafts.js` fait de même.
  */
 
-/** Les mouvements de la BOUTIQUE, qui ne sont pas des operations d'agent. */
+/** Les mouvements de la BOUTIQUE, qui ne sont pas des opérations d'agent. */
 export const TYPES_MOUVEMENT_BOUTIQUE = Object.freeze(['ravitaillement', 'cloture'])
 
 /**
- * Les ecritures du type rencontrees en base.
+ * Les écritures du type rencontrées en base.
  *
- * « Depot » ET « Depot » COEXISTENT, et ce n'est pas une hypothese :
- *   `src/utils/caisse.js` plie deja les accents pour cette raison exacte. Toute
- *   comparaison directe en manquerait la moitie.
+ * ⚠ « Dépôt » ET « Depot » COEXISTENT, et ce n'est pas une hypothèse :
+ *   `src/utils/caisse.js` plie déjà les accents pour cette raison exacte. Toute
+ *   comparaison directe en manquerait la moitié.
  */
-export const VARIANTES_DEPOT = Object.freeze(['Depot', 'Depot', 'depot', 'depot', 'DEPOT', 'DEPOT'])
+export const VARIANTES_DEPOT = Object.freeze(['Dépôt', 'Depot', 'dépôt', 'depot', 'DÉPÔT', 'DEPOT'])
 export const VARIANTES_RETRAIT = Object.freeze(['Retrait', 'retrait', 'RETRAIT'])
 
-/** Accents et casse retires — « Depot » et « Depot » deviennent « depot ». */
+/** Accents et casse retirés — « Dépôt » et « Depot » deviennent « depot ». */
 export const plierType = (valeur) => String(valeur ?? '')
   .normalize('NFD')
   .replace(/[̀-ͯ]/g, '')
@@ -35,10 +35,10 @@ export const plierType = (valeur) => String(valeur ?? '')
 const estNombre = (v) => typeof v === 'number' && Number.isFinite(v)
 
 /**
- * Le montant qu'une non terminee laisse reellement dehors.
+ * Le montant qu'une non terminée laisse réellement dehors.
  *
- * `remainingAmount` fait autorite des qu'il est lisible : il vaut 0 sur une
- * transaction soldee. On ne retombe sur `montant` que s'il est absent.
+ * `remainingAmount` fait autorité dès qu'il est lisible : il vaut 0 sur une
+ * transaction soldée. On ne retombe sur `montant` que s'il est absent.
  */
 export function montantRestant(ligne) {
   if (estNombre(ligne?.remainingAmount)) return ligne.remainingAmount
@@ -46,7 +46,7 @@ export function montantRestant(ligne) {
   return null
 }
 
-/** Un Timestamp Firestore, une Date ou une chaine, ramenes en millisecondes. */
+/** Un Timestamp Firestore, une Date ou une chaîne, ramenés en millisecondes. */
 const enMillisecondes = (brut) => {
   if (!brut) return 0
   if (typeof brut.toMillis === 'function') return brut.toMillis()
@@ -56,12 +56,12 @@ const enMillisecondes = (brut) => {
 }
 
 /**
- * L'instant de la DERNIERE ACTION — c'est lui qui classe.
+ * L'instant de la DERNIÈRE ACTION — c'est lui qui classe.
  *
- * Une operation notee le matin et validee le soir garde le `createdAt` du
- * brouillon : le serveur le recopie tel quel. Classee la-dessus, elle
- * reapparaîtrait au milieu de la matinee alors qu'on vient de la traiter.
- * Meme regle que `src/context/transactions.jsx`.
+ * Une opération notée le matin et validée le soir garde le `createdAt` du
+ * brouillon : le serveur le recopie tel quel. Classée là-dessus, elle
+ * réapparaîtrait au milieu de la matinée alors qu'on vient de la traiter.
+ * Même règle que `src/context/transactions.jsx`.
  */
 export const instantDerniereAction = (ligne) => Math.max(
   Number(ligne?.createdAt) || 0,
@@ -77,10 +77,10 @@ const boutiqueDuChemin = (chemin) => {
 /**
  * Une ligne affichable, ou `null` si le document n'en est pas une.
  *
- * LA BOUTIQUE VIENT DU CHEMIN. `storeName` recopie dans le document peut
- *   dater d'un renommage ; le chemin, lui, ne ment pas. Le nom est resolu
- *   depuis `stores`, puis depuis le champ recopie, puis depuis l'identifiant —
- *   une boutique fermee reste nommee par quelque chose plutot que par rien.
+ * ⚠ LA BOUTIQUE VIENT DU CHEMIN. `storeName` recopié dans le document peut
+ *   dater d'un renommage ; le chemin, lui, ne ment pas. Le nom est résolu
+ *   depuis `stores`, puis depuis le champ recopié, puis depuis l'identifiant —
+ *   une boutique fermée reste nommée par quelque chose plutôt que par rien.
  */
 export function ligneDeDocument({ id, chemin, donnees = {}, source, nomsDeBoutique }) {
   const type = plierType(donnees.type)
@@ -116,13 +116,13 @@ export function ligneDeDocument({ id, chemin, donnees = {}, source, nomsDeBoutiq
 }
 
 /**
- * Les deux sources, reunies et classees.
+ * Les deux sources, réunies et classées.
  *
- * LES NON TERMINEES SORTENT A PART. Ce sont des operations EN COURS, peu
- *   nombreuses, et ce qu'on vient voir en premier. Les melees a la liste paginee
- *   produirait un defaut visible : une non terminee vieille de trois mois
- *   s afficherait des la premiere page, puis se ferait depasser par des lignes
- *   plus recentes a chaque « charger plus ».
+ * ⚠ LES NON TERMINÉES SORTENT À PART. Ce sont des opérations EN COURS, peu
+ *   nombreuses, et ce qu'on vient voir en premier. Les mêlées à la liste paginée
+ *   produirait un défaut visible : une non terminée vieille de trois mois
+ *   s'afficherait dès la première page, puis se ferait dépasser par des lignes
+ *   plus récentes à chaque « charger plus ».
  */
 export function construireHistoriqueClient({ history = [], drafts = [], nomsDeBoutique = new Map() } = {}) {
   const convertir = (documents, source) => documents
