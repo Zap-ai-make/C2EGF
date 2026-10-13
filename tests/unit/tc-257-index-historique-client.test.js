@@ -8,6 +8,12 @@ import { readFileSync } from 'node:fs'
  *   les index à la volée : TOUS les tests de TC-256 passent sans qu'aucun index
  *   ne soit déclaré. La production, elle, refuse la requête. C'est le seul
  *   endroit où cet oubli peut être attrapé avant le déploiement.
+ *
+ * ⚠ IL N'Y A QUE DEUX INDEX ICI, ET C'EST VOULU. Un index {clientId, type} a
+ *   existé dans le plan : il servait des sommes par type que l'on a retirées,
+ *   parce qu'elles comptaient des lignes annulées dont l'argent était déjà
+ *   revenu aux soldes. Un index déclaré mais qu'aucune requête n'emprunte n'est
+ *   pas gratuit — Firestore le maintient à chaque écriture dans `history`.
  */
 
 const index = JSON.parse(readFileSync('firestore.indexes.json', 'utf8'))
@@ -22,14 +28,6 @@ describe('TC-257 — les index de l\'historique client', () => {
     expect(trouve('history', [
       { fieldPath: 'clientId', order: 'ASCENDING' },
       { fieldPath: 'createdAt', order: 'DESCENDING' },
-    ])).toBe(true)
-  })
-
-  /** Les sommes par type passent par `where('type','in',…)`. */
-  it('[TC-257-02] history : clientId + type, en portée GROUPE', () => {
-    expect(trouve('history', [
-      { fieldPath: 'clientId', order: 'ASCENDING' },
-      { fieldPath: 'type', order: 'ASCENDING' },
     ])).toBe(true)
   })
 
