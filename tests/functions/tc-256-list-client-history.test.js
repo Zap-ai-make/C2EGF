@@ -265,6 +265,18 @@ describe('TC-256 — la pagination', () => {
     expect(tous).toContain('milieu')
     expect(new Set(tous).size).toBe(3)
   })
+
+  /**
+   * Une ligne peut être mise à la corbeille pendant qu'on pagine. On refuse le
+   * curseur au lieu de se repositionner en silence : l'échec visible vaut mieux
+   * qu'une page qui recommence sans le dire.
+   */
+  it('[TC-256-24] un curseur dont le document a disparu est refusé', async () => {
+    await expect(appel('u-caissiere', {
+      clientId: 'c1',
+      curseur: { chemin: 'clients/store-a/history/jamais-existe' },
+    })).rejects.toMatchObject({ code: 'INVALID_HISTORY_CURSOR' })
+  })
 })
 
 describe('TC-256 — les totaux portent sur tout, pas sur la page', () => {
@@ -277,27 +289,21 @@ describe('TC-256 — les totaux portent sur tout, pas sur la page', () => {
     expect(totaux.operations).toBe(PAGE + 7)
   })
 
-  it('[TC-256-18] les montants sont sommés par type, accents compris', async () => {
-    await poser('clients/store-a/history', 'h1', ligne({ type: 'Dépôt', montant: 100 }))
-    await poser('clients/store-a/history', 'h2', ligne({ type: 'Depot', montant: 50 }))
-    await poser('clients/store-b/history', 'h3', ligne({ type: 'Retrait', montant: 30 }))
-
-    const { totaux } = await appel('u-caissiere')
-    expect(totaux.depots).toBe(150)
-    expect(totaux.retraits).toBe(30)
-  })
-
   /**
-   * ⚠ REVIEW FOCUS 5 — UN TYPE INATTENDU N'ENTRE DANS AUCUN TOTAL. Le taire
-   *   ferait afficher une somme fausse sans que rien ne le dise. On le compte.
+   * ⚠ UNE LIGNE ANNULÉE OU MISE À LA CORBEILLE A DÉJÀ RENDU SON MONTANT AUX
+   *   SOLDES. Le panneau ne publie donc aucune somme tirée de l'historique : les
+   *   seuls chiffres financiers viennent des non terminées, lues en entier.
    */
-  it('[TC-256-19] les opérations d’un type inattendu sont comptées à part', async () => {
-    await poser('clients/store-a/history', 'h1', ligne({ type: 'Dépôt', montant: 100 }))
-    await poser('clients/store-a/history', 'h2', ligne({ type: 'Transfert', montant: 999 }))
+  it('[TC-256-18] aucune somme d’argent n’est tirée de l’historique', async () => {
+    await poser('clients/store-a/history', 'h1', ligne({ montant: 500000 }))
+    await poser('clients/store-a/history', 'annulee', ligne({ montant: 500000, statut: 'Annulée' }))
 
     const { totaux } = await appel('u-caissiere')
-    expect(totaux.depots).toBe(100)
-    expect(totaux.nonClassees).toBe(1)
+    expect(totaux.depots).toBeUndefined()
+    expect(totaux.retraits).toBeUndefined()
+    expect(totaux.nonClassees).toBeUndefined()
+    // Les comptes, eux, comptent bien les deux : une ligne annulée a eu lieu.
+    expect(totaux.operations).toBe(2)
   })
 
   /**

@@ -20,11 +20,7 @@ import {
   validateAuthUid,
   validateInputPayload,
 } from '../dealerRequests/shared.js'
-import {
-  construireHistoriqueClient,
-  VARIANTES_DEPOT,
-  VARIANTES_RETRAIT,
-} from './historiqueClient.js'
+import { construireHistoriqueClient } from './historiqueClient.js'
 
 /** La taille d'une page. Le panneau charge la suite à la demande. */
 export const PAGE = 50
@@ -75,37 +71,34 @@ const validerProfilBoutique = (profile) => {
 /**
  * Les totaux, calculés sur TOUT l'historique du client.
  *
- * ⚠ ILS NE PORTENT PAS SUR LA PAGE. Un « 12 300 000 déposés » qui grandit à
- *   chaque « charger plus » se lit comme un total alors qu'il n'en est pas un.
+ * ⚠ ILS NE PORTENT PAS SUR LA PAGE. Un nombre qui grandit à chaque « charger
+ *   plus » se lit comme un total alors qu'il n'en est pas un.
  *
- * ⚠ LE COMPTE GLOBAL SE FAIT SANS `orderBy`, ET C'EST LE POINT. Firestore exclut
- *   d'une requête triée les documents qui ne portent pas le champ trié : une
- *   vieille ligne sans `createdAt` ne peut pas être listée. Le `count()` la voit,
- *   lui, et l'écart devient `nonDatees` — un nombre affiché plutôt qu'un silence.
+ * ⚠ CE SONT DES COMPTES, PAS DES SOMMES, ET C'EST UNE DÉCISION. Une ligne
+ *   annulée ou mise à la corbeille garde son `montant` alors que l'argent est
+ *   déjà revenu aux soldes : l'additionner ferait dire au panneau que l'agent a
+ *   déposé une somme qui n'existe plus. L'exclure proprement demanderait de
+ *   soustraire des agrégats filtrés sur le statut ET sur le type — deux
+ *   énumérations qui sous-estiment en silence ce qu'elles ne connaissent pas.
+ *   Les seuls chiffres financiers du panneau viennent donc des non terminées,
+ *   qui sont lues en entier : `resteAEncaisser` et `resteAPayer`.
+ *
+ * ⚠ LE COMPTE GLOBAL SE FAIT SANS `orderBy`, ET C'EST TOUT LE POINT. Firestore
+ *   exclut d'une requête triée les documents qui ne portent pas le champ trié :
+ *   une vieille ligne sans `createdAt` ne peut pas être listée. Mesuré sur
+ *   émulateur : 3 documents au total, 2 seulement une fois `orderBy('createdAt')`
+ *   posé. L'écart devient `nonDatees` — un nombre affiché plutôt qu'un silence.
  */
 async function calculerTotaux(db, clientId) {
   const base = db.collectionGroup('history').where('clientId', '==', clientId)
 
-  const [global, depots, retraits, datees] = await Promise.all([
+  const [global, datees] = await Promise.all([
     base.aggregate({ n: AggregateField.count() }).get(),
-    base.where('type', 'in', VARIANTES_DEPOT)
-      .aggregate({ n: AggregateField.count(), somme: AggregateField.sum('montant') }).get(),
-    base.where('type', 'in', VARIANTES_RETRAIT)
-      .aggregate({ n: AggregateField.count(), somme: AggregateField.sum('montant') }).get(),
     base.orderBy('createdAt', 'desc').aggregate({ n: AggregateField.count() }).get(),
   ])
 
   const operations = global.data().n ?? 0
-  const nbDepots = depots.data().n ?? 0
-  const nbRetraits = retraits.data().n ?? 0
-
-  return {
-    operations,
-    depots: depots.data().somme ?? 0,
-    retraits: retraits.data().somme ?? 0,
-    nonClassees: Math.max(0, operations - nbDepots - nbRetraits),
-    nonDatees: Math.max(0, operations - (datees.data().n ?? 0)),
-  }
+  return { operations, nonDatees: Math.max(0, operations - (datees.data().n ?? 0)) }
 }
 
 /** Le compte d'opérations par boutique — une requête par boutique active. */
