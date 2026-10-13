@@ -1,24 +1,21 @@
 import { useState, useMemo } from 'react'
 import { MONTHS } from '../constants'
-import { valeursAgent } from '../utils/agentFields.js'
+import { filtrerClients } from '../utils/rechercheClients.js'
 
 export const useClientsFilter = (clients) => {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedMonth, setSelectedMonth] = useState('Tous les mois')
 
   const filteredClients = useMemo(() => {
-    const search = searchTerm.trim().toLowerCase()
+    // ⚠ LA MÊME RECHERCHE QUE LA BARRE DU FORMULAIRE DE TRANSACTION, et c'est
+    //   le point : deux implémentations divergent, et l'opératrice qui trouve
+    //   une fiche dans un écran sans la trouver dans l'autre conclut que le
+    //   logiciel se trompe. Accents pliés, numéros en chiffres seuls, tous les
+    //   mots tapés exigés — voir `utils/rechercheClients.js`.
+    const correspondants = new Set(filtrerClients(clients, searchTerm))
+
     return clients.filter(client => {
-      // Recherche sur : nom, prénom, code agent, numéro agent et numéro
-      // personnel. `valeursAgent` rend les deux champs d'une fiche séparée
-      // COMME d'une fiche d'avant — chercher un ancien code continue de marcher.
-      // Champs potentiellement absents → coalescer en chaîne vide avant toLowerCase().
-      const matchesSearch = !search || [
-        client.nom,
-        client.prenom,
-        client.numeroPersonnel,
-        ...valeursAgent(client),
-      ].some(field => String(field ?? '').toLowerCase().includes(search))
+      const matchesSearch = correspondants.has(client)
 
       let matchesMonth = true
       if (selectedMonth !== 'Tous les mois') {

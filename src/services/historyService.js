@@ -231,6 +231,39 @@ export class HistoryService {
    * 'open'`) et repasse à `settled` au dernier retour : la ligne quitte alors
    * cette écoute d'elle-même.
    */
+  /**
+   * Les lignes VALIDÉES depuis un instant donné, quelle que soit leur date de saisie.
+   *
+   * POURQUOI UNE ÉCOUTE DE PLUS
+   * ───────────────────────────
+   * Les deux écoutes existantes cherchent par `createdAt` : les cent dernières
+   * lignes saisies, plus la journée en cours. Or une « non terminée » notée il y
+   * a trois jours garde son `createdAt` de ce jour-là quand elle est validée —
+   * le serveur le recopie tel quel. Si plus de cent opérations ont suivi, la
+   * ligne qu'on vient de valider n'appartient ni à la page ni à la journée : elle
+   * n'apparaissait nulle part. Le gérant validait, et rien ne bougeait à l'écran.
+   *
+   * ⚠ CETTE ÉCOUTE NE PEUT QU'AJOUTER. Un filtre sur `validatedAt` écarte par
+   *   construction les documents qui n'ont pas ce champ — les anciens, les
+   *   ravitaillements, les clôtures. C'est sans danger ici parce que les autres
+   *   sources les apportent déjà, et que `mergeHistoryPages` déduplique par id.
+   *   Une écoute qui ne fait qu'ajouter ne peut pas faire disparaître une ligne.
+   *
+   * ⚠ NI TRI NI LIMITE EXPLICITES : un seul filtre d'intervalle se sert de
+   *   l'index automatique du champ. Y ajouter un second critère exigerait un
+   *   index composite, donc un déploiement, pour trier en mémoire ce que
+   *   `sortHistoryDesc` reclasse déjà.
+   */
+  subscribeToValidatedSince(callback, since) {
+    this._requireActiveStore()
+
+    return this._subscribeToCollection(
+      FIRESTORE_CONFIG.COLLECTIONS.HISTORY,
+      callback,
+      { where: [{ field: 'validatedAt', operator: '>=', value: since }] },
+    )
+  }
+
   subscribeToOpenReplenishments(callback) {
     this._requireActiveStore()
 

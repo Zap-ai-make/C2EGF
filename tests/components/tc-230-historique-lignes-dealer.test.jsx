@@ -42,6 +42,7 @@ const service = {
   subscribeToHistory: vi.fn(),
   // La dette de ravitaillement a sa propre ecoute, hors fenetre de pagination.
   subscribeToOpenReplenishments: vi.fn(),
+  subscribeToValidatedSince: vi.fn(),
   trashHistory: vi.fn(),
   trashReplenishmentReturn: vi.fn(),
 }
@@ -239,6 +240,7 @@ describe('TC-230 — la commande réellement envoyée', () => {
     service.subscribeToDrafts.mockImplementation((cb) => { cb([]); return () => {} })
     service.subscribeToHistory.mockImplementation((cb) => { cb([]); return () => {} })
     service.subscribeToOpenReplenishments.mockImplementation((cb) => { cb([]); return () => {} })
+    service.subscribeToValidatedSince.mockImplementation((cb) => { cb([]); return () => {} })
     service.getHistoryPage.mockResolvedValue({ transactions: historique, lastDoc: null, hasMore: false })
 
     render(

@@ -135,6 +135,41 @@ describe('TC-234 — la barre du formulaire de transaction', () => {
   it('[TC-234-9] ne propose rien sur un terme inconnu', () => {
     expect(chercher('00000000')).toHaveLength(0)
   })
+
+  /**
+   * ⚠ LE NOM COMPLET ÉTAIT LE SEUL GESTE QUI ÉCHOUAIT. Chaque champ était testé
+   *   séparément : ni `nom` ni `prenom` ne contient « Ouedraogo Aïssata », donc
+   *   taper les deux ne rendait rien. Les règles sont dans `rechercheClients.js`,
+   *   ce test vérifie que la barre les applique bien.
+   */
+  it('[TC-234-12] trouve par nom ET prénom tapés ensemble', () => {
+    expect(chercher('ouedraogo aissata')).toHaveLength(1)
+    expect(chercher('aissata ouedraogo')).toHaveLength(1)
+  })
+
+  it('[TC-234-13] trouve malgré les accents et la mise en forme d’un numéro', () => {
+    expect(chercher('OUÉDRAOGO')).toHaveLength(1)
+    expect(chercher('70 11 22 33')).toHaveLength(1)
+  })
+
+  /**
+   * ⚠ UNE LISTE COUPÉE EN SILENCE SE LIT COMME UNE BASE INCOMPLÈTE. C'est
+   *   l'explication du « pour certains agents ça s'affiche, pour d'autres non » :
+   *   la fiche était là, au onzième rang.
+   */
+  it('[TC-234-14] annonce les résultats qu’elle ne montre pas', () => {
+    const homonymes = Array.from({ length: 14 }, (_, i) => ({
+      id: `h-${i}`, nom: 'Compaore', prenom: `Prenom${i}`, codeAgent: `020000${i}`,
+    }))
+    cleanup()
+    render(<ClientSearch clients={homonymes} onClientSelect={onClientSelect} selectedClient={null} />)
+    fireEvent.change(screen.getByPlaceholderText(/code agent/i), { target: { value: 'compaore' } })
+    act(() => { vi.advanceTimersByTime(350) })
+
+    const lignes = screen.queryAllByRole('listitem')
+    expect(lignes).toHaveLength(11) // 10 fiches + la ligne qui compte le reste
+    expect(lignes[10]).toHaveTextContent('… et 4 autres')
+  })
 })
 
 // ─────────────────────────────────────────────────────────────────────────────

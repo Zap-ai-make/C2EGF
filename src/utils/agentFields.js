@@ -118,6 +118,62 @@ export function libelleAgent(client) {
  * boutique détentrice, afin que le refus indique qui appeler au lieu de laisser
  * l'opérateur sans issue.
  */
+/**
+ * La fiche qui porte DÉJÀ cet identifiant agent, s'il y en a une.
+ *
+ * ⚠ TROIS CHAMPS, COMME LE CONTRÔLE DU SERVEUR. `valeursAgent` ne suffirait pas :
+ *   il cesse de lire `orange` dès que les deux clés existent, et laisserait donc
+ *   passer un doublon d'une fiche d'avant la séparation — c'est-à-dire presque
+ *   toute la base. Ce qui est cherché ici doit être exactement ce que
+ *   `_refuserDoublonAgent` refusera : un avertissement plus permissif que le
+ *   refus ferait remplir un formulaire entier pour le voir rejeté à la fin.
+ *
+ * @param {Array<object>} clients   les fiches déjà en mémoire
+ * @param {string} valeur           le code ou le numéro saisi
+ * @param {string|null} idExclu     la fiche en cours de modification
+ */
+export function trouverFicheAgent(clients, valeur, idExclu = null) {
+  const cherchee = texte(valeur)
+  if (!cherchee || !Array.isArray(clients)) return null
+
+  return clients.find((client) => {
+    if (!client || client.id === idExclu) return false
+    return texte(client.codeAgent) === cherchee
+      || texte(client.numeroAgent) === cherchee
+      || texte(client.orange) === cherchee
+  }) || null
+}
+
+/**
+ * L'avertissement affiché PENDANT la saisie, quand l'identifiant est déjà pris.
+ *
+ * ⚠ CE N'EST PAS LE MÊME MESSAGE QUE LE REFUS D'ENREGISTREMENT, et ce n'est pas
+ *   un doublon de code. `messageDoublonAgent` clôt une tentative de création :
+ *   il explique pourquoi c'est refusé. Celui-ci s'affiche alors que la personne
+ *   est encore en train de taper, et sa seule raison d'être est d'ouvrir une
+ *   porte — « c'est cette fiche-là, va la modifier » — pendant qu'il est encore
+ *   temps de ne pas ressaisir le reste du formulaire.
+ *
+ * ⚠ LA FICHE D'UNE AUTRE BOUTIQUE EST MODIFIABLE, et le message le dit sans
+ *   détour. La boutique d'origine est nommée non pas comme un obstacle mais
+ *   comme une information : on corrige une fiche que quelqu'un d'autre a créée.
+ */
+export function messageFicheExistante(existant, storeIdCourant) {
+  const nom = `${existant?.nom ?? ''} ${existant?.prenom ?? ''}`.trim()
+  const qui = nom ? `« ${nom} »` : 'une fiche sans nom'
+  const boutique = texte(existant?.registeredStoreName) || texte(existant?.registeredStoreId)
+  const memeBoutique = existant?.registeredStoreId && existant.registeredStoreId === storeIdCourant
+
+  if (memeBoutique) {
+    return `Cet identifiant agent est déjà celui de ${qui}, dans cette boutique.`
+      + ' Ouvrir sa fiche plutôt que d\'en créer une seconde.'
+  }
+
+  return `Cet identifiant agent est déjà celui de ${qui}`
+    + `${boutique ? `, enregistré par ${boutique}` : ', enregistré par une autre boutique'}.`
+    + ' La fiche client est commune : vous pouvez la compléter ou la corriger ici.'
+}
+
 export function messageDoublonAgent(existant, storeIdCourant) {
   const nom = `${existant?.nom ?? ''} ${existant?.prenom ?? ''}`.trim()
   // « celui de une fiche » : l'élision se décide ici, pas à l'interpolation.

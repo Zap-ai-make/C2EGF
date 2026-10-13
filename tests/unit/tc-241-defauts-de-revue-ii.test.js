@@ -110,6 +110,33 @@ describe('TC-241 — une dette ne se périme pas avec la pagination', () => {
     expect(requireActiveStore).toHaveBeenCalled()
   })
 
+  /**
+   * ⚠ MÊME RAISONNEMENT, AUTRE TROU : une « non terminée » notée avant-hier garde
+   *   son `createdAt` d'avant-hier en devenant une ligne d'historique — le serveur
+   *   le recopie tel quel. Les deux écoutes existantes cherchent par `createdAt` :
+   *   la page des 100 dernières et la journée en cours. Au-delà de cent opérations,
+   *   la ligne qu'on vient de valider n'appartenait à aucune des deux, et le gérant
+   *   validait sans rien voir bouger à l'écran.
+   */
+  it('[TC-241-4b] les lignes validées depuis un instant donné sont écoutées à part', () => {
+    const { svc, subscribeToCollection } = service()
+    const depuis = new Date('2026-10-13T00:00:00Z')
+    svc.subscribeToValidatedSince(vi.fn(), depuis)
+
+    const [collection, , opts] = subscribeToCollection.mock.calls[0]
+    expect(collection).toBe(FIRESTORE_CONFIG.COLLECTIONS.HISTORY)
+    expect(opts.where).toEqual([{ field: 'validatedAt', operator: '>=', value: depuis }])
+  })
+
+  /** Un seul filtre d'intervalle se sert de l'index automatique du champ. */
+  it('[TC-241-4c] sans tri ni limite, donc sans index composite à déployer', () => {
+    const { svc, subscribeToCollection } = service()
+    svc.subscribeToValidatedSince(vi.fn(), new Date())
+
+    expect(options(subscribeToCollection).orderByField).toBeUndefined()
+    expect(options(subscribeToCollection).limitCount).toBeUndefined()
+  })
+
   it('[TC-241-5] l’écoute de l’historique garde sa fenêtre : rien n’a bougé pour elle', () => {
     const { svc, subscribeToCollection } = service()
     svc.subscribeToHistory(vi.fn())

@@ -6,8 +6,10 @@
  *     quelle que soit la boutique d'enregistrement. C'est le comportement métier
  *     intentionnel (clients communs à toutes les boutiques).
  *   - Création : seul un utilisateur actif peut créer un client avec son propre storeId.
- *   - Modification : seul le propriétaire (même storeId que registeredStoreId) peut
- *     modifier. Le registeredStoreId ne peut pas être transféré.
+ *   - Modification : TOUTE boutique active peut modifier un globalClient, parce que
+ *     la fiche client est commune (décision du 2026-10-13). Ce qui reste interdit,
+ *     et qui est l'essentiel, c'est de transférer le registeredStoreId : une
+ *     boutique corrige une fiche, elle ne se l'approprie pas.
  *   - Suppression : seul le propriétaire (même storeId que registeredStoreId) peut
  *     supprimer.
  */
@@ -235,16 +237,50 @@ describe('TC-007D — Modification globalClients', () => {
     }))
   })
 
-  it('[TC-007D-02] uid-admin-bbb — tente de modifier gclient-aaa (appartient à storeA) — deny', async () => {
+  /**
+   * ⚠ CE TEST ATTENDAIT L'INVERSE JUSQU'AU 2026-10-13, et son retournement est la
+   *   décision, pas un relâchement.
+   *
+   *   Un agent est un commerce, pas une relation avec une boutique : son code est
+   *   unique dans toute la base, et toutes les boutiques le voient. Leur interdire
+   *   de corriger la fiche les laissait sans issue — elles voyaient un numéro
+   *   manquant sans pouvoir le compléter, et finissaient par créer une seconde
+   *   fiche. C'est le chemin qui a produit les 175 grappes purgées la veille.
+   *
+   *   Ce qui protège la propriété n'est donc plus « qui peut écrire » mais « ce
+   *   qu'on ne peut pas écrire » : voir TC-007D-03 et -04, qui restent des refus.
+   */
+  it('[TC-007D-02] uid-admin-bbb — modifie gclient-aaa (fiche de storeA) sans toucher au propriétaire — allow', async () => {
     await seedAll()
     const ctx = getAuthenticatedContext(testEnv, 'uid-admin-bbb')
     const ref = doc(ctx.firestore(), 'globalClients', 'gclient-aaa')
-    await assertFails(updateDoc(ref, {
+    await assertSucceeds(updateDoc(ref, {
       nom: 'ModifParB',
       prenom: 'Client',
       registeredStoreId: 'store-test-aaa',
       registeredStoreName: 'Store A',
     }))
+  })
+
+  /** Compléter un champ vide est le cas qui a motivé l'ouverture. */
+  it('[TC-007D-02b] uid-admin-bbb — complète le numéro agent d’une fiche de storeA — allow', async () => {
+    await seedAll()
+    const ctx = getAuthenticatedContext(testEnv, 'uid-admin-bbb')
+    const ref = doc(ctx.firestore(), 'globalClients', 'gclient-aaa')
+    await assertSucceeds(updateDoc(ref, {
+      nom: 'Alpha',
+      prenom: 'Client',
+      numeroAgent: '01234567',
+      registeredStoreId: 'store-test-aaa',
+      registeredStoreName: 'Store A',
+    }))
+  })
+
+  /** ⚠ La suppression, elle, reste au propriétaire : corriger n'est pas effacer. */
+  it('[TC-007D-02c] uid-admin-bbb — tente de SUPPRIMER gclient-aaa — deny', async () => {
+    await seedAll()
+    const ctx = getAuthenticatedContext(testEnv, 'uid-admin-bbb')
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'globalClients', 'gclient-aaa')))
   })
 
   it('[TC-007D-03] uid-member-aaa — tente de changer registeredStoreId de store-test-aaa vers store-test-bbb — deny', async () => {

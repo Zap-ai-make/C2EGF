@@ -1,5 +1,12 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
-import { valeursAgent, libelleAgent } from '../../utils/agentFields.js'
+import { libelleAgent } from '../../utils/agentFields.js'
+import { chercherClients } from '../../utils/rechercheClients.js'
+
+/**
+ * Ce que le menu montre. Au-delà, il DIT combien d'autres existent : une liste
+ * coupée en silence est ce qui faisait croire qu'une fiche n'était pas en base.
+ */
+const RESULTATS_AFFICHES = 10
 
 function ClientSearch({ clients, onClientSelect, selectedClient, onManualCodeChange, resetToken = 0 }) {
   const [searchTerm, setSearchTerm] = useState('')
@@ -15,28 +22,18 @@ function ClientSearch({ clients, onClientSelect, selectedClient, onManualCodeCha
     return () => clearTimeout(timer)
   }, [searchTerm])
 
-  const filteredClients = useMemo(() => {
-    if (!debouncedSearchTerm.trim() || !clients || clients.length === 0) return []
-
-    const term = debouncedSearchTerm.toLowerCase()
-    return clients.filter(client => {
-      if (!client) return false
-
-      // CINQ CHAMPS, pas quatre : le code agent et le numéro agent sont
-      // désormais deux choses distinctes, et la caissière connaît parfois
-      // l'une sans l'autre. `valeursAgent` les rend aussi bien d'une fiche
-      // séparée que d'une fiche d'avant, donc chercher un ancien code
-      // continue de trouver.
-      const champs = [
-        client.nom,
-        client.prenom,
-        client.numeroPersonnel,
-        ...valeursAgent(client),
-      ]
-
-      return champs.some((champ) => String(champ ?? '').toLowerCase().includes(term))
-    }).slice(0, 10)
-  }, [clients, debouncedSearchTerm])
+  /**
+   * CINQ CHAMPS, et une recherche qui pardonne la façon d'écrire.
+   *
+   * Le filtre vit dans `utils/rechercheClients.js`, partagé avec la liste des
+   * clients : accents pliés, numéros comparés en chiffres seuls, et TOUS LES
+   * MOTS tapés doivent correspondre — ce qui fait enfin trouver « OUEDRAOGO
+   * SALIF », le nom et le prénom étant deux champs distincts en base.
+   */
+  const { resultats: filteredClients, reste } = useMemo(
+    () => chercherClients(clients, debouncedSearchTerm, { maximum: RESULTATS_AFFICHES }),
+    [clients, debouncedSearchTerm],
+  )
 
   const handleInputChange = useCallback((e) => {
     const nextValue = e.target.value
@@ -94,6 +91,13 @@ function ClientSearch({ clients, onClientSelect, selectedClient, onManualCodeCha
               </div>
             </li>
           ))}
+          {/* ⚠ UNE LISTE COUPÉE EN SILENCE SE LIT COMME UNE BASE INCOMPLÈTE.
+              Dire le reste transforme « ce client n'y est pas » en « précisez ». */}
+          {reste > 0 && (
+            <li className="px-3 py-2 text-sm text-gray-600 bg-gray-50">
+              … et {reste} autre{reste > 1 ? 's' : ''} : précisez le nom ou tapez le code agent entier.
+            </li>
+          )}
         </ul>
       )}
 

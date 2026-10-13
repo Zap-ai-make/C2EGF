@@ -359,9 +359,24 @@ service cloud.firestore {
         validClient(request.resource.data) &&
         request.resource.data.registeredStoreId == profile().storeId;
 
+      // LA FICHE CLIENT EST COMMUNE À TOUTES LES BOUTIQUES, sa PROPRIÉTÉ ne l'est pas.
+      //
+      // Un agent est un commerce, pas une relation avec une boutique : son code
+      // est unique dans toute la base, et n'importe quelle boutique qui le sert
+      // doit pouvoir compléter ou corriger sa fiche — un numéro qui manque, une
+      // localité fausse. Restreindre la modification à la boutique d'origine
+      // laissait l'autre sans issue : elle voyait la fiche, ne pouvait pas la
+      // corriger, et finissait par en créer une seconde. C'est exactement le
+      // chemin qui a produit les 175 grappes de doublons purgées le 2026-10-12.
+      //
+      // ⚠ CE QUI RESTE INTERDIT, ET QUI EST L'ESSENTIEL : changer le propriétaire.
+      //   `registeredStoreId` doit valoir EXACTEMENT ce qu'il valait. Sans cette
+      //   égalité, une boutique pourrait s'approprier les fiches d'une autre —
+      //   silencieusement, et sans que rien ne le journalise. La suppression
+      //   reste elle aussi réservée à la boutique d'origine : corriger une fiche
+      //   commune est un service, l'effacer est une décision de propriétaire.
       allow update: if hasProfile() &&
         resource.data.registeredStoreId is string &&
-        resource.data.registeredStoreId == profile().storeId &&
         request.resource.data.registeredStoreId == resource.data.registeredStoreId &&
         validClient(request.resource.data);
 

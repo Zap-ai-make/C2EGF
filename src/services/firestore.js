@@ -887,7 +887,7 @@ export class FirestoreService {
    * dans `messageDoublonAgent` — qui nomme la boutique détentrice pour que le
    * refus dise qui appeler.
    */
-  async _refuserDoublonAgent(normalise, storeId) {
+  async _refuserDoublonAgent(normalise, storeId, idExclu = null) {
     const valeurs = [normalise.codeAgent, normalise.numeroAgent].filter(Boolean)
     if (valeurs.length === 0) return
 
@@ -897,12 +897,16 @@ export class FirestoreService {
           FIRESTORE_CONFIG.COLLECTIONS.CLIENTS,
           {
             where: [{ field: champ, operator: '==', value: valeur }],
-            limitCount: 1,
+            // Deux, pas un : la fiche qu'on modifie porte DÉJÀ sa propre valeur
+            // et sort toujours en tête. Avec `limitCount: 1`, l'exclure ne
+            // laisserait rien — et un vrai doublon derrière elle passerait.
+            limitCount: idExclu ? 2 : 1,
           },
           false, // pas de cache : on veut l'état réel avant écriture
         )
-        if (existants.length > 0) {
-          throw new Error(messageDoublonAgent(existants[0], storeId))
+        const autre = existants.find((fiche) => fiche.id !== idExclu)
+        if (autre) {
+          throw new Error(messageDoublonAgent(autre, storeId))
         }
       }
     }
@@ -936,12 +940,31 @@ export class FirestoreService {
     })
   }
 
+  /**
+   * ⚠ LE MÊME ANTI-DOUBLON QU'À LA CRÉATION, ET IL MANQUAIT ICI.
+   *
+   *   `addClient` refusait un code agent déjà pris, `updateClient` ne regardait
+   *   rien : il suffisait d'enregistrer une fiche avec un code vide, puis de la
+   *   modifier, pour écrire un identifiant qu'une autre fiche portait déjà. Le
+   *   trou était documenté et sans conséquence tant que la modification restait
+   *   cantonnée à la boutique d'origine.
+   *
+   *   Depuis que TOUTE boutique peut corriger une fiche commune, il ne l'est
+   *   plus : deux boutiques peuvent viser la même fiche en même temps, et rien
+   *   n'empêchait l'une d'y recopier le code agent d'une autre. Le contrôle est
+   *   donc posé des deux côtés, avec la fiche elle-même exclue — sinon une fiche
+   *   serait son propre doublon et aucune modification ne passerait.
+   */
   async updateClient(clientId, updates) {
-    this.requireActiveStore()
+    const activeStore = this.requireActiveStore()
+    const normalise = normaliserChampsAgent(updates)
+
+    await this._refuserDoublonAgent(normalise, activeStore?.id, clientId)
+
     return this.updateDocument(
       FIRESTORE_CONFIG.COLLECTIONS.CLIENTS,
       clientId,
-      { ...updates, ...normaliserChampsAgent(updates) },
+      { ...updates, ...normalise },
     )
   }
 
@@ -1083,6 +1106,12 @@ export class FirestoreService {
 
   subscribeToHistory(callback, filters = {}) {
     return this._historyService.subscribeToHistory(callback, filters)
+  }
+
+  // Les lignes validees depuis un instant donne, meme si elles ont ete saisies
+  // bien avant : voir HistoryService.subscribeToValidatedSince.
+  subscribeToValidatedSince(callback, since) {
+    return this._historyService.subscribeToValidatedSince(callback, since)
   }
 
   // Les ravitaillements encore dus, hors fenetre de pagination : voir

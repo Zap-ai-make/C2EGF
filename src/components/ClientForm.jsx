@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useContext } from 'react'
 import PageHeader from './ui/PageHeader'
 import { useToast } from '../hooks/useToast'
 import { getStorageKey } from '../config/clientIsolation'
-import { champsAgent } from '../utils/agentFields.js'
+import { champsAgent, libelleAgent, trouverFicheAgent, messageFicheExistante } from '../utils/agentFields.js'
+import { ClientsContext } from '../context/ClientsContext.jsx'
+import { AuthContext } from '../context/AuthContext'
 import Toast from './Toast'
 
 const EMPTY_CLIENT_FORM = {
@@ -24,10 +26,21 @@ const EMPTY_CLIENT_FORM = {
 
 const LEGACY_CLIENT_FORM_DRAFT_KEY = getStorageKey('client_form_draft')
 
-function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client', embedded = false }) {
+function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client', embedded = false, onOuvrirFiche = null }) {
   const { toasts, showToast, removeToast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState(EMPTY_CLIENT_FORM)
+
+  // ⚠ LES CONTEXTES SONT LUS SANS LEUR HOOK, DÉLIBÉRÉMENT. `useClients()` lève
+  //   quand le fournisseur manque — ce qui est juste pour un écran qui ne peut
+  //   pas vivre sans la liste, et faux ici : le contrôle de doublon est un
+  //   confort de saisie, pas une condition d'existence du formulaire. Sans
+  //   fournisseur (un test de rendu isolé), il s'efface au lieu de tout casser.
+  //   Le serveur, lui, refuse dans tous les cas — voir `_refuserDoublonAgent`.
+  const clientsContext = useContext(ClientsContext)
+  const authContext = useContext(AuthContext)
+  const clientsConnus = clientsContext?.clients
+  const storeIdCourant = authContext?.userProfile?.storeId ?? null
 
   useEffect(() => {
     try {
@@ -66,9 +79,42 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client',
     }))
   }
 
+  /**
+   * La fiche qui porte déjà le code ou le numéro en train d'être tapé.
+   *
+   * ⚠ LE CONTRÔLE SE FAIT PENDANT LA SAISIE, PAS À L'ENREGISTREMENT. Le serveur
+   *   refusait déjà un doublon, mais à la fin : on remplissait quinze champs
+   *   pour apprendre que la fiche existait. Ici la liste des clients est déjà en
+   *   mémoire — aucune requête réseau —, donc le signal peut arriver au moment
+   *   où l'information devient utile, c'est-à-dire tout de suite.
+   *
+   *   On cherche les DEUX champs, et chacun dans les deux colonnes : la boutique
+   *   qui tape un numéro agent dans la case code agent doit être arrêtée aussi.
+   */
+  const codeAgentSaisi = formData.codeAgent
+  const numeroAgentSaisi = formData.numeroAgent
+
+  const doublonAgent = useMemo(() => {
+    for (const [champ, saisieBrute] of [['codeAgent', codeAgentSaisi], ['numeroAgent', numeroAgentSaisi]]) {
+      const saisie = String(saisieBrute ?? '').trim()
+      if (!saisie) continue
+      const existant = trouverFicheAgent(clientsConnus ?? [], saisie, initialData?.id ?? null)
+      if (existant) return { champ, saisie, existant }
+    }
+    return null
+  }, [codeAgentSaisi, numeroAgentSaisi, clientsConnus, initialData?.id])
+
   const handleSubmit = async (e) => {
     e.preventDefault()
-    
+
+    // ⚠ LE BLOCAGE EST ICI AUSSI, et pas seulement sur le bouton désactivé. Un
+    //   formulaire se soumet aussi par la touche Entrée, et un bouton grisé ne
+    //   l'en empêche pas dans tous les navigateurs.
+    if (doublonAgent) {
+      showToast(messageFicheExistante(doublonAgent.existant, storeIdCourant), 'error')
+      return
+    }
+
     // Validation alignée sur validClient() de firestore.rules (nom/prenom : 2-50 caractères)
     if (!formData.nom || !formData.prenom) {
       showToast('Le nom et le prénom sont obligatoires', 'error')
@@ -109,6 +155,14 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client',
   }
 
   const inputClasses = "w-full rounded border border-line px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+  const inputEnDoublon = "w-full rounded border-2 border-warn/60 bg-warn-soft px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-warn"
+
+  /** « OUEDRAOGO SALIF · Code 0123456 · N° 01234567 · POUYTENGA » — de quoi reconnaître la fiche. */
+  const ligneIdentite = (fiche) => [
+    `${fiche?.nom ?? ''} ${fiche?.prenom ?? ''}`.trim() || '(sans nom)',
+    libelleAgent(fiche),
+    fiche?.localite,
+  ].filter(Boolean).join(' · ')
 
   const formContent = (
     <>
@@ -182,7 +236,9 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client',
             inputMode="numeric"
             value={formData.codeAgent}
             onChange={handleChange}
-            className={inputClasses}
+            className={doublonAgent?.champ === 'codeAgent' ? inputEnDoublon : inputClasses}
+            aria-invalid={doublonAgent?.champ === 'codeAgent' || undefined}
+            aria-describedby={doublonAgent ? 'client-doublon-agent' : undefined}
           />
         </div>
 
@@ -197,9 +253,42 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client',
             inputMode="numeric"
             value={formData.numeroAgent}
             onChange={handleChange}
-            className={inputClasses}
+            className={doublonAgent?.champ === 'numeroAgent' ? inputEnDoublon : inputClasses}
+            aria-invalid={doublonAgent?.champ === 'numeroAgent' || undefined}
+            aria-describedby={doublonAgent ? 'client-doublon-agent' : undefined}
           />
         </div>
+
+        {/* ⚠ L'AVERTISSEMENT OCCUPE LES DEUX COLONNES, juste sous les deux champs
+            qu'il concerne. Relégué en bas près du bouton, il arrive après que le
+            reste du formulaire a été rempli — c'est-à-dire trop tard pour servir. */}
+        {doublonAgent && (
+          <div
+            id="client-doublon-agent"
+            role="alert"
+            className={`${embedded ? 'md:col-span-2' : ''} rounded border border-warn/40 bg-warn-soft p-3`}
+          >
+            <p className="text-sm font-semibold text-gray-900">
+              {messageFicheExistante(doublonAgent.existant, storeIdCourant)}
+            </p>
+            <p className="mt-1 text-sm text-gray-700">
+              {ligneIdentite(doublonAgent.existant)}
+            </p>
+            {onOuvrirFiche ? (
+              <button
+                type="button"
+                onClick={() => onOuvrirFiche(doublonAgent.existant)}
+                className="mt-2 rounded bg-brand-500 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+              >
+                Ouvrir sa fiche pour la modifier
+              </button>
+            ) : (
+              <p className="mt-2 text-sm text-gray-700">
+                Ouvrir sa fiche depuis la liste des clients pour la modifier.
+              </p>
+            )}
+          </div>
+        )}
 
         <div>
           <label htmlFor="client-localite" className="block text-sm font-medium text-gray-700 mb-1">
@@ -231,7 +320,7 @@ function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client',
 
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || Boolean(doublonAgent)}
           className={`${embedded ? 'md:col-span-2 md:justify-self-end' : 'mt-6'} rounded bg-brand-500 px-6 py-2 font-medium text-white transition-colors hover:bg-brand-600 disabled:bg-gray-300 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400`}
         >
           {isSubmitting ? 'Enregistrement...' : initialData ? 'Modifier' : 'Enregistrer'}

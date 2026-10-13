@@ -38,6 +38,19 @@ function Clients() {
     setEditingClient(null)
   }
 
+  /**
+   * Passer directement de « ce code est deja pris » a la fiche qui le porte.
+   *
+   * La boite d'ajout se ferme et l'ecran de modification s'ouvre sur la fiche
+   * existante — y compris quand elle appartient a une autre boutique, puisque la
+   * fiche client est commune. Sans ce chemin, l'avertissement nommait une fiche
+   * que l'operatrice devait ensuite retrouver a la main dans quinze mille.
+   */
+  const handleOuvrirFiche = (client) => {
+    setIsAddingClient(false)
+    setEditingClient(client)
+  }
+
   const handleImportClients = async (importedClients) => {
     // Ajouter chaque client importé sans l'ID généré automatiquement
     const results = await Promise.allSettled(importedClients.map(clientData => {
@@ -63,10 +76,11 @@ function Clients() {
             Retour à la liste
           </button>
         </div>
-        <ClientForm 
+        <ClientForm
           onSubmit={handleEditSubmit}
           initialData={editingClient}
           title="Modifier le client"
+          onOuvrirFiche={handleOuvrirFiche}
         />
       </div>
     )
@@ -99,7 +113,7 @@ function Clients() {
         spacious
         testId="ajout-client-dialog"
       >
-        <ClientForm onSubmit={handleAddSubmit} embedded />
+        <ClientForm onSubmit={handleAddSubmit} embedded onOuvrirFiche={handleOuvrirFiche} />
       </Dialog>
     </>
   )

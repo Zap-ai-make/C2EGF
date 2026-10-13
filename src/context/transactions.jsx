@@ -16,6 +16,15 @@ import { TYPE_RETOUR } from '../utils/ravitaillement.js'
 // provider réel (bancs d'essai, tests de rendu) — cf. src/preview.jsx.
 export const TransactionsContext = createContext()
 
+/** Un horodatage Firestore, une Date ou une chaîne, ramenés en millisecondes. */
+const enMillisecondes = (brut) => {
+  if (!brut) return 0
+  if (typeof brut.toMillis === 'function') return brut.toMillis()
+  const date = brut instanceof Date ? brut : new Date(brut)
+  const t = date.getTime()
+  return Number.isNaN(t) ? 0 : t
+}
+
 /**
  * Horodatage (ms) d'un élément d'historique pour le tri décroissant.
  * Priorité au Timestamp Firestore `createdAt` ; repli sur la date FR `date`
@@ -23,18 +32,46 @@ export const TransactionsContext = createContext()
  * n'en pose pas volontairement, pour inclure TOUS les éléments).
  */
 const historyTimestamp = (item) => {
-  if (item?.createdAt?.toMillis) return item.createdAt.toMillis()
-  if (item?.createdAt) {
-    const t = new Date(item.createdAt).getTime()
-    if (!Number.isNaN(t)) return t
-  }
+  const cree = enMillisecondes(item?.createdAt)
+  if (cree) return cree
   const parsed = parsefrenchDate(item?.date)
   return parsed ? parsed.getTime() : 0
 }
 
-/** Tri décroissant (le dernier enregistré en haut). Exporté pour test. */
+/**
+ * L'instant de la DERNIÈRE ACTION sur une ligne — c'est lui qui la classe.
+ *
+ * ⚠ CE N'EST PAS LA DATE DE SAISIE, ET LA DIFFÉRENCE SE VOIT TOUS LES JOURS.
+ *   Une opération notée le matin, laissée en « non terminée », puis validée le
+ *   soir conserve le `createdAt` du brouillon : le serveur le recopie tel quel
+ *   dans l'historique (`storeTransactionCommand.js`, branche de validation).
+ *   Classée là-dessus, elle réapparaissait au milieu de la matinée — le gérant
+ *   venait de la traiter et devait la chercher. Elle remonte désormais au moment
+ *   où on s'en est occupé.
+ *
+ *   `date`, lui, ne bouge pas : les filtres par journée continuent de ranger
+ *   l'opération au jour où elle a eu lieu. Seul l'ORDRE D'AFFICHAGE change.
+ */
+export const instantDerniereAction = (item) => Math.max(
+  historyTimestamp(item),
+  enMillisecondes(item?.validatedAt),
+)
+
+/** Tri décroissant (la dernière traitée en haut). Exporté pour test. */
 export const sortHistoryDesc = (list) =>
-  [...list].sort((a, b) => historyTimestamp(b) - historyTimestamp(a))
+  [...list].sort((a, b) => instantDerniereAction(b) - instantDerniereAction(a))
+
+/**
+ * Tri décroissant des non terminées — le dernier brouillon noté en haut.
+ *
+ * ⚠ IL N'Y EN AVAIT AUCUN. `subscribeToDrafts` ne pose pas d'`orderBy`, donc le
+ *   snapshot arrive dans l'ordre des IDENTIFIANTS DE DOCUMENTS : un ordre
+ *   alphabétique sur des identifiants aléatoires, c'est-à-dire aucun ordre. La
+ *   liste se réorganisait à chaque ajout, et la ligne qu'on venait de noter
+ *   pouvait atterrir n'importe où.
+ */
+export const sortDraftsDesc = (list) =>
+  [...(list ?? [])].sort((a, b) => historyTimestamp(b) - historyTimestamp(a))
 
 export const mergeHistoryPages = (...lists) => {
   const byId = new Map()
@@ -70,6 +107,10 @@ export const TransactionsProvider = ({ children }) => {
   // Les ravitaillements encore dus. Une dette ne se perime pas avec la
   // pagination : cette source-la ignore la fenetre des 100 lignes.
   const dettesRavitaillementRef = useRef([])
+  // Ce qui vient d'etre VALIDE, meme si la saisie est ancienne. Voir
+  // `subscribeToValidatedSince` : sans cette source, une non terminee vieille de
+  // trois jours validee a l'instant n'apparaissait nulle part a l'ecran.
+  const valideesRecemmentRef = useRef([])
   const archiveHistoryRef = useRef([])
   const historyCursorRef = useRef(null)
 
@@ -79,6 +120,7 @@ export const TransactionsProvider = ({ children }) => {
       dettesRavitaillementRef.current,
       liveHistoryRef.current,
       todayHistoryRef.current,
+      valideesRecemmentRef.current,
     ))
   }, [])
 
@@ -87,6 +129,7 @@ export const TransactionsProvider = ({ children }) => {
     liveHistoryRef.current = []
     todayHistoryRef.current = []
     dettesRavitaillementRef.current = []
+    valideesRecemmentRef.current = []
     archiveHistoryRef.current = []
     historyCursorRef.current = null
     setHistoryLoadingMore(false)
@@ -106,7 +149,7 @@ export const TransactionsProvider = ({ children }) => {
     }
 
     let isMounted = true
-    let unsubscribeDrafts, unsubscribeHistory, unsubscribeToday, unsubscribeDettes, rolloverTimeout
+    let unsubscribeDrafts, unsubscribeHistory, unsubscribeToday, unsubscribeDettes, unsubscribeValidees, rolloverTimeout
 
     const initializeTransactions = async () => {
       try {
@@ -142,7 +185,8 @@ export const TransactionsProvider = ({ children }) => {
         const onDrafts = (draftsData) => {
             if (!isMounted) return
             // Un snapshot Firestore contient déjà un document unique par id.
-            setPendingTransactions(draftsData)
+            // Le tri, lui, n'est pas donné : voir `sortDraftsDesc`.
+            setPendingTransactions(sortDraftsDesc(draftsData))
         }
         onDrafts.onError = onSubscriptionError
         unsubscribeDrafts = firestoreService.subscribeToDrafts(onDrafts)
@@ -179,6 +223,20 @@ export const TransactionsProvider = ({ children }) => {
             dateRange: { start, endExclusive: end },
             limitCount: null,
           })
+
+          // Ce qui a ete VALIDE aujourd'hui, quelle que soit sa date de saisie.
+          // L'ecoute journaliere ci-dessus cherche par `createdAt` : une non
+          // terminee notee avant-hier garde ce `createdAt` en devenant une ligne
+          // d'historique, donc elle echappait aux deux fenetres.
+          unsubscribeValidees?.()
+          const onValidees = (historyData) => {
+            if (!isMounted) return
+            valideesRecemmentRef.current = historyData
+            publishHistory()
+          }
+          onValidees.onError = onSubscriptionError
+          unsubscribeValidees = firestoreService.subscribeToValidatedSince(onValidees, start)
+
           rolloverTimeout = setTimeout(subscribeToday, millisecondsUntilNextBusinessDay(now) + 25)
         }
         subscribeToday()
@@ -207,7 +265,7 @@ export const TransactionsProvider = ({ children }) => {
           try {
             const savedPending = localStorage.getItem(STORAGE_KEYS.PENDING_TRANSACTIONS)
             const savedCompleted = localStorage.getItem(STORAGE_KEYS.COMPLETED_TRANSACTIONS)
-            setPendingTransactions(savedPending ? JSON.parse(savedPending) : [])
+            setPendingTransactions(savedPending ? sortDraftsDesc(JSON.parse(savedPending)) : [])
             // Même tri décroissant qu'en mode nominal, pour une cohérence d'affichage.
             setCompletedTransactions(savedCompleted ? sortHistoryDesc(JSON.parse(savedCompleted)) : [])
           } catch {
@@ -230,6 +288,7 @@ export const TransactionsProvider = ({ children }) => {
       }
       if (unsubscribeToday && typeof unsubscribeToday === 'function') unsubscribeToday()
       if (unsubscribeDettes && typeof unsubscribeDettes === 'function') unsubscribeDettes()
+      if (unsubscribeValidees && typeof unsubscribeValidees === 'function') unsubscribeValidees()
       if (rolloverTimeout) clearTimeout(rolloverTimeout)
     }
   }, [user, userProfile?.storeId, activeStore?.id, authLoading, publishHistory])
