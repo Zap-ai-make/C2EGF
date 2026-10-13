@@ -29,8 +29,6 @@ import {
 /** La taille d'une page. Le panneau charge la suite à la demande. */
 export const PAGE = 50
 
-const estNombreFini = (v) => typeof v === 'number' && Number.isFinite(v)
-
 export function validerClientId(valeur) {
   if (typeof valeur !== 'string' || valeur.trim().length === 0 || valeur !== valeur.trim() || valeur.length > 128) {
     throw new DealerRequestError('INVALID_CLIENT_ID', 'Identifiant client invalide.')
@@ -41,25 +39,28 @@ export function validerClientId(valeur) {
 /**
  * Le curseur, ou `null` s'il n'y en a pas.
  *
+ * ⚠ C'EST LE CHEMIN DU DERNIER DOCUMENT LU, PAS UN HORODATAGE. Mesuré sur
+ *   émulateur : un curseur construit depuis `toMillis()` perd les nanosecondes,
+ *   et tout document de la même milliseconde mais de nanos inférieurs disparaît
+ *   de la page suivante — sans erreur, sans compteur. Repartir du SNAPSHOT
+ *   compare les valeurs réelles, à pleine précision.
+ *
  * ⚠ UN CURSEUR MAL FORMÉ EST REFUSÉ, JAMAIS IGNORÉ. L'ignorer renverrait
  *   silencieusement la première page : l'appelant croirait avancer et relirait
  *   indéfiniment les mêmes lignes.
- *
- * ⚠ C'EST UNE PAIRE DE VALEURS, PAS UN `DocumentSnapshot`. Un snapshot ne
- *   traverse pas la frontière d'un callable.
  */
 export function validerCurseur(valeur) {
   if (valeur === undefined || valeur === null) return null
+  const chemin = valeur?.chemin
   if (
     typeof valeur !== 'object'
     || Array.isArray(valeur)
-    || !estNombreFini(valeur.createdAt)
-    || typeof valeur.chemin !== 'string'
-    || valeur.chemin.trim().length === 0
+    || typeof chemin !== 'string'
+    || !/^clients\/[^/]+\/history\/[^/]+$/.test(chemin)
   ) {
     throw new DealerRequestError('INVALID_HISTORY_CURSOR', 'Curseur de pagination invalide.')
   }
-  return { createdAt: valeur.createdAt, chemin: valeur.chemin }
+  return { chemin }
 }
 
 const validerProfilBoutique = (profile) => {
@@ -121,7 +122,7 @@ async function compterParBoutique(db, clientId, boutiques) {
     .sort((a, b) => b.operations - a.operations || a.storeName.localeCompare(b.storeName, 'fr'))
 }
 
-export async function listClientHistoryHandler(request, { db }) {
+export async function listClientHistoryHandler(request, { db, taillePage = PAGE }) {
   const actorUid = validateAuthUid(request.auth?.uid)
   validateInputPayload(request.data ?? {}, ['clientId', 'curseur'])
   const clientId = validerClientId(request.data?.clientId)
@@ -138,16 +139,18 @@ export async function listClientHistoryHandler(request, { db }) {
     .orderBy('createdAt', 'desc')
     .orderBy('__name__', 'desc')
   if (curseur) {
-    // `startAfter` prend les VALEURS des champs triés, dans l'ordre des
-    // `orderBy` : l'horodatage, puis une RÉFÉRENCE de document pour `__name__`.
-    //
-    // ⚠ UN `Date`, PAS UN `Timestamp` CONSTRUIT ICI. `functions/` a son propre
-    //   `node_modules` : un `Timestamp` fabriqué par CE paquet ne passe pas la
-    //   vérification `instanceof` du Firestore SDK chargé par l'appelant (même
-    //   version, copie différente — ça ne se produit qu'en test, `functions/`
-    //   étant déployé seul en production). Le SDK Firestore accepte un `Date`
-    //   natif au même titre qu'un `Timestamp` pour un curseur : aucune perte.
-    requete = requete.startAfter(new Date(curseur.createdAt), db.doc(curseur.chemin))
+    // ⚠ ON REPART DU SNAPSHOT, pas d'une valeur reconstruite : `startAfter`
+    //   compare alors les champs triés à leur précision réelle, nanosecondes
+    //   comprises. Une lecture de document de plus par page, contre des lignes
+    //   d'argent qui disparaissent en silence : le marché est vite fait.
+    const depuis = await db.doc(curseur.chemin).get()
+    if (!depuis.exists) {
+      throw new DealerRequestError(
+        'INVALID_HISTORY_CURSOR',
+        "Le repère de pagination n'existe plus. Rouvrir l'historique.",
+      )
+    }
+    requete = requete.startAfter(depuis)
   }
 
   const premierePage = curseur === null
@@ -155,7 +158,7 @@ export async function listClientHistoryHandler(request, { db }) {
   // On demande une ligne de plus que la page : sa présence dit qu'il reste à
   // lire, sans coûter une seconde requête pour le savoir.
   const [historySnap, draftsSnap, storesSnap] = await Promise.all([
-    requete.limit(PAGE + 1).get(),
+    requete.limit(taillePage + 1).get(),
     premierePage
       ? db.collectionGroup('drafts').where('clientId', '==', clientId).get()
       : Promise.resolve({ docs: [] }),
@@ -164,8 +167,8 @@ export async function listClientHistoryHandler(request, { db }) {
 
   const nomsDeBoutique = new Map(storesSnap.docs.map((d) => [d.id, d.data()?.name ?? d.id]))
 
-  const encore = historySnap.docs.length > PAGE
-  const documentsPage = encore ? historySnap.docs.slice(0, PAGE) : historySnap.docs
+  const encore = historySnap.docs.length > taillePage
+  const documentsPage = encore ? historySnap.docs.slice(0, taillePage) : historySnap.docs
 
   const { enCours, lignes, attente } = construireHistoriqueClient({
     history: documentsPage.map((d) => ({ id: d.id, chemin: d.ref.path, donnees: d.data() ?? {} })),
@@ -179,9 +182,7 @@ export async function listClientHistoryHandler(request, { db }) {
   //   dernière ligne rendue le relirait à chaque page, et la pagination
   //   tournerait en rond sans jamais atteindre la fin.
   const dernier = documentsPage[documentsPage.length - 1]
-  const curseurSuivant = encore && dernier
-    ? { createdAt: Number(dernier.get('createdAt')?.toMillis?.() ?? 0), chemin: dernier.ref.path }
-    : null
+  const curseurSuivant = encore && dernier ? { chemin: dernier.ref.path } : null
 
   let totaux = null
   if (premierePage) {

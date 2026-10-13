@@ -99,9 +99,11 @@ describe('TC-256 — autorisation', () => {
 
   /** Un curseur mal formé est REFUSÉ, jamais ignoré : l'ignorer renverrait la page 1. */
   it('[TC-256-07] refuse un curseur mal formé', async () => {
-    await expect(appel('u-caissiere', { clientId: 'c1', curseur: { createdAt: 'hier' } }))
+    await expect(appel('u-caissiere', { clientId: 'c1', curseur: { chemin: 42 } }))
       .rejects.toMatchObject({ code: 'INVALID_HISTORY_CURSOR' })
     await expect(appel('u-caissiere', { clientId: 'c1', curseur: 'abc' }))
+      .rejects.toMatchObject({ code: 'INVALID_HISTORY_CURSOR' })
+    await expect(appel('u-caissiere', { clientId: 'c1', curseur: { chemin: 'users/u-caissiere' } }))
       .rejects.toMatchObject({ code: 'INVALID_HISTORY_CURSOR' })
   })
 })
@@ -166,7 +168,7 @@ describe('TC-256 — la pagination', () => {
 
     expect(page1.lignes).toHaveLength(PAGE)
     expect(page1.encore).toBe(true)
-    expect(page1.curseurSuivant).toMatchObject({ createdAt: expect.any(Number), chemin: expect.any(String) })
+    expect(page1.curseurSuivant).toMatchObject({ chemin: expect.any(String) })
   })
 
   it('[TC-256-14] la page suivante reprend exactement où la première s’arrête', async () => {
@@ -239,6 +241,29 @@ describe('TC-256 — la pagination', () => {
     const tous = [...page1.lignes, ...page2.lignes].map((l) => l.id)
     expect(new Set(tous).size).toBe(tous.length)
     expect(tous).toContain('apres')
+  })
+
+  /**
+   * ⚠ DEUX OPÉRATIONS DANS LA MÊME MILLISECONDE. Mesuré sur émulateur : un
+   *   curseur construit depuis `toMillis()` perd les nanosecondes, et celle qui
+   *   en a le moins disparaît de la page suivante — sans erreur et sans
+   *   compteur. C'est pour ça que le curseur repart du snapshot.
+   */
+  it('[TC-256-23] deux opérations à la même milliseconde ne sont pas perdues', async () => {
+    await poser('clients/store-a/history', 'haut', ligne({ createdAt: new Timestamp(1000, 900000) }))
+    await poser('clients/store-a/history', 'milieu', ligne({ createdAt: new Timestamp(1000, 500000) }))
+    await poser('clients/store-a/history', 'bas', ligne({ createdAt: new Timestamp(999, 0) }))
+
+    // Une page d'UNE ligne, pour forcer la frontière à tomber entre « haut » et « milieu ».
+    const page1 = await listClientHistoryHandler(
+      { auth: { uid: 'u-caissiere' }, data: { clientId: 'c1' } },
+      { db, taillePage: 1 },
+    )
+    const page2 = await appel('u-caissiere', { clientId: 'c1', curseur: page1.curseurSuivant })
+
+    const tous = [...page1.lignes, ...page2.lignes].map((l) => l.id)
+    expect(tous).toContain('milieu')
+    expect(new Set(tous).size).toBe(3)
   })
 })
 
