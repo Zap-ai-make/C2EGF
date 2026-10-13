@@ -187,3 +187,30 @@ describe('TC-258 — changer de client', () => {
     await waitFor(() => expect(result.current.lignes.map((l) => l.id)).toEqual(['z']))
   })
 })
+
+describe('TC-258 — StrictMode', () => {
+  /**
+   * ⚠ LE SCÉNARIO QUE LE COMMENTAIRE PROMETTAIT SANS QUE RIEN NE LE VÉRIFIE.
+   *   `StrictMode` rejoue l'effet de montage avant que la première requête
+   *   n'ait eu le temps de se résoudre. Sans un verrou qui retient POUR QUI il
+   *   a été posé, le rejeu relâche celui du premier passage et part en double.
+   *
+   * ⚠ MÉCANIQUE ADAPTÉE, INTENTION CONSERVÉE : `wrapper: ({children}) =>
+   *   <StrictMode>{children}</StrictMode>` NE mord PAS ici — vérifié
+   *   empiriquement (voir rapport) : `renderHook` insère son propre composant
+   *   fonction AU-DESSUS du wrapper fourni, et `StrictMode` ne double alors
+   *   plus les effets de ses descendants dans cette version de
+   *   `@testing-library/react`. L'option `reactStrictMode: true`, elle, fait
+   *   de `StrictMode` l'élément RACINE passé à `root.render()` — c'est la
+   *   seule forme qui déclenche réellement le double montage ici. Un vrai
+   *   montage sous `src/main.jsx` (où `<StrictMode>` EST la racine) reproduit
+   *   ce même chemin : c'est cette forme que ce test doit reproduire.
+   */
+  it('[TC-258-13] un double montage StrictMode ne part qu’une fois', async () => {
+    chargerHistoriqueClient.mockResolvedValue(page(['a']))
+    const { result } = renderHook(() => useHistoriqueClient('c1'), { reactStrictMode: true })
+
+    await waitFor(() => expect(result.current.etat).toBe('pret'))
+    expect(chargerHistoriqueClient).toHaveBeenCalledTimes(1)
+  })
+})

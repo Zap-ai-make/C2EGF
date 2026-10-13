@@ -27,18 +27,26 @@ export function useHistoriqueClient(clientId) {
   // Le client EN COURS de chargement : une réponse arrivée après un changement
   // de client ne doit pas s'afficher sous le nom du nouveau.
   const clientRef = useRef(null)
-  // ⚠ UNE SEULE REQUÊTE EN VOL À LA FOIS, ET CE N'EST PAS UNE OPTIMISATION.
-  //   `StrictMode` double-invoque l'effet de montage en développement : sans
-  //   cette garde, chaque ouverture du panneau part en DEUX appels de Cloud
-  //   Function, payés deux fois. Et deux clics rapprochés sur « Charger plus »
-  //   repartent tous les deux avec le même curseur. `clientRef` ne couvre pas ce
-  //   cas : il protège d'un changement de client, pas d'un second appel pour le
-  //   même. Même garde que `useRealtimePaginatedRequests.js:78`.
-  const enVolRef = useRef(false)
+  /**
+   * ⚠ LE VERROU RETIENT POUR QUI IL A ÉTÉ POSÉ, et pas seulement qu'il est posé.
+   *   Un booléen ne suffisait pas, pour deux raisons qui se ressemblent :
+   *
+   *   · `StrictMode` rejoue l'effet de montage sans que rien ne distingue ce
+   *     rejeu d'un vrai changement de client. Un verrou booléen qu'on relâche
+   *     « parce que le client a changé » se relâche donc aussi au rejeu, et
+   *     laisse partir un second appel de Cloud Function, payé pour rien.
+   *   · La réponse tardive d'une requête périmée relâchait le verrou d'une
+   *     requête qui, elle, était toujours en vol.
+   *
+   *   En y mettant l'identifiant du client, les deux disparaissent : un second
+   *   appel pour le MÊME client est refusé, un appel pour un AUTRE client passe,
+   *   et seule la requête qui détient le verrou peut le rendre.
+   */
+  const enVolRef = useRef(null)
 
   const charger = useCallback(async (id, curseur) => {
-    if (enVolRef.current) return
-    enVolRef.current = true
+    if (enVolRef.current === id) return
+    enVolRef.current = id
     clientRef.current = id
     setEtat(curseur ? 'chargementPage' : 'chargement')
     setErreur(null)
@@ -63,9 +71,9 @@ export function useHistoriqueClient(clientId) {
       setErreur(err?.message || 'Impossible de charger l’historique.')
       setEtat('erreur')
     } finally {
-      // Toujours relâchée, même en erreur : sinon le hook reste bloqué à
-      // jamais et `reessayer` ne repart plus.
-      enVolRef.current = false
+      // Seul le détenteur rend le verrou : une réponse périmée ne doit pas
+      // libérer la requête qui lui a succédé.
+      if (enVolRef.current === id) enVolRef.current = null
     }
   }, [])
 
@@ -73,7 +81,6 @@ export function useHistoriqueClient(clientId) {
     if (!clientId) {
       clientRef.current = null
       curseurRef.current = null
-      enVolRef.current = false
       setEtat('inactif')
       setLignes([])
       setEnCours([])
@@ -82,10 +89,6 @@ export function useHistoriqueClient(clientId) {
       return
     }
     curseurRef.current = null
-    // Un changement de client est légitime même si une requête de l'ANCIEN est
-    // encore en vol : on relâche la garde pour que le nouveau parte quand même.
-    // La réponse tardive de l'ancien est déjà écartée par `clientRef` ci-dessus.
-    enVolRef.current = false
     setLignes([])
     setEnCours([])
     setTotaux(null)
