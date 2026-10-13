@@ -110,6 +110,7 @@ describe('TC-036-WRA — exports callable de index.js', () => {
       'decreaseDealerInventory',
       'createPartnerDeposit',
       'listOutstandingDrafts',
+      'listClientHistory',
       // Collaborations inter-boutiques
       'createStoreCollaboration',
       'confirmStoreCollaboration',

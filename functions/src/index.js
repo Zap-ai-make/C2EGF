@@ -41,6 +41,7 @@ import { confirmInternalDebtCompensationHandler } from './collaborations/confirm
 import { rejectInternalDebtCompensationHandler } from './collaborations/rejectInternalDebtCompensation.js'
 import { storeTransactionCommandHandler } from './storeTransactions/storeTransactionCommand.js'
 import { listOutstandingDraftsHandler } from './dealerMetrics/listOutstandingDrafts.js'
+import { listClientHistoryHandler } from './clients/listClientHistory.js'
 
 // Garde idempotente : évite "App named '[DEFAULT]' already exists" lors des imports
 // dans les tests d'intégration (TC-036) qui s'exécutent après TC-035 dans le même processus.
@@ -164,6 +165,13 @@ export const createPartnerDeposit = onCall(
 export const listOutstandingDrafts = onCall(
   CALLABLE,
   wrapCallable(listOutstandingDraftsHandler, deps)
+)
+
+// L'historique nominatif d'un agent, toutes boutiques confondues. Le dealer en
+// est refusé : les règles ne lui donnent ailleurs qu'un agrégat sans identité.
+export const listClientHistory = onCall(
+  CALLABLE,
+  wrapCallable(listClientHistoryHandler, deps)
 )
 
 // ── Collaborations inter-boutiques ──────────────────────────────────────────
