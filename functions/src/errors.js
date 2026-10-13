@@ -70,6 +70,9 @@ export const HTTP_CODES = {
   INVALID_COLLABORATION_NETWORK: 'invalid-argument',
   INVALID_STORE_ID:              'invalid-argument',
   INVALID_CLIENT_ID:             'invalid-argument',
+  // Historique d'un agent, toutes boutiques
+  INVALID_HISTORY_CURSOR:        'invalid-argument',
+  HISTORY_ROLE_FORBIDDEN:        'permission-denied',
   SAME_STORE_COLLABORATION:      'invalid-argument',
   CLIENT_NOT_FOUND:              'not-found',
   SUPPLIER_STORE_NOT_FOUND:      'not-found',

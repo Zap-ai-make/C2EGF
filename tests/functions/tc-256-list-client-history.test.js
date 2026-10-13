@@ -1,0 +1,305 @@
+/**
+ * TC-256 — listClientHistory : l'historique d'un agent, toutes boutiques.
+ *   Handler integration avec Firestore Emulator, { db } injecté.
+ *
+ * Comportement protégé :
+ *   autorisation : refus sans auth, profil inactif, DEALER refusé (une identité
+ *                  client ne doit jamais lui parvenir), payload hors liste blanche.
+ *   lecture      : deux boutiques réunies en une seule liste ; non terminées à part.
+ *   pagination   : pages de 50, curseur sérialisable, ex æquo sur createdAt.
+ *   totaux       : comptés sur TOUT l'historique, pas sur la page.
+ *
+ * Exécution : npm run test:functions (émulateur Firestore, projet demo-akayis-test).
+ */
+
+import { describe, it, beforeAll, afterAll, beforeEach, expect } from 'vitest'
+import { initializeApp, getApps, deleteApp } from 'firebase-admin/app'
+import { getFirestore, Timestamp } from 'firebase-admin/firestore'
+import { listClientHistoryHandler, PAGE } from '../../functions/src/clients/listClientHistory.js'
+
+let adminApp
+let db
+
+const PROJECT_ID = process.env.GCLOUD_PROJECT
+const FIRESTORE_HOST = process.env.FIRESTORE_EMULATOR_HOST
+
+beforeAll(() => {
+  if (!FIRESTORE_HOST) throw new Error('SÉCURITÉ : FIRESTORE_EMULATOR_HOST non défini. Lancer via : npm run test:functions')
+  if (!PROJECT_ID) throw new Error('SÉCURITÉ : GCLOUD_PROJECT non défini. Lancer via : npm run test:functions')
+  if (PROJECT_ID !== 'demo-akayis-test') throw new Error(`SÉCURITÉ : projectId doit être "demo-akayis-test". Reçu : "${PROJECT_ID}"`)
+  adminApp = getApps().length === 0 ? initializeApp({ projectId: PROJECT_ID }) : getApps()[0]
+  db = getFirestore(adminApp)
+})
+
+afterAll(async () => { if (adminApp) await deleteApp(adminApp) })
+
+const effacer = async (chemin) => {
+  const snap = await db.collection(chemin).get()
+  await Promise.all(snap.docs.map((d) => d.ref.delete()))
+}
+
+const CAISSIERE = { uid: 'u-caissiere', role: 'store_member', storeId: 'store-a', active: true, name: 'Awa' }
+const DEALER = { uid: 'u-dealer', role: 'dealer', active: true, name: 'Le dealer' }
+const INACTIVE = { uid: 'u-inactive', role: 'store_member', storeId: 'store-a', active: false, name: 'Ex' }
+
+const appel = (uid, data = { clientId: 'c1' }) =>
+  listClientHistoryHandler({ auth: { uid }, data }, { db })
+
+const poser = (chemin, id, donnees) => db.doc(`${chemin}/${id}`).set(donnees)
+
+beforeEach(async () => {
+  await Promise.all([
+    effacer('clients/store-a/history'), effacer('clients/store-b/history'),
+    effacer('clients/store-a/drafts'), effacer('clients/store-b/drafts'),
+    effacer('stores'), effacer('users'),
+  ])
+  for (const p of [CAISSIERE, DEALER, INACTIVE]) await db.doc(`users/${p.uid}`).set(p)
+  await db.doc('stores/store-a').set({ name: 'C2EGF OUAGA', active: true })
+  await db.doc('stores/store-b').set({ name: 'C2EGF BOBO', active: true })
+})
+
+const ligne = (over = {}) => ({
+  clientId: 'c1', type: 'Dépôt', montant: 100, statut: 'Validée',
+  createdAt: Timestamp.fromMillis(Date.UTC(2026, 9, 13, 8, 0)), operatorName: 'Awa',
+  ...over,
+})
+
+describe('TC-256 — autorisation', () => {
+  it('[TC-256-01] refuse un appel sans authentification', async () => {
+    await expect(listClientHistoryHandler({ auth: null, data: { clientId: 'c1' } }, { db }))
+      .rejects.toMatchObject({ code: 'UNAUTHENTICATED' })
+  })
+
+  it('[TC-256-02] refuse un profil inactif', async () => {
+    await expect(appel('u-inactive')).rejects.toMatchObject({ code: 'PROFILE_INACTIVE' })
+  })
+
+  /**
+   * ⚠ LE DEALER EST REFUSÉ, ET CE N'EST PAS UN DÉTAIL. Les règles ne lui donnent
+   *   aujourd'hui qu'un agrégat sans aucune identité client ; cette fonction rend
+   *   des noms et des montants nominatifs.
+   */
+  it('[TC-256-03] refuse le dealer', async () => {
+    await expect(appel('u-dealer')).rejects.toMatchObject({ code: 'HISTORY_ROLE_FORBIDDEN' })
+  })
+
+  it('[TC-256-04] refuse un profil inexistant', async () => {
+    await expect(appel('u-fantome')).rejects.toMatchObject({ code: 'PROFILE_NOT_FOUND' })
+  })
+
+  it('[TC-256-05] refuse une clé hors liste blanche', async () => {
+    await expect(appel('u-caissiere', { clientId: 'c1', storeId: 'store-b' }))
+      .rejects.toMatchObject({ code: 'INVALID_REQUEST_ID' })
+  })
+
+  it('[TC-256-06] refuse un clientId vide ou non textuel', async () => {
+    await expect(appel('u-caissiere', { clientId: '' })).rejects.toMatchObject({ code: 'INVALID_CLIENT_ID' })
+    await expect(appel('u-caissiere', { clientId: 42 })).rejects.toMatchObject({ code: 'INVALID_CLIENT_ID' })
+  })
+
+  /** Un curseur mal formé est REFUSÉ, jamais ignoré : l'ignorer renverrait la page 1. */
+  it('[TC-256-07] refuse un curseur mal formé', async () => {
+    await expect(appel('u-caissiere', { clientId: 'c1', curseur: { createdAt: 'hier' } }))
+      .rejects.toMatchObject({ code: 'INVALID_HISTORY_CURSOR' })
+    await expect(appel('u-caissiere', { clientId: 'c1', curseur: 'abc' }))
+      .rejects.toMatchObject({ code: 'INVALID_HISTORY_CURSOR' })
+  })
+})
+
+describe('TC-256 — les deux boutiques réunies', () => {
+  it('[TC-256-08] rend les opérations des deux boutiques, nommées', async () => {
+    await poser('clients/store-a/history', 'h1', ligne({ montant: 250 }))
+    await poser('clients/store-b/history', 'h2', ligne({ montant: 75, createdAt: Timestamp.fromMillis(Date.UTC(2026, 9, 12, 8, 0)) }))
+
+    const { lignes } = await appel('u-caissiere')
+    expect(lignes.map((l) => l.storeName)).toEqual(['C2EGF OUAGA', 'C2EGF BOBO'])
+    expect(lignes.map((l) => l.montant)).toEqual([250, 75])
+  })
+
+  it('[TC-256-09] n’inclut jamais les opérations d’un autre client', async () => {
+    await poser('clients/store-a/history', 'h1', ligne())
+    await poser('clients/store-a/history', 'autre', ligne({ clientId: 'c2' }))
+
+    const { lignes } = await appel('u-caissiere')
+    expect(lignes).toHaveLength(1)
+  })
+
+  it('[TC-256-10] les non terminées sortent dans `enCours`, pas dans `lignes`', async () => {
+    await poser('clients/store-a/history', 'h1', ligne())
+    await poser('clients/store-b/drafts', 'd1', ligne({ type: 'Retrait', montant: 100, remainingAmount: 40, statut: 'Non Terminées' }))
+
+    const { lignes, enCours, totaux } = await appel('u-caissiere')
+    expect(lignes.map((l) => l.id)).toEqual(['h1'])
+    expect(enCours.map((l) => l.id)).toEqual(['d1'])
+    expect(totaux.resteAPayer).toBe(40)
+    expect(totaux.resteAEncaisser).toBe(0)
+  })
+
+  it('[TC-256-11] un client sans aucune opération rend des listes vides, pas une erreur', async () => {
+    const reponse = await appel('u-caissiere')
+    expect(reponse).toMatchObject({ success: true, lignes: [], enCours: [], encore: false, curseurSuivant: null })
+    expect(reponse.totaux.operations).toBe(0)
+  })
+
+  it('[TC-256-12] les ravitaillements et clôtures sont écartés', async () => {
+    await poser('clients/store-a/history', 'r1', ligne({ type: 'Ravitaillement' }))
+    await poser('clients/store-a/history', 'c1', ligne({ type: 'Clôture' }))
+    await poser('clients/store-a/history', 'h1', ligne())
+
+    const { lignes } = await appel('u-caissiere')
+    expect(lignes.map((l) => l.id)).toEqual(['h1'])
+  })
+})
+
+describe('TC-256 — la pagination', () => {
+  const poserPlusieurs = async (combien, ms = (i) => Date.UTC(2026, 9, 13, 0, 0) + i * 60000) => {
+    for (let i = 0; i < combien; i += 1) {
+      await poser('clients/store-a/history', `h${String(i).padStart(3, '0')}`, ligne({
+        montant: i, createdAt: Timestamp.fromMillis(ms(i)),
+      }))
+    }
+  }
+
+  it('[TC-256-13] la première page est bornée et annonce la suite', async () => {
+    await poserPlusieurs(PAGE + 10)
+    const page1 = await appel('u-caissiere')
+
+    expect(page1.lignes).toHaveLength(PAGE)
+    expect(page1.encore).toBe(true)
+    expect(page1.curseurSuivant).toMatchObject({ createdAt: expect.any(Number), chemin: expect.any(String) })
+  })
+
+  it('[TC-256-14] la page suivante reprend exactement où la première s’arrête', async () => {
+    await poserPlusieurs(PAGE + 10)
+    const page1 = await appel('u-caissiere')
+    const page2 = await appel('u-caissiere', { clientId: 'c1', curseur: page1.curseurSuivant })
+
+    expect(page2.lignes).toHaveLength(10)
+    expect(page2.encore).toBe(false)
+    expect(page2.curseurSuivant).toBeNull()
+
+    const tous = [...page1.lignes, ...page2.lignes].map((l) => l.id)
+    expect(new Set(tous).size).toBe(PAGE + 10)
+  })
+
+  /** Les pages suivantes ne recalculent ni les totaux ni les non terminées. */
+  it('[TC-256-15] seule la première page porte les totaux et les non terminées', async () => {
+    await poserPlusieurs(PAGE + 1)
+    const page1 = await appel('u-caissiere')
+    const page2 = await appel('u-caissiere', { clientId: 'c1', curseur: page1.curseurSuivant })
+
+    expect(page1.totaux).not.toBeNull()
+    expect(page2.totaux).toBeNull()
+    expect(page2.enCours).toEqual([])
+  })
+
+  /**
+   * ⚠ REVIEW FOCUS 2 — DEUX OPÉRATIONS À LA MÊME SECONDE. C'est courant en
+   *   caisse. Sans `__name__` en second critère de tri ET dans le curseur, la
+   *   page suivante saute des lignes ou les répète, sans aucun message.
+   */
+  it('[TC-256-16] des opérations au même instant ne sont ni perdues ni répétées', async () => {
+    await poserPlusieurs(PAGE + 5, () => Date.UTC(2026, 9, 13, 10, 0))
+
+    const page1 = await appel('u-caissiere')
+    const page2 = await appel('u-caissiere', { clientId: 'c1', curseur: page1.curseurSuivant })
+
+    const tous = [...page1.lignes, ...page2.lignes].map((l) => l.id)
+    expect(tous).toHaveLength(PAGE + 5)
+    expect(new Set(tous).size).toBe(PAGE + 5)
+  })
+
+  /**
+   * ⚠ LE CURSEUR SORT DU DERNIER DOCUMENT LU, PAS DE LA DERNIÈRE LIGNE RENDUE.
+   *   Un ravitaillement est écarté de l'affichage mais occupe une place dans le
+   *   tri : si la page se termine sur lui, repartir de la dernière ligne VISIBLE
+   *   le relirait à chaque page, et la pagination tournerait en rond sans
+   *   jamais atteindre la fin.
+   */
+  it('[TC-256-22] une page qui finit sur une ligne écartée avance quand même', async () => {
+    // Les PAGE-1 premières lignes du tri, les plus récentes.
+    for (let i = 0; i < PAGE - 1; i += 1) {
+      const id = `h${String(i).padStart(3, '0')}`
+      await poser('clients/store-a/history', id, ligne({
+        createdAt: Timestamp.fromMillis(Date.UTC(2026, 9, 13) + (1000 - i) * 1000),
+      }))
+    }
+    // La PAGE-ième : un ravitaillement. Il est LU, il n'est jamais RENDU.
+    await poser('clients/store-a/history', 'ravito', ligne({
+      type: 'Ravitaillement', createdAt: Timestamp.fromMillis(Date.UTC(2026, 9, 13) + 500 * 1000),
+    }))
+    await poser('clients/store-a/history', 'apres', ligne({
+      createdAt: Timestamp.fromMillis(Date.UTC(2026, 9, 13) + 1 * 1000),
+    }))
+
+    const page1 = await appel('u-caissiere')
+    expect(page1.encore).toBe(true)
+    const page2 = await appel('u-caissiere', { clientId: 'c1', curseur: page1.curseurSuivant })
+
+    const tous = [...page1.lignes, ...page2.lignes].map((l) => l.id)
+    expect(new Set(tous).size).toBe(tous.length)
+    expect(tous).toContain('apres')
+  })
+})
+
+describe('TC-256 — les totaux portent sur tout, pas sur la page', () => {
+  it('[TC-256-17] le compte dépasse la page chargée', async () => {
+    for (let i = 0; i < PAGE + 7; i += 1) {
+      await poser('clients/store-a/history', `h${i}`, ligne({ createdAt: Timestamp.fromMillis(Date.UTC(2026, 9, 13) + i * 1000) }))
+    }
+    const { lignes, totaux } = await appel('u-caissiere')
+    expect(lignes).toHaveLength(PAGE)
+    expect(totaux.operations).toBe(PAGE + 7)
+  })
+
+  it('[TC-256-18] les montants sont sommés par type, accents compris', async () => {
+    await poser('clients/store-a/history', 'h1', ligne({ type: 'Dépôt', montant: 100 }))
+    await poser('clients/store-a/history', 'h2', ligne({ type: 'Depot', montant: 50 }))
+    await poser('clients/store-b/history', 'h3', ligne({ type: 'Retrait', montant: 30 }))
+
+    const { totaux } = await appel('u-caissiere')
+    expect(totaux.depots).toBe(150)
+    expect(totaux.retraits).toBe(30)
+  })
+
+  /**
+   * ⚠ REVIEW FOCUS 5 — UN TYPE INATTENDU N'ENTRE DANS AUCUN TOTAL. Le taire
+   *   ferait afficher une somme fausse sans que rien ne le dise. On le compte.
+   */
+  it('[TC-256-19] les opérations d’un type inattendu sont comptées à part', async () => {
+    await poser('clients/store-a/history', 'h1', ligne({ type: 'Dépôt', montant: 100 }))
+    await poser('clients/store-a/history', 'h2', ligne({ type: 'Transfert', montant: 999 }))
+
+    const { totaux } = await appel('u-caissiere')
+    expect(totaux.depots).toBe(100)
+    expect(totaux.nonClassees).toBe(1)
+  })
+
+  /**
+   * ⚠ REVIEW FOCUS 3 — UN DOCUMENT SANS `createdAt` EST EXCLU PAR `orderBy`.
+   *   Firestore ignore les documents qui ne portent pas le champ trié : ces
+   *   lignes ne seraient JAMAIS listées, et rien ne le dirait. Le total vient
+   *   d'un `count()` SANS `orderBy`, donc l'écart se voit.
+   */
+  it('[TC-256-20] une ligne sans horodatage est comptée même si elle ne peut pas être listée', async () => {
+    await poser('clients/store-a/history', 'h1', ligne())
+    await poser('clients/store-a/history', 'vieille', { clientId: 'c1', type: 'Dépôt', montant: 7, date: '01/01/2025' })
+
+    const { lignes, totaux } = await appel('u-caissiere')
+    expect(lignes).toHaveLength(1)
+    expect(totaux.operations).toBe(2)
+    expect(totaux.nonDatees).toBe(1)
+  })
+
+  it('[TC-256-21] le récapitulatif par boutique compte chaque boutique', async () => {
+    await poser('clients/store-a/history', 'h1', ligne())
+    await poser('clients/store-a/history', 'h2', ligne())
+    await poser('clients/store-b/history', 'h3', ligne())
+
+    const { totaux } = await appel('u-caissiere')
+    expect(totaux.parBoutique).toEqual([
+      { storeId: 'store-a', storeName: 'C2EGF OUAGA', operations: 2 },
+      { storeId: 'store-b', storeName: 'C2EGF BOBO', operations: 1 },
+    ])
+  })
+})
