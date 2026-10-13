@@ -43,7 +43,17 @@ import {
 } from './importChampsAgent.mjs'
 import { CHAMPS } from './champsImportables.mjs'
 
-const EXTENSIONS_TABLEUR = new Set(['.xlsx', '.xlsm', '.xls', '.csv', '.txt'])
+/**
+ * Ce qu'un `--dossier=` ramasse tout seul. `--fichier=` accepte en plus `.txt`
+ * (voir la lecture plus bas, qui dispatche sur l'extension).
+ *
+ * ⚠ `.txt` EN EST EXCLU, ALORS QU'IL RESTE LISIBLE PAR `--fichier=`. Un dossier
+ *   de livraison contient des notes : « Lire_avant_import.txt » a vraiment été
+ *   livré à côté des quinze classeurs. Le lire comme un tableur fait échouer tout
+ *   l'import sur un fichier qui n'a jamais prétendu en être un. Désigner un `.txt`
+ *   à la main reste possible — là, c'est une intention, pas une trouvaille.
+ */
+const EXTENSIONS_RAMASSEES = new Set(['.xlsx', '.xlsm', '.xls', '.csv'])
 
 const nombre = (n) => Number(n).toLocaleString('fr-FR')
 
@@ -135,16 +145,18 @@ export async function executerImportAgent(champ) {
     }
 
     const verrous = entrees.filter((e) => e.startsWith('~$'))
-    fichiers = entrees
-      .filter((e) => !e.startsWith('~$') && EXTENSIONS_TABLEUR.has(extname(e).toLowerCase()))
+    const retenus = entrees
+      .filter((e) => !e.startsWith('~$') && EXTENSIONS_RAMASSEES.has(extname(e).toLowerCase()))
       .sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }))
-      .map((e) => join(dossierSource, e))
+    fichiers = retenus.map((e) => join(dossierSource, e))
+    const ecartes = entrees.filter((e) => !e.startsWith('~$') && !retenus.includes(e))
 
     titre(`DOSSIER : ${dossierSource}`)
     if (fichiers.length === 0) {
       echouer(
         `Aucun tableur dans ${dossierSource}.\n`
-        + `Extensions reconnues : ${[...EXTENSIONS_TABLEUR].join(', ')}.`,
+        + `Extensions ramassées : ${[...EXTENSIONS_RAMASSEES].join(', ')}.\n`
+        + 'Un fichier à l\'extension inhabituelle se désigne à la main : --fichier=<chemin>',
       )
     }
     console.log(`${nombre(fichiers.length)} fichier(s) à traiter, dans cet ordre :`)
@@ -154,6 +166,15 @@ export async function executerImportAgent(champ) {
       console.log(`⚠ ${nombre(verrous.length)} fichier(s) de verrou Excel ignoré(s) : ${verrous.join(', ')}`)
       console.log('  Ce sont des fichiers temporaires créés par un classeur OUVERT.')
       console.log("  Fermer Excel avant de lancer l'import évite toute surprise.")
+    }
+    // ⚠ CE QUI N'EST PAS LU EST DIT. Un fichier écarté en silence, c'est la
+    //   question « est-ce que mes 15 000 lignes y sont toutes ? » sans réponse.
+    if (ecartes.length > 0) {
+      console.log('')
+      console.log(`${nombre(ecartes.length)} fichier(s) NON lu(s) (extension non ramassée) :`)
+      for (const e of ecartes.slice(0, 20)) console.log(`  ${e}`)
+      if (ecartes.length > 20) console.log(`  … et ${nombre(ecartes.length - 20)} autre(s).`)
+      console.log('  Si l\'un d\'eux porte des données à importer : --fichier=<chemin>')
     }
   }
 
@@ -229,7 +250,18 @@ export async function executerImportAgent(champ) {
         ? `\n\nCe fichier porte « ${autres[0].colonne} ». Pour le traiter :\n`
           + `  node ${autres[0].script} ${argv.join(' ')}`
         : ''
-      echouer(`${chemin} :\n${colonnes.erreur}${redirection}`)
+      // ⚠ L'INTRUS DANS UN DOSSIER DE LIVRAISON. Quand d'autres fichiers du même
+      //   lot ont, eux, les bonnes colonnes, le problème n'est presque jamais une
+      //   faute d'en-tête : c'est un fichier qui n'est pas un fichier d'import —
+      //   un CSV de vérification, une note. On abandonne quand même : écarter
+      //   l'intrus tout seul risquerait d'écarter en silence un vrai lot mal
+      //   nommé, et de laisser des centaines de fiches vides sans le dire.
+      const intrus = tableurs.length > 0 && autres.length === 0
+        ? `\n\n${nombre(tableurs.length)} fichier(s) déjà lu(s) ont bien les deux colonnes.`
+          + " Si celui-ci n'est pas un fichier d'import (CSV de vérification, note),"
+          + ' le sortir du dossier et relancer.'
+        : ''
+      echouer(`${chemin} :\n${colonnes.erreur}${redirection}${intrus}`)
     }
     console.log(`Colonnes retenues : code = « ${colonnes.code} », ${champ.libelleCourt} = « ${colonnes.valeur} »`)
 
