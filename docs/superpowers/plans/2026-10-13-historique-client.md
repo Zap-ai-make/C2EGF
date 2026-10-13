@@ -747,7 +747,7 @@ describe('TC-256 — les totaux portent sur tout, pas sur la page', () => {
 - [ ] **Step 3 : lancer le test pour le voir échouer**
 
 ```bash
-npm run test:functions -- tests/functions/tc-256-list-client-history.test.js
+npx firebase emulators:exec --only firestore --project demo-akayis-test "npx vitest run --config vitest.functions.config.js tests/functions/tc-256-list-client-history.test.js"
 ```
 Attendu : ÉCHEC — module `listClientHistory.js` introuvable.
 
@@ -990,7 +990,7 @@ bloc « la pagination » :
 - [ ] **Step 6 : lancer les tests pour les voir passer**
 
 ```bash
-npm run test:functions -- tests/functions/tc-256-list-client-history.test.js
+npx firebase emulators:exec --only firestore --project demo-akayis-test "npx vitest run --config vitest.functions.config.js tests/functions/tc-256-list-client-history.test.js"
 ```
 Attendu : PASS, 22 tests.
 
@@ -1161,7 +1161,7 @@ Dans `tests/functions/tc-036-callable-wiring.test.js`, repérer la liste des nom
 de callables attendus et y ajouter `'listClientHistory'`. Lancer :
 
 ```bash
-npm run test:functions -- tests/functions/tc-036-callable-wiring.test.js
+npx firebase emulators:exec --only firestore --project demo-akayis-test "npx vitest run --config vitest.functions.config.js tests/functions/tc-036-callable-wiring.test.js"
 ```
 Attendu : PASS. Si le test compte les callables (`23`), incrémenter le nombre.
 
