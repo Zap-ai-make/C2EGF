@@ -60,35 +60,60 @@ montants nominatifs. Son rôle est refusé, et un test le vérifie.
 ### 1. `functions/src/clients/listClientHistory.js` — la Cloud Function
 
 ```
-listClientHistory({ clientId }) → { success, lignes[], totaux, tronque, limite }
+listClientHistory({ clientId, curseur? }) →
+  { success, enCours[], lignes[], totaux, curseurSuivant, encore }
 ```
 
 **Autorisation**, dans cet ordre :
 
 1. `validateAuthUid(request.auth?.uid)` ;
-2. `validateInputPayload(request.data, ['clientId'])` — liste blanche stricte ;
+2. `validateInputPayload(request.data, ['clientId', 'curseur'])` — liste blanche ;
 3. `clientId` : chaîne non vide, sans espace de bord, ≤ 128 caractères ;
-4. `readValidatedProfile(db, uid, validateStoreProfile)` — profil actif, et
+4. `curseur` : absent, ou `{ createdAt: number, chemin: string }` validé de la
+   même façon — un curseur mal formé est refusé, jamais ignoré en silence ;
+5. `readValidatedProfile(db, uid, validateStoreProfile)` — profil actif, et
    `role !== 'dealer'`.
 
-**Lectures**, en parallèle :
+**Deux sources, deux régimes**, et c'est la clé du découpage :
 
 ```js
+// Les NON TERMINÉES : petites par nature, chargées en entier, une seule fois.
+db.collectionGroup('drafts').where('clientId', '==', clientId)
+
+// L'HISTORIQUE : paginé, du plus récent au plus ancien.
 db.collectionGroup('history')
   .where('clientId', '==', clientId)
   .orderBy('createdAt', 'desc')
-  .limit(LIMITE)                     // 200
-db.collectionGroup('drafts').where('clientId', '==', clientId).limit(LIMITE)
-db.collection('stores').get()
+  .orderBy('__name__', 'desc')
+  .startAfter(curseur.createdAt, curseur.chemin)   // si curseur
+  .limit(PAGE)                                      // 50
 ```
+
+> ⚠ **LES NON TERMINÉES NE SE PAGINENT PAS, ET NE S'INTERCALENT PAS NON PLUS.**
+> Ce sont des opérations EN COURS : il y en a peu, et elle sont ce qu'on vient
+> voir en premier. Les mêler à la liste chronologique paginée produirait un
+> défaut visible — une non terminée vieille de trois mois s'afficherait dès la
+> première page, puis se ferait dépasser par des lignes plus récentes à chaque
+> « charger plus ». Elles ont donc leur bloc, épinglé en haut.
+
+> ⚠ **`__name__` EN SECOND CRITÈRE DE TRI, SANS QUOI LA PAGINATION PERD DES
+> LIGNES.** Deux opérations peuvent partager la même seconde — c'est courant en
+> caisse. Un curseur posé sur le seul `createdAt` sauterait les ex æquo ou les
+> rendrait deux fois. Firestore ajoute `__name__` dans la direction du dernier
+> `orderBy`, donc l'index composite ci-dessous couvre déjà cette requête : le
+> critère est gratuit, son absence coûterait des lignes perdues sans message.
+
+> ⚠ **Le curseur est une PAIRE DE VALEURS, pas un `DocumentSnapshot`.** Un
+> snapshot ne traverse pas la frontière du callable. On renvoie
+> `{ createdAt: ms, chemin: doc.ref.path }`, et le serveur le reconstruit.
 
 > ⚠ **La boutique vient du CHEMIN, pas du champ.** `doc.ref.parent.parent.id`
 > fait foi ; `storeName` recopié dans le document peut dater d'un renommage. Le
 > nom est résolu depuis `stores`, avec repli sur le champ recopié puis sur l'id.
 
-> ⚠ **Les brouillons ne sont pas triés côté Firestore.** Un `orderBy` sur un
-> second champ coûterait un index composite de plus pour trier une poignée de
-> lignes. Ils sont réunis aux autres et classés en mémoire.
+> ⚠ **`stores` est relu à chaque page, et non transmis par l'appelant.** Une
+> dizaine de documents par page coûte moins qu'un paramètre que le navigateur
+> pourrait falsifier pour renommer une boutique à l'écran.
 
 **Deux index à créer** — sans eux la requête échoue à la première exécution.
 Firestore ne crée les index de groupe de collections qu'explicitement, et seul
@@ -146,7 +171,19 @@ C'est elle que les tests unitaires éprouvent cas par cas.
 `createdAt` et `validatedAt`, la règle posée le même jour pour l'historique
 (`src/context/transactions.jsx`). Ce qui vient d'être traité est en haut.
 
-**Totaux** :
+**Totaux** — et ils posent une question que la pagination rend aiguë :
+
+> ⚠ **LES TOTAUX PORTENT SUR TOUT L'HISTORIQUE, PAS SUR LA PAGE CHARGÉE.** Un
+> « 12 300 000 déposés » qui grandit à chaque « charger plus » ne veut rien dire,
+> et pire : il se lit comme un total alors qu'il n'en est pas un. Le serveur les
+> calcule donc avec une requête d'agrégation (`count()` et `sum()`, disponibles
+> côté Admin SDK) sur l'ENSEMBLE des lignes du client, indépendamment de la page.
+> Ils sont renvoyés tels quels à chaque appel, et le panneau n'y touche pas.
+>
+> Si l'agrégation s'avérait indisponible sur ce projet, le repli est de ne PAS
+> afficher de totaux plutôt que d'en afficher de faux.
+
+
 
 ```
 operations        nombre de lignes non supprimées
@@ -177,9 +214,19 @@ parBoutique       [{ storeId, storeName, operations, depots, retraits }]
 
 ### 3. `src/services/clientHistoryService.js` — l'appel
 
-Une fonction, `chargerHistoriqueClient(clientId)`, qui appelle le callable et
-rend `{ lignes, totaux, tronque }`. Mêmes conventions d'erreur que
-`dealerService.js`.
+Une fonction, `chargerHistoriqueClient(clientId, curseur)`, qui appelle le
+callable et rend `{ enCours, lignes, totaux, curseurSuivant, encore }`. Mêmes
+conventions d'erreur que `dealerService.js`.
+
+Le cumul des pages vit dans un hook, `useHistoriqueClient(clientId)`, qui garde
+la liste déjà lue, le curseur courant et l'état « encore ». Deux règles :
+
+> ⚠ **Dédupliquer par identifiant à chaque page.** Une ligne écrite pendant la
+> lecture peut décaler la pagination et faire revenir un document déjà affiché.
+> `mergeHistoryPages` fait déjà exactement ça pour l'historique de la boutique.
+
+> ⚠ **Un changement de client remet tout à zéro.** Sans cela, ouvrir le panneau
+> d'un second agent lui empilerait les pages du premier.
 
 ### 4. `src/components/clients/HistoriqueClientPanel.jsx` — le panneau
 
@@ -189,22 +236,47 @@ Ouvert par la nouvelle colonne, fermé par `Échap` et par le fond.
 OUEDRAOGO SALIF                                    [x]
 Code 0123456 · N° 01234567 · POUYTENGA
 
-47 opérations · 12 300 000 déposés · 8 100 000 retirés
-EN ATTENTE : 40 000 à encaisser · 100 000 à payer   (2 opérations)
+437 opérations · 12 300 000 déposés · 8 100 000 retirés
+OUAGA 312 · BOBO 98 · KOUPELA 27
+
+┌ EN COURS ─────────────────────────────────────────┐
+│ 13/10  09:05  Retrait   100 000   OUAGA · Awa     │
+│        reste 40 000 — en attente depuis 6 h       │
+│ 09/10  11:20  Dépôt      80 000   BOBO · Salif    │
+│        reste 80 000 — en attente depuis 4 j       │
+│ À ENCAISSER 80 000 · À PAYER 40 000               │
+└───────────────────────────────────────────────────┘
 
 13/10  14:32   Dépôt      250 000   Validée           OUAGA · Awa
-13/10  09:05   Retrait    100 000   NON TERMINÉE      OUAGA · Awa
-               reste 40 000 — en attente depuis 6 h
 12/10  17:48   Dépôt       75 000   Encaissé Orange   BOBO · Salif
 11/10  10:12   Dépôt      500 000   Supprimée         OUAGA · Awa
+                       … 50 de plus sur 437 …
+                        [ Charger plus ]
 ```
 
-Quatre états, et aucun ne doit ressembler à un autre :
+**Le bloc « EN COURS » est épinglé** : chargé en entier dès le premier appel,
+jamais paginé, toujours en haut. C'est la réponse à « où en est son
+remboursement ? », et elle ne doit pas dépendre du nombre de pages chargées.
+
+**La liste chronologique est virtualisée et paginée.** `useWindowedRows`
+(`src/hooks/useWindowedRows.js`) fenêtre déjà des lignes à hauteur fixe sans
+dépendance, et `LoadMoreButton` existe. Un agent à 437 opérations doit pouvoir
+être lu en entier : on charge par pages de 50, et on peut aller jusqu'au bout.
+
+> ⚠ **LE RÉCAPITULATIF PAR BOUTIQUE EST UNE LIGNE, PAS UN TABLEAU.** Il répond à
+> « qui travaille avec cet agent » d'un coup d'œil. Un second tableau au-dessus
+> du premier doublerait la lecture pour une information que la colonne boutique
+> porte déjà ligne à ligne.
+
+Cinq états, et aucun ne doit ressembler à un autre :
 
 - **chargement** — `SkeletonList`, le panneau est déjà ouvert avec l'identité ;
 - **vide** — « Aucune opération pour cet agent », qui n'est pas une erreur ;
 - **erreur** — `ErrorState` avec un bouton Réessayer ;
-- **tronqué** — « 200 opérations les plus récentes sur 437 » en pied de liste.
+- **page suivante en cours** — le bouton seul passe à « Chargement… », la liste
+  déjà lue ne bouge pas et ne clignote pas ;
+- **tout chargé** — le bouton disparaît, remplacé par « 437 opérations, c'est
+  tout ». Une liste qui s'arrête sans le dire laisse croire qu'il en manque.
 
 Le sens du mouvement reprend le code couleur existant (entrant / sortant) de
 `src/utils/constants.js` ; rien de nouveau n'est inventé.
@@ -223,16 +295,18 @@ Le sens du mouvement reprend le code couleur existant (entrant / sortant) de
 - **Aucun temps réel.** Le panneau charge à l'ouverture. Un `onSnapshot` sur un
   groupe de collections multi-boutiques coûterait une écoute permanente par
   client consulté, pour une donnée qu'on lit une fois.
-- **Aucune pagination.** Au-delà de 200 lignes, le panneau le dit. Charger la
-  suite est une fonctionnalité séparée, à ajouter si le besoin se présente.
-- **Aucun filtre ni export.** Même raison.
+- **Aucun filtre ni export.** L'historique se lit en entier, dans l'ordre. Un
+  filtre par date ou par boutique est une fonctionnalité séparée, à ajouter si
+  le besoin se présente.
 
 ## Risques
 
 | Risque | Conséquence | Réponse |
 |---|---|---|
 | Index non déployés | la fonction échoue à chaque ouverture | les déployer AVANT la fonction ; le plan l'impose |
-| Agent très actif | lecture de 200 documents par ouverture | `limit(200)` borne le coût ; le total est annoncé |
+| Agent très actif | lecture illimitée à l'ouverture | pages de 50 : l'ouverture lit 50 lignes + les non terminées, le reste à la demande |
+| Deux opérations à la même seconde | pagination qui saute ou répète des lignes | `__name__` en second critère de tri et dans le curseur |
+| Curseur forgé par l'appelant | lecture hors périmètre | le curseur ne porte qu'une position dans un tri ; le filtre `clientId` est réimposé à chaque page, côté serveur |
 | `clientId` d'une fiche fusionnée | historique amputé | le script de fusion a repointé `clientId` (`fusionnerClients.mjs:438`) — vérifié |
 | Client « manuel » (non enregistré) | `clientId` en `manual-…`, aucune fiche | la colonne n'existe que dans la liste des clients, donc le cas ne se présente pas |
 | Dealer appelant la fonction | identités clients exposées | rôle refusé, test dédié |
