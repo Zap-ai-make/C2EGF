@@ -181,9 +181,9 @@ fabrique le fichier qui a besoin de la réponse, et il n'a pas cet accès.
 # Aperçu — aucune écriture. 16 000 lignes ne se lisent pas au terminal : --csv les écrit toutes.
 node scripts/importerNumerosAgent.mjs --fichier=numeros.xlsx --csv=apercu.csv
 
-# Plusieurs lots : --fichier est RÉPÉTABLE, et les lots sont réunis avant
-# la planification — un code présent dans deux fichiers est vu comme répété.
-node scripts/importerNumerosAgent.mjs --fichier=lot1.xlsx --fichier=lot2.xlsx
+# Plusieurs lots : désigner le DOSSIER. Tous ses tableurs sont lus, triés par
+# nom, réunis en UN seul plan — donc une seule sauvegarde et une seule annulation.
+node scripts/importerNumerosAgent.mjs --dossier=numeros-agent --csv=apercu.csv
 
 # Application, quatre verrous comme la fusion
 $env:AKAYIS_ALLOW_AGENT_IMPORT='true'

@@ -30,6 +30,7 @@
  * modifiée depuis l'import.
  *
  * Usage :
+ *   node scripts/importerNumerosAgent.mjs --dossier=numeros-agent
  *   node scripts/importerNumerosAgent.mjs --fichier=numeros.xlsx
  *   node scripts/importerNumerosAgent.mjs --fichier=lot1.xlsx --fichier=lot2.xlsx
  *   node scripts/importerNumerosAgent.mjs --fichier=numeros.csv --csv=apercu.csv
@@ -37,6 +38,8 @@
  *   node scripts/importerNumerosAgent.mjs --annuler=backups/import-numeros-… --execute --allow-production
  *
  * Options :
+ *   --dossier=    tous les tableurs d'un dossier, triés par nom. LE PLUS SIMPLE
+ *                 quand les 15 000 lignes arrivent découpées en lots.
  *   --fichier=    le .xlsx ou .csv à lire. RÉPÉTABLE, ou séparé par des virgules :
  *                 les lots sont réunis avant la planification, pour qu'un code
  *                 présent dans deux fichiers soit vu comme répété.
@@ -73,11 +76,12 @@ const allowProductionFlag = argv.includes('--allow-production')
 //   écritures sur la même fiche, dont la seconde écrase la première. Les lots
 //   doivent donc être réunis AVANT la planification, pour que la détection des
 //   répétitions porte sur l'ensemble.
-const fichiers = argv
+const fichiersNommes = argv
   .filter((a) => a.startsWith('--fichier='))
   .flatMap((a) => a.slice('--fichier='.length).split(','))
   .map((f) => f.trim())
   .filter(Boolean)
+const dossierSource = valeur('--dossier=', null)
 const feuilleVoulue = valeur('--feuille=', null)
 const csvSortie = valeur('--csv=', null)
 const dossierAnnulation = valeur('--annuler=', null)
@@ -97,13 +101,73 @@ const titre = (texte) => {
   console.log('─'.repeat(texte.length))
 }
 
+/**
+ * ⚠ UN DOSSIER PLUTÔT QU'UNE LISTE, PARCE QUE QUINZE MILLE LIGNES ARRIVENT
+ *   DÉCOUPÉES EN LOTS.
+ *
+ *   Taper `--fichier=` autant de fois qu'il y a de fichiers n'est pas une
+ *   réponse : c'est long, et surtout un fichier oublié ne se voit pas — l'import
+ *   réussirait, le bilan serait cohérent, et quelques centaines de fiches
+ *   resteraient vides sans que rien ne le dise. Désigner le DOSSIER supprime la
+ *   question : ce qui est dedans est traité.
+ *
+ * ⚠ LES FICHIERS DE VERROU D'EXCEL SONT ÉCARTÉS. Un classeur ouvert dans Excel
+ *   crée à côté de lui un `~$classeur.xlsx` : un fichier de quelques octets, au
+ *   nom et à l'extension d'un vrai classeur, mais qui n'en est pas un. Le lire
+ *   ferait échouer l'import au milieu du dossier, pour une raison introuvable.
+ *   Les noms commençant par `~$` sont donc ignorés, et comptés à part.
+ *
+ * ⚠ L'ORDRE EST ALPHABÉTIQUE, ET IL DOIT L'ÊTRE. Sans tri, l'ordre dépend du
+ *   système de fichiers : deux exécutions pourraient numéroter les lignes
+ *   autrement, et l'aperçu ne décrirait plus ce que `--execute` va faire.
+ */
+const EXTENSIONS_TABLEUR = new Set(['.xlsx', '.xlsm', '.xls', '.csv', '.txt'])
+let fichiers = fichiersNommes
+
+if (dossierSource) {
+  if (fichiersNommes.length > 0) {
+    echouer('--dossier et --fichier s\'excluent : désigner le dossier, ou les fichiers un par un.')
+  }
+  let entrees
+  try {
+    entrees = await readdir(dossierSource)
+  } catch (error) {
+    echouer(`Dossier illisible : ${dossierSource}\n  (${error.message})`)
+  }
+
+  const verrous = entrees.filter((e) => e.startsWith('~$'))
+  fichiers = entrees
+    .filter((e) => !e.startsWith('~$') && EXTENSIONS_TABLEUR.has(extname(e).toLowerCase()))
+    .sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }))
+    .map((e) => join(dossierSource, e))
+
+  titre(`DOSSIER : ${dossierSource}`)
+  if (fichiers.length === 0) {
+    echouer(
+      `Aucun tableur dans ${dossierSource}.\n`
+      + `Extensions reconnues : ${[...EXTENSIONS_TABLEUR].join(', ')}.`,
+    )
+  }
+  console.log(`${nombre(fichiers.length)} fichier(s) à traiter, dans cet ordre :`)
+  for (const f of fichiers) console.log(`  ${f}`)
+  if (verrous.length > 0) {
+    console.log('')
+    console.log(`⚠ ${nombre(verrous.length)} fichier(s) de verrou Excel ignoré(s) : ${verrous.join(', ')}`)
+    console.log('  Ce sont des fichiers temporaires créés par un classeur OUVERT.')
+    console.log('  Fermer Excel avant de lancer l\'import évite toute surprise.')
+  }
+}
+
 if (fichiers.length === 0 && !dossierAnnulation) {
   echouer(
-    'Rien à faire : préciser --fichier=<.xlsx|.csv> ou --annuler=<dossier>.\n'
-    + `Le fichier doit porter deux colonnes : « ${COLONNE_CODE} » et « ${COLONNE_NUMERO} ».`,
+    'Rien à faire. Trois façons de désigner les données :\n'
+    + '  --dossier=<dossier>   tous les tableurs du dossier (le plus simple)\n'
+    + '  --fichier=<fichier>   répétable, ou séparé par des virgules\n'
+    + '  --annuler=<dossier>   remet en place une sauvegarde d\'import\n'
+    + `\nChaque fichier doit porter deux colonnes : « ${COLONNE_CODE} » et « ${COLONNE_NUMERO} ».`,
   )
 }
-if (fichiers.length > 0 && dossierAnnulation) {
+if ((fichiers.length > 0 || dossierSource) && dossierAnnulation) {
   echouer('--fichier et --annuler s\'excluent : importer ou annuler, pas les deux.')
 }
 
