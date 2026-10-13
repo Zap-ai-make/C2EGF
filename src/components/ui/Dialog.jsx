@@ -204,7 +204,17 @@ function Dialog({ open, onClose, title, description, children, footer, testId, l
           </button>
         </div>
 
-        <div ref={corps} className={spacious ? 'px-7 py-5' : 'px-5 py-4'}>{children}</div>
+        <div
+          ref={corps}
+          /* ⚠ `min-h-0` N'EST PAS DÉCORATIF. Un flex-item garde `min-height:auto`
+             et refuse de se réduire sous la taille de son contenu : sans lui, le
+             corps déborde du panneau et se fait couper net par son
+             `overflow-hidden`, sans barre de défilement. Ce qui dépasse devient
+             inatteignable — y compris le pied de page et ses boutons. */
+          className={`${spacious ? 'px-7 py-5' : 'px-5 py-4'} ${cote ? 'min-h-0 overflow-y-auto' : ''}`}
+        >
+          {children}
+        </div>
 
         {footer && (
           <div className="flex flex-wrap justify-end gap-2 border-t border-line bg-brand-50 px-5 py-3">

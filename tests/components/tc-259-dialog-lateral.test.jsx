@@ -43,4 +43,30 @@ describe('TC-259 — la variante latérale', () => {
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(onClose).toHaveBeenCalled()
   })
+
+  /**
+   * ⚠ LE CONTENU D'UN PANNEAU LATÉRAL DÉPASSE, C'EST SA NATURE. S'il n'a aucun
+   *   conteneur qui défile, ce qui dépasse n'est pas seulement invisible : il est
+   *   inatteignable, y compris au clavier. Le pied de page du panneau
+   *   d'historique porte le bouton « Charger plus ».
+   */
+  it('[TC-259-05] le corps du panneau latéral peut défiler', () => {
+    // ⚠ Requête ajustée : `Dialog` sort dans un portail vers `document.body`
+    //   (voir le commentaire « LE DIALOGUE SORT DE L'ARBRE OÙ IL EST ÉCRIT »
+    //   dans Dialog.jsx). Le `container` rendu par `render()` ne contient donc
+    //   pas le panneau — il faut interroger `document.body`, comme le fait déjà
+    //   `tc-123-dialog.test.jsx` via `screen`. L'intention reste celle du brief :
+    //   le bouton du pied doit vivre dans un conteneur qui défile et se réduit.
+    render(
+      <Dialog open cote onClose={vi.fn()} title="Historique">
+        <div style={{ height: '4000px' }}>Très long</div>
+        <button type="button">Charger plus</button>
+      </Dialog>,
+    )
+
+    const defilant = document.body.querySelector('.overflow-y-auto')
+    expect(defilant).not.toBeNull()
+    expect(defilant.className).toMatch(/min-h-0/)
+    expect(defilant).toContainElement(screen.getByRole('button', { name: 'Charger plus' }))
+  })
 })
