@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { chargerHistoriqueClient } from '../services/clientHistoryService.js'
+import { chargerHistoriqueClient, CODE_CURSEUR_PERIME } from '../services/clientHistoryService.js'
 
 /**
  * Le cumul des pages de l'historique d'un agent.
@@ -72,6 +72,13 @@ export function useHistoriqueClient(clientId) {
       setEtat('pret')
     } catch (err) {
       if (jetonRef.current !== jeton) return
+      // ⚠ UN CURSEUR PÉRIMÉ SE JETTE, SINON « RÉESSAYER » BOUCLE À VIE. Le
+      //   serveur refuse un repère dont le document a disparu — ce qui arrive
+      //   pour de vrai : `reopenHistory` supprime la ligne d'historique qu'il
+      //   remet en brouillon. Sans cette remise à zéro, `reessayer` rejoue le
+      //   MÊME curseur et échoue identiquement, et la seule sortie
+      //   (fermer puis rouvrir) n'est écrite nulle part à l'écran.
+      if (err?.code === CODE_CURSEUR_PERIME) curseurRef.current = null
       setErreur(err?.message || 'Impossible de charger l’historique.')
       setEtat('erreur')
     } finally {
@@ -99,6 +106,11 @@ export function useHistoriqueClient(clientId) {
     setLignes([])
     setEnCours([])
     setTotaux(null)
+    // `encore` est remis à zéro ici AUSSI, comme dans la branche de fermeture.
+    // L'asymétrie était sans effet visible — le bouton n'existe que si des
+    // lignes sont déjà affichées — mais laisser un `encore` du client précédent
+    // dans l'état d'un nouveau client est un piège pour la prochaine retouche.
+    setEncore(false)
     void charger(clientId, null)
   }, [clientId, charger])
 

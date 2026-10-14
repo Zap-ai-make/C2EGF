@@ -2,7 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 
 const chargerHistoriqueClient = vi.fn()
-vi.mock('../../src/services/clientHistoryService.js', () => ({ chargerHistoriqueClient }))
+// ⚠ LE MOCK DOIT EXPORTER LA CONSTANTE AUSSI. Le hook l'importe pour
+//   reconnaître un curseur périmé ; un mock qui ne rend que la fonction fait
+//   échouer le hook sur un accès à un export inexistant — pas sur sa logique.
+vi.mock('../../src/services/clientHistoryService.js', () => ({
+  chargerHistoriqueClient,
+  CODE_CURSEUR_PERIME: 'INVALID_HISTORY_CURSOR',
+}))
 
 const { useHistoriqueClient } = await import('../../src/hooks/useHistoriqueClient.js')
 
@@ -250,5 +256,81 @@ describe('TC-258 — StrictMode', () => {
 
     await waitFor(() => expect(result.current.etat).toBe('pret'))
     expect(chargerHistoriqueClient).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * ⚠ UN CURSEUR PÉRIMÉ DOIT ÊTRE JETÉ, SINON « RÉESSAYER » BOUCLE À VIE.
+ *
+ * R6 a choisi l'échec visible : si le document du curseur a disparu, le serveur
+ * refuse le repère au lieu de se repositionner en silence. Mais le navigateur
+ * jetait ensuite les deux informations utiles — le message rédigé par le
+ * serveur (remplacé par « Données invalides. ») et le CODE métier, seul moyen
+ * de distinguer un curseur rattrapable d'une vraie donnée invalide.
+ *
+ * ⚠ LE SCÉNARIO N'EST PAS THÉORIQUE : `reopenHistory` supprime la ligne
+ *   d'historique qu'il remet en brouillon. Une caissière rouvre une transaction
+ *   pendant qu'une collègue parcourt l'historique de cet agent, et « Charger
+ *   plus » meurt sans porte de sortie écrite à l'écran.
+ */
+describe('TC-258 — un curseur qui a disparu', () => {
+  const perime = () => Object.assign(
+    new Error('Le repère de pagination n’existe plus. Rouvrir l’historique.'),
+    { code: 'INVALID_HISTORY_CURSOR' },
+  )
+
+  it('[TC-258-16] le message du serveur arrive à l’écran', async () => {
+    chargerHistoriqueClient
+      .mockResolvedValueOnce(page(['a'], { curseurSuivant: { chemin: 'clients/store-a/history/a' }, encore: true }))
+      .mockRejectedValueOnce(perime())
+
+    const { result } = renderHook(() => useHistoriqueClient('c1'))
+    await waitFor(() => expect(result.current.etat).toBe('pret'))
+
+    await act(async () => { await result.current.chargerPlus() })
+
+    expect(result.current.etat).toBe('erreur')
+    expect(result.current.erreur).toMatch(/repère de pagination/)
+  })
+
+  /**
+   * ⚠ ET « RÉESSAYER » REPART DE LA PREMIÈRE PAGE, pas du curseur mort. Sans la
+   *   remise à zéro, le hook rejoue le MÊME curseur et échoue identiquement :
+   *   la seule sortie serait de fermer puis rouvrir le panneau, ce qui n'est
+   *   écrit nulle part.
+   */
+  it('[TC-258-17] « Réessayer » repart du début et non du curseur mort', async () => {
+    chargerHistoriqueClient
+      .mockResolvedValueOnce(page(['a'], { curseurSuivant: { chemin: 'clients/store-a/history/a' }, encore: true }))
+      .mockRejectedValueOnce(perime())
+      .mockResolvedValueOnce(page(['a', 'b']))
+
+    const { result } = renderHook(() => useHistoriqueClient('c1'))
+    await waitFor(() => expect(result.current.etat).toBe('pret'))
+    await act(async () => { await result.current.chargerPlus() })
+    expect(result.current.etat).toBe('erreur')
+
+    await act(async () => { await result.current.reessayer() })
+
+    await waitFor(() => expect(result.current.etat).toBe('pret'))
+    // Le troisième appel est reparti SANS curseur : c'est ce que vérifie ce test.
+    expect(chargerHistoriqueClient).toHaveBeenNthCalledWith(3, 'c1', null)
+    expect(result.current.lignes.map((l) => l.id)).toEqual(['a', 'b'])
+  })
+
+  /** Une erreur ordinaire, elle, ne doit PAS faire perdre la place acquise. */
+  it('[TC-258-18] une panne réseau garde le curseur', async () => {
+    chargerHistoriqueClient
+      .mockResolvedValueOnce(page(['a'], { curseurSuivant: { chemin: 'clients/store-a/history/a' }, encore: true }))
+      .mockRejectedValueOnce(new Error('Service temporairement indisponible. Réessayez.'))
+      .mockResolvedValueOnce(page(['b']))
+
+    const { result } = renderHook(() => useHistoriqueClient('c1'))
+    await waitFor(() => expect(result.current.etat).toBe('pret'))
+    await act(async () => { await result.current.chargerPlus() })
+    await act(async () => { await result.current.reessayer() })
+
+    await waitFor(() => expect(result.current.etat).toBe('pret'))
+    expect(chargerHistoriqueClient).toHaveBeenNthCalledWith(3, 'c1', { chemin: 'clients/store-a/history/a' })
   })
 })

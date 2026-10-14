@@ -90,6 +90,28 @@ describe('TC-261 — les cinq états', () => {
     expect(screen.queryByText(/Aucune opération/)).toBeNull()
   })
 
+  /**
+   * ⚠ L'AUTRE MOITIÉ DU MÊME MENSONGE, et le cas est QUOTIDIEN. Un agent dont
+   *   la toute première opération n'est pas encore terminée n'a RIEN dans
+   *   `history` : un brouillon n'y rejoint qu'à la validation. Le panneau
+   *   affichait donc l'encart « En cours » avec l'opération, puis juste en
+   *   dessous « Rien n'a encore été enregistré sous ce code, dans aucune
+   *   boutique » — les deux à l'écran en même temps.
+   *
+   *   Le fixture `etatPar()` met `enCours: []` par défaut : aucun test ne
+   *   croisait les deux listes, c'est pour ça que ça n'a pas été vu.
+   */
+  it('[TC-261-17] n’annonce pas le vide quand une opération est en cours', () => {
+    afficher({
+      etat: 'pret',
+      lignes: [],
+      enCours: [ligne('d1', { source: 'draft', reste: 40000 })],
+      totaux: { ...TOTAUX, operations: 0 },
+    })
+    expect(screen.getByText(/EN COURS/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Aucune opération/)).toBeNull()
+  })
+
   it('[TC-261-05] erreur : un message et un bouton Réessayer', () => {
     const reessayer = vi.fn()
     afficher({ etat: 'erreur', erreur: 'Accès refusé', reessayer })
@@ -176,5 +198,74 @@ describe('TC-261 — charger la suite', () => {
     afficher({ etat: 'pret', lignes: [ligne('a')], totaux: TOTAUX, encore: true, chargerPlus })
     fireEvent.click(screen.getByRole('button', { name: /Charger plus/ }))
     expect(chargerPlus).toHaveBeenCalled()
+  })
+
+  /**
+   * ⚠ UNE PANNE, UNE SEULE RELANCE. Après l'échec d'une page suivante,
+   *   `ErrorState` porte son bouton Réessayer ET `LoadMoreButton` restait actif
+   *   juste en dessous : deux boutons pour la même panne, dont l'un relance
+   *   avec le curseur qui vient d'échouer.
+   */
+  it('[TC-261-18] pas de « Charger plus » quand la page suivante a échoué', () => {
+    afficher({
+      etat: 'erreur', erreur: 'Service indisponible',
+      lignes: [ligne('a')], totaux: TOTAUX, encore: true,
+    })
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Charger plus/ })).toBeNull()
+  })
+})
+
+describe('TC-261 — quand le serveur ne sait pas compter', () => {
+  /**
+   * ⚠ `operations: null` VEUT DIRE « JE NE SAIS PAS », PAS « AUCUNE ». Le
+   *   serveur le pose quand une agrégation échoue — index absent, quota
+   *   dépassé : les lignes restent parfaitement lisibles, seul le total manque.
+   *   Avant, les quatre agrégats partageaient un `Promise.all` sans garde et
+   *   emportaient la réponse ENTIÈRE, lignes comprises.
+   */
+  it('[TC-261-19] un total inconnu n’est pas annoncé, les lignes restent', () => {
+    afficher({
+      etat: 'pret',
+      lignes: [ligne('a')],
+      totaux: { operations: null, nonDatees: 0, parBoutique: [], resteAEncaisser: 0, resteAPayer: 0, nbEnAttente: 0 },
+    })
+    expect(screen.getByText(/13\/10\/2026 08:00/)).toBeInTheDocument()
+    expect(screen.queryByText(/opérations enregistrées/)).toBeNull()
+  })
+
+  /**
+   * ⚠ `resteAEncaisser` SURVIT AU REPLI, et c'est le point délicat. Il ne vient
+   *   d'aucun agrégat : il est calculé sur les non terminées, lues en entier.
+   *   Le laisser tomber avec les comptes afficherait « 0 à encaisser · 0 à
+   *   payer » en pied d'un encart dont chaque ligne montre son reste.
+   */
+  it('[TC-261-20] les restes des non terminées survivent à un repli', () => {
+    afficher({
+      etat: 'pret',
+      lignes: [],
+      enCours: [ligne('d1', { source: 'draft', reste: 40000, typePlie: 'retrait', type: 'Retrait' })],
+      totaux: { operations: null, nonDatees: 0, parBoutique: [], resteAEncaisser: 0, resteAPayer: 40000, nbEnAttente: 1 },
+    })
+    expect(screen.getByText(/40\s?000 à payer/)).toBeInTheDocument()
+  })
+
+  /**
+   * ⚠ LE PIED COMPTE CE QUI EST AFFICHÉ, pas `totaux.operations`. Ce total
+   *   porte sur TOUT l'historique, non datées comprises, alors que la liste ne
+   *   peut pas montrer les lignes sans `createdAt` — Firestore exclut d'une
+   *   requête triée les documents qui ne portent pas le champ trié. Annoncer
+   *   « 437 opérations, c'est tout » au bas d'une liste de 2 faisait se
+   *   contredire deux nombres du même panneau.
+   */
+  it('[TC-261-21] le pied ne contredit pas l’avertissement des non datées', () => {
+    afficher({
+      etat: 'pret',
+      lignes: [ligne('a'), ligne('b')],
+      totaux: { ...TOTAUX, operations: 437, nonDatees: 435 },
+      encore: false,
+    })
+    expect(screen.getByText(/2 opérations affichées/)).toBeInTheDocument()
+    expect(screen.getByText(/435 opération\(s\) sans date/)).toBeInTheDocument()
   })
 })

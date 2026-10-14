@@ -202,14 +202,33 @@ export async function listClientHistoryHandler(request, { db, taillePage = PAGE 
   const dernier = documentsPage[documentsPage.length - 1]
   const curseurSuivant = encore && dernier ? { chemin: dernier.ref.path } : null
 
+  // ⚠ UNE AGRÉGATION QUI ÉCHOUE NE DOIT PAS EMPORTER LES LIGNES. Les quatre
+  //   agrégats partageaient un Promise.all sans garde : un index d'agrégation
+  //   absent, un quota dépassé, et la réponse ENTIÈRE était perdue — y compris
+  //   `lignes` et `enCours`, parfaitement lisibles. `wrapCallable` convertit
+  //   alors l'erreur en 'internal', que le navigateur affiche « Une erreur
+  //   inattendue s'est produite. » : aucun diagnostic, et un bouton Réessayer
+  //   qui échouera toujours. La spec tranche noir sur blanc — ne PAS afficher
+  //   de totaux plutôt qu'en afficher de faux.
+  //
+  // ⚠ `attente` SURVIT AU REPLI, et ce n'est pas un détail. Il ne vient d'aucun
+  //   agrégat : il est calculé sur les non terminées, lues en entier. Le laisser
+  //   tomber avec les comptes ferait afficher « 0 à encaisser · 0 à payer » en
+  //   pied d'un encart dont chaque ligne montre son reste.
   let totaux = null
   if (premierePage) {
     const boutiques = storesSnap.docs.map((d) => ({ storeId: d.id, storeName: d.data()?.name ?? d.id }))
-    const [globaux, parBoutique] = await Promise.all([
-      calculerTotaux(db, clientId),
-      compterParBoutique(db, clientId, boutiques),
-    ])
-    totaux = { ...globaux, ...attente, parBoutique }
+    try {
+      const [globaux, parBoutique] = await Promise.all([
+        calculerTotaux(db, clientId),
+        compterParBoutique(db, clientId, boutiques),
+      ])
+      totaux = { ...globaux, ...attente, parBoutique }
+    } catch (erreur) {
+      console.error('[listClientHistory] agregats indisponibles', erreur)
+      // `operations: null` dit « je ne sais pas », là où 0 dirait « aucune ».
+      totaux = { operations: null, nonDatees: 0, parBoutique: [], ...attente }
+    }
   }
 
   return { success: true, enCours, lignes, totaux, curseurSuivant, encore }

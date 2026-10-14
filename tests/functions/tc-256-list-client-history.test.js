@@ -360,3 +360,106 @@ describe('TC-256 — les totaux portent sur tout, pas sur la page', () => {
     ])
   })
 })
+
+/**
+ * ⚠ UN AGRÉGAT QUI ÉCHOUE NE DOIT PAS EMPORTER LES LIGNES.
+ *
+ * Les quatre agrégats partageaient un `Promise.all` sans garde : un index
+ * d'agrégation absent, un quota dépassé, et la réponse ENTIÈRE était perdue —
+ * y compris `lignes` et `enCours`, parfaitement lisibles. `wrapCallable`
+ * convertit alors l'erreur en 'internal', que le navigateur rend « Une erreur
+ * inattendue s'est produite. » : aucun diagnostic, et un Réessayer qui
+ * échouera toujours. La spec tranche — ne PAS afficher de totaux plutôt que
+ * d'en afficher de faux.
+ *
+ * ⚠ CE N'EST PAS UN CAS THÉORIQUE. L'agrégat de groupe sur `clientId` seul n'a
+ *   reçu son index qu'après la relecture finale ; sans lui, Firestore répond
+ *   FAILED_PRECONDITION à CHAQUE ouverture, car les totaux ne sont calculés que
+ *   sur la première page.
+ */
+describe('TC-256 — quand une agrégation échoue', () => {
+  /** Un `db` identique au vrai, sauf que tout `aggregate().get()` rejette. */
+  const sansAgregat = (vrai) => {
+    const envelopper = (cible) => new Proxy(cible, {
+      get(obj, cle) {
+        const valeur = obj[cle]
+        if (cle === 'aggregate') {
+          return () => ({ get: () => Promise.reject(new Error('9 FAILED_PRECONDITION: index manquant')) })
+        }
+        if (typeof valeur !== 'function') return valeur
+        return (...args) => {
+          const resultat = valeur.apply(obj, args)
+          // On n'enveloppe que les maillons de chaîne de requête : un snapshot
+          // ou une promesse doivent ressortir intacts.
+          const chainable = resultat
+            && typeof resultat === 'object'
+            && typeof resultat.where === 'function'
+          return chainable ? envelopper(resultat) : resultat
+        }
+      },
+    })
+    return envelopper(vrai)
+  }
+
+  it('[TC-256-25] les lignes sortent quand même, et les totaux disent « je ne sais pas »', async () => {
+    await poser('clients/store-a/history', 'h1', ligne())
+    await poser('clients/store-b/history', 'h2', ligne({ montant: 250 }))
+
+    const reponse = await listClientHistoryHandler(
+      { auth: { uid: 'u-caissiere' }, data: { clientId: 'c1' } },
+      { db: sansAgregat(db) },
+    )
+
+    expect(reponse.success).toBe(true)
+    expect(reponse.lignes).toHaveLength(2)
+    // `null` dit « je ne sais pas » ; 0 dirait « aucune », ce qui serait faux.
+    expect(reponse.totaux.operations).toBeNull()
+    expect(reponse.totaux.parBoutique).toEqual([])
+  })
+
+  /**
+   * ⚠ `attente` NE VIENT D'AUCUN AGRÉGAT, et doit donc survivre au repli. Il est
+   *   calculé sur les non terminées, lues en entier. Le laisser tomber avec les
+   *   comptes ferait afficher « 0 à payer » en pied d'un encart dont la ligne
+   *   montre un reste de 40 000.
+   */
+  it('[TC-256-26] les restes des non terminées survivent au repli', async () => {
+    await poser('clients/store-a/drafts', 'd1', ligne({
+      type: 'Retrait', montant: 100000, remainingAmount: 40000, statut: 'Non Terminées',
+    }))
+
+    const reponse = await listClientHistoryHandler(
+      { auth: { uid: 'u-caissiere' }, data: { clientId: 'c1' } },
+      { db: sansAgregat(db) },
+    )
+
+    expect(reponse.enCours).toHaveLength(1)
+    expect(reponse.totaux.resteAPayer).toBe(40000)
+    expect(reponse.totaux.nbEnAttente).toBe(1)
+  })
+})
+
+/**
+ * ⚠ LE DÉFAUT QUI EMPORTAIT L'APPLICATION ENTIÈRE, vérifié de bout en bout.
+ *
+ * `collaborations/confirmStoreCollaboration.js` écrit `date: serverTimestamp()`
+ * là où tous les autres écrivains mettent une chaîne « JJ/MM/AAAA ». Cette
+ * ligne porte un `clientId` : elle sort de la requête de groupe comme les
+ * autres. L'encodage du callable transformait le Timestamp en objet nu
+ * `{_seconds,_nanoseconds}`, que React refuse comme enfant — et l'unique
+ * ErrorBoundary enveloppe `AppContent` ENTIER.
+ */
+describe('TC-256 — une date non textuelle ne sort jamais du serveur', () => {
+  it('[TC-256-27] un Timestamp dans `date` ressort en chaîne', async () => {
+    await poser('clients/store-a/history', 'collab', ligne({
+      date: Timestamp.fromMillis(Date.UTC(2026, 9, 13, 8, 0)),
+      collaborationId: 'collab-1',
+    }))
+
+    const { lignes } = await appel('u-caissiere')
+
+    expect(lignes).toHaveLength(1)
+    expect(typeof lignes[0].date).toBe('string')
+    expect(lignes[0].date).toBe('13/10/2026')
+  })
+})

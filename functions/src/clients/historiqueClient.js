@@ -68,6 +68,36 @@ export const instantDerniereAction = (ligne) => Math.max(
   Number(ligne?.validatedAt) || 0,
 )
 
+/**
+ * La date affichable, TOUJOURS une chaîne.
+ *
+ * ⚠ `date` N'EST PAS TOUJOURS DU TEXTE EN BASE, et c'est mesuré, pas supposé.
+ *   Tous les écrivains d'opération y mettent une chaîne « JJ/MM/AAAA »
+ *   (`dateFr()` dans storeTransactions/storeTransactionCommand.js), SAUF
+ *   `collaborations/confirmStoreCollaboration.js` qui y pose un
+ *   `serverTimestamp()`. Cette ligne-là porte un `clientId` : elle sort donc de
+ *   la requête de groupe comme les autres.
+ *
+ * ⚠ CE QUI ARRIVAIT SANS CETTE FONCTION. L'encodage du callable transforme un
+ *   Timestamp en objet nu `{_seconds, _nanoseconds}` ; `LigneHistorique` rend
+ *   `{ligne.date}` ; React refuse un objet comme enfant et jette. L'unique
+ *   ErrorBoundary enveloppe `AppContent` ENTIER (src/App.jsx) : l'écran complet,
+ *   navigation comprise, était remplacé par la carte d'erreur, et toute
+ *   réouverture de cet agent y ramenait. Un seul document mal typé emportait
+ *   l'application.
+ *
+ * Le repli reformate depuis `createdAt`, qui est déjà en millisecondes à cet
+ * endroit, dans le fuseau de la boutique — un conteneur en UTC daterait de la
+ * veille les opérations d'après 23 h.
+ */
+const JOUR_BOUTIQUE = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Africa/Ouagadougou' })
+
+const dateLisible = (brut, instantMs) => {
+  if (typeof brut === 'string') return brut.trim()
+  if (Number.isFinite(instantMs) && instantMs > 0) return JOUR_BOUTIQUE.format(new Date(instantMs))
+  return ''
+}
+
 /** « clients/store-a/history/h1 » → « store-a ». Null si le chemin n'a pas cette forme. */
 const boutiqueDuChemin = (chemin) => {
   const morceaux = String(chemin ?? '').split('/')
@@ -92,6 +122,8 @@ export function ligneDeDocument({ id, chemin, donnees = {}, source, nomsDeBoutiq
     || storeId
     || '—'
 
+  const creeA = enMillisecondes(donnees.createdAt)
+
   return {
     id,
     source,
@@ -104,8 +136,8 @@ export function ligneDeDocument({ id, chemin, donnees = {}, source, nomsDeBoutiq
     statut: donnees.statut ?? '',
     reseau: donnees.reseau ?? '',
     code: donnees.code ?? '',
-    date: donnees.date ?? '',
-    createdAt: enMillisecondes(donnees.createdAt),
+    date: dateLisible(donnees.date, creeA),
+    createdAt: creeA,
     validatedAt: enMillisecondes(donnees.validatedAt),
     deletedAt: enMillisecondes(donnees.deletedAt) || null,
     paidAmount: estNombre(donnees.paidAmount) ? donnees.paidAmount : null,
@@ -129,10 +161,23 @@ export function construireHistoriqueClient({ history = [], drafts = [], nomsDeBo
     .map((d) => ligneDeDocument({ ...d, source, nomsDeBoutique }))
     .filter(Boolean)
 
+  // Les non terminées sont chargées EN ENTIER, donc `instantDerniereAction` les
+  // classe sans risque : il n'y a pas de page suivante avec laquelle se brouiller.
   const enCours = convertir(drafts, 'draft')
     .sort((a, b) => instantDerniereAction(b) - instantDerniereAction(a))
+
+  // ⚠ `lignes` SE CLASSE SUR `createdAt`, LA MÊME CLÉ QUE LA PAGINATION, et
+  //   c'est le seul choix cohérent. Le serveur pagine en
+  //   `orderBy('createdAt','desc')` ; reclasser la page sur
+  //   `max(createdAt, validatedAt)` trie BIEN chaque page et MAL leur cumul.
+  //   Mesuré : quatre lignes de createdAt décroissant d>c>b>a avec b validée
+  //   après d, en pages de 2, donnent « d, c, b, a » — non décroissant, et b,
+  //   l'opération la plus récemment traitée, se retrouve en 3e position sous
+  //   deux lignes plus anciennes. Trier globalement sur la dernière action
+  //   demanderait d'écrire ce maximum dans le document à chaque validation ;
+  //   tant qu'il n'existe pas, l'ordre affiché est celui de la SAISIE.
   const lignes = convertir(history, 'history')
-    .sort((a, b) => instantDerniereAction(b) - instantDerniereAction(a))
+    .sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0))
 
   const attente = { resteAEncaisser: 0, resteAPayer: 0, nbEnAttente: enCours.length }
   for (const ligne of enCours) {

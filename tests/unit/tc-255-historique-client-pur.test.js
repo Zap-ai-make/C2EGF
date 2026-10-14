@@ -130,9 +130,12 @@ describe('TC-255 — ce qui est écarté', () => {
 })
 
 describe('TC-255 — les deux sources réunies', () => {
+  // Deux `createdAt` DISTINCTS, et c'est voulu : l'ordre attendu ci-dessous doit
+  // décrire la clé de tri réelle (`createdAt`), pas un ex æquo départagé par
+  // autre chose. Le cas « validée plus tard » a son test à lui, TC-255-17.
   const history = [
     doc({ createdAt: ts(MATIN), montant: 250000 }),
-    { ...doc({ createdAt: ts(MATIN), validatedAt: ts(SOIR), montant: 75000 }), id: 'h2', chemin: 'clients/store-b/history/h2' },
+    { ...doc({ createdAt: ts(SOIR), montant: 75000 }), id: 'h2', chemin: 'clients/store-b/history/h2' },
   ]
   const drafts = [{
     id: 'd1', chemin: 'clients/store-a/drafts/d1', source: 'draft',
@@ -145,11 +148,59 @@ describe('TC-255 — les deux sources réunies', () => {
     expect(lignes.map((l) => l.id)).toEqual(['h2', 'h1'])
   })
 
-  /** ⚠ Le classement reprend la règle de l'écran : la dernière action en haut. */
-  it('[TC-255-14] l\'historique est classé sur la dernière action', () => {
+  /**
+   * ⚠ C'EST LA RÈGLE DES NON TERMINÉES, PLUS CELLE DE L'HISTORIQUE. Cette
+   *   fonction classe `enCours`, qui est chargé EN ENTIER — il n'y a pas de page
+   *   suivante avec laquelle son ordre pourrait se brouiller. Pour `lignes`,
+   *   voir TC-255-17 : la pagination impose sa clé.
+   */
+  it('[TC-255-14] la dernière action, c\'est le plus tard des deux instants', () => {
     expect(instantDerniereAction({ createdAt: MATIN, validatedAt: SOIR })).toBe(SOIR)
     expect(instantDerniereAction({ createdAt: SOIR, validatedAt: MATIN })).toBe(SOIR)
     expect(instantDerniereAction({})).toBe(0)
+  })
+
+  /**
+   * ⚠ LA PROPRIÉTÉ QUI PROTÈGE LE CUMUL DES PAGES, et le défaut qu'elle ferme.
+   *
+   *   Le serveur pagine en `orderBy('createdAt','desc')`. Reclasser chaque page
+   *   sur `max(createdAt, validatedAt)` trie BIEN la page et MAL son cumul :
+   *   mesuré sur émulateur avec quatre lignes de `createdAt` décroissant
+   *   d > c > b > a, dont b validée après d, en pages de deux, le cumul rendu
+   *   était « d, c, b, a » — non décroissant, et b, l'opération la plus
+   *   récemment traitée, se retrouvait en 3e position SOUS deux lignes plus
+   *   anciennes. Deux tests passaient pourtant : l'un exigeait le tri sur la
+   *   dernière action, l'autre la pagination sur `createdAt`. Aucun ne voyait
+   *   leur rencontre.
+   *
+   *   Ici `recent` est créée APRÈS `ancienne` mais `ancienne` est validée plus
+   *   tard. L'ordre doit suivre la création, sinon la clé d'affichage a de
+   *   nouveau divergé de la clé de pagination.
+   */
+  it('[TC-255-17] l\'historique se classe sur `createdAt`, pas sur la validation', () => {
+    const ancienne = { ...doc({ createdAt: ts(MATIN), validatedAt: ts(SOIR) }), id: 'ancienne' }
+    const recente = { ...doc({ createdAt: ts(SOIR - 1) }), id: 'recente' }
+
+    const { lignes } = construireHistoriqueClient({ history: [ancienne, recente], nomsDeBoutique: NOMS })
+
+    expect(lignes.map((l) => l.id)).toEqual(['recente', 'ancienne'])
+  })
+
+  /** Les non terminées, elles, gardent bien la dernière action comme clé. */
+  it('[TC-255-18] les non terminées se classent sur la dernière action', () => {
+    const brouillon = (id, over) => ({
+      id, chemin: `clients/store-a/drafts/${id}`, source: 'draft',
+      donnees: { type: 'Retrait', montant: 1000, statut: 'Non Terminées', ...over },
+    })
+    const { enCours } = construireHistoriqueClient({
+      drafts: [
+        brouillon('vieille-mais-touchee', { createdAt: ts(MATIN), validatedAt: ts(SOIR) }),
+        brouillon('recente', { createdAt: ts(SOIR - 1) }),
+      ],
+      nomsDeBoutique: NOMS,
+    })
+
+    expect(enCours.map((l) => l.id)).toEqual(['vieille-mais-touchee', 'recente'])
   })
 
   /**
@@ -164,6 +215,51 @@ describe('TC-255 — les deux sources réunies', () => {
     }]
     const { attente } = construireHistoriqueClient({ history, drafts: avecDepot, nomsDeBoutique: NOMS })
     expect(attente).toEqual({ resteAEncaisser: 80000, resteAPayer: 40000, nbEnAttente: 2 })
+  })
+
+  /**
+   * ⚠ LE DÉFAUT QUE CE GROUPE FERME EMPORTAIT L'APPLICATION ENTIÈRE.
+   *
+   *   Tous les écrivains d'opération mettent dans `date` une chaîne
+   *   « JJ/MM/AAAA » (`dateFr()`), SAUF
+   *   `functions/src/collaborations/confirmStoreCollaboration.js:181` qui y pose
+   *   un `serverTimestamp()`. Cette ligne-là porte un `clientId` : elle sort de
+   *   la requête de groupe comme les autres.
+   *
+   *   Ce qui suivait, mesuré : l'encodage du callable transforme le Timestamp en
+   *   objet nu `{_seconds, _nanoseconds}` ; `LigneHistorique` rend
+   *   `{ligne.date}` ; React refuse un objet comme enfant et jette. L'unique
+   *   ErrorBoundary enveloppe `AppContent` ENTIER — l'écran complet, navigation
+   *   comprise, était remplacé par la carte d'erreur, et toute réouverture de
+   *   cet agent y ramenait. Un seul document mal typé rendait la page clients
+   *   inutilisable.
+   *
+   *   La normalisation est ici, dans la fonction pure, parce que c'est le seul
+   *   endroit qui voit TOUTES les sources.
+   */
+  describe('TC-255 — la date est toujours une chaîne', () => {
+    it('[TC-255-19] un Timestamp dans `date` est reformaté, jamais recopié', () => {
+      const ligne = ligneDeDocument(doc({ date: ts(MATIN), createdAt: ts(MATIN) }))
+
+      expect(typeof ligne.date).toBe('string')
+      // 13 octobre 2026 à 08:00 UTC, dans le fuseau de la boutique (UTC+0).
+      expect(ligne.date).toBe('13/10/2026')
+    })
+
+    it('[TC-255-20] un objet quelconque ne traverse pas non plus', () => {
+      const ligne = ligneDeDocument(doc({ date: { _seconds: 1760000000, _nanoseconds: 0 } }))
+      expect(typeof ligne.date).toBe('string')
+      expect(ligne.date).toBe('13/10/2026')
+    })
+
+    it('[TC-255-21] une chaîne est conservée telle quelle, à l\'espace près', () => {
+      expect(ligneDeDocument(doc({ date: ' 09/10/2026 14:30 ' })).date).toBe('09/10/2026 14:30')
+    })
+
+    it('[TC-255-22] sans date lisible ni createdAt, la ligne rend une chaîne vide', () => {
+      const ligne = ligneDeDocument(doc({ date: null, createdAt: null }))
+      expect(ligne.date).toBe('')
+    })
   })
 
   it('[TC-255-16] des sources vides rendent des listes vides, pas une erreur', () => {

@@ -72,7 +72,13 @@ function HistoriqueClientPanel({ client, onClose }) {
     >
       {totaux && (
         <div className="border-b border-line pb-3">
-          <p className="text-sm text-ink">{francs(totaux.operations)} opérations enregistrées</p>
+          {/* ⚠ `operations: null` SIGNIFIE « JE NE SAIS PAS », pas « aucune ».
+              Le serveur le pose quand une agrégation échoue : les lignes restent
+              lisibles, seul le total manque. Afficher « — opérations » à cet
+              endroit se lirait comme un compte ; mieux vaut ne rien annoncer. */}
+          {typeof totaux.operations === 'number' && (
+            <p className="text-sm text-ink">{francs(totaux.operations)} opérations enregistrées</p>
+          )}
           {totaux.parBoutique?.length > 0 && (
             <p className="mt-1 text-sm text-ink-muted">
               {totaux.parBoutique.map((b) => `${b.storeName} ${francs(b.operations)}`).join(' · ')}
@@ -112,7 +118,12 @@ function HistoriqueClientPanel({ client, onClose }) {
           une frame à chaque ouverture, et annonce « aucune opération » sur un
           agent qui en a. Un écran ne dit pas qu'il n'y a rien tant qu'il n'a pas
           demandé. */}
-      {etat === 'pret' && lignes.length === 0 && (
+      {/* ⚠ ET SEULEMENT SI « EN COURS » EST VIDE AUSSI. Un agent dont la toute
+          première opération n'est pas encore terminée n'a RIEN dans `history` —
+          un brouillon n'y rejoint qu'à la validation. Sans cette condition, le
+          panneau affichait l'encart « En cours » avec l'opération, puis juste
+          en dessous « Rien n'a encore été enregistré sous ce code ». */}
+      {etat === 'pret' && lignes.length === 0 && enCours.length === 0 && (
         <div className="mt-3">
           <EmptyState
             title="Aucune opération pour cet agent"
@@ -137,13 +148,23 @@ function HistoriqueClientPanel({ client, onClose }) {
             <div style={{ height: fenetre.bottomPad }} />
           </div>
 
-          {encore
-            ? <LoadMoreButton loading={etat === 'chargementPage'} onClick={chargerPlus} />
-            : (
-              <p className="mt-3 text-center text-sm text-ink-muted">
-                {francs(totaux?.operations ?? lignes.length)} opérations, c’est tout.
-              </p>
-            )}
+          {/* ⚠ ON COMPTE CE QUI EST AFFICHÉ, pas `totaux.operations`. Ce total
+              porte sur TOUT l'historique, non datées comprises, alors que la
+              liste ne peut pas montrer les lignes sans `createdAt` — Firestore
+              exclut d'une requête triée les documents qui ne portent pas le
+              champ trié. Annoncer « 437 opérations, c'est tout » au bas d'une
+              liste de 434 faisait se contredire deux nombres du même panneau.
+
+              ⚠ ET PAS DE BOUTON QUAND LE CHARGEMENT A ÉCHOUÉ : `ErrorState`
+              porte déjà son Réessayer, deux relances pour une seule panne. */}
+          {encore && etat !== 'erreur' && (
+            <LoadMoreButton loading={etat === 'chargementPage'} onClick={chargerPlus} />
+          )}
+          {!encore && (
+            <p className="mt-3 text-center text-sm text-ink-muted">
+              {francs(lignes.length)} opérations affichées, c’est tout.
+            </p>
+          )}
         </>
       )}
     </Dialog>

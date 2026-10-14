@@ -15,14 +15,33 @@
 import { httpsCallable } from 'firebase/functions'
 import { functions } from '../config/firebase'
 
+/**
+ * ⚠ LE CODE MÉTIER SURVIT À LA TRADUCTION. `wrapCallable` le transmet dans
+ *   `details.code` (functions/src/callable.js) ; l'écraser en même temps que le
+ *   message privait l'appelant du seul moyen de distinguer un curseur périmé
+ *   — rattrapable en repartant de la première page — d'une vraie donnée
+ *   invalide, qui ne l'est pas.
+ */
+export const CODE_CURSEUR_PERIME = 'INVALID_HISTORY_CURSOR'
+
 function mapFirestoreError(err) {
   const code = String(err?.code || '').replace(/^functions\//, '')
-  if (code === 'permission-denied') return new Error('Accès refusé. Vérifiez vos permissions.')
-  if (code === 'unavailable') return new Error('Service temporairement indisponible. Réessayez.')
-  if (code === 'failed-precondition') return new Error('Opération impossible dans l\'état actuel.')
-  if (code === 'invalid-argument') return new Error('Données invalides.')
+  const codeMetier = err?.details?.code ?? null
+
+  const traduite = (message) => Object.assign(new Error(message), { code: codeMetier })
+
+  if (code === 'permission-denied') return traduite('Accès refusé. Vérifiez vos permissions.')
+  if (code === 'unavailable') return traduite('Service temporairement indisponible. Réessayez.')
+  if (code === 'failed-precondition') return traduite('Opération impossible dans l\'état actuel.')
+  if (code === 'invalid-argument') {
+    // ⚠ LE SERVEUR A DÉJÀ RÉDIGÉ CE MESSAGE POUR L'UTILISATEUR : « Le repère de
+    //   pagination n'existe plus. Rouvrir l'historique. » Le remplacer par
+    //   « Données invalides. » jetait la seule phrase actionnable de l'échange.
+    if (codeMetier === CODE_CURSEUR_PERIME) return traduite(err.message)
+    return traduite('Données invalides.')
+  }
   if (import.meta.env.DEV) console.error('[clientHistoryService]', err)
-  return new Error('Une erreur inattendue s\'est produite.')
+  return traduite('Une erreur inattendue s\'est produite.')
 }
 
 /**
