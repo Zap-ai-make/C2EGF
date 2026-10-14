@@ -80,6 +80,16 @@ describe('TC-261 — les cinq états', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  /**
+   * ⚠ LE MENSONGE D'UNE FRAME. Le hook démarre à « inactif » : une condition
+   *   formulée en négatif affichait le vide dès l'ouverture, avant la moindre
+   *   requête — sur un agent qui a un historique.
+   */
+  it('[TC-261-16] n’annonce pas le vide avant d’avoir chargé', () => {
+    afficher({ etat: 'inactif', lignes: [], totaux: null })
+    expect(screen.queryByText(/Aucune opération/)).toBeNull()
+  })
+
   it('[TC-261-05] erreur : un message et un bouton Réessayer', () => {
     const reessayer = vi.fn()
     afficher({ etat: 'erreur', erreur: 'Accès refusé', reessayer })

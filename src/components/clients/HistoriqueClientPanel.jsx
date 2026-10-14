@@ -106,7 +106,13 @@ function HistoriqueClientPanel({ client, onClose }) {
         </div>
       )}
 
-      {etat !== 'chargement' && etat !== 'erreur' && lignes.length === 0 && (
+      {/* ⚠ SEULEMENT SUR « PRÊT ». Le hook démarre à « inactif » et l'effet qui
+          lance le chargement ne part qu'après le premier rendu : toute condition
+          formulée en négatif (« ni chargement ni erreur ») affiche donc le vide
+          une frame à chaque ouverture, et annonce « aucune opération » sur un
+          agent qui en a. Un écran ne dit pas qu'il n'y a rien tant qu'il n'a pas
+          demandé. */}
+      {etat === 'pret' && lignes.length === 0 && (
         <div className="mt-3">
           <EmptyState
             title="Aucune opération pour cet agent"
