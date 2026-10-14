@@ -59,12 +59,37 @@ export function validerCurseur(valeur) {
   return { chemin }
 }
 
+/**
+ * Les rôles qui peuvent lire l'historique nominatif d'un agent.
+ *
+ * ⚠ UNE LISTE BLANCHE, PAS UNE LISTE NOIRE. Ce contrôle refusait nommément le
+ *   dealer et laissait passer tout le reste. Un rôle ajouté plus tard — un
+ *   partenaire, un auditeur, un compte de service — aurait hérité en silence de
+ *   l'accès à l'historique financier nominatif de TOUS les agents, dans TOUTES
+ *   les boutiques. Un oubli ne doit pas ouvrir une porte ; il doit en fermer une.
+ *
+ * ⚠ LES NOMS SONT CEUX DE `firestore.rules`, et il faut les y lire plutôt que
+ *   les deviner : le rôle de caissière s'appelle `member`, pas `store_member`.
+ *   Le test de ce handler utilisait justement `store_member` — un rôle qui
+ *   n'existe nulle part — et la liste noire le laissait passer. Il prouvait donc
+ *   que la fonction accepte un rôle inexistant, et ne prouvait rien sur le rôle
+ *   réel. Voir `firestore.rules` : `profile().role in ['store_admin', 'member']`.
+ *
+ * `system_manager` y figure parce que les règles lui accordent déjà la lecture
+ * globale de l'historique (`match /{path=**}/history/{docId}`) : l'exclure ici
+ * lui refuserait par la fonction ce qu'il obtient par la base.
+ */
+const ROLES_AUTORISES = Object.freeze(['store_admin', 'member', 'system_manager'])
+
 const validerProfilBoutique = (profile) => {
   if (!profile?.active) {
     throw new DealerRequestError('PROFILE_INACTIVE', 'Votre compte est désactivé.')
   }
-  if (profile.role === 'dealer') {
-    throw new DealerRequestError('HISTORY_ROLE_FORBIDDEN', "L'historique nominatif d'un agent n'est pas accessible au dealer.")
+  if (!ROLES_AUTORISES.includes(profile?.role)) {
+    throw new DealerRequestError(
+      'HISTORY_ROLE_FORBIDDEN',
+      "L'historique nominatif d'un agent n'est accessible qu'aux comptes de boutique.",
+    )
   }
 }
 

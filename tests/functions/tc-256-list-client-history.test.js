@@ -38,9 +38,13 @@ const effacer = async (chemin) => {
   await Promise.all(snap.docs.map((d) => d.ref.delete()))
 }
 
-const CAISSIERE = { uid: 'u-caissiere', role: 'store_member', storeId: 'store-a', active: true, name: 'Awa' }
+const CAISSIERE = { uid: 'u-caissiere', role: 'member', storeId: 'store-a', active: true, name: 'Awa' }
 const DEALER = { uid: 'u-dealer', role: 'dealer', active: true, name: 'Le dealer' }
-const INACTIVE = { uid: 'u-inactive', role: 'store_member', storeId: 'store-a', active: false, name: 'Ex' }
+const INACTIVE = { uid: 'u-inactive', role: 'member', storeId: 'store-a', active: false, name: 'Ex' }
+const GERANT = { uid: 'u-gerant', role: 'store_admin', storeId: 'store-a', active: true, name: 'Le gerant' }
+// Un role que le projet n'emploie pas. Il doit etre REFUSE : une liste blanche
+// ferme la porte a ce qu'elle ne connait pas, une liste noire l'ouvre.
+const INCONNU = { uid: 'u-inconnu', role: 'partenaire', storeId: 'store-a', active: true, name: 'Qui ?' }
 
 const appel = (uid, data = { clientId: 'c1' }) =>
   listClientHistoryHandler({ auth: { uid }, data }, { db })
@@ -53,9 +57,15 @@ beforeEach(async () => {
     effacer('clients/store-a/drafts'), effacer('clients/store-b/drafts'),
     effacer('stores'), effacer('users'),
   ])
-  for (const p of [CAISSIERE, DEALER, INACTIVE]) await db.doc(`users/${p.uid}`).set(p)
-  await db.doc('stores/store-a').set({ name: 'C2EGF OUAGA', active: true })
-  await db.doc('stores/store-b').set({ name: 'C2EGF BOBO', active: true })
+  // ⚠ EN PARALLÈLE, PAS EN SÉRIE. Chaque aller-retour vers l'émulateur coûte
+  //   près d'une seconde sur cette machine : sept écritures enchaînées suffisent
+  //   à dépasser le délai d'un hook, et l'échec s'affiche alors sur le PREMIER
+  //   test au lieu du hook qui l'a causé.
+  await Promise.all([
+    ...[CAISSIERE, DEALER, INACTIVE, GERANT, INCONNU].map((p) => db.doc(`users/${p.uid}`).set(p)),
+    db.doc('stores/store-a').set({ name: 'C2EGF OUAGA', active: true }),
+    db.doc('stores/store-b').set({ name: 'C2EGF BOBO', active: true }),
+  ])
 })
 
 const ligne = (over = {}) => ({
@@ -81,6 +91,22 @@ describe('TC-256 — autorisation', () => {
    */
   it('[TC-256-03] refuse le dealer', async () => {
     await expect(appel('u-dealer')).rejects.toMatchObject({ code: 'HISTORY_ROLE_FORBIDDEN' })
+  })
+
+  /**
+   * ⚠ UNE LISTE BLANCHE, PAS UNE LISTE NOIRE. Le controle refusait nommement le
+   *   dealer et laissait passer tout le reste : un role ajoute plus tard aurait
+   *   herite en silence de l'historique financier nominatif de tous les agents.
+   */
+  it('[TC-256-03b] refuse un role que le projet n’emploie pas', async () => {
+    await expect(appel('u-inconnu')).rejects.toMatchObject({ code: 'HISTORY_ROLE_FORBIDDEN' })
+  })
+
+  /** Le role de caissiere s'appelle `member`, et le gerant `store_admin`. */
+  it('[TC-256-03c] accepte les deux roles de boutique', async () => {
+    await poser('clients/store-a/history', 'h1', ligne())
+    await expect(appel('u-caissiere')).resolves.toMatchObject({ success: true })
+    await expect(appel('u-gerant')).resolves.toMatchObject({ success: true })
   })
 
   it('[TC-256-04] refuse un profil inexistant', async () => {
