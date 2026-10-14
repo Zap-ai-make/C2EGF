@@ -167,9 +167,29 @@ C'est elle que les tests unitaires éprouvent cas par cas.
   historique qui tait ce qui a été annulé ment par omission, et c'est
   précisément ce qu'on vient consulter en cas de litige.
 
-**Classement** : décroissant sur `instantDerniereAction` — le plus récent de
-`createdAt` et `validatedAt`, la règle posée le même jour pour l'historique
-(`src/context/transactions.jsx`). Ce qui vient d'être traité est en haut.
+**Classement** : décroissant sur `createdAt` — **l'ordre de la saisie**, et
+c'est la même clé que la pagination.
+
+> ⚠ **CETTE SPEC A D'ABORD DIT L'INVERSE, ET C'ÉTAIT UN DÉFAUT.** Elle exigeait
+> un classement sur `instantDerniereAction` (le plus récent de `createdAt` et
+> `validatedAt`), comme la liste des transactions
+> (`src/context/transactions.jsx`). Mais cette liste-là n'est pas paginée. Ici,
+> le serveur pagine en `orderBy('createdAt','desc')` : reclasser chaque page
+> sur une autre clé trie **bien** la page et **mal** son cumul. Mesuré sur
+> émulateur — quatre lignes de `createdAt` décroissant d > c > b > a, dont b
+> validée après d, en pages de deux : le cumul rendu était « d, c, b, a », qui
+> n'est pas décroissant, et b — l'opération la plus récemment traitée — se
+> retrouvait en 3ᵉ position **sous** deux lignes plus anciennes. Deux tests
+> passaient pourtant, l'un sur chaque moitié de la règle.
+>
+> Trier globalement sur la dernière action demanderait d'écrire ce maximum dans
+> le document à chaque validation. Tant que ce champ n'existe pas, **une seule
+> clé** — celle de la pagination.
+>
+> Ce que l'on ne perd pas : une opération encore en cours est dans le bloc
+> « En cours », épinglé en haut, et **ce bloc-là est bien classé sur la dernière
+> action** — il est chargé en entier, sans page suivante avec laquelle se
+> brouiller.
 
 **Totaux** — et ils posent une question que la pagination rend aiguë :
 
@@ -182,6 +202,15 @@ C'est elle que les tests unitaires éprouvent cas par cas.
 >
 > Si l'agrégation s'avérait indisponible sur ce projet, le repli est de ne PAS
 > afficher de totaux plutôt que d'en afficher de faux.
+>
+> ⚠ **CE REPLI A DÛ ÊTRE AJOUTÉ APRÈS COUP** : les quatre agrégats partageaient
+> un `Promise.all` sans garde, donc un index absent ou un quota dépassé
+> emportait la réponse **entière** — y compris `lignes` et `enCours`,
+> parfaitement lisibles. Le mécanisme : `operations: null`, qui dit « je ne sais
+> pas » là où `0` dirait « aucune », et le panneau n'affiche la ligne de total
+> que sur un nombre. `resteAEncaisser` / `resteAPayer` **survivent toujours** au
+> repli : ils ne viennent d'aucun agrégat, ils sont calculés sur les non
+> terminées lues en entier.
 
 
 
@@ -334,8 +363,10 @@ Le sens du mouvement reprend le code couleur existant (entrant / sortant) de
 
 - **Unitaire** (`construireHistoriqueClient`) : écart des deux sources, exclusion
   des mouvements de boutique, lignes supprimées visibles mais hors totaux, reste
-  dû, classement sur la dernière action, nom de boutique résolu depuis `stores`,
-  repli quand la boutique a disparu.
+  dû, **classement de l'historique sur `createdAt` et des non terminées sur la
+  dernière action** (deux clés, pour la raison donnée plus haut), **`date`
+  toujours rendue en chaîne quel que soit son type en base**, nom de boutique
+  résolu depuis `stores`, repli quand la boutique a disparu.
 - **Fonctions, sur émulateur** : refus sans authentification, refus d'un profil
   inactif, refus du dealer, payload hors liste blanche refusé, et un agent dont
   l'historique est réparti sur deux boutiques revenant en une seule liste.
