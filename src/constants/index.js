@@ -46,7 +46,12 @@ export const TABLE_HEADERS = [
   { key: 'numeroAgent', label: 'Numéro agent', width: 'min-w-36' },
   { key: 'localite', label: 'Localité', width: 'min-w-48' },
   { key: 'agentCommercial', label: 'Agent commercial', width: 'min-w-40' },
-  { key: 'dateAjout', label: 'Date d\'ajout', width: 'min-w-32' }
+  { key: 'dateAjout', label: 'Date d\'ajout', width: 'min-w-32' },
+  // L'historique d'un agent, toutes boutiques confondues. La colonne ne porte
+  // pas une donnée du client mais une PORTE vers ses opérations : son contenu
+  // est un bouton, et c'est voulu — l'en-tête existe pour que la cellule soit
+  // alignée comme les autres, et pour que l'écran annonce ce qu'il propose.
+  { key: 'historique', label: 'Historique', width: 'min-w-28' }
 ]
 
 export const STORAGE_KEYS = {

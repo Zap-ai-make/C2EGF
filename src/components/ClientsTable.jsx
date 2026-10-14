@@ -1,4 +1,4 @@
-import { useContext, useMemo } from 'react'
+import { useContext, useMemo, useState } from 'react'
 import { useClientsFilter } from '../hooks/useClientsFilter'
 import { useExcelOperations } from '../hooks/useExcelOperations'
 import { usePagination } from '../hooks/usePagination'
@@ -11,6 +11,7 @@ import Pagination from './Pagination'
 import Toast from './Toast'
 import PageHeader from './ui/PageHeader'
 import EmptyState from './ui/EmptyState'
+import HistoriqueClientPanel from './clients/HistoriqueClientPanel'
 import { Download, Plus, Users, SearchX } from 'lucide-react'
 
 function ClientsTable({ clients, onEdit, onImportClients, onAddClient, emptyAction }) {
@@ -18,6 +19,10 @@ function ClientsTable({ clients, onEdit, onImportClients, onAddClient, emptyActi
   const { activeStore } = useContext(AuthContext)
   const { searchTerm, setSearchTerm, selectedMonth, setSelectedMonth, filteredClients } = useClientsFilter(clients)
   const { paginatedData, ...paginationProps } = usePagination(filteredClients)
+
+  // Le client dont on regarde l'historique. `null` ferme le panneau — et le hook
+  // remet alors tout à zéro, donc rien du client précédent ne survit.
+  const [clientHistorique, setClientHistorique] = useState(null)
 
   // Construire la map des boutiques pour la résolution du nom dans l'export.
   // L'utilisateur ne voit que les clients de sa propre boutique (activeStore).
@@ -144,6 +149,7 @@ function ClientsTable({ clients, onEdit, onImportClients, onAddClient, emptyActi
                 client={client}
                 index={index}
                 onEdit={onEdit}
+                onHistorique={setClientHistorique}
               />
             ))}
           </tbody>
@@ -166,6 +172,8 @@ function ClientsTable({ clients, onEdit, onImportClients, onAddClient, emptyActi
           />
         ))}
       </div>
+
+      <HistoriqueClientPanel client={clientHistorique} onClose={() => setClientHistorique(null)} />
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import { champsAgent } from '../utils/agentFields.js'
 
-const TableRow = memo(({ client, index, onEdit }) => {
+const TableRow = memo(({ client, index, onEdit, onHistorique }) => {
   // Une fiche d'avant la séparation n'a qu'un champ : il se range ici, à la
   // lecture, sans que la base soit réécrite (utils/agentFields.js).
   const agent = champsAgent(client)
@@ -22,6 +22,18 @@ const TableRow = memo(({ client, index, onEdit }) => {
       <td className="px-4 py-3 text-base max-w-48 break-words">{client.localite}</td>
       <td className="px-4 py-3 text-base">{client.agentCommercial}</td>
       <td className="px-4 py-3 text-base">{client.dateAjout}</td>
+      <td className="px-4 py-3 text-center">
+        {onHistorique && (
+          <button
+            type="button"
+            onClick={() => onHistorique(client)}
+            aria-label={`Historique de ${client.nom ?? ''} ${client.prenom ?? ''}`.trim()}
+            className="rounded border border-line px-3 py-1 text-sm font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+          >
+            Historique
+          </button>
+        )}
+      </td>
       <td className="px-4 py-3 text-center">
         <div className="flex gap-2 justify-center">
           <button
