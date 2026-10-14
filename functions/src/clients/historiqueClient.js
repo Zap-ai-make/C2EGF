@@ -86,15 +86,33 @@ export const instantDerniereAction = (ligne) => Math.max(
  *   réouverture de cet agent y ramenait. Un seul document mal typé emportait
  *   l'application.
  *
- * Le repli reformate depuis `createdAt`, qui est déjà en millisecondes à cet
- * endroit, dans le fuseau de la boutique — un conteneur en UTC daterait de la
- * veille les opérations d'après 23 h.
+ * ⚠ L'HEURE VIENT DE `createdAt`, PAS DU CHAMP `date`. Les boutiques écrivent
+ *   `dateFr()`, qui ne rend que le JOUR : « 14/10/2026 ». Le panneau affichait
+ *   donc une date sans heure alors qu'on lui en demandait une — l'heure n'avait
+ *   simplement jamais été dans ce champ. Elle est dans `createdAt`, à la
+ *   seconde près. On s'en sert dès qu'il existe ; le champ texte ne sert plus
+ *   que de repli pour les vieilles lignes sans horodatage.
+ *
+ * Le fuseau est celui de la boutique, jamais celui de la machine : un conteneur
+ * en UTC daterait de la veille les opérations d'après 23 h.
  */
-const JOUR_BOUTIQUE = new Intl.DateTimeFormat('fr-FR', { timeZone: 'Africa/Ouagadougou' })
+const HORODATAGE_BOUTIQUE = new Intl.DateTimeFormat('fr-FR', {
+  timeZone: 'Africa/Ouagadougou',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+})
 
 const dateLisible = (brut, instantMs) => {
+  if (Number.isFinite(instantMs) && instantMs > 0) {
+    // `format` insère « à » en fr-FR selon la version d'ICU ; on le retire pour
+    // garder « 14/10/2026 08:30 », lisible en colonne et stable d'une version
+    // de Node à l'autre.
+    return HORODATAGE_BOUTIQUE.format(new Date(instantMs)).replace(' à ', ' ')
+  }
   if (typeof brut === 'string') return brut.trim()
-  if (Number.isFinite(instantMs) && instantMs > 0) return JOUR_BOUTIQUE.format(new Date(instantMs))
   return ''
 }
 

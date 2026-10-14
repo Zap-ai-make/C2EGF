@@ -460,6 +460,6 @@ describe('TC-256 — une date non textuelle ne sort jamais du serveur', () => {
 
     expect(lignes).toHaveLength(1)
     expect(typeof lignes[0].date).toBe('string')
-    expect(lignes[0].date).toBe('13/10/2026')
+    expect(lignes[0].date).toBe('13/10/2026 08:00')
   })
 })

@@ -79,9 +79,15 @@ function HistoriqueClientPanel({ client, onClose }) {
           {typeof totaux.operations === 'number' && (
             <p className="text-sm text-ink">{francs(totaux.operations)} opérations enregistrées</p>
           )}
+          {/* ⚠ LE NOMBRE SE COLLAIT AU NOM : « C2EGF 10YAAR 3 » se lisait comme
+              une boutique appelée « 10YAAR 3 ». Les noms de boutique d'ici
+              finissent par des chiffres, donc la juxtaposition ne peut pas
+              marcher — il faut un mot entre les deux. */}
           {totaux.parBoutique?.length > 0 && (
             <p className="mt-1 text-sm text-ink-muted">
-              {totaux.parBoutique.map((b) => `${b.storeName} ${francs(b.operations)}`).join(' · ')}
+              {totaux.parBoutique
+                .map((b) => `${b.storeName} — ${francs(b.operations)} op.`)
+                .join(' · ')}
             </p>
           )}
           {totaux.nonDatees > 0 && (

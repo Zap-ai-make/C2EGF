@@ -243,20 +243,36 @@ describe('TC-255 — les deux sources réunies', () => {
 
       expect(typeof ligne.date).toBe('string')
       // 13 octobre 2026 à 08:00 UTC, dans le fuseau de la boutique (UTC+0).
-      expect(ligne.date).toBe('13/10/2026')
+      expect(ligne.date).toBe('13/10/2026 08:00')
     })
 
     it('[TC-255-20] un objet quelconque ne traverse pas non plus', () => {
       const ligne = ligneDeDocument(doc({ date: { _seconds: 1760000000, _nanoseconds: 0 } }))
       expect(typeof ligne.date).toBe('string')
-      expect(ligne.date).toBe('13/10/2026')
+      expect(ligne.date).toBe('13/10/2026 08:00')
     })
 
-    it('[TC-255-21] une chaîne est conservée telle quelle, à l\'espace près', () => {
-      expect(ligneDeDocument(doc({ date: ' 09/10/2026 14:30 ' })).date).toBe('09/10/2026 14:30')
+    /**
+     * ⚠ L'HEURE VIENT DE `createdAt`, ET C'EST TOUT L'OBJET DE CE TEST.
+     *   Les boutiques écrivent `dateFr()`, qui ne rend que le JOUR. Le panneau
+     *   affichait donc « 14/10/2026 » tout court alors qu'on lui demandait
+     *   « date heure » — l'heure n'avait jamais été dans ce champ. Dès qu'un
+     *   `createdAt` existe il fait autorité : lui seul porte l'heure.
+     */
+    it('[TC-255-21] l’heure est rendue, et vient de createdAt', () => {
+      const SOIREE = Date.UTC(2026, 9, 13, 18, 45)
+      const ligne = ligneDeDocument(doc({ date: '13/10/2026', createdAt: ts(SOIREE) }))
+
+      expect(ligne.date).toBe('13/10/2026 18:45')
     })
 
-    it('[TC-255-22] sans date lisible ni createdAt, la ligne rend une chaîne vide', () => {
+    /** Sans horodatage, la vieille chaîne est le seul repère — on la garde. */
+    it('[TC-255-22] sans createdAt, la chaîne stockée sert de repli', () => {
+      expect(ligneDeDocument(doc({ date: ' 09/10/2026 14:30 ', createdAt: null })).date)
+        .toBe('09/10/2026 14:30')
+    })
+
+    it('[TC-255-23] sans date lisible ni createdAt, la ligne rend une chaîne vide', () => {
       const ligne = ligneDeDocument(doc({ date: null, createdAt: null }))
       expect(ligne.date).toBe('')
     })

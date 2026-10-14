@@ -25,6 +25,34 @@ export function depuisQuand(instant, maintenant) {
   return `${Math.max(1, Math.floor(ecart / MINUTE))} min`
 }
 
+/**
+ * Le temps qu'une opération a mis à être traitée : de la saisie à la validation.
+ *
+ * ⚠ VIDE SOUS LA MINUTE, ET C'EST VOULU. Une transaction validée dans la foulée
+ *   est le cas ORDINAIRE : afficher « traité en 1 min » sur chaque ligne noierait
+ *   les quelques-unes qui ont réellement attendu, qui sont les seules qu'on vient
+ *   chercher ici. Le silence est l'information : une ligne sans délai est une
+ *   ligne qui n'a pas traîné.
+ *
+ * ⚠ VIDE AUSSI SANS `validatedAt`. Une opération enregistrée directement n'a pas
+ *   de délai de traitement — pas un délai de zéro.
+ */
+export function dureeDeTraitement(debut, fin) {
+  if (!debut || !fin || fin <= debut) return ''
+  const ecart = fin - debut
+  if (ecart < MINUTE) return ''
+  if (ecart >= JOUR) return `${Math.floor(ecart / JOUR)} j`
+  if (ecart >= HEURE) return `${Math.floor(ecart / HEURE)} h`
+  return `${Math.floor(ecart / MINUTE)} min`
+}
+
+/** Deux noms qui ne diffèrent que par la casse ou les espaces sont le même nom. */
+const memeNom = (a, b) => {
+  const plier = (v) => String(v ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
+  const pliee = plier(a)
+  return pliee.length > 0 && pliee === plier(b)
+}
+
 const francs = (montant) => (
   typeof montant === 'number' && Number.isFinite(montant) ? montant.toLocaleString('fr-FR') : '—'
 )
@@ -47,6 +75,14 @@ const LigneHistorique = memo(function LigneHistorique({ ligne, maintenant }) {
   const supprimee = Boolean(ligne.deletedAt)
   const entrant = ligne.typePlie === 'depot'
   const attente = ligne.source === 'draft' ? depuisQuand(ligne.createdAt, maintenant) : ''
+  const traitee = ligne.source === 'draft' ? '' : dureeDeTraitement(ligne.createdAt, ligne.validatedAt)
+
+  // ⚠ LE COMPTE DE LA BOUTIQUE PORTE LE NOM DE LA BOUTIQUE. Quand la caissière
+  //   opère sous le compte de son magasin, `operatorName` vaut exactement le nom
+  //   déjà affiché par la pastille — et la ligne répétait « C2EGF 10YAAR
+  //   C2EGF 10YAAR ». On ne montre l'opérateur que lorsqu'il ajoute quelque
+  //   chose : un prénom, un autre compte.
+  const operateur = memeNom(ligne.operatorName, ligne.storeName) ? '' : texte(ligne.operatorName)
 
   return (
     <div className={`border-b border-line px-4 py-3 ${supprimee ? 'opacity-60' : ''}`}>
@@ -70,7 +106,7 @@ const LigneHistorique = memo(function LigneHistorique({ ligne, maintenant }) {
         <span className="ml-auto inline-flex rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-700">
           {texte(ligne.storeName) || '—'}
         </span>
-        {texte(ligne.operatorName) && <span className="text-xs text-ink-muted">{texte(ligne.operatorName)}</span>}
+        {operateur && <span className="text-xs text-ink-muted">{operateur}</span>}
       </div>
 
       {ligne.source === 'draft' && typeof ligne.reste === 'number' && (
@@ -78,6 +114,13 @@ const LigneHistorique = memo(function LigneHistorique({ ligne, maintenant }) {
           reste {francs(ligne.reste)}
           {attente && <> — en attente depuis {attente}</>}
         </p>
+      )}
+
+      {/* Le délai n'apparaît que lorsqu'il y en a un : une opération validée
+          dans la foulée ne porte rien, et les quelques-unes qui ont attendu se
+          repèrent d'un coup d'œil. */}
+      {traitee && (
+        <p className="mt-1 text-xs text-ink-muted">traité en {traitee}</p>
       )}
     </div>
   )

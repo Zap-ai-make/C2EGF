@@ -75,3 +75,83 @@ describe('TC-260 — une ligne supprimée', () => {
     expect(container.querySelector('.line-through')).not.toBeNull()
   })
 })
+
+/**
+ * TC-260 — Le temps mis, et le nom qui ne doit pas être dit deux fois.
+ *
+ * Trois défauts vus sur une capture de production, sur un même agent :
+ * la date sans heure, aucune durée, et « C2EGF 10YAAR C2EGF 10YAAR » côte à côte.
+ */
+describe('TC-260 — la durée de traitement', () => {
+  /**
+   * ⚠ C'EST LA RÉPONSE À « LES DÉLAIS DE REMBOURSEMENT ». Une opération saisie
+   *   le matin et validée le soir a fait attendre quelqu'un ; l'historique doit
+   *   le dire, sinon il ne raconte que l'instant de la saisie.
+   */
+  it('[TC-260-08] une opération validée plus tard annonce le temps mis', () => {
+    afficher({
+      createdAt: Date.UTC(2026, 9, 13, 8, 0),
+      validatedAt: Date.UTC(2026, 9, 13, 14, 0),
+    })
+    expect(screen.getByText(/traité en 6 h/)).toBeInTheDocument()
+  })
+
+  it('[TC-260-09] un délai de plusieurs jours se dit en jours', () => {
+    afficher({
+      createdAt: Date.UTC(2026, 9, 9, 8, 0),
+      validatedAt: Date.UTC(2026, 9, 13, 8, 0),
+    })
+    expect(screen.getByText(/traité en 4 j/)).toBeInTheDocument()
+  })
+
+  /**
+   * ⚠ LE SILENCE EST L'INFORMATION. Une transaction validée dans la foulée est
+   *   le cas ORDINAIRE : écrire « traité en 1 min » sur chaque ligne noierait
+   *   les quelques-unes qui ont réellement attendu — les seules qu'on vient
+   *   chercher ici.
+   */
+  it('[TC-260-10] une validation immédiate n’affiche aucun délai', () => {
+    afficher({
+      createdAt: Date.UTC(2026, 9, 13, 8, 0),
+      validatedAt: Date.UTC(2026, 9, 13, 8, 0, 30),
+    })
+    expect(screen.queryByText(/traité en/)).toBeNull()
+  })
+
+  /** Sans `validatedAt`, il n'y a pas de délai — pas un délai de zéro. */
+  it('[TC-260-11] une ligne jamais validée n’invente pas de délai', () => {
+    afficher({ validatedAt: 0 })
+    expect(screen.queryByText(/traité en/)).toBeNull()
+  })
+
+  /** Les non terminées disent « en attente depuis », pas « traité en ». */
+  it('[TC-260-12] une non terminée ne parle pas de traitement', () => {
+    afficher({ source: 'draft', reste: 40000, validatedAt: Date.UTC(2026, 9, 13, 12, 0) })
+    expect(screen.queryByText(/traité en/)).toBeNull()
+    expect(screen.getByText(/en attente depuis/)).toBeInTheDocument()
+  })
+})
+
+describe('TC-260 — la boutique n’est nommée qu’une fois', () => {
+  /**
+   * ⚠ LE COMPTE DE LA BOUTIQUE PORTE LE NOM DE LA BOUTIQUE. Quand la caissière
+   *   opère sous le compte du magasin, `operatorName` vaut exactement ce que la
+   *   pastille affiche déjà, et la ligne rendait « C2EGF 10YAAR C2EGF 10YAAR ».
+   */
+  it('[TC-260-13] un opérateur homonyme de la boutique n’est pas répété', () => {
+    afficher({ storeName: 'C2EGF 10YAAR', operatorName: 'C2EGF 10YAAR' })
+    expect(screen.getAllByText(/C2EGF 10YAAR/)).toHaveLength(1)
+  })
+
+  it('[TC-260-14] la casse et les espaces ne font pas deux noms différents', () => {
+    afficher({ storeName: 'C2EGF 10YAAR', operatorName: '  c2egf  10yaar ' })
+    expect(screen.getAllByText(/10YAAR|10yaar/i)).toHaveLength(1)
+  })
+
+  /** Un opérateur qui ajoute quelque chose reste affiché : c'est l'information. */
+  it('[TC-260-15] un opérateur distinct est toujours montré', () => {
+    afficher({ storeName: 'C2EGF 10YAAR', operatorName: 'Awa' })
+    expect(screen.getByText('Awa')).toBeInTheDocument()
+    expect(screen.getByText(/C2EGF 10YAAR/)).toBeInTheDocument()
+  })
+})

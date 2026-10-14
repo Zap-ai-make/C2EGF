@@ -152,10 +152,25 @@ describe('TC-261 — ce que les totaux disent', () => {
     expect(screen.getByText(/40\s?000 à payer/)).toBeInTheDocument()
   })
 
+  /**
+   * ⚠ LE NOMBRE NE SE COLLE PAS AU NOM. Les boutiques d'ici s'appellent
+   *   « C2EGF 10YAAR » : juxtaposer le compte donnait « C2EGF 10YAAR 3 », qui se
+   *   lit comme une boutique nommée « 10YAAR 3 ». Il faut un mot entre les deux.
+   */
   it('[TC-261-10] le récapitulatif par boutique tient sur une ligne', () => {
     afficher({ etat: 'pret', lignes: [ligne('a')], totaux: TOTAUX })
-    expect(screen.getByText(/OUAGA 312/)).toBeInTheDocument()
-    expect(screen.getByText(/BOBO 125/)).toBeInTheDocument()
+    expect(screen.getByText(/OUAGA — 312 op\./)).toBeInTheDocument()
+    expect(screen.getByText(/BOBO — 125 op\./)).toBeInTheDocument()
+  })
+
+  it('[TC-261-22] un nom de boutique finissant par un chiffre reste lisible', () => {
+    afficher({
+      etat: 'pret',
+      lignes: [ligne('a')],
+      totaux: { ...TOTAUX, operations: 3, parBoutique: [{ storeId: 's', storeName: 'C2EGF 10YAAR', operations: 3 }] },
+    })
+    expect(screen.queryByText('C2EGF 10YAAR 3')).toBeNull()
+    expect(screen.getByText(/C2EGF 10YAAR — 3 op\./)).toBeInTheDocument()
   })
 
   /**
