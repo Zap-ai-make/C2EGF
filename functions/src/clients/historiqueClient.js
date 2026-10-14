@@ -161,6 +161,11 @@ export function ligneDeDocument({ id, chemin, donnees = {}, source, nomsDeBoutiq
     paidAmount: estNombre(donnees.paidAmount) ? donnees.paidAmount : null,
     refundedAmount: estNombre(donnees.refundedAmount) ? donnees.refundedAmount : null,
     settlementStatus: donnees.settlementStatus ?? null,
+    // ⚠ OÙ L'ARGENT EST PARTI, quand un règlement a été envoyé sur un compte
+    //   agent au lieu d'être remis en main propre. `HistoriqueTable` l'affiche
+    //   sous le code du client (« → 1234345 ») ; sans ce champ, le panneau
+    //   montrait la même opération en taisant sa destination.
+    settlementAgentCode: donnees.settlementAgentCode ?? '',
     operatorName: donnees.operatorName ?? '',
   }
 }

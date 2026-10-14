@@ -66,7 +66,13 @@ beforeEach(async () => {
     db.doc('stores/store-a').set({ name: 'C2EGF OUAGA', active: true }),
     db.doc('stores/store-b').set({ name: 'C2EGF BOBO', active: true }),
   ])
-})
+// ⚠ 30 s, ET CE N'EST PAS DE LA COMPLAISANCE. Ce hook fait une douzaine
+//   d'allers-retours vers l'émulateur ; sous les 10 s par défaut, il expire dès
+//   que la machine est chargée — et vitest affiche alors l'échec sur le PREMIER
+//   test, ici « refuse un appel sans authentification », qui n'a rien à voir.
+//   Un faux échec qui accuse un test d'autorisation est pire qu'un hook lent :
+//   on cherche une faille de sécurité qui n'existe pas.
+}, 30000)
 
 const ligne = (over = {}) => ({
   clientId: 'c1', type: 'Dépôt', montant: 100, statut: 'Validée',

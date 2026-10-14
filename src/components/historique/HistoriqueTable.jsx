@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useTransactions } from '../../context/transactions.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
-import { getClientName, formatTransactionDateTime } from '../../utils/helpers.js'
+import { getClientName, formatTransactionDateTime, tonStatut } from '../../utils/helpers.js'
 import { useWindowedRows } from '../../hooks/useWindowedRows.js'
 import EmptyState from '../ui/EmptyState.jsx'
 import { History } from 'lucide-react'
@@ -67,18 +67,6 @@ const COLONNES_OPERATEUR = STORE_HISTORY_CONFIG.operatorColumns !== false
 const VIRTUALIZE_THRESHOLD = 60
 // Hauteur de repli d'une ligne (px) tant que la mesure réelle n'est pas disponible.
 const DEFAULT_ROW_HEIGHT = 49
-
-/**
- * Le ton d'un statut. La pastille était `bg-success-soft` en dur : une opération
- * ANNULÉE s'affichait en vert, tout comme une opération validée. La couleur
- * affirmait le contraire du texte qu'elle entourait.
- */
-const tonStatut = (statut) => {
-  const s = String(statut || 'Validée').toLowerCase()
-  if (s.includes('annul') || s.includes('rejet') || s.includes('échou') || s.includes('echou')) return 'rejected'
-  if (s.includes('valid') || s.includes('termin')) return 'confirmed'
-  return 'pending'
-}
 
 /**
  * Un règlement inachevé : des tranches encaissées, un reste à payer.

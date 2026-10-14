@@ -425,3 +425,23 @@ export const debounce = (func, wait) => {
     timeout = setTimeout(later, wait)
   }
 }
+
+/**
+ * Le ton d'un statut, pour la pastille qui l'entoure.
+ *
+ * ⚠ LA COULEUR NE DOIT JAMAIS CONTREDIRE LE TEXTE. La pastille a longtemps été
+ *   `bg-success-soft` en dur : une opération ANNULÉE s'affichait en vert, comme
+ *   une opération validée. Sur un écran d'argent, c'est le genre de détail qui
+ *   fait relire une ligne trois fois.
+ *
+ * ⚠ PARTAGÉE PAR DEUX ÉCRANS, ET C'EST LE BUT. `HistoriqueTable` et
+ *   `LigneHistorique` montrent les mêmes opérations ; deux règles de couleur
+ *   séparées finiraient par diverger sur un statut rare, et la même ligne
+ *   changerait de sens selon l'écran où on la regarde.
+ */
+export const tonStatut = (statut) => {
+  const s = String(statut || 'Validée').toLowerCase()
+  if (s.includes('annul') || s.includes('rejet') || s.includes('échou') || s.includes('echou')) return 'rejected'
+  if (s.includes('valid') || s.includes('termin')) return 'confirmed'
+  return 'pending'
+}

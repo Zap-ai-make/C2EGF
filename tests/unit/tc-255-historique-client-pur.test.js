@@ -104,6 +104,22 @@ describe('TC-255 — une ligne construite depuis son document', () => {
     expect(ligneDeDocument({ ...doc({ createdAt: new Date(MATIN).toISOString() }), nomsDeBoutique: NOMS }).createdAt).toBe(MATIN)
   })
 
+  /**
+   * ⚠ OÙ L'ARGENT EST PARTI. Quand un règlement est envoyé sur un compte agent
+   *   au lieu d'être remis en main propre, `HistoriqueTable` l'affiche sous le
+   *   code du client (« → 1234345 »). Le panneau montrait la même opération en
+   *   taisant sa destination, parce que le serveur ne transmettait pas le champ.
+   */
+  it('[TC-255-24] le code agent du règlement est transmis', () => {
+    const ligne = ligneDeDocument(doc({ code: '8913261', settlementAgentCode: '1234345' }))
+    expect(ligne.code).toBe('8913261')
+    expect(ligne.settlementAgentCode).toBe('1234345')
+  })
+
+  it('[TC-255-25] son absence rend une chaîne vide, jamais undefined', () => {
+    expect(ligneDeDocument(doc({})).settlementAgentCode).toBe('')
+  })
+
   it('[TC-255-10] un chemin illisible ne fait pas tomber la construction', () => {
     expect(ligneDeDocument({ id: 'z', chemin: 'nimporte', source: 'history', donnees: { type: 'Dépôt' }, nomsDeBoutique: NOMS }))
       .toMatchObject({ storeId: null, storeName: '—' })

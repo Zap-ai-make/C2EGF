@@ -1,7 +1,19 @@
 import { memo } from 'react'
+import StatusBadge from '../ui/StatusBadge.jsx'
+import { tonStatut } from '../../utils/helpers.js'
+import { dureeDe, formaterHeure } from '../../utils/attente.js'
 
 /**
  * Une opération d'agent, telle qu'elle se lit dans son historique.
+ *
+ * ⚠ LES MÊMES RÈGLES QUE `HistoriqueTable`, PAS DES RÈGLES PARALLÈLES. Ces deux
+ *   écrans montrent les mêmes opérations : la même transaction doit s'y lire
+ *   pareil, sinon la caissière qui passe de l'un à l'autre doit se demander
+ *   lequel dit vrai. D'où les imports partagés — `dureeDe` et `formaterHeure`
+ *   pour le chronomètre, `tonStatut` pour la couleur de la pastille, et le même
+ *   `StatusBadge`. Ce fichier avait sa propre arithmétique de durée : elle
+ *   arrondissait à la minute là où le tableau compte les secondes, et taisait
+ *   tout délai inférieur à une minute que le tableau, lui, affiche.
  *
  * ⚠ MÉMOÏSÉE PARCE QUE LA LISTE EST VIRTUALISÉE. Le conteneur rerend à chaque
  *   défilement ; sans `memo`, chaque ligne visible se reconstruirait à chaque
@@ -25,27 +37,6 @@ export function depuisQuand(instant, maintenant) {
   return `${Math.max(1, Math.floor(ecart / MINUTE))} min`
 }
 
-/**
- * Le temps qu'une opération a mis à être traitée : de la saisie à la validation.
- *
- * ⚠ VIDE SOUS LA MINUTE, ET C'EST VOULU. Une transaction validée dans la foulée
- *   est le cas ORDINAIRE : afficher « traité en 1 min » sur chaque ligne noierait
- *   les quelques-unes qui ont réellement attendu, qui sont les seules qu'on vient
- *   chercher ici. Le silence est l'information : une ligne sans délai est une
- *   ligne qui n'a pas traîné.
- *
- * ⚠ VIDE AUSSI SANS `validatedAt`. Une opération enregistrée directement n'a pas
- *   de délai de traitement — pas un délai de zéro.
- */
-export function dureeDeTraitement(debut, fin) {
-  if (!debut || !fin || fin <= debut) return ''
-  const ecart = fin - debut
-  if (ecart < MINUTE) return ''
-  if (ecart >= JOUR) return `${Math.floor(ecart / JOUR)} j`
-  if (ecart >= HEURE) return `${Math.floor(ecart / HEURE)} h`
-  return `${Math.floor(ecart / MINUTE)} min`
-}
-
 /** Deux noms qui ne diffèrent que par la casse ou les espaces sont le même nom. */
 const memeNom = (a, b) => {
   const plier = (v) => String(v ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
@@ -54,7 +45,7 @@ const memeNom = (a, b) => {
 }
 
 const francs = (montant) => (
-  typeof montant === 'number' && Number.isFinite(montant) ? montant.toLocaleString('fr-FR') : '—'
+  typeof montant === 'number' && Number.isFinite(montant) ? montant.toLocaleString('fr-FR') : null
 )
 
 /**
@@ -75,7 +66,12 @@ const LigneHistorique = memo(function LigneHistorique({ ligne, maintenant }) {
   const supprimee = Boolean(ligne.deletedAt)
   const entrant = ligne.typePlie === 'depot'
   const attente = ligne.source === 'draft' ? depuisQuand(ligne.createdAt, maintenant) : ''
-  const traitee = ligne.source === 'draft' ? '' : dureeDeTraitement(ligne.createdAt, ligne.validatedAt)
+
+  // Le chronomètre des non terminées, arrêté — exactement celui du tableau.
+  // `null` sur une ligne validée d'un geste : elle n'est jamais passée par les
+  // non terminées, donc personne n'a attendu, et « 00:00:00 » ferait lire une
+  // mesure là où il n'y a rien à mesurer.
+  const duree = ligne.source === 'draft' ? null : dureeDe(ligne)
 
   // ⚠ LE COMPTE DE LA BOUTIQUE PORTE LE NOM DE LA BOUTIQUE. Quand la caissière
   //   opère sous le compte de son magasin, `operatorName` vaut exactement le nom
@@ -83,6 +79,10 @@ const LigneHistorique = memo(function LigneHistorique({ ligne, maintenant }) {
   //   C2EGF 10YAAR ». On ne montre l'opérateur que lorsqu'il ajoute quelque
   //   chose : un prénom, un autre compte.
   const operateur = memeNom(ligne.operatorName, ligne.storeName) ? '' : texte(ligne.operatorName)
+
+  const montant = francs(ligne.montant)
+  const code = texte(ligne.code)
+  const codeReglement = texte(ligne.settlementAgentCode)
 
   return (
     <div className={`border-b border-line px-4 py-3 ${supprimee ? 'opacity-60' : ''}`}>
@@ -92,9 +92,12 @@ const LigneHistorique = memo(function LigneHistorique({ ligne, maintenant }) {
           {texte(ligne.type) || '—'}
         </span>
         <span className={`text-base font-semibold tabular-nums ${supprimee ? 'line-through' : ''}`}>
-          {francs(ligne.montant)}
+          {montant ? `${montant} FCFA` : '—'}
         </span>
-        <span className="text-sm text-ink-muted">{texte(ligne.statut) || '—'}</span>
+        {/* ⚠ LA COULEUR NE DOIT PAS CONTREDIRE LE TEXTE : une opération annulée
+            ne s'affiche pas comme une validée. Même règle que le tableau, parce
+            que c'est littéralement la même fonction (`tonStatut`). */}
+        <StatusBadge status={tonStatut(ligne.statut)} label={texte(ligne.statut) || 'Validée'} />
         {/*
           ⚠ LA BOUTIQUE EST LA RAISON D'ÊTRE DE CET ÉCRAN. Sans elle, on ne sait
             pas si l'opération est la nôtre — d'où la pastille, toujours visible,
@@ -109,18 +112,45 @@ const LigneHistorique = memo(function LigneHistorique({ ligne, maintenant }) {
         {operateur && <span className="text-xs text-ink-muted">{operateur}</span>}
       </div>
 
-      {ligne.source === 'draft' && typeof ligne.reste === 'number' && (
-        <p className="mt-1 text-sm text-warn">
-          reste {francs(ligne.reste)}
-          {attente && <> — en attente depuis {attente}</>}
-        </p>
+      {/* La seconde ligne porte ce que la première ne peut pas tenir : le code
+          du client, la destination du règlement, et le temps que ça a pris. */}
+      {(code || duree) && (
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+          {code && (
+            <span className="text-sm tabular-nums text-ink-muted">
+              {code}
+              {/* La DESTINATION du règlement, quand l'argent est parti sur un
+                  compte agent au lieu d'être remis en main propre. Collée au
+                  code du client, parce que la réponse n'a de sens qu'à côté de
+                  la question. */}
+              {codeReglement && (
+                <span
+                  className="ml-1 text-xs"
+                  data-testid="code-agent-reglement"
+                  title="Code agent sur lequel le règlement a été envoyé"
+                >
+                  → {codeReglement}
+                </span>
+              )}
+            </span>
+          )}
+
+          {duree && (
+            <span className="inline-flex items-baseline gap-2" data-testid="duree-transaction">
+              <span className="font-mono text-sm font-semibold tabular-nums text-ink">{duree.texte}</span>
+              <span className="text-xs tabular-nums text-ink-muted">
+                {formaterHeure(duree.debut)} → {formaterHeure(duree.fin)}
+              </span>
+            </span>
+          )}
+        </div>
       )}
 
-      {/* Le délai n'apparaît que lorsqu'il y en a un : une opération validée
-          dans la foulée ne porte rien, et les quelques-unes qui ont attendu se
-          repèrent d'un coup d'œil. */}
-      {traitee && (
-        <p className="mt-1 text-xs text-ink-muted">traité en {traitee}</p>
+      {ligne.source === 'draft' && typeof ligne.reste === 'number' && (
+        <p className="mt-1 text-sm text-warn">
+          reste {francs(ligne.reste) ?? '—'} FCFA
+          {attente && <> — en attente depuis {attente}</>}
+        </p>
       )}
     </div>
   )

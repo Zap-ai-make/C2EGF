@@ -70,28 +70,51 @@ function HistoriqueClientPanel({ client, onClose }) {
       largeur="max-w-2xl"
       testId="historique-client-panel"
     >
+      {/*
+        ⚠ CE RÉSUMÉ ÉTAIT DEUX PHRASES EMPILÉES, DE MÊME TAILLE ET DE MÊME TON.
+          « 3 opérations enregistrées » puis « C2EGF SIEGE — 2 op. · C2EGF
+          SANKARIARE — 1 op. » : rien ne disait lequel des deux était le total et
+          lequel le détail, et les nombres se lisaient au milieu des mots.
+          Maintenant le total est un CHIFFRE, gros, avec son libellé en dessous ;
+          la répartition est une liste de valeurs étiquetées, chaque compte aligné
+          sous le nom de sa boutique. On lit les chiffres en diagonale, les noms
+          seulement si on cherche lequel.
+      */}
       {totaux && (
-        <div className="border-b border-line pb-3">
-          {/* ⚠ `operations: null` SIGNIFIE « JE NE SAIS PAS », pas « aucune ».
-              Le serveur le pose quand une agrégation échoue : les lignes restent
-              lisibles, seul le total manque. Afficher « — opérations » à cet
-              endroit se lirait comme un compte ; mieux vaut ne rien annoncer. */}
-          {typeof totaux.operations === 'number' && (
-            <p className="text-sm text-ink">{francs(totaux.operations)} opérations enregistrées</p>
-          )}
-          {/* ⚠ LE NOMBRE SE COLLAIT AU NOM : « C2EGF 10YAAR 3 » se lisait comme
-              une boutique appelée « 10YAAR 3 ». Les noms de boutique d'ici
-              finissent par des chiffres, donc la juxtaposition ne peut pas
-              marcher — il faut un mot entre les deux. */}
-          {totaux.parBoutique?.length > 0 && (
-            <p className="mt-1 text-sm text-ink-muted">
-              {totaux.parBoutique
-                .map((b) => `${b.storeName} — ${francs(b.operations)} op.`)
-                .join(' · ')}
-            </p>
-          )}
+        <div className="border-b border-line pb-4">
+          <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
+            {/* ⚠ `operations: null` SIGNIFIE « JE NE SAIS PAS », pas « aucune ».
+                Le serveur le pose quand une agrégation échoue : les lignes
+                restent lisibles, seul le total manque. Afficher « — » comme un
+                compte serait pire que ne rien annoncer. */}
+            {typeof totaux.operations === 'number' && (
+              <div>
+                <p className="text-2xl font-semibold leading-none tabular-nums text-ink">
+                  {francs(totaux.operations)}
+                </p>
+                <p className="mt-1 text-xs uppercase tracking-wide text-ink-muted">
+                  {totaux.operations > 1 ? 'opérations enregistrées' : 'opération enregistrée'}
+                </p>
+              </div>
+            )}
+
+            {/* ⚠ LE NOMBRE NE SE COLLE PAS AU NOM. « C2EGF 10YAAR 3 » se lisait
+                comme une boutique appelée « 10YAAR 3 » : les noms d'ici finissent
+                par des chiffres, donc la juxtaposition ne peut pas marcher. En
+                colonne, le compte est au-dessus de son libellé — il n'y a plus
+                de juxtaposition du tout. */}
+            {totaux.parBoutique?.map((b) => (
+              <div key={b.storeId ?? b.storeName}>
+                <p className="text-lg font-semibold leading-none tabular-nums text-ink">
+                  {francs(b.operations)}
+                </p>
+                <p className="mt-1 text-xs uppercase tracking-wide text-ink-muted">{b.storeName}</p>
+              </div>
+            ))}
+          </div>
+
           {totaux.nonDatees > 0 && (
-            <p className="mt-1 text-sm text-warn">
+            <p className="mt-3 text-sm text-warn">
               {francs(totaux.nonDatees)} opération(s) sans date ne peuvent pas être listées.
             </p>
           )}

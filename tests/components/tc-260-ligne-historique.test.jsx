@@ -88,46 +88,56 @@ describe('TC-260 — la durée de traitement', () => {
    *   le matin et validée le soir a fait attendre quelqu'un ; l'historique doit
    *   le dire, sinon il ne raconte que l'instant de la saisie.
    */
+  /**
+   * ⚠ LE MÊME CHRONOMÈTRE QUE `HistoriqueTable`, AU FORMAT PRÈS. Ces deux écrans
+   *   montrent les mêmes opérations : « 00:15:54 » d'un côté et « traité en
+   *   15 min » de l'autre font douter de laquelle des deux mesures est la bonne.
+   *   D'où `dureeDe` partagé — secondes comprises, et les deux bornes affichées.
+   */
   it('[TC-260-08] une opération validée plus tard annonce le temps mis', () => {
     afficher({
       createdAt: Date.UTC(2026, 9, 13, 8, 0),
       validatedAt: Date.UTC(2026, 9, 13, 14, 0),
     })
-    expect(screen.getByText(/traité en 6 h/)).toBeInTheDocument()
+    expect(screen.getByTestId('duree-transaction')).toHaveTextContent('06:00:00')
   })
 
-  it('[TC-260-09] un délai de plusieurs jours se dit en jours', () => {
+  /** Les deux bornes, comme dans le tableau : on voit QUAND, pas seulement combien. */
+  it('[TC-260-09] le début et la fin encadrent la durée', () => {
+    afficher({
+      createdAt: Date.UTC(2026, 9, 13, 9, 48),
+      validatedAt: Date.UTC(2026, 9, 13, 10, 4),
+    })
+    const duree = screen.getByTestId('duree-transaction')
+    expect(duree).toHaveTextContent('00:16:00')
+    expect(duree).toHaveTextContent('09:48')
+    expect(duree).toHaveTextContent('10:04')
+  })
+
+  /** Au-delà du jour, « 76:12:04 » serait illisible — le tableau dit « 4j 00:00 ». */
+  it('[TC-260-10] un délai de plusieurs jours se dit en jours', () => {
     afficher({
       createdAt: Date.UTC(2026, 9, 9, 8, 0),
       validatedAt: Date.UTC(2026, 9, 13, 8, 0),
     })
-    expect(screen.getByText(/traité en 4 j/)).toBeInTheDocument()
+    expect(screen.getByTestId('duree-transaction')).toHaveTextContent('4j 00:00')
   })
 
   /**
-   * ⚠ LE SILENCE EST L'INFORMATION. Une transaction validée dans la foulée est
-   *   le cas ORDINAIRE : écrire « traité en 1 min » sur chaque ligne noierait
-   *   les quelques-unes qui ont réellement attendu — les seules qu'on vient
-   *   chercher ici.
+   * ⚠ SANS `validatedAt`, IL N'Y A PAS DE DÉLAI — pas un délai de zéro. Une
+   *   transaction validée d'un geste n'est jamais passée par les non terminées :
+   *   personne n'a attendu, et « 00:00:00 » ferait lire une mesure là où il n'y
+   *   a rien à mesurer.
    */
-  it('[TC-260-10] une validation immédiate n’affiche aucun délai', () => {
-    afficher({
-      createdAt: Date.UTC(2026, 9, 13, 8, 0),
-      validatedAt: Date.UTC(2026, 9, 13, 8, 0, 30),
-    })
-    expect(screen.queryByText(/traité en/)).toBeNull()
-  })
-
-  /** Sans `validatedAt`, il n'y a pas de délai — pas un délai de zéro. */
   it('[TC-260-11] une ligne jamais validée n’invente pas de délai', () => {
     afficher({ validatedAt: 0 })
-    expect(screen.queryByText(/traité en/)).toBeNull()
+    expect(screen.queryByTestId('duree-transaction')).toBeNull()
   })
 
-  /** Les non terminées disent « en attente depuis », pas « traité en ». */
+  /** Les non terminées disent « en attente depuis » : leur chronomètre tourne encore. */
   it('[TC-260-12] une non terminée ne parle pas de traitement', () => {
     afficher({ source: 'draft', reste: 40000, validatedAt: Date.UTC(2026, 9, 13, 12, 0) })
-    expect(screen.queryByText(/traité en/)).toBeNull()
+    expect(screen.queryByTestId('duree-transaction')).toBeNull()
     expect(screen.getByText(/en attente depuis/)).toBeInTheDocument()
   })
 })
@@ -153,5 +163,50 @@ describe('TC-260 — la boutique n’est nommée qu’une fois', () => {
     afficher({ storeName: 'C2EGF 10YAAR', operatorName: 'Awa' })
     expect(screen.getByText('Awa')).toBeInTheDocument()
     expect(screen.getByText(/C2EGF 10YAAR/)).toBeInTheDocument()
+  })
+})
+
+/**
+ * TC-260 — Le code, et où l'argent est parti.
+ *
+ * ⚠ PARITÉ AVEC `HistoriqueTable`. Le tableau montre le code du client et, quand
+ *   un règlement a été envoyé sur un compte agent plutôt que remis en main
+ *   propre, la DESTINATION sous la forme « → 1234345 ». Le panneau montrait la
+ *   même opération en taisant les deux : le serveur ne transmettait même pas le
+ *   champ.
+ */
+describe('TC-260 — le code et la destination du règlement', () => {
+  it('[TC-260-16] le code du client est affiché', () => {
+    afficher({ code: '8913261' })
+    expect(screen.getByText(/8913261/)).toBeInTheDocument()
+  })
+
+  it('[TC-260-17] le code agent du règlement est montré à côté du code client', () => {
+    afficher({ code: '8913261', settlementAgentCode: '1234345' })
+    expect(screen.getByTestId('code-agent-reglement')).toHaveTextContent('1234345')
+  })
+
+  /** Sans règlement envoyé, rien ne s'affiche — pas une flèche vers le vide. */
+  it('[TC-260-18] sans code de règlement, aucune flèche', () => {
+    afficher({ code: '8913261', settlementAgentCode: '' })
+    expect(screen.queryByTestId('code-agent-reglement')).toBeNull()
+  })
+
+  /** ⚠ Le montant porte sa devise, comme dans le tableau. */
+  it('[TC-260-19] le montant est libellé en FCFA', () => {
+    afficher({ montant: 300000 })
+    expect(screen.getByText(/300\s?000 FCFA/)).toBeInTheDocument()
+  })
+
+  /**
+   * ⚠ LA COULEUR NE DOIT PAS CONTREDIRE LE TEXTE. La pastille de statut passe
+   *   par `tonStatut`, la MÊME fonction que le tableau : une opération annulée
+   *   ne peut pas s'afficher comme une validée sur l'un des deux écrans.
+   */
+  it('[TC-260-20] une opération annulée ne porte pas la couleur d’une validée', () => {
+    const { container } = afficher({ statut: 'Annulée' })
+    const pastille = screen.getByText('Annulée')
+    expect(pastille.className).toMatch(/danger/)
+    expect(container.querySelector('.bg-success-soft')).toBeNull()
   })
 })

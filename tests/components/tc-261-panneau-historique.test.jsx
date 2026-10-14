@@ -140,9 +140,22 @@ describe('TC-261 — les cinq états', () => {
 })
 
 describe('TC-261 — ce que les totaux disent', () => {
+  /**
+   * ⚠ LE CHIFFRE ET SON LIBELLÉ SONT DÉSORMAIS DEUX NŒUDS. Le résumé était deux
+   *   phrases empilées de même taille, où rien ne distinguait le total du
+   *   détail ; le total est maintenant un nombre, gros, avec son libellé en
+   *   dessous. L'assertion vise donc les deux séparément.
+   */
   it('[TC-261-08] le compte total, pas celui de la page', () => {
     afficher({ etat: 'pret', lignes: [ligne('a')], totaux: TOTAUX, encore: true })
-    expect(screen.getByText(/437 opérations/)).toBeInTheDocument()
+    expect(screen.getByText('437')).toBeInTheDocument()
+    expect(screen.getByText(/opérations enregistrées/)).toBeInTheDocument()
+  })
+
+  /** Une seule opération ne s'annonce pas au pluriel. */
+  it('[TC-261-23] le libellé s’accorde avec le nombre', () => {
+    afficher({ etat: 'pret', lignes: [ligne('a')], totaux: { ...TOTAUX, operations: 1, parBoutique: [] } })
+    expect(screen.getByText('opération enregistrée')).toBeInTheDocument()
   })
 
   /** ⚠ DEUX RESTES, PAS UN : ils vont dans des sens opposés. */
@@ -157,20 +170,28 @@ describe('TC-261 — ce que les totaux disent', () => {
    *   « C2EGF 10YAAR » : juxtaposer le compte donnait « C2EGF 10YAAR 3 », qui se
    *   lit comme une boutique nommée « 10YAAR 3 ». Il faut un mot entre les deux.
    */
-  it('[TC-261-10] le récapitulatif par boutique tient sur une ligne', () => {
+  it('[TC-261-10] chaque boutique porte son compte', () => {
     afficher({ etat: 'pret', lignes: [ligne('a')], totaux: TOTAUX })
-    expect(screen.getByText(/OUAGA — 312 op\./)).toBeInTheDocument()
-    expect(screen.getByText(/BOBO — 125 op\./)).toBeInTheDocument()
+    expect(screen.getByText('OUAGA')).toBeInTheDocument()
+    expect(screen.getByText('312')).toBeInTheDocument()
+    expect(screen.getByText('BOBO')).toBeInTheDocument()
+    expect(screen.getByText('125')).toBeInTheDocument()
   })
 
+  /**
+   * ⚠ LES NOMS DE BOUTIQUE D'ICI FINISSENT PAR DES CHIFFRES. « C2EGF 10YAAR »
+   *   suivi de son compte donnait « C2EGF 10YAAR 3 », qui se lit comme une
+   *   boutique appelée « 10YAAR 3 ». Le compte est maintenant AU-DESSUS du nom :
+   *   il n'y a plus de juxtaposition possible.
+   */
   it('[TC-261-22] un nom de boutique finissant par un chiffre reste lisible', () => {
     afficher({
       etat: 'pret',
       lignes: [ligne('a')],
       totaux: { ...TOTAUX, operations: 3, parBoutique: [{ storeId: 's', storeName: 'C2EGF 10YAAR', operations: 3 }] },
     })
-    expect(screen.queryByText('C2EGF 10YAAR 3')).toBeNull()
-    expect(screen.getByText(/C2EGF 10YAAR — 3 op\./)).toBeInTheDocument()
+    expect(screen.queryByText(/C2EGF 10YAAR\s+3/)).toBeNull()
+    expect(screen.getByText('C2EGF 10YAAR')).toBeInTheDocument()
   })
 
   /**
