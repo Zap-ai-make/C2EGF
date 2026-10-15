@@ -124,12 +124,40 @@ atteint sans déplacer la main. `ADMIN_NAV_ITEMS`
 ([navigation.js:84](../../../src/constants/navigation.js#L84)) passe de neuf
 entrées à deux.
 
-### 2. Le tableau — réutilisation de `ClientsTable`
+### 2. Le tableau — la ligne est partagée, pas le tableau
 
-Le tableau du gérant est repris tel quel : `TABLE_HEADERS`
+Les colonnes et la ligne du gérant sont reprises : `TABLE_HEADERS`
 ([constants/index.js:39](../../../src/constants/index.js#L39)), `ClientsTable`,
 `TableRow`, et la colonne `historique` ajoutée le 2026-10-13. Le patron voit la
 même chose que ses gérants, pour toute la base.
+
+> **⚠ « Repris tel quel » était trop vite dit — et la vérification le montre.**
+> `ClientsTable` ([ClientsTable.jsx:17](../../../src/components/ClientsTable.jsx#L17))
+> prend `onEdit`, `onImportClients`, `onAddClient`, lit `activeStore` dans
+> `AuthContext` pour construire `storesById`, et monte `useExcelOperations` —
+> l'import/export Excel. Le patron n'a pas d'`activeStore`, et la spec dit
+> **aucune écriture** : importer un fichier Excel en est une.
+>
+> **Ce qui est réellement partagé, c'est la LIGNE, pas le tableau.** L'écran du
+> patron monte `TABLE_HEADERS` et `TableRow` dans une enveloppe en lecture
+> seule : pas d'export, pas d'ajout, pas de modification.
+
+> **⚠ Et `TableRow` rend un bouton « Modifier » même sans `onEdit`.** Il garde
+> `onHistorique` derrière un `onHistorique &&`
+> ([TableRow.jsx:26](../../../src/components/TableRow.jsx#L26)) mais pas la
+> cellule d'actions, dont le `onClick` fait `onEdit && onEdit(client)`
+> ([TableRow.jsx:40](../../../src/components/TableRow.jsx#L40)). Chez le patron,
+> le bouton s'afficherait et **ne ferait rien** — pire qu'absent : il a l'air
+> cassé, et il devient un chemin d'écriture le jour où quelqu'un le câble.
+>
+> La cellule d'actions passe donc derrière le même garde que l'historique. Le
+> gérant, qui passe toujours `onEdit`, ne voit aucune différence — et un test
+> l'exige dans les deux sens.
+>
+> Conséquence de colonnes : `ClientsTable` rend les 11 `TABLE_HEADERS` **plus**
+> un `<th>Actions</th>` écrit en dur
+> ([ClientsTable.jsx:142](../../../src/components/ClientsTable.jsx#L142)), soit
+> 12 colonnes pour 12 cellules. L'écran du patron en rend **11 et 11**.
 
 **Aucune répartition par boutique, et c'est structurel.** Un code agent désigne
 un commerce, pas une relation avec une boutique — c'est précisément le
@@ -158,20 +186,42 @@ appelle `requireActiveStore()`, qui lève *« Boutique active introuvable. Veuil
 vous reconnecter. »* ([firestore.js:141](../../../src/services/firestore.js#L141)).
 Le patron n'a pas de `storeId` : l'abonnement échouerait chez lui.
 
-**Le garde-fou n'est pas assoupli, un second chemin est écrit.** Assouplir
-`requireActiveStore` serait une ligne, mais ce contrôle est ce qui empêche les
-gérants de lire la base d'une autre boutique. Le desserrer pour le confort
-d'un seul utilisateur retirerait silencieusement une protection qui sert à tous les
-autres — et le jour où ça fuite, personne ne se souviendra que c'était pour le
-patron.
+> **⚠ CORRECTION D'UN RAISONNEMENT FAUX QUE CETTE SPEC A PORTÉ.**
+> J'avais écrit que `requireActiveStore()` était « ce qui empêche les gérants de
+> lire la base d'une autre boutique », et que l'assouplir retirerait une
+> protection. **C'est faux, et la vérification le montre en deux points.**
+>
+> `resolveCollectionPath` ([firestore.js:150-156](../../../src/services/firestore.js#L150-L156))
+> renvoie le **nom nu** de la collection pour `USERS`, `STORES` et `CLIENTS` —
+> sans préfixe `clients/{storeId}/`. `subscribeToClients` s'abonne donc à la
+> racine `globalClients`, **sans aucun filtre de boutique**.
+>
+> Et les règles l'autorisent : `allow read: if hasProfile() || isSystemManager()`
+> ([firestore.rules:356](../../../firestore.rules#L356)), où `hasProfile()` vaut
+> pour `store_admin` et `member`.
+>
+> **Conséquence : chaque gérant diffuse déjà les 15 699 fiches entières sur son
+> appareil, par cette requête exacte.** `requireActiveStore()` n'y filtre rien ;
+> c'est une précondition, pas une frontière.
 
-`subscribeToAllClients()` est donc une fonction distincte, qui :
+Le second chemin reste la bonne décision, mais **pour une raison plus faible, et
+il faut le dire** :
 
-- exige le rôle `system_manager` et refuse tout autre rôle ;
-- s'abonne à `globalClients` sans filtre de boutique ;
-- ne touche pas au chemin du gérant, qui garde son `requireActiveStore()`.
+- `subscribeToClients` est appelé par les écrans du gérant, pour qui la
+  précondition est juste : sans boutique active, le reste de leur application ne
+  fonctionne pas, et échouer tôt avec un message clair vaut mieux qu'un écran à
+  moitié chargé ;
+- assouplir une précondition partagée pour servir un écran nouveau rendrait
+  **silencieuse**, pour tous les autres, la panne d'une boutique réellement
+  absente ;
+- une fonction nommée pour la lecture globale dit ce qu'elle fait. Une relecture
+  voit lequel des deux chemins elle regarde.
 
-Une relecture voit immédiatement lequel des deux chemins elle regarde.
+`subscribeToAllClients()` ne porte donc **aucun contrôle de rôle applicatif** :
+il n'en existe pas dans ce service, qui ne connaît que `this.activeStore`
+([firestore.js:85](../../../src/services/firestore.js#L85)). L'autorisation est
+déjà tenue à deux endroits, et aucun n'est contournable depuis le navigateur :
+le `RoleGuard` de la route, et les règles Firestore.
 
 ### 4. La page historique — `listClientHistory`, inchangée
 
@@ -333,7 +383,7 @@ part avec.
 > retélécharge la base. Ce drapeau est donc une dépendance de cet espace, pas
 > un réglage de confort.
 
-C'est déjà vrai des appareils des gérants, donc ce n'est pas un recul. Mais
+C'est déjà vrai des appareils des gérants — et pas « à peu près » : **la requête est identique**, `subscribeToClients` s'abonnant lui aussi à la racine `globalClients` sans filtre. Le patron ne recevra donc rien qu'un gérant ne reçoive déjà. Ce n'est pas un recul. Mais
 un patron se déplace davantage, et ce fait doit être écrit plutôt que découvert.
 
 **Ce qu'on achète en échange** : une recherche instantanée, qui marche sans
@@ -380,9 +430,15 @@ Ce qui est déjà tenu et ne doit pas régresser : `tc-252` (recherche), `tc-209
 
 Ce qui est à écrire :
 
-- `subscribeToAllClients` **refuse** `store_admin`, `member`, `dealer` et un
-  appel non authentifié ; et `subscribeToClients` **conserve** son
-  `requireActiveStore()` — un test qui échoue si quelqu'un l'assouplit ;
+- `subscribeToAllClients` s'abonne **sans** exiger de boutique active, et
+  `subscribeToClients` **conserve** son `requireActiveStore()` — un test qui
+  échoue si quelqu'un assouplit le chemin partagé. ⚠ Aucun test de rôle ici :
+  ce service ne connaît pas le rôle, et prétendre l'y vérifier donnerait une
+  fausse impression de contrôle. Le rôle est tenu par le `RoleGuard` de la route
+  et par les règles Firestore ;
+- `TableRow` ne rend **aucune** cellule d'action quand `onEdit` est absent, et
+  la rend toujours pour le gérant — les deux sens, parce que la régression
+  possible va dans les deux directions ;
 - la moyenne des durées ignore les opérations sans `validatedAt`, et **publie
   l'effectif** sur lequel elle porte ;
 - `listOutstandingDrafts` accepte `system_manager` **et refuse toujours** les
