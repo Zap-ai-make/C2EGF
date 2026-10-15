@@ -251,14 +251,33 @@ describe('TC-078-CL — listAllClients', () => {
     mocks.getDocs.mockResolvedValue(makeQuerySnap([]))
     await listAllClients({ storeId: 'store-a' })
     expect(mocks.where).toHaveBeenCalledWith('registeredStoreId', '==', 'store-a')
+    expect(mocks.orderBy).not.toHaveBeenCalled()
   })
 
   it('[CL-04] recherche filtre sur nom, prénom, numéro personnel, agent, boutique', async () => {
-    mocks.getDocs.mockResolvedValue(makeQuerySnap([
-      { nom: 'Kaboré', prenom: 'Awa' }, { nom: 'Sawadogo', prenom: 'Issa' },
-    ]))
-    const res = await listAllClients({ search: 'kabo' })
-    expect(res.clients.map(c => c.nom)).toEqual(['Kaboré'])
+    const jeu = () => [
+      { nom: 'Kaboré', prenom: 'Awa', numeroPersonnel: '70000001', codeAgent: '1234567', numeroAgent: '70112233', registeredStoreName: 'Zogona' },
+      { nom: 'Sawadogo', prenom: 'Issa', numeroPersonnel: '70000002', codeAgent: '7654321', numeroAgent: '70445566', registeredStoreName: 'Gounghin' },
+    ]
+
+    mocks.getDocs.mockResolvedValue(makeQuerySnap(jeu()))
+    expect((await listAllClients({ search: 'kabo' })).clients.map(c => c.nom)).toEqual(['Kaboré'])
+
+    mocks.getDocs.mockResolvedValue(makeQuerySnap(jeu()))
+    expect((await listAllClients({ search: 'issa' })).clients.map(c => c.nom)).toEqual(['Sawadogo'])
+
+    mocks.getDocs.mockResolvedValue(makeQuerySnap(jeu()))
+    expect((await listAllClients({ search: '70000002' })).clients.map(c => c.nom)).toEqual(['Sawadogo'])
+
+    // valeursAgent() couvre les DEUX champs : code agent (7 chiffres) et numéro agent (8 chiffres).
+    mocks.getDocs.mockResolvedValue(makeQuerySnap(jeu()))
+    expect((await listAllClients({ search: '1234567' })).clients.map(c => c.nom)).toEqual(['Kaboré'])
+
+    mocks.getDocs.mockResolvedValue(makeQuerySnap(jeu()))
+    expect((await listAllClients({ search: '70445566' })).clients.map(c => c.nom)).toEqual(['Sawadogo'])
+
+    mocks.getDocs.mockResolvedValue(makeQuerySnap(jeu()))
+    expect((await listAllClients({ search: 'gounghin' })).clients.map(c => c.nom)).toEqual(['Sawadogo'])
   })
 })
 

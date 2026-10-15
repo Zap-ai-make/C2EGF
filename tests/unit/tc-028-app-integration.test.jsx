@@ -114,8 +114,8 @@ vi.mock('../../src/pages/Profil', () => ({
   default: () => <div data-testid="page-profil">Profil</div>,
 }))
 
-// Pages Patron (shell a deux ecrans, lot 3 — AdminDashboard/AdminStores/
-// AdminProfile sont supprimes, remplaces par PatronClients et PatronBoutiques ;
+// Pages Patron (shell à deux écrans, lot 3 — AdminDashboard/AdminStores/
+// AdminProfile sont supprimées, remplacées par PatronClients et PatronBoutiques ;
 // les sept autres adresses /admin/* redirigent vers /admin, voir App.jsx)
 vi.mock('../../src/pages/admin/PatronClients.jsx', () => ({
   default: () => <div data-testid="admin-home">PatronClients</div>,
@@ -344,8 +344,8 @@ describe('TC-028-A — URL finale par rôle', () => {
     expect(screen.getByTestId('location').textContent).toBe('/admin/boutiques')
   })
 
-  // L'ecran de supervision a disparu (lot 3) : l'adresse redirige vers /admin
-  // au lieu de tomber en 404 — meme raisonnement que le tableau de bord
+  // L'écran de supervision a disparu (lot 3) : l'adresse redirige vers /admin
+  // au lieu de tomber en 404 — même raisonnement que le tableau de bord
   // boutique plus haut dans ce fichier.
   it('A-11 : system_manager sur "/admin/stores" → redirige vers /admin', async () => {
     renderApp(systemManagerCtx(), '/admin/stores')

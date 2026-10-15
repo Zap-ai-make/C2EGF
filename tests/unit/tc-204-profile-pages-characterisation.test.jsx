@@ -9,10 +9,14 @@ vi.mock('../../src/context/AuthContext', () => ({
   useAuth: () => mocks.useAuth(),
 }))
 
-// AdminProfile a disparu avec le shell a neuf ecrans (lot 3) : le compte du
-// patron vit desormais dans l'en-tete d'AdminLayout (TC-266), pas dans une
-// page dediee. DealerProfile n'est pas touche par ce lot — il garde son banc
-// de caracterisation, qui n'a plus de raison d'etre partage avec un tableau.
+// AdminProfile a disparu avec le shell à neuf écrans (lot 3). Son contenu
+// n'est PAS repris ailleurs : l'en-tête d'AdminLayout (TC-266) n'affiche que
+// `userProfile.name` — l'email et le rôle (« Gérant global ») n'apparaissent
+// plus nulle part. Ce n'est pas un déplacement, c'est une perte, assumée par
+// le brief de la tâche 3 (aucune des pages supprimées n'écrit, et le compte
+// n'était pas dans son périmètre de remplacement). DealerProfile n'est pas
+// touché par ce lot — il garde son banc de caractérisation, qui n'a plus de
+// raison d'être partagé avec un tableau.
 import DealerProfile from '../../src/pages/dealer/DealerProfile'
 
 const USER_PROFILE = {

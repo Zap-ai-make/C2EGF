@@ -447,15 +447,17 @@ describe('TC-043-L — Pas de flash "Accès bloqué" pendant le chargement', () 
 })
 
 // ---------------------------------------------------------------------------
-// Section R — Routes admin, forme a deux ecrans (lot 3)
+// Section R — Routes admin, forme à deux écrans (lot 3)
 //
 // ⚠ Cette section testait neuf adresses de supervision rendant chacune un
 //   contenu propre (AdminHome, AdminStores, AdminProfile...). Le lot 3 les a
-//   remplacees par deux ecrans (/admin, /admin/boutiques) ; les sept autres
-//   adresses redirigent desormais vers /admin au lieu de rendre un contenu —
-//   R-1 vaut toujours (route reelle), R-2/R-3 sont reecrits pour verifier la
-//   redirection plutot qu'un contenu qui n'existe plus. Le detail textuel de
-//   chaque ancienne adresse est deja couvert par TC-266-06/07 et TC-028-A.
+//   remplacées par deux écrans (/admin, /admin/boutiques) ; les sept autres
+//   adresses redirigent désormais vers /admin au lieu de rendre un contenu —
+//   R-1 (/admin) et R-2 (/admin/boutiques) restent du contenu réel, R-3/R-4
+//   vérifient la redirection des deux adresses supprimées les plus citées
+//   plus haut dans ce fichier (stores, profile) plutôt qu'un contenu qui
+//   n'existe plus. Le détail runtime des huit adresses est couvert par
+//   TC-266-06 (test par test), et le détail textuel par TC-266-07/TC-028-A.
 // ---------------------------------------------------------------------------
 
 describe('TC-043-R — Routes admin accessibles par system_manager', () => {

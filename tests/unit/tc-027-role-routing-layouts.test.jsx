@@ -407,11 +407,14 @@ describe('TC-027-L — Layouts', () => {
   beforeEach(() => vi.clearAllMocks())
 
   // AdminLayout
-  // ⚠ Lot 3 (shell patron) a remplacé la barre laterale a neuf destinations
-  // par deux onglets en pied : « Vue generale »/« Profil » ont disparu avec
-  // les ecrans de supervision, et la navigation n'est plus identifiee par un
-  // testid dedie mais par le role ARIA `tablist` (voir TC-266).
-  it('L-1 : AdminLayout contient la navigation patron (deux onglets)', () => {
+  // ⚠ Lot 3 (shell patron) a remplacé la barre latérale à neuf destinations
+  // par deux liens de routage en pied : « Vue générale »/« Profil » ont
+  // disparu avec les écrans de supervision. Pas de motif ARIA onglets
+  // (`role="tablist"`/`tab`) : ce sont des liens, pas un panneau à onglets
+  // complet (`aria-selected`, tabpanel, flèches) — voir le commentaire
+  // d'AdminLayout.jsx et TC-266. La navigation s'identifie par son nom
+  // accessible, pas par un testid dédié.
+  it('L-1 : AdminLayout contient la navigation patron (deux destinations)', () => {
     useAuth.mockReturnValue(systemManagerCtx())
     render(
       <MemoryRouter>
@@ -419,7 +422,7 @@ describe('TC-027-L — Layouts', () => {
       </MemoryRouter>
     )
     expect(screen.getByTestId('admin-layout')).toBeInTheDocument()
-    expect(screen.getByRole('tablist')).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: /navigation patron/i })).toBeInTheDocument()
     expect(screen.getByText('Clients')).toBeInTheDocument()
     expect(screen.getByText('Boutiques')).toBeInTheDocument()
   })

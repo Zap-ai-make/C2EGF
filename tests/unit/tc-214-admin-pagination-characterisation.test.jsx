@@ -8,11 +8,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../src/services/adminService', () => mocks)
 
-// AdminDealer, AdminStores et AdminUsers ont disparu avec le shell a neuf
-// ecrans (lot 3) ; leurs cas de pagination meurent avec eux. AdminClients.jsx
+// AdminDealer, AdminStores et AdminUsers ont disparu avec le shell à neuf
+// écrans (lot 3) ; leurs cas de pagination meurent avec eux. AdminClients.jsx
 // n'est pas dans la liste de suppression du lot 3 (la racine /admin est reprise
-// par PatronClients, coquille remplie en tache 4) : le fichier existe encore,
-// pas encore route, et son banc de caracterisation de pagination reste valide.
+// par PatronClients, coquille remplie en tâche 4) : le fichier existe encore,
+// pas encore routé, et son banc de caractérisation de pagination reste valide.
 import AdminClients from '../../src/pages/admin/AdminClients'
 
 const CURSOR = { id: 'page-1' }
