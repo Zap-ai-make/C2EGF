@@ -6,7 +6,7 @@
  *   - useAuth est mocké pour injecter un contexte contrôlé
  *   - Les pages lourdes et composants UI boutique sont mockés pour les performances
  *   - AdminLayout, DealerLayout, RoleGuard, RoleBasedRedirect : RÉELS
- *   - Section A : routing URL finale par rôle (15 scénarios)
+ *   - Section A : routing URL finale par rôle (17 scénarios)
  *   - Section B : états bloqués sur wildcard (7 scénarios)
  *   - Section C : isolation providers pour rôles globaux (3 scénarios)
  */
@@ -114,15 +114,14 @@ vi.mock('../../src/pages/Profil', () => ({
   default: () => <div data-testid="page-profil">Profil</div>,
 }))
 
-// Pages Admin
-vi.mock('../../src/pages/admin/AdminDashboard.jsx', () => ({
-  default: () => <div data-testid="admin-home">AdminHome</div>,
+// Pages Patron (shell a deux ecrans, lot 3 — AdminDashboard/AdminStores/
+// AdminProfile sont supprimes, remplaces par PatronClients et PatronBoutiques ;
+// les sept autres adresses /admin/* redirigent vers /admin, voir App.jsx)
+vi.mock('../../src/pages/admin/PatronClients.jsx', () => ({
+  default: () => <div data-testid="admin-home">PatronClients</div>,
 }))
-vi.mock('../../src/pages/admin/AdminStores.jsx', () => ({
-  default: () => <div data-testid="admin-stores">AdminStores</div>,
-}))
-vi.mock('../../src/pages/admin/AdminProfile', () => ({
-  default: () => <div data-testid="admin-profile">AdminProfile</div>,
+vi.mock('../../src/pages/admin/PatronBoutiques.jsx', () => ({
+  default: () => <div data-testid="admin-boutiques">PatronBoutiques</div>,
 }))
 
 // Pages Dealer
@@ -265,7 +264,7 @@ const renderApp = (ctx, path = '/') => {
 }
 
 // ---------------------------------------------------------------------------
-// Section A — URL finale par rôle (15 scénarios)
+// Section A — URL finale par rôle (17 scénarios)
 // ---------------------------------------------------------------------------
 
 describe('TC-028-A — URL finale par rôle', () => {
@@ -339,14 +338,25 @@ describe('TC-028-A — URL finale par rôle', () => {
     expect(screen.getByTestId('location').textContent).toBe('/admin')
   })
 
-  it('A-10 : system_manager sur "/admin/stores" → AdminStores rendu', async () => {
-    renderApp(systemManagerCtx(), '/admin/stores')
-    expect(await screen.findByTestId('admin-stores')).toBeInTheDocument()
+  it('A-10 : system_manager sur "/admin/boutiques" → PatronBoutiques rendu', async () => {
+    renderApp(systemManagerCtx(), '/admin/boutiques')
+    expect(await screen.findByTestId('admin-boutiques')).toBeInTheDocument()
+    expect(screen.getByTestId('location').textContent).toBe('/admin/boutiques')
   })
 
-  it('A-11 : system_manager sur "/admin/profile" → AdminProfile rendu', async () => {
+  // L'ecran de supervision a disparu (lot 3) : l'adresse redirige vers /admin
+  // au lieu de tomber en 404 — meme raisonnement que le tableau de bord
+  // boutique plus haut dans ce fichier.
+  it('A-11 : system_manager sur "/admin/stores" → redirige vers /admin', async () => {
+    renderApp(systemManagerCtx(), '/admin/stores')
+    expect(await screen.findByTestId('admin-home')).toBeInTheDocument()
+    expect(screen.getByTestId('location').textContent).toBe('/admin')
+  })
+
+  it('A-12 : system_manager sur "/admin/profile" → redirige vers /admin', async () => {
     renderApp(systemManagerCtx(), '/admin/profile')
-    expect(await screen.findByTestId('admin-profile')).toBeInTheDocument()
+    expect(await screen.findByTestId('admin-home')).toBeInTheDocument()
+    expect(screen.getByTestId('location').textContent).toBe('/admin')
   })
 
   // Renommé : ce test a TOUJOURS rendu DealerDashboard, jamais DealerHome.
@@ -354,28 +364,28 @@ describe('TC-028-A — URL finale par rôle', () => {
   // importé nulle part et son mock, retiré avec lui, ne servait à rien. Le
   // testid « dealer-home » est porté par DealerDashboard — nom trompeur, hors
   // périmètre de ce lot, à reprendre en S4 quand l'écran sera réécrit.
-  it('A-12 : dealer sur "/dealer" → le tableau de bord dealer est rendu', async () => {
+  it('A-13 : dealer sur "/dealer" → le tableau de bord dealer est rendu', async () => {
     renderApp(dealerCtx(), '/dealer')
     expect(await screen.findByTestId('dealer-home')).toBeInTheDocument()
     expect(screen.getByTestId('location').textContent).toBe('/dealer')
   })
 
-  it('A-13 : dealer sur "/dealer/stores" → DealerStores rendu', async () => {
+  it('A-14 : dealer sur "/dealer/stores" → DealerStores rendu', async () => {
     renderApp(dealerCtx(), '/dealer/stores')
     expect(await screen.findByTestId('dealer-stores')).toBeInTheDocument()
   })
 
-  it('A-14 : dealer sur "/dealer/requests" → DealerRequests rendu', async () => {
+  it('A-15 : dealer sur "/dealer/requests" → DealerRequests rendu', async () => {
     renderApp(dealerCtx(), '/dealer/requests')
     expect(await screen.findByTestId('dealer-requests')).toBeInTheDocument()
   })
 
-  it('A-15 : dealer sur "/dealer/profile" → DealerProfile rendu', async () => {
+  it('A-16 : dealer sur "/dealer/profile" → DealerProfile rendu', async () => {
     renderApp(dealerCtx(), '/dealer/profile')
     expect(await screen.findByTestId('dealer-profile')).toBeInTheDocument()
   })
 
-  it('A-16 : dealer sur "/dealer/requests/new" → NewDealerRequest rendu', async () => {
+  it('A-17 : dealer sur "/dealer/requests/new" → NewDealerRequest rendu', async () => {
     renderApp(dealerCtx(), '/dealer/requests/new')
     expect(await screen.findByTestId('dealer-requests-new')).toBeInTheDocument()
     expect(screen.getByTestId('location').textContent).toBe('/dealer/requests/new')

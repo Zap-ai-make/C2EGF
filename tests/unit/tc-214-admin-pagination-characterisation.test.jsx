@@ -4,18 +4,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   listAllClients: vi.fn(),
   listStoreOptions: vi.fn(),
-  listAllDealerRequests: vi.fn(),
-  listAllStores: vi.fn(),
-  getStoreNetworkBalances: vi.fn(),
-  listAllUsers: vi.fn(),
 }))
 
 vi.mock('../../src/services/adminService', () => mocks)
 
+// AdminDealer, AdminStores et AdminUsers ont disparu avec le shell a neuf
+// ecrans (lot 3) ; leurs cas de pagination meurent avec eux. AdminClients.jsx
+// n'est pas dans la liste de suppression du lot 3 (la racine /admin est reprise
+// par PatronClients, coquille remplie en tache 4) : le fichier existe encore,
+// pas encore route, et son banc de caracterisation de pagination reste valide.
 import AdminClients from '../../src/pages/admin/AdminClients'
-import AdminDealer from '../../src/pages/admin/AdminDealer'
-import AdminStores from '../../src/pages/admin/AdminStores'
-import AdminUsers from '../../src/pages/admin/AdminUsers'
 
 const CURSOR = { id: 'page-1' }
 
@@ -28,39 +26,6 @@ const CASES = [
     first: { id: 'client-1', nom: 'Kaboré', prenom: 'Awa' },
     second: { id: 'client-2', nom: 'Sawadogo', prenom: 'Issa' },
     secondLabel: 'Sawadogo',
-  },
-  {
-    name: 'demandes dealer',
-    Component: AdminDealer,
-    service: mocks.listAllDealerRequests,
-    key: 'requests',
-    first: {
-      id: 'request-1', targetStoreName: 'Boutique A', dealerName: 'Dealer A',
-      requestType: 'stock_add', amount: 1000, status: 'pending', createdAt: null,
-    },
-    second: {
-      id: 'request-2', targetStoreName: 'Boutique B', dealerName: 'Dealer B',
-      requestType: 'liquidity_add', amount: 2000, status: 'confirmed', createdAt: null,
-    },
-    secondLabel: 'Boutique B',
-  },
-  {
-    name: 'boutiques',
-    Component: AdminStores,
-    service: mocks.listAllStores,
-    key: 'stores',
-    first: { id: 'store-1', name: 'Boutique A', email: 'a@c2egf.bf', active: true },
-    second: { id: 'store-2', name: 'Boutique B', email: 'b@c2egf.bf', active: true },
-    secondLabel: 'Boutique B',
-  },
-  {
-    name: 'utilisateurs',
-    Component: AdminUsers,
-    service: mocks.listAllUsers,
-    key: 'users',
-    first: { id: 'user-1', name: 'Utilisateur A', role: 'member', active: true },
-    second: { id: 'user-2', name: 'Utilisateur B', role: 'dealer', active: true },
-    secondLabel: 'Utilisateur B',
   },
 ]
 

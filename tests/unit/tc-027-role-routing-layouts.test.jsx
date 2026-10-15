@@ -407,7 +407,11 @@ describe('TC-027-L — Layouts', () => {
   beforeEach(() => vi.clearAllMocks())
 
   // AdminLayout
-  it('L-1 : AdminLayout contient la navigation admin', () => {
+  // ⚠ Lot 3 (shell patron) a remplacé la barre laterale a neuf destinations
+  // par deux onglets en pied : « Vue generale »/« Profil » ont disparu avec
+  // les ecrans de supervision, et la navigation n'est plus identifiee par un
+  // testid dedie mais par le role ARIA `tablist` (voir TC-266).
+  it('L-1 : AdminLayout contient la navigation patron (deux onglets)', () => {
     useAuth.mockReturnValue(systemManagerCtx())
     render(
       <MemoryRouter>
@@ -415,10 +419,9 @@ describe('TC-027-L — Layouts', () => {
       </MemoryRouter>
     )
     expect(screen.getByTestId('admin-layout')).toBeInTheDocument()
-    expect(screen.getByTestId('admin-nav')).toBeInTheDocument()
-    expect(screen.getByText('Vue générale')).toBeInTheDocument()
+    expect(screen.getByRole('tablist')).toBeInTheDocument()
+    expect(screen.getByText('Clients')).toBeInTheDocument()
     expect(screen.getByText('Boutiques')).toBeInTheDocument()
-    expect(screen.getByText('Profil')).toBeInTheDocument()
   })
 
   it('L-2 : AdminLayout contient bouton déconnexion', () => {

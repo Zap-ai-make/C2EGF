@@ -18,6 +18,21 @@
  *   clients/{storeId}/auditLogs          → read=storeMember uniquement
  *   clients/{storeId}/drafts             → collectionGroup lisible mais peu utile pour admin
  *   clients/{storeId}/sessions           → interne boutique
+ *
+ * ⚠ Lot 3 (shell patron) a supprimé huit écrans de supervision (AdminDashboard,
+ *   AdminStores, AdminUsers, AdminDealer, AdminDealerInventory, AdminHistory,
+ *   AdminReports, AdminProfile). Les fonctions qui n'avaient pas d'autre
+ *   appelant que ces écrans sont retirées avec eux : listAllStores,
+ *   getAdminDashboardCounts, getDealerRequestCounts, getUserCountsByRole,
+ *   listAllDealerRequests, getRecentDealerRequests, listDealerInventoryMovements,
+ *   listAllUsers, listConsolidatedHistory, listStoreHistory,
+ *   getStoreNetworkBalances, getRequestsForReport. Vérifié par recherche avant
+ *   suppression (aucun import restant, voir le rapport de tâche 3).
+ *   `listAllClients` et `listStoreOptions` restent : `AdminClients.jsx` (hors
+ *   périmètre de suppression de ce lot) les appelle encore. `getStoreById` et
+ *   `listAllNetworkBalances` restent aussi : ils n'avaient déjà aucun appelant
+ *   avant ce lot — leur sort n'est pas celui de cette suppression, et les
+ *   toucher ici sortirait du périmètre tranché.
  */
 
 import { valeursAgent } from '../utils/agentFields.js'
@@ -32,13 +47,9 @@ import {
   orderBy,
   limit,
   startAfter,
-  getCountFromServer,
-  Timestamp,
 } from 'firebase/firestore'
-import { getBusinessDayBounds } from '../utils/businessDate.js'
 import { db } from '../config/firebase'
 import { ADMIN_PAGE_SIZE } from '../constants/dealerConstants'
-import { shapeDealerInventory } from '../utils/dealerInventory'
 
 const PAGE = ADMIN_PAGE_SIZE
 
@@ -54,30 +65,6 @@ function mapErr(err) {
 // Boutiques
 // ──────────────────────────────────────────────────────────────────────────────
 
-export async function listAllStores({ lastDoc = null, activeFilter = null, search = '' } = {}) {
-  try {
-    const constraints = []
-    if (activeFilter !== null) constraints.push(where('active', '==', activeFilter))
-    constraints.push(orderBy('name'))
-    constraints.push(limit(PAGE + 1))
-    if (lastDoc) constraints.push(startAfter(lastDoc))
-
-    const snap = await getDocs(query(collection(db, 'stores'), ...constraints))
-    const hasMore = snap.docs.length > PAGE
-    const docs = hasMore ? snap.docs.slice(0, PAGE) : snap.docs
-    let stores = docs.map(d => ({ id: d.id, ...d.data() }))
-
-    if (search.trim()) {
-      const q = search.trim().toLowerCase()
-      stores = stores.filter(s => s.name?.toLowerCase().includes(q))
-    }
-
-    return { stores, lastDoc: docs.at(-1) ?? null, hasMore }
-  } catch (err) {
-    throw mapErr(err)
-  }
-}
-
 export async function getStoreById(storeId) {
   try {
     const snap = await getDoc(doc(db, 'stores', storeId))
@@ -90,121 +77,7 @@ export async function getStoreById(storeId) {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Compteurs globaux (dashboard)
-// ──────────────────────────────────────────────────────────────────────────────
-
-export async function getAdminDashboardCounts() {
-  try {
-    const [
-      allStores,
-      activeStores,
-      allUsers,
-      allClients,
-      pendingRequests,
-    ] = await Promise.all([
-      getCountFromServer(query(collection(db, 'stores'))),
-      getCountFromServer(query(collection(db, 'stores'), where('active', '==', true))),
-      getCountFromServer(query(collection(db, 'users'))),
-      getCountFromServer(query(collection(db, 'globalClients'))),
-      getCountFromServer(query(collection(db, 'dealerRequests'), where('status', '==', 'pending'))),
-    ])
-
-    return {
-      totalStores: allStores.data().count,
-      activeStores: activeStores.data().count,
-      inactiveStores: allStores.data().count - activeStores.data().count,
-      totalUsers: allUsers.data().count,
-      totalClients: allClients.data().count,
-      pendingRequests: pendingRequests.data().count,
-    }
-  } catch (err) {
-    throw mapErr(err)
-  }
-}
-
-export async function getDealerRequestCounts() {
-  try {
-    const [confirmed, rejected] = await Promise.all([
-      getCountFromServer(query(collection(db, 'dealerRequests'), where('status', '==', 'confirmed'))),
-      getCountFromServer(query(collection(db, 'dealerRequests'), where('status', '==', 'rejected'))),
-    ])
-    return {
-      confirmed: confirmed.data().count,
-      rejected: rejected.data().count,
-    }
-  } catch (err) {
-    throw mapErr(err)
-  }
-}
-
-export async function getUserCountsByRole() {
-  try {
-    const snap = await getDocs(query(collection(db, 'users')))
-    const counts = { store_admin: 0, dealer: 0, system_manager: 0, member: 0, other: 0 }
-    snap.docs.forEach(d => {
-      const role = d.data().role
-      if (role in counts) counts[role]++
-      else counts.other++
-    })
-    return counts
-  } catch (err) {
-    throw mapErr(err)
-  }
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Demandes Dealer (supervision)
-// ──────────────────────────────────────────────────────────────────────────────
-
-export async function listAllDealerRequests({
-  lastDoc = null,
-  statusFilter = null,
-  dealerSearch = '',
-  storeSearch = '',
-} = {}) {
-  try {
-    const constraints = []
-    if (statusFilter) constraints.push(where('status', '==', statusFilter))
-    constraints.push(orderBy('createdAt', 'desc'))
-    constraints.push(limit(PAGE + 1))
-    if (lastDoc) constraints.push(startAfter(lastDoc))
-
-    const snap = await getDocs(query(collection(db, 'dealerRequests'), ...constraints))
-    const hasMore = snap.docs.length > PAGE
-    const docs = hasMore ? snap.docs.slice(0, PAGE) : snap.docs
-    let requests = docs.map(d => ({ id: d.id, ...d.data() }))
-
-    if (dealerSearch.trim()) {
-      const q = dealerSearch.trim().toLowerCase()
-      requests = requests.filter(r =>
-        r.dealerName?.toLowerCase().includes(q) ||
-        r.dealerEmail?.toLowerCase().includes(q)
-      )
-    }
-    if (storeSearch.trim()) {
-      const q = storeSearch.trim().toLowerCase()
-      requests = requests.filter(r => r.targetStoreName?.toLowerCase().includes(q))
-    }
-
-    return { requests, lastDoc: docs.at(-1) ?? null, hasMore }
-  } catch (err) {
-    throw mapErr(err)
-  }
-}
-
-export async function getRecentDealerRequests(count = 5) {
-  try {
-    const snap = await getDocs(
-      query(collection(db, 'dealerRequests'), orderBy('createdAt', 'desc'), limit(count))
-    )
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }))
-  } catch (err) {
-    throw mapErr(err)
-  }
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Inventaire Dealer — audit des mouvements de stock / liquidité (lecture seule)
+// Inventaire Dealer — normalisation d'un mouvement (lecture seule)
 // ──────────────────────────────────────────────────────────────────────────────
 
 const RESOURCE_LABELS = { stock: 'Stock', liquidite: 'Liquidité' }
@@ -243,85 +116,6 @@ export function normalizeDealerMovement(log = {}) {
     default:
       return { ...base, type: log.action ?? 'Mouvement', resourceLabel: RESOURCE_LABELS[log.resource] ?? '—',
         sens: '', amount: log.amount ?? 0, soldeApres: log.newBalance ?? null, source: '—' }
-  }
-}
-
-// Liste paginée des mouvements d'inventaire du dealer unique actif + solde courant.
-// Le gérant lit users (résolution dealer), dealerBalances/{uid} et sa sous-collection
-// auditLogs (règles: isSystemManager). Aucun index composite requis.
-export async function listDealerInventoryMovements({ lastDoc = null, dealerUid = null } = {}) {
-  try {
-    let uid = dealerUid
-    let dealerName = null
-    let multipleActiveDealers = false
-    if (!uid) {
-      // limit(2) pour détecter l'anomalie « plusieurs dealers actifs » (invariant
-      // serveur : un seul dealer actif — cf. resolveSingleDealer/MULTIPLE_DEALERS_ACTIVE).
-      const dealerSnap = await getDocs(
-        query(collection(db, 'users'), where('role', '==', 'dealer'), where('active', '==', true), limit(2))
-      )
-      if (dealerSnap.empty) {
-        const empty = shapeDealerInventory(null)
-        return { dealerUid: null, dealerName: null, balance: { stock: empty.stock, liquidite: empty.liquidite }, byNetwork: empty.byNetwork, totalLiquidite: empty.totalLiquidite, movements: [], lastDoc: null, hasMore: false, multipleActiveDealers: false }
-      }
-      multipleActiveDealers = dealerSnap.size > 1
-      uid = dealerSnap.docs[0].id
-      dealerName = dealerSnap.docs[0].data().name ?? null
-    }
-
-    const balSnap = await getDoc(doc(db, 'dealerBalances', uid))
-    // Inventaire par réseau (profil) : `balance` = réseau primaire (vue mono
-    // inchangée) ; `byNetwork`/`totalLiquidite` alimentent la vue multi-réseaux.
-    const shaped = shapeDealerInventory(balSnap.exists() ? balSnap.data() : null)
-    const balance = { stock: shaped.stock, liquidite: shaped.liquidite }
-
-    const constraints = [orderBy('createdAt', 'desc'), limit(PAGE + 1)]
-    if (lastDoc) constraints.push(startAfter(lastDoc))
-    const snap = await getDocs(query(collection(db, 'dealerBalances', uid, 'auditLogs'), ...constraints))
-    const hasMore = snap.docs.length > PAGE
-    const docs = hasMore ? snap.docs.slice(0, PAGE) : snap.docs
-    const movements = docs.map(d => ({ id: d.id, ...normalizeDealerMovement(d.data()) }))
-
-    return { dealerUid: uid, dealerName, balance, byNetwork: shaped.byNetwork, totalLiquidite: shaped.totalLiquidite, movements, lastDoc: docs.at(-1) ?? null, hasMore, multipleActiveDealers }
-  } catch (err) {
-    throw mapErr(err)
-  }
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Utilisateurs
-// ──────────────────────────────────────────────────────────────────────────────
-
-export async function listAllUsers({
-  lastDoc = null,
-  roleFilter = null,
-  activeFilter = null,
-  search = '',
-} = {}) {
-  try {
-    const constraints = []
-    if (roleFilter) constraints.push(where('role', '==', roleFilter))
-    if (activeFilter !== null) constraints.push(where('active', '==', activeFilter))
-    constraints.push(orderBy('name'))
-    constraints.push(limit(PAGE + 1))
-    if (lastDoc) constraints.push(startAfter(lastDoc))
-
-    const snap = await getDocs(query(collection(db, 'users'), ...constraints))
-    const hasMore = snap.docs.length > PAGE
-    const docs = hasMore ? snap.docs.slice(0, PAGE) : snap.docs
-    let users = docs.map(d => ({ id: d.id, ...d.data() }))
-
-    if (search.trim()) {
-      const q = search.trim().toLowerCase()
-      users = users.filter(u =>
-        u.name?.toLowerCase().includes(q) ||
-        u.email?.toLowerCase().includes(q)
-      )
-    }
-
-    return { users, lastDoc: docs.at(-1) ?? null, hasMore }
-  } catch (err) {
-    throw mapErr(err)
   }
 }
 
@@ -364,74 +158,8 @@ export async function listAllClients({ lastDoc = null, search = '', storeId = ''
   }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Historique consolidé (collectionGroup)
-// ──────────────────────────────────────────────────────────────────────────────
-
-export async function listConsolidatedHistory({ lastDoc = null, search = '', storeNameMap = null } = {}) {
-  try {
-    // L'index collection-group explicite de firestore.indexes.json garantit un
-    // ordre global entre les pages. Sans cet orderBy, chaque tranche était triée
-    // isolément et « Charger plus » pouvait placer une ancienne ligne avant une récente.
-    const constraints = [orderBy('createdAt', 'desc')]
-    if (lastDoc) constraints.push(startAfter(lastDoc))
-    constraints.push(limit(PAGE + 1))
-
-    const fetches = [getDocs(query(collectionGroup(db, 'history'), ...constraints))]
-    if (!storeNameMap) fetches.push(getDocs(query(collection(db, 'stores'), limit(200))))
-
-    const [snap, storesSnap] = await Promise.all(fetches)
-
-    const resolvedMap = storeNameMap ?? (() => {
-      const m = {}
-      storesSnap.docs.forEach(d => { m[d.id] = d.data().name ?? d.id })
-      return m
-    })()
-
-    const hasMore = snap.docs.length > PAGE
-    const rawDocs = hasMore ? snap.docs.slice(0, PAGE) : snap.docs
-
-    let records = rawDocs
-      .map(d => {
-        const parts = d.ref.path.split('/')
-        const storeId = parts[1] ?? null
-        const storeName = storeId ? (resolvedMap[storeId] ?? storeId) : '—'
-        return { id: d.id, storeId, storeName, ...d.data() }
-      })
-      .sort((a, b) => {
-        const ta = a.createdAt?.toMillis?.() ?? (a.createdAt ? new Date(a.createdAt).getTime() : 0)
-        const tb = b.createdAt?.toMillis?.() ?? (b.createdAt ? new Date(b.createdAt).getTime() : 0)
-        return tb - ta
-      })
-
-    const lastRawDoc = rawDocs.at(-1) ?? null
-
-    if (search.trim()) {
-      const q = search.trim().toLowerCase()
-      records = records.filter(r => {
-        const cn = [r.client?.prenom, r.client?.nom].filter(Boolean).join(' ').toLowerCase()
-        const code = String(r.code || valeursAgent(r.client)[0] || '').toLowerCase()
-        return (
-          r.clientId?.toLowerCase().includes(q) ||
-          r.clientNom?.toLowerCase().includes(q) ||
-          cn.includes(q) ||
-          code.includes(q) ||
-          r.storeName?.toLowerCase().includes(q) ||
-          r.storeId?.toLowerCase().includes(q) ||
-          r.nom?.toLowerCase().includes(q)
-        )
-      })
-    }
-
-    return { records, lastDoc: lastRawDoc, hasMore, storeNameMap: resolvedMap }
-  } catch (err) {
-    throw mapErr(err)
-  }
-}
-
 // Liste des boutiques (id + nom) pour alimenter un sélecteur de filtre.
-// Retourne la map id→nom (compatible avec listConsolidatedHistory) et une
-// liste triée par nom prête pour un <select>.
+// Retourne la map id→nom et une liste triée par nom prête pour un <select>.
 export async function listStoreOptions() {
   try {
     const snap = await getDocs(query(collection(db, 'stores'), limit(200)))
@@ -444,37 +172,6 @@ export async function listStoreOptions() {
     })
     options.sort((a, b) => a.name.localeCompare(b.name, 'fr'))
     return { map, options }
-  } catch (err) {
-    throw mapErr(err)
-  }
-}
-
-// Historique d'UNE boutique, requêté directement sur sa sous-collection
-// `clients/{storeId}/history` (côté serveur) — contrairement au filtre
-// client-side de listConsolidatedHistory, ceci renvoie TOUT l'historique de la
-// boutique (paginé), pas seulement les lignes présentes dans la page courante.
-// Les écritures actuelles portent toutes createdAt ; l'ordre Firestore rend le
-// curseur stable et l'ordre chronologique correct entre les pages.
-export async function listStoreHistory({ storeId, storeName = null, lastDoc = null } = {}) {
-  if (!storeId) throw new Error('storeId requis pour listStoreHistory.')
-  try {
-    const constraints = [orderBy('createdAt', 'desc')]
-    if (lastDoc) constraints.push(startAfter(lastDoc))
-    constraints.push(limit(PAGE + 1))
-
-    const snap = await getDocs(query(collection(db, 'clients', storeId, 'history'), ...constraints))
-    const hasMore = snap.docs.length > PAGE
-    const rawDocs = hasMore ? snap.docs.slice(0, PAGE) : snap.docs
-
-    const records = rawDocs
-      .map(d => ({ id: d.id, storeId, storeName: storeName ?? storeId, ...d.data() }))
-      .sort((a, b) => {
-        const ta = a.createdAt?.toMillis?.() ?? (a.createdAt ? new Date(a.createdAt).getTime() : 0)
-        const tb = b.createdAt?.toMillis?.() ?? (b.createdAt ? new Date(b.createdAt).getTime() : 0)
-        return tb - ta
-      })
-
-    return { records, lastDoc: rawDocs.at(-1) ?? null, hasMore }
   } catch (err) {
     throw mapErr(err)
   }
@@ -498,48 +195,5 @@ export async function listAllNetworkBalances() {
     // Non critique — renvoie tableau vide en cas d'échec partiel
     if (import.meta.env.DEV) console.warn('[adminService] listAllNetworkBalances:', err)
     return []
-  }
-}
-
-export async function getStoreNetworkBalances(storeId) {
-  try {
-    const snap = await getDoc(doc(db, 'clients', storeId, 'networkBalances', 'current'))
-    if (!snap.exists()) return null
-    return snap.data()
-  } catch {
-    return null
-  }
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Rapports — agrégation des demandes Dealer sur une période
-// ──────────────────────────────────────────────────────────────────────────────
-
-export async function getRequestsForReport({ dateFrom = null, dateTo = null, statusFilter = null } = {}) {
-  try {
-    const baseConstraints = []
-    if (statusFilter) baseConstraints.push(where('status', '==', statusFilter))
-    if (dateFrom) {
-      baseConstraints.push(where('createdAt', '>=', Timestamp.fromDate(getBusinessDayBounds(dateFrom).start)))
-    }
-    if (dateTo) {
-      baseConstraints.push(where('createdAt', '<', Timestamp.fromDate(getBusinessDayBounds(dateTo).end)))
-    }
-    baseConstraints.push(orderBy('createdAt', 'desc'))
-
-    const requests = []
-    let cursor = null
-    while (true) {
-      const pageConstraints = [...baseConstraints]
-      if (cursor) pageConstraints.push(startAfter(cursor))
-      pageConstraints.push(limit(500))
-      const snap = await getDocs(query(collection(db, 'dealerRequests'), ...pageConstraints))
-      requests.push(...snap.docs.map(d => ({ id: d.id, ...d.data() })))
-      if (snap.docs.length < 500) break
-      cursor = snap.docs.at(-1)
-    }
-    return requests
-  } catch (err) {
-    throw mapErr(err)
   }
 }

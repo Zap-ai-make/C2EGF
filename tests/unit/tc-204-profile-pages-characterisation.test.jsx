@@ -9,7 +9,10 @@ vi.mock('../../src/context/AuthContext', () => ({
   useAuth: () => mocks.useAuth(),
 }))
 
-import AdminProfile from '../../src/pages/admin/AdminProfile'
+// AdminProfile a disparu avec le shell a neuf ecrans (lot 3) : le compte du
+// patron vit desormais dans l'en-tete d'AdminLayout (TC-266), pas dans une
+// page dediee. DealerProfile n'est pas touche par ce lot — il garde son banc
+// de caracterisation, qui n'a plus de raison d'etre partage avec un tableau.
 import DealerProfile from '../../src/pages/dealer/DealerProfile'
 
 const USER_PROFILE = {
@@ -18,13 +21,6 @@ const USER_PROFILE = {
 }
 
 describe.each([
-  {
-    name: 'administrateur',
-    Component: AdminProfile,
-    testId: 'admin-profile',
-    title: 'Profil administrateur',
-    role: 'Gérant global',
-  },
   {
     name: 'dealer',
     Component: DealerProfile,

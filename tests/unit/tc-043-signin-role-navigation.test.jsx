@@ -77,7 +77,7 @@ vi.mock('../../src/utils/authHelpers', () => ({
 
 import React from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, useLocation, Navigate } from 'react-router-dom'
 import { useAuth } from '../../src/context/AuthContext'
 import { AUTH_ROLES } from '../../src/constants/authMessages'
 import RoleGuard from '../../src/components/auth/RoleGuard'
@@ -447,7 +447,15 @@ describe('TC-043-L — Pas de flash "Accès bloqué" pendant le chargement', () 
 })
 
 // ---------------------------------------------------------------------------
-// Section R — Routes admin complètes (AdminHome, AdminStores, AdminProfile)
+// Section R — Routes admin, forme a deux ecrans (lot 3)
+//
+// ⚠ Cette section testait neuf adresses de supervision rendant chacune un
+//   contenu propre (AdminHome, AdminStores, AdminProfile...). Le lot 3 les a
+//   remplacees par deux ecrans (/admin, /admin/boutiques) ; les sept autres
+//   adresses redirigent desormais vers /admin au lieu de rendre un contenu —
+//   R-1 vaut toujours (route reelle), R-2/R-3 sont reecrits pour verifier la
+//   redirection plutot qu'un contenu qui n'existe plus. Le detail textuel de
+//   chaque ancienne adresse est deja couvert par TC-266-06/07 et TC-028-A.
 // ---------------------------------------------------------------------------
 
 describe('TC-043-R — Routes admin accessibles par system_manager', () => {
@@ -462,7 +470,7 @@ describe('TC-043-R — Routes admin accessibles par system_manager', () => {
             path="/admin"
             element={
               <RoleGuard allowedRoles={[AUTH_ROLES.SYSTEM_MANAGER]}>
-                <div data-testid="admin-home">AdminHome</div>
+                <div data-testid="admin-home">PatronClients</div>
               </RoleGuard>
             }
           />
@@ -472,41 +480,62 @@ describe('TC-043-R — Routes admin accessibles par system_manager', () => {
     expect(screen.getByTestId('admin-home')).toBeInTheDocument()
   })
 
-  it('R-2 : system_manager accède à /admin/stores', () => {
+  it('R-2 : system_manager accède à /admin/boutiques', () => {
+    useAuth.mockReturnValue(systemManagerCtx())
+    render(
+      <MemoryRouter initialEntries={['/admin/boutiques']}>
+        <Routes>
+          <Route
+            path="/admin/boutiques"
+            element={
+              <RoleGuard allowedRoles={[AUTH_ROLES.SYSTEM_MANAGER]}>
+                <div data-testid="admin-boutiques">PatronBoutiques</div>
+              </RoleGuard>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    )
+    expect(screen.getByTestId('admin-boutiques')).toBeInTheDocument()
+  })
+
+  it('R-3 : system_manager sur /admin/stores (supprimé) → redirigé vers /admin', () => {
     useAuth.mockReturnValue(systemManagerCtx())
     render(
       <MemoryRouter initialEntries={['/admin/stores']}>
         <Routes>
           <Route
-            path="/admin/stores"
+            path="/admin"
             element={
               <RoleGuard allowedRoles={[AUTH_ROLES.SYSTEM_MANAGER]}>
-                <div data-testid="admin-stores">AdminStores</div>
+                <div data-testid="admin-home">PatronClients</div>
               </RoleGuard>
             }
           />
+          <Route path="/admin/stores" element={<Navigate to="/admin" replace />} />
         </Routes>
       </MemoryRouter>
     )
-    expect(screen.getByTestId('admin-stores')).toBeInTheDocument()
+    expect(screen.getByTestId('admin-home')).toBeInTheDocument()
   })
 
-  it('R-3 : system_manager accède à /admin/profile', () => {
+  it('R-4 : system_manager sur /admin/profile (supprimé) → redirigé vers /admin', () => {
     useAuth.mockReturnValue(systemManagerCtx())
     render(
       <MemoryRouter initialEntries={['/admin/profile']}>
         <Routes>
           <Route
-            path="/admin/profile"
+            path="/admin"
             element={
               <RoleGuard allowedRoles={[AUTH_ROLES.SYSTEM_MANAGER]}>
-                <div data-testid="admin-profile">AdminProfile</div>
+                <div data-testid="admin-home">PatronClients</div>
               </RoleGuard>
             }
           />
+          <Route path="/admin/profile" element={<Navigate to="/admin" replace />} />
         </Routes>
       </MemoryRouter>
     )
-    expect(screen.getByTestId('admin-profile')).toBeInTheDocument()
+    expect(screen.getByTestId('admin-home')).toBeInTheDocument()
   })
 })
