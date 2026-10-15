@@ -416,6 +416,44 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
     // livres. Rien n'est lu dans la charge utile : le serveur solde ce qu'il
     // voit, et un montant soufflé par le navigateur n'a aucun effet.
     if (action === 'closeDay') {
+      // ⚠ UNE LIVRAISON NON RENDUE INTERDIT DE VIDER. Un ravitaillement AJOUTE
+      //   aux soldes, un retour les PONCTIONNE : l'argent dû au dealer est donc
+      //   assis dans les soldes. Les vider détruit les fonds enregistrés qui
+      //   serviraient au retour, pendant que la dette survit sur la ligne de
+      //   ravitaillement. La boutique se retrouverait devant une dette sans
+      //   rien d'inscrit pour l'honorer.
+      //
+      // ⚠ CE REFUS PASSE AVANT « déjà à zéro » : il nomme un problème que le
+      //   gérant peut corriger, là où l'autre constate un geste sans effet.
+      //
+      // ⚠ LE RESTE DÛ SE FILTRE EN MÉMOIRE, PAS DANS LA REQUÊTE. Un
+      //   `where('remainingAmount','>',0)` exigerait un index composite de plus,
+      //   et surtout il ÉCARTERAIT les lignes qui ne portent pas le champ —
+      //   Firestore exclut d'un filtre les documents sans le champ filtré. Les
+      //   livraisons d'avant S8 n'en ont pas ; les rater ici serait sans
+      //   conséquence (elles comptent pour soldées), mais le même piège a déjà
+      //   coûté une correction sur l'historique client.
+      const livraisons = await t.get(
+        db.collection(`clients/${storeId}/history`).where('type', '==', REPLENISHMENT_TYPE),
+      )
+      // Le reste dû ABSENT vaut « soldée » : ce qui en a été rendu avant S8 ne
+      // fut jamais enregistré, et l'inconnaissable ne doit pas bloquer la
+      // boutique pour toujours. Même règle que `estRavitaillementEnCours`
+      // (src/utils/ravitaillement.js), qu'on ne peut pas importer d'ici.
+      const dues = livraisons.docs
+        .map(d => d.data())
+        .filter(r => !r.deletedAt && Number.isFinite(Number(r.remainingAmount)) && Number(r.remainingAmount) > 0)
+
+      if (dues.length > 0) {
+        const reste = dues.reduce((somme, r) => somme + Number(r.remainingAmount), 0)
+        const pluriel = dues.length > 1 ? 's' : ''
+        fail(
+          'STORE_CLOSURE_BLOCKED',
+          `${dues.length} ravitaillement${pluriel} non retourné${pluriel} — ${reste.toLocaleString('fr-FR')} FCFA. `
+          + 'Vider les soldes effacerait les fonds qui servent à les rendre.',
+        )
+      }
+
       const soldes = STORE_NETWORKS.map(network => ({
         network,
         stock: Number(balances[network]?.stock) || 0,

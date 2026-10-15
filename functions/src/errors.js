@@ -22,6 +22,10 @@ export const HTTP_CODES = {
   STORE_TRANSACTION_INVALID: 'invalid-argument',
   STORE_TRANSACTION_NOT_FOUND: 'not-found',
   SETTLED_DRAFT_IMMUTABLE: 'failed-precondition',
+  // Vider les soldes alors qu'une livraison du dealer n'est pas rendue. Ce
+  // n'est pas une donnée invalide : la demande est bien formée, c'est l'ÉTAT de
+  // la boutique qui l'interdit — d'où `failed-precondition`.
+  STORE_CLOSURE_BLOCKED: 'failed-precondition',
   BALANCE_EDIT_FORBIDDEN: 'permission-denied',
   // Clôtures Dealer
   STORE_NOT_FOUND:              'not-found',

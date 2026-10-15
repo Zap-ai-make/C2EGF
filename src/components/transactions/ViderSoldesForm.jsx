@@ -25,7 +25,22 @@ import { activeProfile } from '../../config/activeClientProfile.js'
 
 const RESEAUX = activeProfile.networks.enabled
 
-function ViderSoldesForm({ onComplete, onCancel }) {
+/**
+ * Ce qui bloque le geste, ou `null` s'il ne l'est pas.
+ *
+ * ⚠ LA LISTE ABSENTE NE BLOQUE PAS. Ce formulaire est rendu depuis plusieurs
+ *   chemins ; un garde-fou qui se déclencherait sur `undefined` empêcherait de
+ *   vider les soldes partout où la prop a été oubliée — un blocage total, et
+ *   silencieux. Le serveur reste de toute façon le dernier mot.
+ */
+const blocage = (ravitaillements) => {
+  const dus = Array.isArray(ravitaillements) ? ravitaillements : []
+  if (dus.length === 0) return null
+  const reste = dus.reduce((somme, r) => somme + (Number(r?.remainingAmount) || 0), 0)
+  return { nombre: dus.length, reste }
+}
+
+function ViderSoldesForm({ onComplete, onCancel, ravitaillements }) {
   const { showToast } = useToast()
   const { networkData } = useSimpleNetworkData()
   const [envoiEnCours, setEnvoiEnCours] = useState(false)
@@ -44,6 +59,10 @@ function ViderSoldesForm({ onComplete, onCancel }) {
 
   const vider = useCallback(async () => {
     if (verrou.current) return
+    // ⚠ PAS SEULEMENT `disabled`. L'attribut empêche le clic de l'utilisateur,
+    //   pas un appel programmatique ni un rendu où la prop arriverait tard.
+    //   Sur un geste qui efface la position de fonds, la garde est dans le code.
+    if (blocage(ravitaillements)) return
     verrou.current = true
     setEnvoiEnCours(true)
     try {
@@ -56,9 +75,13 @@ function ViderSoldesForm({ onComplete, onCancel }) {
       setEnvoiEnCours(false)
       verrou.current = false
     }
-  }, [showToast, onComplete])
+    // `ravitaillements` est dans les dépendances : sans elle, la garde ci-dessus
+    // lirait la liste du PREMIER rendu. Une livraison arrivée pendant que la
+    // fenêtre est ouverte ne bloquerait alors rien.
+  }, [showToast, onComplete, ravitaillements])
 
   const rienASolder = total <= 0
+  const bloque = blocage(ravitaillements)
 
   return (
     <div className="space-y-5">
@@ -87,6 +110,26 @@ function ViderSoldesForm({ onComplete, onCancel }) {
         <p className="text-sm text-ink-muted">Les soldes sont déjà à zéro : il n'y a rien à vider.</p>
       )}
 
+      {/* ⚠ UN BOUTON GRISÉ SANS RAISON SE LIT COMME UNE PANNE. Le message dit
+          ce qui bloque, combien, et surtout la conséquence — pas seulement
+          l'état. Le serveur refuse de son côté (STORE_CLOSURE_BLOCKED) ; ici on
+          explique AVANT le geste plutôt qu'après. */}
+      {bloque && (
+        <div
+          className="flex gap-3 rounded-lg border border-danger/40 bg-danger-soft p-3"
+          data-testid="ravitaillements-bloquants"
+        >
+          <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-danger" aria-hidden="true" />
+          <p className="text-sm text-ink">
+            <strong className="font-semibold">
+              {bloque.nombre} ravitaillement{bloque.nombre > 1 ? 's' : ''} non
+              retourné{bloque.nombre > 1 ? 's' : ''} — {formatCurrency(bloque.reste)}.
+            </strong>{' '}
+            Vider les soldes effacerait les fonds qui servent à les rendre.
+          </p>
+        </div>
+      )}
+
       <div className="flex justify-end gap-3 border-t border-line pt-4">
         <button
           type="button"
@@ -99,10 +142,10 @@ function ViderSoldesForm({ onComplete, onCancel }) {
         <button
           type="button"
           onClick={vider}
-          disabled={envoiEnCours || rienASolder}
+          disabled={envoiEnCours || rienASolder || Boolean(bloque)}
           data-testid="confirmer-vider-soldes"
           className={`rounded px-5 py-2 text-sm font-semibold transition-colors ${
-            envoiEnCours || rienASolder
+            envoiEnCours || rienASolder || bloque
               ? 'cursor-not-allowed bg-gray-200 text-gray-500'
               : 'bg-danger text-white hover:bg-danger/90'
           }`}

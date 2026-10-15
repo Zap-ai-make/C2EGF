@@ -95,3 +95,94 @@ describe('TC-217 — vider les soldes', () => {
     expect(await soldes()).toEqual({ stock: 0, liquidite: 0 })
   })
 })
+
+/**
+ * TC-217 — Un ravitaillement non retourné interdit de vider les soldes.
+ *
+ * POURQUOI CE GARDE-FOU EXISTE
+ * ────────────────────────────
+ * Un ravitaillement AJOUTE aux soldes ; un retour les PONCTIONNE. L'argent que
+ * la boutique doit rendre au dealer est donc assis dans les soldes. Les vider
+ * détruit les fonds enregistrés qui serviraient au retour — pendant que la
+ * dette, elle, survit sur la ligne de ravitaillement (`remainingAmount`). La
+ * boutique se retrouverait devant une dette sans rien d'inscrit pour l'honorer.
+ *
+ * ⚠ LE REFUS EST SERVEUR, PAS SEULEMENT À L'ÉCRAN. L'écran peut être périmé ou
+ *   contourné ; sur de l'argent, c'est le serveur qui décide.
+ */
+describe('TC-217 — un ravitaillement dû bloque la clôture', () => {
+  const poserRavitaillement = (id, champs) => db.doc(`clients/${STORE}/history/${id}`).set({
+    type: 'Ravitaillement',
+    montant: 500_000,
+    reseau: 'Orange',
+    statut: 'Validée',
+    storeId: STORE,
+    createdAt: FieldValue.serverTimestamp(),
+    ...champs,
+  })
+
+  it('[TC-217-10] refuse quand un ravitaillement reste dû', async () => {
+    await poserRavitaillement('rav-1', { remainingAmount: 350_000 })
+
+    await expect(call({ action: 'closeDay' })).rejects.toMatchObject({
+      code: 'STORE_CLOSURE_BLOCKED',
+    })
+  })
+
+  /** ⚠ Et les soldes ne bougent pas : un refus qui solde quand même ne refuse rien. */
+  it('[TC-217-11] le refus laisse les soldes intacts', async () => {
+    await poserRavitaillement('rav-1', { remainingAmount: 350_000 })
+
+    await expect(call({ action: 'closeDay' })).rejects.toThrow()
+
+    expect(await soldes()).toEqual({ stock: 600_066, liquidite: 401_934 })
+    const lignes = await db.collection(`clients/${STORE}/history`).get()
+    expect(lignes.docs.filter((d) => d.data().type === 'Clôture')).toHaveLength(0)
+  })
+
+  /** Le message nomme ce qui bloque : combien de livraisons, et combien d'argent. */
+  it('[TC-217-12] le message dit combien, et combien', async () => {
+    await poserRavitaillement('rav-1', { remainingAmount: 350_000 })
+    await poserRavitaillement('rav-2', { remainingAmount: 150_000 })
+
+    await expect(call({ action: 'closeDay' })).rejects.toThrow(/2 ravitaillements.*500\s?000/s)
+  })
+
+  it('[TC-217-13] un ravitaillement entièrement rendu ne bloque pas', async () => {
+    await poserRavitaillement('rav-1', { remainingAmount: 0, replenishmentStatus: 'settled' })
+
+    const result = await call({ action: 'closeDay' })
+    expect(result.type).toBe('Clôture')
+  })
+
+  /**
+   * ⚠ LES LIVRAISONS D'AVANT S8 N'ONT PAS DE RESTE DÛ, et il est inconnaissable :
+   *   ce qui en a été rendu ne fut jamais enregistré. `estRavitaillementEnCours`
+   *   les compte pour soldées côté écran ; le serveur doit dire la même chose,
+   *   sinon une boutique ne pourrait plus JAMAIS vider ses soldes.
+   */
+  it('[TC-217-14] un ravitaillement sans reste dû ne bloque pas', async () => {
+    await poserRavitaillement('rav-ancien', {})
+
+    const result = await call({ action: 'closeDay' })
+    expect(result.type).toBe('Clôture')
+  })
+
+  it('[TC-217-15] un ravitaillement mis à la corbeille ne bloque pas', async () => {
+    await poserRavitaillement('rav-1', { remainingAmount: 350_000, deletedAt: FieldValue.serverTimestamp() })
+
+    const result = await call({ action: 'closeDay' })
+    expect(result.type).toBe('Clôture')
+  })
+
+  /** Le garde-fou ne regarde que SA boutique. */
+  it('[TC-217-16] un ravitaillement dû chez une autre boutique ne bloque pas', async () => {
+    await db.doc('clients/store-closeday-b/history/rav-x').set({
+      type: 'Ravitaillement', montant: 500_000, remainingAmount: 500_000,
+      storeId: 'store-closeday-b', createdAt: FieldValue.serverTimestamp(),
+    })
+
+    const result = await call({ action: 'closeDay' })
+    expect(result.type).toBe('Clôture')
+  })
+})

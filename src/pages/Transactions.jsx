@@ -76,10 +76,14 @@ function Transactions() {
   // qu'il redescend réellement à zéro : il n'y a pas de commission entre
   // franchises de la même entreprise, donc le reste dû d'une livraison atteint
   // zéro exactement. Un compteur qui ne redescend jamais n'est plus lu.
-  const ravitaillementsDus = useMemo(
-    () => ravitaillementsEnCours(completedTransactions).length,
+  // La LISTE, pas seulement son compte : « Vider les soldes » en a besoin pour
+  // dire combien d'argent bloque le geste, et le badge se contente de sa
+  // longueur.
+  const ravitaillements = useMemo(
+    () => ravitaillementsEnCours(completedTransactions),
     [completedTransactions],
   )
+  const ravitaillementsDus = ravitaillements.length
 
   const demande = params.get('tab')
   const mode = MODES.includes(demande) ? demande : MODES[0]
@@ -243,6 +247,7 @@ function Transactions() {
       >
         <ErrorBoundary>
           <ViderSoldesForm
+            ravitaillements={ravitaillements}
             onComplete={() => setViderOuvert(false)}
             onCancel={() => setViderOuvert(false)}
           />
