@@ -997,6 +997,46 @@ export class FirestoreService {
     )
   }
 
+  /**
+   * La base clients entière, sans exiger de boutique active.
+   *
+   * ⚠ POURQUOI UNE SECONDE FONCTION PLUTÔT QU'UN ASSOUPLISSEMENT.
+   *   `requireActiveStore()` ne filtre RIEN sur cette collection :
+   *   `resolveCollectionPath` renvoie le nom nu pour `CLIENTS`, `STORES` et
+   *   `USERS`, donc `subscribeToClients` vise déjà la racine `globalClients`
+   *   sans préfixe de boutique — et les règles l'autorisent à tout
+   *   `hasProfile()`. Chaque gérant diffuse donc déjà la base entière.
+   *
+   *   Ce n'est donc pas une frontière de sécurité qu'on contourne ici. Mais
+   *   c'est la PRÉCONDITION JUSTE pour les écrans du gérant : sans boutique
+   *   active, le reste de leur application ne fonctionne pas, et échouer tôt
+   *   avec un message clair vaut mieux qu'un écran à moitié chargé. L'assouplir
+   *   pour servir un écran nouveau rendrait cette panne silencieuse pour tous
+   *   les autres.
+   *
+   * ⚠ AUCUN CONTRÔLE DE RÔLE ICI. Ce service ne connaît pas le rôle — il ne
+   *   porte que `this.activeStore`. L'autorisation est tenue par le `RoleGuard`
+   *   de la route et par `firestore.rules`, et aucun des deux n'est
+   *   contournable depuis le navigateur.
+   */
+  subscribeToAllClients(callback) {
+    const collectionRef = this.collectionRef(FIRESTORE_CONFIG.COLLECTIONS.CLIENTS)
+    const observer = normalizeSubscriptionObserver(callback)
+
+    return onSnapshot(collectionRef,
+      (snapshot) => {
+        try {
+          observer.onNext(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
+        } catch (error) {
+          notifySubscriptionError(observer, error, 'All clients snapshot processing error')
+        }
+      },
+      (error) => {
+        notifySubscriptionError(observer, error, 'All clients subscription error')
+      }
+    )
+  }
+
   // DRAFTS (Transactions non terminées) — délèguent à DraftService
 
   async getDrafts() {
