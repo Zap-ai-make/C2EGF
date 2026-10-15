@@ -37,15 +37,8 @@ const StoreInternalDebts = lazy(() => import('./pages/store/StoreInternalDebts.j
 const StoreAdminDealerRequestDetails = lazy(() => import('./pages/store/StoreAdminDealerRequestDetails.jsx'))
 const StoreAdminClosures = lazy(() => import('./pages/store/StoreAdminClosures.jsx'))
 
-const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard.jsx'))
-const AdminStores = lazy(() => import('./pages/admin/AdminStores.jsx'))
-const AdminProfile = lazy(() => import('./pages/admin/AdminProfile.jsx'))
-const AdminUsers = lazy(() => import('./pages/admin/AdminUsers.jsx'))
-const AdminDealer = lazy(() => import('./pages/admin/AdminDealer.jsx'))
-const AdminDealerInventory = lazy(() => import('./pages/admin/AdminDealerInventory.jsx'))
-const AdminClients = lazy(() => import('./pages/admin/AdminClients.jsx'))
-const AdminHistory = lazy(() => import('./pages/admin/AdminHistory.jsx'))
-const AdminReports = lazy(() => import('./pages/admin/AdminReports.jsx'))
+const PatronClients = lazy(() => import('./pages/admin/PatronClients.jsx'))
+const PatronBoutiques = lazy(() => import('./pages/admin/PatronBoutiques.jsx'))
 
 const DealerDashboard = lazy(() => import('./pages/dealer/DealerDashboard.jsx'))
 const DealerStores = lazy(() => import('./pages/dealer/DealerStores.jsx'))
@@ -143,15 +136,20 @@ export function AppContent() {
           </RoleGuard>
         }
       >
-        <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/admin/stores" element={<AdminStores />} />
-        <Route path="/admin/users" element={<AdminUsers />} />
-        <Route path="/admin/dealer" element={<AdminDealer />} />
-        <Route path="/admin/dealer-inventory" element={<AdminDealerInventory />} />
-        <Route path="/admin/clients" element={<AdminClients />} />
-        <Route path="/admin/history" element={<AdminHistory />} />
-        <Route path="/admin/reports" element={<AdminReports />} />
-        <Route path="/admin/profile" element={<AdminProfile />} />
+        <Route path="/admin" element={<PatronClients />} />
+        <Route path="/admin/boutiques" element={<PatronBoutiques />} />
+        {/* Les huit écrans de supervision sont supprimés. Leurs adresses
+            redirigent plutôt que de tomber en 404 : un signet ou un raccourci
+            PWA doit toujours mener quelque part. Même raisonnement qu'à la
+            racine de l'espace boutique, plus haut dans ce fichier. */}
+        <Route path="/admin/stores" element={<Navigate to="/admin" replace />} />
+        <Route path="/admin/users" element={<Navigate to="/admin" replace />} />
+        <Route path="/admin/dealer" element={<Navigate to="/admin" replace />} />
+        <Route path="/admin/dealer-inventory" element={<Navigate to="/admin" replace />} />
+        <Route path="/admin/clients" element={<Navigate to="/admin" replace />} />
+        <Route path="/admin/history" element={<Navigate to="/admin" replace />} />
+        <Route path="/admin/reports" element={<Navigate to="/admin" replace />} />
+        <Route path="/admin/profile" element={<Navigate to="/admin" replace />} />
       </Route>
 
       {/* ── Espace Dealer ─────────────────────────────────────────────────── */}

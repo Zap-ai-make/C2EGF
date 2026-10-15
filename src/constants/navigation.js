@@ -81,16 +81,11 @@ export function assertCompteurAutorise(path) {
   return true
 }
 
+// Deux destinations. La notion de « section » disparaît avec la barre latérale :
+// on ne groupe pas deux entrées.
 export const ADMIN_NAV_ITEMS = [
-  { name: 'Vue générale', path: '/admin', section: 'main' },
-  { name: 'Boutiques', path: '/admin/stores', section: 'supervision' },
-  { name: 'Utilisateurs', path: '/admin/users', section: 'supervision' },
-  { name: 'Dealer', path: '/admin/dealer', section: 'supervision' },
-  { name: 'Inventaire Dealer', path: '/admin/dealer-inventory', section: 'supervision' },
-  { name: 'Clients', path: '/admin/clients', section: 'supervision' },
-  { name: 'Historique', path: '/admin/history', section: 'supervision' },
-  { name: 'Rapports', path: '/admin/reports', section: 'supervision' },
-  { name: 'Profil', path: '/admin/profile', section: 'admin' },
+  { name: 'Clients', path: '/admin' },
+  { name: 'Boutiques', path: '/admin/boutiques' },
 ]
 
 /**
