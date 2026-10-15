@@ -34,24 +34,31 @@ const TableRow = memo(({ client, index, onEdit, onHistorique }) => {
           </button>
         )}
       </td>
-      <td className="px-4 py-3 text-center">
-        <div className="flex gap-2 justify-center">
-          <button
-            onClick={() => onEdit && onEdit(client)}
-            className="rounded bg-brand-500 px-3 py-1 text-sm font-medium text-white transition-colors hover:bg-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-          >
-            Modifier
-          </button>
-          <button
-            type="button"
-            disabled
-            title="Suppression désactivée pour protéger la base clients commune"
-            className="cursor-not-allowed rounded bg-gray-200 px-3 py-1 text-sm font-medium text-gray-500"
-          >
-            Supprimer
-          </button>
-        </div>
-      </td>
+      {/* ⚠ LA CELLULE ENTIÈRE, PAS SEULEMENT SON CONTENU. Un `<td>` vide
+          laisserait une douzième colonne sans en-tête chez le patron, et le
+          tableau se décalerait d'une case. Et `onEdit &&` plutôt que
+          `onEdit && onEdit(client)` dans le handler : un bouton qui s'affiche
+          sans pouvoir agir est pire qu'un bouton absent. */}
+      {onEdit && (
+        <td className="px-4 py-3 text-center">
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={() => onEdit(client)}
+              className="rounded bg-brand-500 px-3 py-1 text-sm font-medium text-white transition-colors hover:bg-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+            >
+              Modifier
+            </button>
+            <button
+              type="button"
+              disabled
+              title="Suppression désactivée pour protéger la base clients commune"
+              className="cursor-not-allowed rounded bg-gray-200 px-3 py-1 text-sm font-medium text-gray-500"
+            >
+              Supprimer
+            </button>
+          </div>
+        </td>
+      )}
     </tr>
   )
 })
