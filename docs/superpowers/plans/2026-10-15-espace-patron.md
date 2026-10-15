@@ -628,7 +628,7 @@ vi.mock('react-router-dom', async (orig) => ({
 let recoit = null
 const desabonner = vi.fn()
 vi.mock('../../src/services/firestore.js', () => ({
-  default: {
+  firestoreService: {
     subscribeToAllClients: (cb) => { recoit = cb; return desabonner },
   },
 }))
@@ -738,7 +738,7 @@ Expected: tout échoue — `PatronClients` est une coquille vide.
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search } from 'lucide-react'
-import firestoreService from '../../services/firestore.js'
+import { firestoreService } from '../../services/firestore.js'
 import { TABLE_HEADERS } from '../../constants'
 import { chercherClients } from '../../utils/rechercheClients.js'
 import TableRow from '../../components/TableRow.jsx'
@@ -1004,7 +1004,7 @@ vi.mock('../../src/hooks/useHistoriqueClient.js', () => ({
 
 let clients = []
 vi.mock('../../src/services/firestore.js', () => ({
-  default: { subscribeToAllClients: (cb) => { cb(clients); return vi.fn() } },
+  firestoreService: { subscribeToAllClients: (cb) => { cb(clients); return vi.fn() } },
 }))
 
 const { default: PatronHistoriqueClient } = await import('../../src/pages/admin/PatronHistoriqueClient.jsx')
@@ -1083,7 +1083,7 @@ Expected d'abord: FAIL — le module n'existe pas.
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ChevronLeft } from 'lucide-react'
-import firestoreService from '../../services/firestore.js'
+import { firestoreService } from '../../services/firestore.js'
 import { useHistoriqueClient } from '../../hooks/useHistoriqueClient.js'
 import { delaiMoyen } from '../../utils/delaiMoyen.js'
 import { champsAgent } from '../../utils/agentFields.js'
