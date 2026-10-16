@@ -28,30 +28,30 @@
  *   listAllUsers, listConsolidatedHistory, listStoreHistory,
  *   getStoreNetworkBalances, getRequestsForReport. Vérifié par recherche avant
  *   suppression (aucun import restant, voir le rapport de tâche 3).
- *   `listAllClients` et `listStoreOptions` restent : `AdminClients.jsx` (hors
- *   périmètre de suppression de ce lot) les appelle encore. `getStoreById` et
- *   `listAllNetworkBalances` restent aussi : ils n'avaient déjà aucun appelant
- *   avant ce lot — leur sort n'est pas celui de cette suppression, et les
- *   toucher ici sortirait du périmètre tranché.
+ *   `listAllClients` et `listStoreOptions` restaient alors : `AdminClients.jsx`
+ *   (hors périmètre de suppression de ce lot) les appelait encore.
+ *
+ * ⚠ Tâche 4 (tableau patron) a supprimé `AdminClients.jsx` — `PatronClients.jsx`
+ *   reprend son rôle (même ligne `TableRow`, mêmes `TABLE_HEADERS`) mais lit
+ *   Firestore en direct via `firestoreService.subscribeToAllClients` et
+ *   cherche en mémoire (`rechercheClients.js`), pas page par page via ce
+ *   service. `listAllClients` et `listStoreOptions` perdent donc leur dernier
+ *   appelant et sont retirées à leur tour (même recherche de vérification,
+ *   voir le rapport de tâche 4). `getStoreById` et `listAllNetworkBalances`
+ *   restent : ils n'avaient déjà aucun appelant avant lot 3, et leur sort
+ *   n'est pas celui de cette suppression.
  */
 
-import { valeursAgent } from '../utils/agentFields.js'
 import {
-  collection,
   collectionGroup,
   doc,
   getDoc,
   getDocs,
   query,
   where,
-  orderBy,
   limit,
-  startAfter,
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
-import { ADMIN_PAGE_SIZE } from '../constants/dealerConstants'
-
-const PAGE = ADMIN_PAGE_SIZE
 
 function mapErr(err) {
   if (err?.code === 'permission-denied') return new Error('Accès refusé. Vérifiez vos permissions.')
@@ -116,64 +116,6 @@ export function normalizeDealerMovement(log = {}) {
     default:
       return { ...base, type: log.action ?? 'Mouvement', resourceLabel: RESOURCE_LABELS[log.resource] ?? '—',
         sens: '', amount: log.amount ?? 0, soldeApres: log.newBalance ?? null, source: '—' }
-  }
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Clients globaux
-// ──────────────────────────────────────────────────────────────────────────────
-
-export async function listAllClients({ lastDoc = null, search = '', storeId = '' } = {}) {
-  try {
-    const constraints = []
-    if (storeId) {
-      // Filtre boutique = égalité seule (ordre implicite par __name__) → aucun
-      // index composite requis. orderBy('nom') seulement en vue « toutes boutiques ».
-      constraints.push(where('registeredStoreId', '==', storeId))
-    } else {
-      constraints.push(orderBy('nom'))
-    }
-    constraints.push(limit(PAGE + 1))
-    if (lastDoc) constraints.push(startAfter(lastDoc))
-
-    const snap = await getDocs(query(collection(db, 'globalClients'), ...constraints))
-    const hasMore = snap.docs.length > PAGE
-    const docs = hasMore ? snap.docs.slice(0, PAGE) : snap.docs
-    let clients = docs.map(d => ({ id: d.id, ...d.data() }))
-
-    if (search.trim()) {
-      const q = search.trim().toLowerCase()
-      clients = clients.filter(c =>
-        c.nom?.toLowerCase().includes(q) ||
-        c.prenom?.toLowerCase().includes(q) ||
-        c.numeroPersonnel?.toLowerCase().includes(q) ||
-        valeursAgent(c).some((v) => v.toLowerCase().includes(q)) ||  // code ET numéro agent
-        c.registeredStoreName?.toLowerCase().includes(q)
-      )
-    }
-
-    return { clients, lastDoc: docs.at(-1) ?? null, hasMore }
-  } catch (err) {
-    throw mapErr(err)
-  }
-}
-
-// Liste des boutiques (id + nom) pour alimenter un sélecteur de filtre.
-// Retourne la map id→nom et une liste triée par nom prête pour un <select>.
-export async function listStoreOptions() {
-  try {
-    const snap = await getDocs(query(collection(db, 'stores'), limit(200)))
-    const map = {}
-    const options = []
-    snap.docs.forEach(d => {
-      const name = d.data().name ?? d.id
-      map[d.id] = name
-      options.push({ id: d.id, name })
-    })
-    options.sort((a, b) => a.name.localeCompare(b.name, 'fr'))
-    return { map, options }
-  } catch (err) {
-    throw mapErr(err)
   }
 }
 

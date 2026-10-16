@@ -136,6 +136,9 @@ vi.mock('../../src/config/firebase', () => ({
 vi.mock('../../src/services/firestore', () => ({
   firestoreService: {
     setActiveStore: vi.fn(),
+    // `PatronClients` (tâche 4) monte vraiment sous `/admin` ici — la VRAIE
+    // App, pas un stub — et appelle ce flux dès le premier rendu.
+    subscribeToAllClients: vi.fn(() => vi.fn()),
     subscribeToClients: vi.fn(() => vi.fn()),
     subscribeToDrafts: vi.fn(() => vi.fn()),
     subscribeToHistory: vi.fn(() => vi.fn()),

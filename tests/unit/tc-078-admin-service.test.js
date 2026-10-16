@@ -16,6 +16,15 @@
  *   conservé, rebranché sur `listAllClients` qui reste. `getStoreById` et
  *   `listAllNetworkBalances` n'avaient déjà aucun appelant avant ce lot : leur
  *   sort n'est pas celui de cette suppression, ils restent inchangés.
+ *
+ * ⚠ Tâche 4 (tableau patron) a supprimé AdminClients.jsx, dernier appelant de
+ *   `listAllClients` ET `listStoreOptions` — les deux fonctions sont retirées
+ *   d'adminService.js avec lui. §CL (pagination/recherche de listAllClients)
+ *   et §SO (tri de listStoreOptions) meurent avec elles : ce comportement
+ *   n'existe plus nulle part, la recherche du patron passe par
+ *   `chercherClients()` sur la base chargée en mémoire (rechercheClients.js),
+ *   pas par ce service. §GS est rebranché une seconde fois, cette fois sur
+ *   `getStoreById` — seule fonction restante dont l'échec passe par `mapErr`.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -62,17 +71,12 @@ vi.mock('../../src/config/firebase', () => ({
 import {
   normalizeDealerMovement,
   getStoreById,
-  listAllClients,
   listAllNetworkBalances,
-  listStoreOptions,
 } from '../../src/services/adminService'
 
 // ---------------------------------------------------------------------------
 // Fixtures / helpers
 // ---------------------------------------------------------------------------
-
-// PAGE = 25 dans adminService : caractérisé ici, ne pas changer sans mettre à jour le service.
-const PAGE = 25
 
 function makeQuerySnap(datas = [], { withRefPrefix = null } = {}) {
   return {
@@ -207,77 +211,21 @@ describe('TC-078-GS — getStoreById & mapErr', () => {
 
   // GS-04/05/06 caractérisent `mapErr`, partagé par toutes les fonctions du
   // service — pas spécifique à une fonction en particulier. Rebranché sur
-  // `listAllClients` depuis la suppression de `listAllStores` (lot 3).
+  // `getStoreById` depuis la suppression de `listAllClients` (tâche 4) : la
+  // seule autre fonction encore debout dont l'échec passe par `mapErr`.
   it('[GS-04] unavailable → "Service indisponible. Réessayez."', async () => {
-    mocks.getDocs.mockRejectedValue(firestoreError('unavailable'))
-    await expect(listAllClients()).rejects.toThrow('Service indisponible. Réessayez.')
+    mocks.getDoc.mockRejectedValue(firestoreError('unavailable'))
+    await expect(getStoreById('s1')).rejects.toThrow('Service indisponible. Réessayez.')
   })
 
   it('[GS-05] failed-precondition → message dédié', async () => {
-    mocks.getDocs.mockRejectedValue(firestoreError('failed-precondition'))
-    await expect(listAllClients()).rejects.toThrow('Impossible de charger ces données pour le moment.')
+    mocks.getDoc.mockRejectedValue(firestoreError('failed-precondition'))
+    await expect(getStoreById('s1')).rejects.toThrow('Impossible de charger ces données pour le moment.')
   })
 
   it('[GS-06] erreur inconnue → message générique', async () => {
-    mocks.getDocs.mockRejectedValue(firestoreError('internal'))
-    await expect(listAllClients()).rejects.toThrow('Une erreur inattendue s\'est produite.')
-  })
-})
-
-// ---------------------------------------------------------------------------
-// §3 — listAllClients : pagination PAGE+1 et recherche client-side
-// ---------------------------------------------------------------------------
-
-describe('TC-078-CL — listAllClients', () => {
-  it('[CL-01] PAGE+1 docs → hasMore=true et page tronquée à PAGE', async () => {
-    const datas = Array.from({ length: PAGE + 1 }, (_, i) => ({ nom: `Client ${String(i).padStart(2, '0')}` }))
-    mocks.getDocs.mockResolvedValue(makeQuerySnap(datas))
-
-    const res = await listAllClients()
-    expect(res.hasMore).toBe(true)
-    expect(res.clients).toHaveLength(PAGE)
-    expect(res.lastDoc).not.toBeNull()
-    expect(mocks.limit).toHaveBeenCalledWith(PAGE + 1)
-  })
-
-  it('[CL-02] moins de PAGE docs → hasMore=false', async () => {
-    mocks.getDocs.mockResolvedValue(makeQuerySnap([{ nom: 'A' }, { nom: 'B' }]))
-    const res = await listAllClients()
-    expect(res.hasMore).toBe(false)
-    expect(res.clients).toHaveLength(2)
-  })
-
-  it('[CL-03] storeId filtre sans orderBy (pas d’index composite requis)', async () => {
-    mocks.getDocs.mockResolvedValue(makeQuerySnap([]))
-    await listAllClients({ storeId: 'store-a' })
-    expect(mocks.where).toHaveBeenCalledWith('registeredStoreId', '==', 'store-a')
-    expect(mocks.orderBy).not.toHaveBeenCalled()
-  })
-
-  it('[CL-04] recherche filtre sur nom, prénom, numéro personnel, agent, boutique', async () => {
-    const jeu = () => [
-      { nom: 'Kaboré', prenom: 'Awa', numeroPersonnel: '70000001', codeAgent: '1234567', numeroAgent: '70112233', registeredStoreName: 'Zogona' },
-      { nom: 'Sawadogo', prenom: 'Issa', numeroPersonnel: '70000002', codeAgent: '7654321', numeroAgent: '70445566', registeredStoreName: 'Gounghin' },
-    ]
-
-    mocks.getDocs.mockResolvedValue(makeQuerySnap(jeu()))
-    expect((await listAllClients({ search: 'kabo' })).clients.map(c => c.nom)).toEqual(['Kaboré'])
-
-    mocks.getDocs.mockResolvedValue(makeQuerySnap(jeu()))
-    expect((await listAllClients({ search: 'issa' })).clients.map(c => c.nom)).toEqual(['Sawadogo'])
-
-    mocks.getDocs.mockResolvedValue(makeQuerySnap(jeu()))
-    expect((await listAllClients({ search: '70000002' })).clients.map(c => c.nom)).toEqual(['Sawadogo'])
-
-    // valeursAgent() couvre les DEUX champs : code agent (7 chiffres) et numéro agent (8 chiffres).
-    mocks.getDocs.mockResolvedValue(makeQuerySnap(jeu()))
-    expect((await listAllClients({ search: '1234567' })).clients.map(c => c.nom)).toEqual(['Kaboré'])
-
-    mocks.getDocs.mockResolvedValue(makeQuerySnap(jeu()))
-    expect((await listAllClients({ search: '70445566' })).clients.map(c => c.nom)).toEqual(['Sawadogo'])
-
-    mocks.getDocs.mockResolvedValue(makeQuerySnap(jeu()))
-    expect((await listAllClients({ search: 'gounghin' })).clients.map(c => c.nom)).toEqual(['Sawadogo'])
+    mocks.getDoc.mockRejectedValue(firestoreError('internal'))
+    await expect(getStoreById('s1')).rejects.toThrow('Une erreur inattendue s\'est produite.')
   })
 })
 
@@ -299,22 +247,5 @@ describe('TC-078-NB — listAllNetworkBalances', () => {
     ]))
     const res = await listAllNetworkBalances()
     expect(res[0].storeId).toBe('store-a')
-  })
-})
-
-// ---------------------------------------------------------------------------
-// §5 — listStoreOptions : tri français
-// ---------------------------------------------------------------------------
-
-describe('TC-078-SO — listStoreOptions', () => {
-  it('[SO-01] retourne map id→nom et options triées par nom (fr)', async () => {
-    mocks.getDocs.mockResolvedValue(makeQuerySnap([
-      { __id: 's2', name: 'Zébra' },
-      { __id: 's1', name: 'Étoile' },
-      { __id: 's3' }, // sans nom → id
-    ]))
-    const res = await listStoreOptions()
-    expect(res.map).toEqual({ s2: 'Zébra', s1: 'Étoile', s3: 's3' })
-    expect(res.options.map(o => o.name)).toEqual(['Étoile', 's3', 'Zébra'])
   })
 })
