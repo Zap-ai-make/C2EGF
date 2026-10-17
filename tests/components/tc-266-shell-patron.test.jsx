@@ -204,7 +204,11 @@ describe('TC-266 — les anciennes adresses mènent quelque part', () => {
     // un écran boutique sans rapport qui reste importé plus haut dans ce fichier.
     for (const nom of ['pages/admin/AdminDashboard', 'pages/admin/AdminStores', 'pages/admin/AdminUsers',
                        'pages/admin/AdminDealer', 'pages/admin/AdminHistory', 'pages/admin/AdminReports',
-                       'pages/admin/AdminProfile']) {
+                       'pages/admin/AdminProfile',
+                       // Supprimé en tâche 4 (dernier appelant de listAllClients/
+                       // listStoreOptions, lui-même code mort depuis ce lot) : ce
+                       // verrou manquait, et rien n'aurait signalé sa réimportation.
+                       'pages/admin/AdminClients']) {
       expect(source).not.toContain(nom)
     }
   })

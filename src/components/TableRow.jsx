@@ -1,19 +1,30 @@
 import { memo } from 'react'
 import { champsAgent } from '../utils/agentFields.js'
 
-const TableRow = memo(({ client, index, onEdit, onHistorique }) => {
+const TableRow = memo(({ client, index, onEdit, onHistorique, nomFige = false }) => {
   // Une fiche d'avant la séparation n'a qu'un champ : il se range ici, à la
   // lecture, sans que la base soit réécrite (utils/agentFields.js).
   const agent = champsAgent(client)
+  const fondLigne = index % 2 === 0 ? 'bg-surface' : 'bg-canvas'
 
   return (
-    <tr className={index % 2 === 0 ? 'bg-surface' : 'bg-canvas'}>
+    <tr className={fondLigne}>
       <td className="px-4 py-3 text-base">
         <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
           {client.registeredStoreName || 'Ancienne base'}
         </span>
       </td>
-      <td className="px-4 py-3 text-base">{client.nom}</td>
+      {/* ⚠ `nomFige` (écran patron) : une cellule `sticky` est peinte dans sa
+          propre couche de composition — elle n'hérite plus du fond posé sur
+          le `<tr>` une fois décollée du flux. Sans son propre fond opaque ici
+          (le même que la ligne), les colonnes qui défilent en dessous
+          transparaîtraient à travers elle. `z-10` : au-dessus des cellules
+          ordinaires de la même ligne, mais sous l'en-tête (`z-20`/`z-30`,
+          PatronClients.jsx) qui doit toujours rester visible par-dessus les
+          lignes qui défilent sous lui. */}
+      <td className={`px-4 py-3 text-base ${nomFige ? `sticky left-0 z-10 ${fondLigne}` : ''}`}>
+        {client.nom}
+      </td>
       <td className="px-4 py-3 text-base">{client.prenom}</td>
       <td className="px-4 py-3 text-base">{client.numeroIdentite}</td>
       <td className="px-4 py-3 text-base">{client.numeroPersonnel}</td>
@@ -28,7 +39,7 @@ const TableRow = memo(({ client, index, onEdit, onHistorique }) => {
             type="button"
             onClick={() => onHistorique(client)}
             aria-label={`Historique de ${client.nom ?? ''} ${client.prenom ?? ''}`.trim()}
-            className="rounded border border-line px-3 py-1 text-sm font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+            className="inline-flex min-h-11 items-center justify-center rounded border border-line px-3 text-sm font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
             Historique
           </button>
