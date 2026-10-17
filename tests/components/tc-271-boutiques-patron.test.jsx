@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
+import { StrictMode } from 'react'
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
 
 /**
@@ -34,6 +35,29 @@ beforeEach(() => {
   })
 })
 afterEach(cleanup)
+
+/**
+ * ⚠ RONDE DE CORRECTION 2 (R42) — L'ÉCRAN EST MONTÉ SOUS `StrictMode` DANS LA
+ *   VRAIE APPLICATION (`src/main.jsx:7`), ET AUCUN AUTRE TEST DE CE FICHIER NE
+ *   LE FAIT.
+ *
+ *   React 18+ monte, démonte et REMONTE chaque composant sous `StrictMode` en
+ *   développement. Un drapeau « encore monté » rangé dans un `useRef` et remis
+ *   à `false` par le nettoyage de l'effet n'est jamais remis à `true` au
+ *   remontage — sauf si le corps de l'effet le fait explicitement. Après le
+ *   cycle de `StrictMode`, toutes les gardes `if (vivantRef.current)` échouent
+ *   et l'écran reste sur « Chargement… » POUR TOUJOURS, en développement.
+ *
+ *   Les vingt autres tests passent : `render()` nu ne simule pas ce cycle. Ce
+ *   test est le seul qui reproduise la condition réelle d'exécution.
+ */
+describe('TC-271 — l’écran survit au double montage de StrictMode', () => {
+  it('[TC-271-21] les lignes s’affichent après le cycle monter/démonter/remonter', async () => {
+    render(<StrictMode><PatronBoutiques /></StrictMode>)
+    expect(await screen.findByTestId('boutique-s1')).toBeInTheDocument()
+    expect(screen.getByTestId('credit-s1')).toHaveTextContent(/70/)
+  })
+})
 
 describe('TC-271 — les quatre soldes, avec les mots du métier', () => {
   it('[TC-271-01] stock et espèces sont affichés', async () => {

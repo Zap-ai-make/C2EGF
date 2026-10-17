@@ -98,8 +98,20 @@ function PatronBoutiques() {
   //   parce que Réessayer appelle `charger()` directement, hors de l'effet : un
   //   drapeau fermé sur le seul mandat de l'effet de montage ne protégerait pas
   //   ce second appel contre un démontage pendant que la requête est en vol.
+  //   ⚠ RONDE DE CORRECTION 2 (R42) — LE CORPS DE L'EFFET REMET `true`, ET CE
+  //     N'EST PAS REDONDANT AVEC LA VALEUR INITIALE DU `useRef`. L'application
+  //     monte sous `StrictMode` (`src/main.jsx:7`), et React 18+ y monte,
+  //     démonte puis REMONTE chaque composant en développement. Sans cette
+  //     ligne, le nettoyage du premier cycle pose `false` et rien ne le relève :
+  //     toutes les gardes ci-dessous échouent, et l'écran reste sur
+  //     « Chargement… » POUR TOUJOURS — en développement seulement, donc
+  //     invisible en test tant qu'aucun test ne monte sous `StrictMode`
+  //     (TC-271-21 le fait, lui).
   const vivantRef = useRef(true)
-  useEffect(() => () => { vivantRef.current = false }, [])
+  useEffect(() => {
+    vivantRef.current = true
+    return () => { vivantRef.current = false }
+  }, [])
 
   const charger = useCallback(() => {
     setCaissesErreur(null)
