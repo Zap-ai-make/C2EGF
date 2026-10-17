@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { render, screen, cleanup, fireEvent } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
 
 /**
  * TC-271 — les 84 boutiques, et les quatre chiffres que le patron demande.
@@ -59,11 +59,24 @@ describe('TC-271 — les quatre soldes, avec les mots du métier', () => {
     expect(ligne).toHaveTextContent(/20\s?000/)
   })
 
-  /** Une boutique sans non terminée affiche zéro, pas un vide. */
-  it('[TC-271-04] une boutique sans non terminée affiche 0', async () => {
+  /**
+   * Une boutique sans non terminée affiche zéro, pas un vide.
+   *
+   * ⚠ RONDE DE CORRECTION 1 (M1) — CE TEST NE POUVAIT PAS ÉCHOUER AVANT.
+   *   `ligne.toHaveTextContent(/0/)` sur `boutique-s2` passait quoi que
+   *   montrent le crédit et le retrait, parce que le STOCK de s2 est « 2 000 »
+   *   — il contient déjà un « 0 ». Remplacer `?? 0` par `?? null` dans
+   *   l'implémentation aurait laissé ce test vert. Il porte maintenant sur
+   *   `credit-s2` / `retrait-s2` spécifiquement, maintenant que ces testid
+   *   existent.
+   */
+  it('[TC-271-04] une boutique sans non terminée affiche 0, sur les deux cases', async () => {
     render(<PatronBoutiques />)
     const ligne = await screen.findByTestId('boutique-s2')
-    expect(ligne).toHaveTextContent(/0/)
+    const credit = ligne.querySelector('[data-testid="credit-s2"]')
+    const retrait = ligne.querySelector('[data-testid="retrait-s2"]')
+    expect(credit).toHaveTextContent('0')
+    expect(retrait).toHaveTextContent('0')
   })
 })
 
@@ -163,6 +176,10 @@ describe('TC-271 — l’argent dehors annonce quand il est incomplet', () => {
     const note = await screen.findByTestId('somme-dehors')
     expect(note).toHaveTextContent(/3/)
     expect(note).toHaveTextContent(/2/)
+    // ⚠ RONDE DE CORRECTION 1 (I2) — ASSERTION POSITIVE AJOUTÉE. Sans elle,
+    //   `/3/` passe sur n'importe quelle chaîne contenant un 3 (« 32 000 FCFA »
+    //   par exemple), même une phrase qui affirmerait le contraire du vrai.
+    expect(note).toHaveTextContent(/incomplet/i)
   })
 
   it('[TC-271-14] un agrégat complet ne porte aucune réserve', async () => {
@@ -195,5 +212,96 @@ describe('TC-271 — « Inconnu » et « 0 » ne veulent pas dire la même chose
     // Et le crédit, lui, dit bien zéro — pas « inconnu », pas « — ».
     const credit = ligne.querySelector('[data-testid="credit-s9"]')
     expect(credit).toHaveTextContent('0')
+  })
+})
+
+describe('TC-271 — l’argent dehors « en vol » n’est pas « en échec » (ronde de correction 1, I1)', () => {
+  /**
+   * ⚠ LA FORME MIROIR DU DÉFAUT DE TC-271-11. Là, un échec se repliait sur un
+   *   silence (« le réseau n'a rien »). Ici, le silence d'une callable encore
+   *   en vol — Cloud Run froid, quelques secondes — se repliait sur un échec
+   *   (« indisponible ») : le patron lirait une panne qui n'a pas eu lieu,
+   *   pendant que la réponse arrive. Les deux sont la même faute : se prononcer
+   *   avant d'avoir fini de demander.
+   */
+  it('[TC-271-16] pendant que l’agrégat charge, le crédit dit « … », jamais « — »', async () => {
+    let resoudre
+    listArgentDehors.mockReturnValue(new Promise((r) => { resoudre = r }))
+    render(<PatronBoutiques />)
+    const ligne = await screen.findByTestId('boutique-s1')
+    const credit = ligne.querySelector('[data-testid="credit-s1"]')
+    expect(credit).toHaveTextContent('…')
+    expect(credit).not.toHaveTextContent('—')
+    // Nettoyage : la promesse est résolue pour ne rien laisser en attente —
+    // `mockReturnValue` n'est pas consommé comme `mockResolvedValueOnce` et
+    // resterait actif pour le test suivant sinon.
+    await act(async () => {
+      resoudre({ parBoutique: [], depots: 0, retraits: 0, dehors: 0, illisibles: 0, horsReseau: 0 })
+    })
+  })
+})
+
+describe('TC-271 — la somme réseau de l’argent dehors porte le brut, pas le net (ronde de correction 1, C1)', () => {
+  /**
+   * ⚠ `dehors.dehors` (= dépôts − retraits) PORTAIT LE MÊME LIBELLÉ QUE LE
+   *   BRUT PAR BOUTIQUE AVANT CETTE RONDE. Avec 70 000 de dépôts et 20 000 de
+   *   retraits non terminés, l'en-tête annonçait « Argent dehors · 50 000 » —
+   *   le net — sous le même mot que « Crédit · argent dehors » qui, lui,
+   *   désigne le brut sur chaque ligne. Ce test verrouille que le total réseau
+   *   montre les DEUX bruts, pas un seul chiffre fusionné.
+   */
+  it('[TC-271-17] « argent dehors » et « clients non payés » portent chacun leur propre total réseau', async () => {
+    render(<PatronBoutiques />)
+    const note = await screen.findByTestId('somme-dehors')
+    expect(note).toHaveTextContent(/argent dehors/i)
+    expect(note).toHaveTextContent(/70\s?000/)
+    expect(note).toHaveTextContent(/clients non payés/i)
+    expect(note).toHaveTextContent(/20\s?000/)
+  })
+})
+
+describe('TC-271 — l’état de chargement ne se confond ni avec l’erreur ni avec le prêt (ronde de correction 1, R29)', () => {
+  it('[TC-271-18] pendant que les caisses chargent : ni alerte, ni ligne, ni somme', async () => {
+    let resoudre
+    listNetworkCaisses.mockReturnValue(new Promise((r) => { resoudre = r }))
+    render(<PatronBoutiques />)
+    expect(screen.getByText(/chargement/i)).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByTestId('boutique-s1')).toBeNull()
+    expect(screen.queryByTestId('somme-caisses')).toBeNull()
+    await act(async () => {
+      resoudre({ caisses: [caisse(1)], total: 1, sommeStock: 1000, sommeLiquidite: 500, illisibles: 0 })
+    })
+    expect(await screen.findByTestId('boutique-s1')).toBeInTheDocument()
+  })
+})
+
+describe('TC-271 — la somme de l’argent dehors porte sur le réseau, pas sur la vue (ronde de correction 1, M2)', () => {
+  it('[TC-271-19] le filtre ne change pas la somme de l’argent dehors', async () => {
+    render(<PatronBoutiques />)
+    await screen.findByTestId('boutique-s1')
+    const avant = screen.getByTestId('somme-dehors').textContent
+    fireEvent.change(screen.getByLabelText(/filtrer les boutiques/i), { target: { value: 'BOUTIQUE 2' } })
+    expect(screen.getByTestId('somme-dehors').textContent).toBe(avant)
+  })
+})
+
+describe('TC-271 — Réessayer remet tout à zéro avant de relire (ronde de correction 1, C2)', () => {
+  /**
+   * ⚠ LE DÉFAUT QUE CE TEST EXISTE POUR EMPÊCHER. `setDehorsEnEchec(true)`
+   *   existait ; `setDehorsEnEchec(false)` n'existait nulle part. Après une
+   *   coupure des DEUX lectures à l'ouverture puis un Réessayer qui réussit,
+   *   l'écran continuait d'afficher « indisponible » et « — » dans les cases
+   *   crédit/retrait alors que l'agrégat portait de vrais montants en mémoire.
+   */
+  it('[TC-271-20] après une coupure totale, un Réessayer qui réussit montre le vrai crédit, pas « — »', async () => {
+    listNetworkCaisses.mockRejectedValueOnce(new Error('coupure'))
+    listArgentDehors.mockRejectedValueOnce(new Error('coupure'))
+    render(<PatronBoutiques />)
+    fireEvent.click(await screen.findByRole('button', { name: /réessayer/i }))
+    const ligne = await screen.findByTestId('boutique-s1')
+    const credit = ligne.querySelector('[data-testid="credit-s1"]')
+    expect(credit).toHaveTextContent('70 000')
+    expect(credit).not.toHaveTextContent('—')
   })
 })
