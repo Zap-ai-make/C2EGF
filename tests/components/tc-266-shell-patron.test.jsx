@@ -154,6 +154,18 @@ vi.mock('../../src/services/firestore', () => ({
 vi.mock('../../src/utils/authHelpers', () => ({
   getAuthErrorMessage: vi.fn((code, msg) => msg || code || 'Erreur'),
 }))
+// ⚠ RONDE DE CORRECTION 1 (I-4) — SANS CE MOCK, LE VRAI HOOK APPELLERAIT
+//   `listClientHistory` via `httpsCallable(functions, ...)` avec `functions`
+//   réduit à `{}` (mock ci-dessus) : l'échec serait asynchrone, résolu APRÈS
+//   que `render()` ait rendu la main — une mise à jour hors `act()`, la même
+//   leçon que `tc-122-page-dettes-internes.test.jsx`. Un double stub, comme
+//   `subscribeToAllClients` au-dessus, l'évite pour la même raison.
+vi.mock('../../src/hooks/useHistoriqueClient.js', () => ({
+  useHistoriqueClient: () => ({
+    enCours: [], lignes: [], totaux: null, etat: 'pret', erreur: null,
+    encore: false, chargerPlus: vi.fn(), reessayer: vi.fn(),
+  }),
+}))
 
 const { useAuth: useAuthMock } = await import('../../src/context/AuthContext')
 const { AppContent } = await import('../../src/App.jsx')
@@ -192,6 +204,24 @@ describe('TC-266 — les huit adresses redirigent, au runtime', () => {
     renderApp(`/admin/${parti}`)
     expect(await screen.findByTestId('patron-clients')).toBeInTheDocument()
     expect(screen.getByTestId('location').textContent).toBe('/admin')
+  })
+})
+
+/**
+ * ⚠ RONDE DE CORRECTION 1 (I-4) — LA COEXISTENCE DES DEUX ROUTES N'ÉTAIT PROUVÉE
+ *   PAR RIEN. Le rapport de la tâche 5 affirmait l'avoir vérifié en lançant ce
+ *   fichier et `tc-269` ensemble — mais `tc-269` déclare sa PROPRE table de
+ *   routes dans un `MemoryRouter` isolé et ne charge jamais `src/App.jsx`. Seul
+ *   un rendu de la VRAIE `AppContent` (RoleGuard réel, routes réelles — déjà le
+ *   principe du bloc `TC-266-06` ci-dessus) peut verrouiller que
+ *   `/admin/clients/:clientId/historique` n'est pas absorbée par la
+ *   redirection `/admin/clients` déclarée juste après elle dans `App.jsx`.
+ */
+describe('TC-266 — la route historique coexiste avec la redirection /admin/clients', () => {
+  it('[TC-266-09] /admin/clients/c1/historique rend la page historique, sans rediriger vers /admin', async () => {
+    renderApp('/admin/clients/c1/historique')
+    expect(await screen.findByTestId('patron-historique-client')).toBeInTheDocument()
+    expect(screen.getByTestId('location').textContent).toBe('/admin/clients/c1/historique')
   })
 })
 
