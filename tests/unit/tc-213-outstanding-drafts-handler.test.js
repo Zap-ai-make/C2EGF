@@ -98,4 +98,47 @@ describe('TC-213-B — autorisation du callable', () => {
     expect(db.storesGet).toHaveBeenCalledOnce()
     expect(db.draftsGet).toHaveBeenCalledOnce()
   })
+
+  /**
+   * ⚠ LE GARDE S'ÉLARGIT, IL NE S'OUVRE PAS. L'écran Boutiques du patron a
+   *   besoin de cet agrégat ; les règles l'autorisent déjà à lire `drafts` en
+   *   collection-group (`firestore.rules`, `{path=**}/drafts`), mais une
+   *   lecture directe ferait descendre TOUS les brouillons du réseau sur son
+   *   téléphone pour n'afficher que 84 sommes. D'où la callable — et d'où ces
+   *   quatre tests, qui tiennent les DEUX sens : ce qui s'ouvre, et ce qui
+   *   doit rester fermé.
+   *
+   * ⚠ CHAQUE REFUS VÉRIFIE AUSSI QUE `draftsGet` N'A PAS ÉTÉ APPELÉ. Un garde
+   *   qui refuse APRÈS avoir lu les brouillons du réseau entier a déjà fait la
+   *   dépense et la lecture : le refus doit tomber avant, et c'est l'assertion
+   *   qui le prouve. C'est la règle que les quatre tests existants de ce bloc
+   *   tiennent déjà.
+   */
+  it('accepte un system_manager actif', async () => {
+    const db = makeDb({ profile: { active: true, role: 'system_manager' } })
+    const result = await listOutstandingDraftsHandler({ auth: { uid: 'patron-1' }, data: {} }, { db })
+    expect(result).toMatchObject({ success: true, dehors: 5000, depots: 5000, retraits: 0 })
+    expect(db.draftsGet).toHaveBeenCalledOnce()
+  })
+
+  it('refuse toujours un member', async () => {
+    const db = makeDb({ profile: { active: true, role: 'member' } })
+    await expect(listOutstandingDraftsHandler({ auth: { uid: 'u1' }, data: {} }, { db }))
+      .rejects.toMatchObject({ code: 'ROLE_FORBIDDEN' })
+    expect(db.draftsGet).not.toHaveBeenCalled()
+  })
+
+  it('refuse un system_manager désactivé', async () => {
+    const db = makeDb({ profile: { active: false, role: 'system_manager' } })
+    await expect(listOutstandingDraftsHandler({ auth: { uid: 'u1' }, data: {} }, { db }))
+      .rejects.toMatchObject({ code: 'PROFILE_INACTIVE' })
+    expect(db.draftsGet).not.toHaveBeenCalled()
+  })
+
+  it('refuse toujours un appel sans authentification', async () => {
+    const db = makeDb()
+    await expect(listOutstandingDraftsHandler({ auth: null, data: {} }, { db }))
+      .rejects.toMatchObject({ code: 'UNAUTHENTICATED' })
+    expect(db.draftsGet).not.toHaveBeenCalled()
+  })
 })

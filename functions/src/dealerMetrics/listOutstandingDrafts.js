@@ -18,12 +18,30 @@ const remainingAmount = (draft) => {
   return null
 }
 
-const validateDealerProfile = (profile) => {
+/**
+ * Les deux rôles qui ont besoin de cet agrégat, et aucun autre.
+ *   · `dealer`         — « mon argent dehors », son écran d'accueil ;
+ *   · `system_manager` — l'écran Boutiques du patron.
+ *
+ * ⚠ CE GARDE EST LOCAL À CETTE CALLABLE, ET IL DOIT LE RESTER. Il existe un
+ *   `validateDealerProfile` exporté par `../storeTransfers/shared.js`, partagé
+ *   par les callables d'écriture (dépôt partenaire, commandes d'inventaire,
+ *   décisions de transfert). Élargir CELUI-LÀ ouvrirait au patron des
+ *   ÉCRITURES, alors que tout son espace est en lecture seule. Les deux gardes
+ *   se ressemblent ; ils ne répondent pas à la même question.
+ *
+ * ⚠ UN `store_admin` OU UN `member` N'ENTRE PAS ICI, et ce n'est pas un oubli :
+ *   il lit déjà les brouillons de SA boutique par les règles Firestore. Cet
+ *   agrégat porte sur le réseau entier — ce n'est pas la même donnée.
+ */
+const ROLES_AUTORISES = Object.freeze(['dealer', 'system_manager'])
+
+const validateCallerProfile = (profile) => {
   if (!profile?.active) {
     throw new DealerRequestError('PROFILE_INACTIVE', 'Votre compte est désactivé.')
   }
-  if (profile.role !== 'dealer') {
-    throw new DealerRequestError('ROLE_FORBIDDEN', 'Action réservée au dealer.')
+  if (!ROLES_AUTORISES.includes(profile.role)) {
+    throw new DealerRequestError('ROLE_FORBIDDEN', 'Action réservée au dealer et au gérant du réseau.')
   }
 }
 
@@ -63,7 +81,7 @@ export async function listOutstandingDraftsHandler(request, { db }) {
   const actorUid = validateAuthUid(request.auth?.uid)
   validateInputPayload(request.data ?? {}, [])
 
-  await readValidatedProfile(db, actorUid, validateDealerProfile)
+  await readValidatedProfile(db, actorUid, validateCallerProfile)
 
   const [storesSnap, draftsSnap] = await Promise.all([
     db.collection('stores').where('active', '==', true).get(),
