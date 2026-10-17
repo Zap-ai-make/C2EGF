@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, Send } from 'lucide-react'
 import { firestoreService } from '../../services/firestore.js'
 import { useHistoriqueClient } from '../../hooks/useHistoriqueClient.js'
 import { delaiMoyen } from '../../utils/delaiMoyen.js'
 import { champsAgent } from '../../utils/agentFields.js'
+import { texteFiche, lienWhatsApp } from '../../utils/ficheWhatsApp.js'
 import LigneHistorique from '../../components/clients/LigneHistorique.jsx'
 import ErrorState from '../../components/ui/ErrorState.jsx'
 import LoadMoreButton from '../../components/ui/LoadMoreButton.jsx'
@@ -68,6 +69,13 @@ function PatronHistoriqueClient() {
 
   const agent = client ? champsAgent(client) : null
 
+  // ⚠ MÉMOÏSÉ : `texteFiche` parcourt les lignes, et l'en-tête se rend à chaque
+  //   frappe de défilement de la liste en dessous.
+  const lienFiche = useMemo(
+    () => (client ? lienWhatsApp(texteFiche({ client, lignes, delai })) : '#'),
+    [client, lignes, delai],
+  )
+
   return (
     <div data-testid="patron-historique-client" className="flex h-full min-h-0 flex-col">
       {clientsErreur ? (
@@ -119,6 +127,15 @@ function PatronHistoriqueClient() {
                 {agent?.codeAgent ? `Code ${agent.codeAgent}` : 'Sans code agent'}
               </p>
             </div>
+            <a
+              href={lienFiche}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-auto flex h-11 flex-none items-center gap-1.5 rounded-xl bg-success px-3 text-sm font-bold text-white hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            >
+              <Send className="h-4 w-4" aria-hidden="true" />
+              Envoyer
+            </a>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">

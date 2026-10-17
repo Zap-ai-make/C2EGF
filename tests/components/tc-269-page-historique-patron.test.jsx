@@ -208,3 +208,41 @@ describe('TC-269 — les boutons empruntés tiennent sous le doigt (44 px)', () 
     expect(screen.getByRole('button', { name: /réessayer/i })).toHaveClass('min-h-11')
   })
 })
+
+/**
+ * TÂCHE 6 — « Envoyer » fait sortir la fiche vers WhatsApp.
+ *
+ * ⚠ CE TEST VERROUILLE LE LIEN, PAS SEULEMENT SA PRÉSENCE. Relancer tc-269 en
+ *   l'état aurait suffi à prouver que rien n'est cassé, pas que le bouton
+ *   existe ni qu'il porte le bon texte : c'est le nom du client ET la phrase de
+ *   délai — le chiffre qui sort réellement du CRM — qui sont vérifiés ici,
+ *   décodés depuis le `href`, pas recopiés à la main dans l'assertion.
+ */
+describe('TC-269 — « Envoyer » ouvre la fiche sur WhatsApp', () => {
+  it('[TC-269-12] le lien vise wa.me et porte le nom et le délai affichés', () => {
+    etatHook = {
+      ...etatHook,
+      etat: 'pret',
+      lignes: [op(4), { id: 'h9', typePlie: 'depot', createdAt: debut }],
+      encore: false,
+    }
+    page()
+    pousserClients([{ id: 'c1', nom: 'OUEDRAOGO', prenom: 'Salif', codeAgent: '6412887' }])
+
+    const lien = screen.getByRole('link', { name: /envoyer/i })
+    expect(lien.getAttribute('href')).toMatch(/^https:\/\/wa\.me\/\?text=/)
+
+    const texte = decodeURIComponent(lien.getAttribute('href').replace('https://wa.me/?text=', ''))
+    expect(texte).toContain('OUEDRAOGO Salif')
+    // Même chiffre qu'à l'écran pour ce jeu de lignes : 4 j, 1 dépôt mesuré sur
+    // 2 opérations chargées (voir TC-269-02, mêmes `lignes`).
+    expect(texte).toMatch(/4 j en moyenne/)
+    expect(texte).toMatch(/1 dépôt mesuré sur 2 opérations chargées/)
+
+    // ⚠ `target="_blank"` SANS `rel="noopener"` laisserait la nouvelle page
+    //   WhatsApp accéder à `window.opener` — faille classique de reverse
+    //   tabnabbing, ici sur un lien qui part du CRM.
+    expect(lien).toHaveAttribute('target', '_blank')
+    expect(lien.getAttribute('rel')).toMatch(/noopener/)
+  })
+})
