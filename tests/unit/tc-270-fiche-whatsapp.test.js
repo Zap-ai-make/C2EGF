@@ -232,6 +232,41 @@ describe('TC-270 — ce que le texte contient', () => {
     expect(t).toContain('12/10')
   })
 
+  /**
+   * ⚠ RONDE DE CORRECTION 2 (R28) — « Validée » ET « Validee » COEXISTENT EN
+   *   BASE, et la comparaison stricte accentuée faisait passer la seconde pour
+   *   une anomalie. `storeTransactionCommand.js:773` écrit `statut: 'Validee'`
+   *   SANS accent sur un retour de ravitaillement, là où `:169` écrit
+   *   `'Validée'` avec. Une ligne parfaitement normale repartait donc suffixée
+   *   « — Validee », qui se lit comme un problème, alors que l'écran l'affiche
+   *   en vert : `tonStatut` (`src/utils/helpers.js`) teste par SOUS-CHAÎNE,
+   *   exactement pour cette raison.
+   *
+   *   C'est le défaut de R23 pris par l'autre bout. R23 corrigeait un message
+   *   plus RASSURANT que l'écran (une opération annulée sortait comme une
+   *   valide) ; ici le message est plus ALARMANT que l'écran. Les deux sens
+   *   violent la même règle : ne jamais affirmer plus que ce que le patron a
+   *   sous les yeux.
+   */
+  it('[TC-270-19] « Validee » sans accent ne passe pas pour une anomalie', () => {
+    const sansAccent = {
+      id: 'v1', date: '15/10', type: 'Retour ravitaillement', typePlie: 'ravitaillement',
+      montant: 12000, statut: 'Validee',
+    }
+    const annulee = {
+      id: 'a1', date: '16/10', type: 'Retrait', typePlie: 'retrait',
+      montant: 3000, statut: 'Annulée',
+    }
+
+    const t = texteFiche({ client, lignes: [sansAccent], delai })
+    expect(t).not.toMatch(/— Validee/)
+    expect(t).not.toMatch(/—s*Valid/)
+
+    // Et le vrai signal, lui, part toujours.
+    const tAnnulee = texteFiche({ client, lignes: [annulee], delai })
+    expect(tAnnulee).toMatch(/— Annulée/)
+  })
+
   it('[TC-270-17] avec quatre opérations ou moins, pas de « des N » redondant', () => {
     const trois = Array.from({ length: 3 }, (_, i) => ({
       id: `h${i}`, date: `0${i + 1}/10`, type: 'Depot', typePlie: 'depot',

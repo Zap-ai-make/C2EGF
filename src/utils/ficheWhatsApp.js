@@ -15,6 +15,30 @@ const s = (n) => (n > 1 ? 's' : '')
 const statutDe = (ligne) => String(ligne?.statut ?? '').trim() || 'Validée'
 
 /**
+ * Ce statut veut-il dire « c'est passé » ? — par SOUS-CHAÎNE, accents repliés.
+ *
+ * ⚠ « Validée » ET « Validee » COEXISTENT EN BASE, et ce n'est pas une
+ *   hypothèse : `storeTransactionCommand.js:773` écrit `statut: 'Validee'` sans
+ *   accent sur un retour de ravitaillement, là où `:169` écrit `'Validée'`
+ *   avec. Une comparaison stricte accentuée faisait donc repartir une ligne
+ *   parfaitement normale suffixée « — Validee » dans le message WhatsApp, ce
+ *   qui se lit comme une anomalie — alors que l'écran l'affiche en vert, parce
+ *   que `tonStatut` (`src/utils/helpers.js`) teste lui aussi par sous-chaîne,
+ *   EXACTEMENT pour cette raison.
+ *
+ * ⚠ ON NE RÉUTILISE PAS `tonStatut` TEL QUEL, et c'est délibéré : il range
+ *   aussi `'termin'` dans « confirmé », ce qui ferait passer un « Non
+ *   Terminées » pour une opération aboutie. Ici la question est plus étroite —
+ *   « faut-il nommer ce statut dans le message ? » — et seule la famille
+ *   « valid » y répond oui.
+ */
+const estValide = (statut) => String(statut ?? '')
+  .normalize('NFD')
+  .replace(/[̀-ͯ]/g, '')
+  .toLowerCase()
+  .includes('valid')
+
+/**
  * Une ligne de l'historique, prête pour un message texte.
  *
  * ⚠ RONDE DE CORRECTION 1 (R23) — LE STATUT SE NOMME QUAND IL N'EST PAS
@@ -67,7 +91,7 @@ function ligneTexte(o) {
     o?.type ?? '',
     montant ? `${montant} FCFA` : '',
     dureeTexte ? `(${dureeTexte})` : '',
-    statut.toLowerCase() !== 'validée' ? `— ${statut}` : '',
+    estValide(statut) ? '' : `— ${statut}`,
   ].filter(Boolean).join(' ')
 }
 
