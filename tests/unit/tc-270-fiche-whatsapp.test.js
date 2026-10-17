@@ -260,7 +260,12 @@ describe('TC-270 — ce que le texte contient', () => {
 
     const t = texteFiche({ client, lignes: [sansAccent], delai })
     expect(t).not.toMatch(/— Validee/)
-    expect(t).not.toMatch(/—s*Valid/)
+    // ⚠ `\s*` AVEC SON ANTISLASH. Écrite `/—s*Valid/`, cette ligne cherchait
+    //   « zéro ou plusieurs lettres s » et ne pouvait donc JAMAIS matcher la
+    //   sortie réelle (tiret, espace, statut) : une assertion toujours vraie,
+    //   qui ne testait rien. Elle attrape maintenant toute orthographe de
+    //   « Valid… » suffixée, quel que soit l'espacement.
+    expect(t).not.toMatch(/—\s*Valid/i)
 
     // Et le vrai signal, lui, part toujours.
     const tAnnulee = texteFiche({ client, lignes: [annulee], delai })
