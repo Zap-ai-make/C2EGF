@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { StrictMode } from 'react'
-import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-library/react'
 
 /**
  * TC-271 — les 84 boutiques, et les quatre chiffres que le patron demande.
@@ -325,6 +325,52 @@ describe('TC-271 — Réessayer remet tout à zéro avant de relire (ronde de co
     fireEvent.click(await screen.findByRole('button', { name: /réessayer/i }))
     const ligne = await screen.findByTestId('boutique-s1')
     const credit = ligne.querySelector('[data-testid="credit-s1"]')
+    expect(credit).toHaveTextContent('70 000')
+    expect(credit).not.toHaveTextContent('—')
+  })
+})
+
+describe('TC-271 — une réponse périmée ne remasque pas un montant valide (ronde de correction 2, R44)', () => {
+  /**
+   * ⚠ C2 RÉINCARNÉ DANS UNE FENÊTRE DE COURSE. Le fix de C2 (ronde 1) a
+   *   remplacé un `let vivant` fermé PAR TENTATIVE — recréé à chaque appel de
+   *   l'effet, donc isolé — par un `vivantRef` partagé entre toutes les
+   *   tentatives. Le point unique de remise à zéro était le bon acquis ; mais
+   *   plus rien ne distinguait « la réponse de la tentative N-1, encore en
+   *   vol » de « celle de la tentative N ».
+   *
+   *   Scénario : les caisses échouent vite (le bouton Réessayer apparaît),
+   *   l'agrégat de CETTE MÊME tentative reste en vol (Cloud Run froid,
+   *   plusieurs secondes). Le patron tape Réessayer avant que cette première
+   *   réponse ne soit arrivée. La tentative 2 réussit. PUIS la réponse périmée
+   *   de la tentative 1 se règle — en échec — et son `.catch` fait
+   *   `setDehorsEnEchec(true)` par-dessus un `dehors` déjà valide : l'écran
+   *   affiche « indisponible » et « — » alors que le bon montant est en
+   *   mémoire. `vivantRef.current` seul ne voit rien venir : le composant est
+   *   toujours monté, la garde passe.
+   */
+  it('[TC-271-22] une tentative 1 encore en vol qui échoue APRÈS une tentative 2 réussie ne remasque pas le crédit', async () => {
+    let rejeterTentative1
+    listArgentDehors
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejeterTentative1 = reject }))
+      .mockResolvedValueOnce({
+        parBoutique: [{ storeId: 's1', name: 'BOUTIQUE 1', depots: 70000, retraits: 20000, dehors: 50000 }],
+        depots: 70000, retraits: 20000, dehors: 50000, illisibles: 0, horsReseau: 0,
+      })
+    listNetworkCaisses.mockRejectedValueOnce(new Error('coupure'))
+
+    render(<PatronBoutiques />)
+    fireEvent.click(await screen.findByRole('button', { name: /réessayer/i }))
+
+    const ligne = await screen.findByTestId('boutique-s1')
+    const credit = ligne.querySelector('[data-testid="credit-s1"]')
+    // La tentative 2 a réussi : on attend que son montant s'affiche avant de
+    // faire parler la réponse périmée — sinon on ne testerait qu'un « en vol ».
+    await waitFor(() => expect(credit).toHaveTextContent('70 000'))
+
+    // La réponse PÉRIMÉE de la tentative 1 se règle seulement maintenant.
+    await act(async () => { rejeterTentative1(new Error('périmée')) })
+
     expect(credit).toHaveTextContent('70 000')
     expect(credit).not.toHaveTextContent('—')
   })

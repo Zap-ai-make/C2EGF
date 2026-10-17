@@ -113,16 +113,38 @@ function PatronBoutiques() {
     return () => { vivantRef.current = false }
   }, [])
 
+  // ⚠ RONDE DE CORRECTION 2 (R44) — C2 RÉINCARNÉ DANS UNE FENÊTRE DE COURSE.
+  //   `vivantRef` seul distingue « monté » de « démonté », pas « cette tentative »
+  //   de « la précédente, encore en vol ». Scénario réel : les caisses échouent
+  //   vite (Réessayer apparaît), l'agrégat de CETTE tentative reste en vol
+  //   (Cloud Run froid). Le patron retente avant la réponse ; la tentative 2
+  //   réussit. Puis la réponse PÉRIMÉE de la tentative 1 se règle enfin — en
+  //   échec — et écrirait `setDehorsEnEchec(true)` PAR-DESSUS un `dehors` déjà
+  //   valide : l'écran annoncerait « indisponible » alors que le bon montant
+  //   est en mémoire. Le composant est toujours monté, donc `vivantRef.current`
+  //   ne voit rien venir.
+  //   `generationRef` incrémenté à CHAQUE appel de `charger()` et capturé dans
+  //   la fermeture ; une réponse n'écrit que si sa génération est encore la
+  //   COURANTE. On ne revient PAS au `let vivant` fermé par tentative de
+  //   l'ancienne version : c'est lui qui dispersait la remise à zéro entre
+  //   plusieurs endroits et qui avait causé C2. Le point unique de remise à
+  //   zéro reste ; l'isolation entre tentatives est rétablie explicitement, en
+  //   plus de lui — pas à sa place.
+  const generationRef = useRef(0)
+
   const charger = useCallback(() => {
+    const generation = ++generationRef.current
+    const recevable = () => vivantRef.current && generationRef.current === generation
+
     setCaissesErreur(null)
     setDehors(null)
     setDehorsEnEchec(false)
     listNetworkCaisses()
-      .then((r) => { if (vivantRef.current) setCaisses(r) })
-      .catch((err) => { if (vivantRef.current) setCaissesErreur(err?.message || 'Erreur de chargement.') })
+      .then((r) => { if (recevable()) setCaisses(r) })
+      .catch((err) => { if (recevable()) setCaissesErreur(err?.message || 'Erreur de chargement.') })
     listArgentDehors()
-      .then((r) => { if (vivantRef.current) setDehors(r) })
-      .catch(() => { if (vivantRef.current) setDehorsEnEchec(true) })
+      .then((r) => { if (recevable()) setDehors(r) })
+      .catch(() => { if (recevable()) setDehorsEnEchec(true) })
   }, [])
 
   useEffect(() => { charger() }, [charger])
