@@ -39,6 +39,7 @@ const StoreAdminClosures = lazy(() => import('./pages/store/StoreAdminClosures.j
 
 const PatronClients = lazy(() => import('./pages/admin/PatronClients.jsx'))
 const PatronBoutiques = lazy(() => import('./pages/admin/PatronBoutiques.jsx'))
+const PatronHistoriqueClient = lazy(() => import('./pages/admin/PatronHistoriqueClient.jsx'))
 
 const DealerDashboard = lazy(() => import('./pages/dealer/DealerDashboard.jsx'))
 const DealerStores = lazy(() => import('./pages/dealer/DealerStores.jsx'))
@@ -138,6 +139,13 @@ export function AppContent() {
       >
         <Route path="/admin" element={<PatronClients />} />
         <Route path="/admin/boutiques" element={<PatronBoutiques />} />
+        {/* ⚠ DÉCLARÉE AVANT LA REDIRECTION `/admin/clients` CI-DESSOUS. Les deux
+            chemins sont en fait sans ambiguïté pour react-router v6 (celui-ci
+            porte deux segments de plus, dont un dynamique, donc seule une URL
+            qui les a tous les deux peut l'atteindre) — mais la placer après
+            la redirection la rendrait fragile au premier refactor qui
+            transformerait `/admin/clients` en route imbriquée (`*`). */}
+        <Route path="/admin/clients/:clientId/historique" element={<PatronHistoriqueClient />} />
         {/* Les huit écrans de supervision sont supprimés. Leurs adresses
             redirigent plutôt que de tomber en 404 : un signet ou un raccourci
             PWA doit toujours mener quelque part. Même raisonnement qu'à la
