@@ -4,14 +4,12 @@ import { ChevronLeft, Send } from 'lucide-react'
 import { firestoreService } from '../../services/firestore.js'
 import { useHistoriqueClient } from '../../hooks/useHistoriqueClient.js'
 import { delaiMoyen } from '../../utils/delaiMoyen.js'
+import { phraseDelai } from '../../utils/phraseDelai.js'
 import { champsAgent } from '../../utils/agentFields.js'
 import { texteFiche, lienWhatsApp } from '../../utils/ficheWhatsApp.js'
 import LigneHistorique from '../../components/clients/LigneHistorique.jsx'
 import ErrorState from '../../components/ui/ErrorState.jsx'
 import LoadMoreButton from '../../components/ui/LoadMoreButton.jsx'
-
-/** Un accord au pluriel, pour les phrases comptées de ce fichier. */
-const s = (n) => (n > 1 ? 's' : '')
 
 /**
  * L'historique d'un client, toutes boutiques — la page que le patron ouvre
@@ -66,14 +64,30 @@ function PatronHistoriqueClient() {
 
   const { lignes, etat, erreur, encore, chargerPlus, reessayer } = useHistoriqueClient(clientId)
   const delai = useMemo(() => delaiMoyen(lignes), [lignes])
+  const { titre: delaiTitre, detail: delaiDetail } = phraseDelai(delai)
 
   const agent = client ? champsAgent(client) : null
 
-  // ⚠ MÉMOÏSÉ : `texteFiche` parcourt les lignes, et l'en-tête se rend à chaque
-  //   frappe de défilement de la liste en dessous.
+  /**
+   * ⚠ RONDE DE CORRECTION 1 (R22) — LE LIEN PREND LA MÊME EXPRESSION QUE LE
+   *   BLOC `delai-moyen` CI-DESSOUS, PAS SA PROPRE CONDITION. Avant ce correctif,
+   *   le lien se rendait dès que `client` existait, sans regarder `etat` : en
+   *   `inactif`/`chargement`, le message partait en disant « Jamais mesuré —
+   *   aucune opération chargée » sur un agent qui en a peut-être 300 ; en
+   *   `erreur`, il en envoyait un alors que la lecture a échoué ; et le pire
+   *   cas — une `erreur` survenue APRÈS une première page, où le `catch` du
+   *   hook ne vide pas `lignes` (`useHistoriqueClient.js:73-83`) — faisait
+   *   partir un chiffre que l'écran, lui, ne montre plus du tout. Un bouton qui
+   *   apparaît quand la donnée arrive est normal ; un message qui parle quand
+   *   l'écran se tait ne l'est pas.
+   * ⚠ PAS DE REPLI `'#'` : un lien qui ne mène nulle part se tape, deux fois
+   *   parfois (M-7 de cette même ronde). Hors de ces deux états, rien n'est
+   *   rendu — voir le JSX plus bas.
+   */
+  const peutEnvoyerFiche = Boolean(client) && (etat === 'pret' || etat === 'chargementPage')
   const lienFiche = useMemo(
-    () => (client ? lienWhatsApp(texteFiche({ client, lignes, delai })) : '#'),
-    [client, lignes, delai],
+    () => (peutEnvoyerFiche ? lienWhatsApp(texteFiche({ client, lignes, delai })) : null),
+    [peutEnvoyerFiche, client, lignes, delai],
   )
 
   return (
@@ -127,15 +141,18 @@ function PatronHistoriqueClient() {
                 {agent?.codeAgent ? `Code ${agent.codeAgent}` : 'Sans code agent'}
               </p>
             </div>
-            <a
-              href={lienFiche}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="ml-auto flex h-11 flex-none items-center gap-1.5 rounded-xl bg-success px-3 text-sm font-bold text-white hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-            >
-              <Send className="h-4 w-4" aria-hidden="true" />
-              Envoyer
-            </a>
+            {lienFiche && (
+              <a
+                href={lienFiche}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Envoyer la fiche par WhatsApp"
+                className="ml-auto flex h-11 flex-none items-center gap-1.5 rounded-xl bg-success px-3 text-sm font-bold text-white hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              >
+                <Send className="h-4 w-4" aria-hidden="true" />
+                Envoyer
+              </a>
+            )}
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
@@ -153,7 +170,10 @@ function PatronHistoriqueClient() {
                 afficher un verdict avant la réponse du serveur — tient donc
                 encore : on A une réponse, et le chiffre affiché reste celui de
                 cette réponse-là. Le démonter pendant que la page suivante
-                arrive ferait clignoter un chiffre déjà valide pour rien. */}
+                arrive ferait clignoter un chiffre déjà valide pour rien.
+             ⚠ CETTE CONDITION EST AUSSI CELLE DU LIEN « ENVOYER » CI-DESSUS
+                (`peutEnvoyerFiche`, ronde de correction 1, R22) : le message
+                ne doit jamais parler quand ce bloc se tait. */}
             {(etat === 'pret' || etat === 'chargementPage') && (
               // ⚠ L'EFFECTIF EST DANS LE MÊME BLOC QUE LA MOYENNE. Les séparer
               //   laisserait l'écran annoncer « 4 j » à côté de « 24 opérations »
@@ -165,30 +185,19 @@ function PatronHistoriqueClient() {
                 <p className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">
                   Temps mis avant remboursement
                 </p>
-                <p className="text-2xl font-bold tabular-nums text-ink">
-                  {/* ⚠ RONDE DE CORRECTION 1 (M-1) — « 0 j » DIT L'INVERSE DE CE
-                      QU'IL VEUT DIRE. Toute moyenne mesurée sous 12 h arrondit à
-                      zéro (`delaiMoyen` arrondit au jour) ; un agent réglé en 3 h
-                      afficherait « 0 j en moyenne », qui se lit comme un défaut,
-                      pas comme une qualité. */}
-                  {delai.jours === null
-                    ? 'Jamais mesuré'
-                    : delai.jours === 0
-                      ? "Moins d'un jour en moyenne"
-                      : `${delai.jours} j en moyenne`}
+                {/* ⚠ RONDE DE CORRECTION 1 (I-3) — `titre`/`detail` VIENNENT DE
+                    `phraseDelai.js`, PAS D'UN TERNAIRE ÉCRIT ICI. Les
+                    `data-testid` ne changent rien à l'affichage : ils laissent
+                    `tc-269-12` lire ces deux textes dans le DOM rendu au lieu
+                    de les recopier à la main dans le test — la seule façon
+                    pour un test de ne jamais diverger de l'écran qu'il
+                    verrouille. Le détail de chaque branche (jamais mesuré,
+                    0 j, etc.) est documenté dans `phraseDelai.js`. */}
+                <p data-testid="delai-titre" className="text-2xl font-bold tabular-nums text-ink">
+                  {delaiTitre}
                 </p>
-                <p className="mt-0.5 text-xs text-ink-muted tabular-nums">
-                  {/* ⚠ RONDE DE CORRECTION 1 (M-3) — `total` N'EST PAS UN
-                      COMPTE DE DÉPÔTS (I-2 : il mêle dépôts et retraits), donc
-                      le zéro mesure ne peut pas dire « aucun des N dépôts » sans
-                      mentir sur ce que N compte. Et plus aucune phrase ne porte
-                      un « 0 » ou un « 1 » mal accordés — lues au téléphone, les
-                      deux se remarquaient. */}
-                  {delai.jours === null
-                    ? (delai.total > 0
-                        ? `Aucun dépôt mesurable parmi les ${delai.total} opération${s(delai.total)} chargée${s(delai.total)}.`
-                        : "Aucune opération chargée pour l'instant.")
-                    : `Sur ${delai.mesurees} dépôt${s(delai.mesurees)} mesuré${s(delai.mesurees)} sur ${delai.total} opération${s(delai.total)} chargée${s(delai.total)}.`}
+                <p data-testid="delai-detail" className="mt-0.5 text-xs text-ink-muted tabular-nums">
+                  {delaiDetail}
                 </p>
                 {/* ⚠ RONDE DE CORRECTION 1 (M-2) — LA MOYENNE SUIT LA PAGE, PAS
                     L'HISTORIQUE ENTIER. `useHistoriqueClient` charge par pages de

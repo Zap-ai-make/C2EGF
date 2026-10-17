@@ -1,5 +1,6 @@
 import { champsAgent } from './agentFields.js'
 import { dureeDe } from './attente.js'
+import { phraseDelai } from './phraseDelai.js'
 
 const francs = (montant) => (
   typeof montant === 'number' && Number.isFinite(montant)
@@ -10,41 +11,64 @@ const francs = (montant) => (
 /** Un accord au pluriel, pour les phrases comptées de ce fichier. */
 const s = (n) => (n > 1 ? 's' : '')
 
+/** Le statut d'une ligne, jamais vide : le serveur traite l'absence comme validée. */
+const statutDe = (ligne) => String(ligne?.statut ?? '').trim() || 'Validée'
+
 /**
- * Ce que la fiche dit du délai — la MÊME phrase que l'écran, pas une variante.
+ * Une ligne de l'historique, prête pour un message texte.
  *
- * ⚠ CES TROIS BRANCHES SONT CELLES DE `PatronHistoriqueClient.jsx`. Si l'une
- *   d'elles diverge, le patron lit un chiffre à l'écran et en envoie un autre.
- *   Toute correction de l'un des deux textes doit toucher l'autre. (La branche
- *   « aucune opération chargée » reprend même le « pour l'instant » de l'écran
- *   — l'omettre rendrait le message PLUS catégorique que ce que le patron a
- *   sous les yeux, exactement ce que ce fichier interdit.)
+ * ⚠ RONDE DE CORRECTION 1 (R23) — LE STATUT SE NOMME QUAND IL N'EST PAS
+ *   « VALIDÉE ». `LigneHistorique.jsx` ne se contente jamais du montant et du
+ *   type : une opération annulée s'y lit barrée, sous une pastille rouge
+ *   (`StatusBadge`, `tonStatut`). Le texte simple n'a ni barré ni pastille — la
+ *   seule façon de ne pas affirmer qu'une opération annulée a eu lieu comme les
+ *   autres est de le dire en toutes lettres. Exemple qui a motivé ce correctif :
+ *   un retrait de 500 000 FCFA annulé serait parti, sans cette ligne, identique
+ *   à un retrait honoré — dans un message qui sert justement à trancher un
+ *   litige d'argent.
  *
- * ⚠ `jours === null` VEUT DIRE « AUCUN DÉPÔT MESURABLE », PAS « IL N'A JAMAIS
- *   FAIT ATTENDRE ». Depuis la tâche 5 (I-2), seuls les dépôts entrent dans la
- *   moyenne : un agent avec vingt retraits impayés et zéro dépôt tombe ici. Une
- *   phrase du genre « aucune de ses opérations n'a attendu de règlement »
- *   blanchirait exactement le client que le patron appelle pour se plaindre.
+ * ⚠ RONDE DE CORRECTION 1 (R24) — LA DURÉE SE NOMME SELON LE SENS. `dureeDe`
+ *   mesure `validatedAt − createdAt`, quel que soit le sens de l'opération
+ *   (même filtre que `delaiMoyen.js`). Sur un RETRAIT, ce chrono est celui de
+ *   LA BOUTIQUE à remettre l'argent ; sur un DÉPÔT, celui du CLIENT à être
+ *   remboursé. Un `(3j 00:00)` nu, juste sous la seule autre phrase chiffrée du
+ *   message — qui parle du temps de remboursement du client — ferait porter au
+ *   client un retard qui est parfois celui de sa propre boutique. À l'écran,
+ *   la plage début→fin et la couleur inflow/outflow évitent la confusion ; le
+ *   texte simple n'a ni l'une ni l'autre, d'où l'étiquette explicite.
  */
-function phraseDelai(delai) {
-  const jours = delai?.jours ?? null
-  const mesurees = delai?.mesurees ?? 0
-  const total = delai?.total ?? 0
+function ligneTexte(o) {
+  const duree = dureeDe(o)
+  const montant = francs(o?.montant)
+  const statut = statutDe(o)
 
-  if (jours === null) {
-    return total > 0
-      ? `Jamais mesuré — aucun dépôt mesurable parmi les ${total} opération${s(total)} chargée${s(total)}.`
-      : "Jamais mesuré — aucune opération chargée pour l'instant."
-  }
+  // ⚠ UNE DIRECTION INCONNUE NE S'ÉTIQUETTE PAS, ET DONC NE PUBLIE PAS SA
+  //   DURÉE. Écrit `typePlie !== 'depot'`, le test de sens faisait repartir
+  //   TOUT ce qui n'est pas un dépôt sous l'étiquette « remis par la
+  //   boutique » — y compris un `typePlie` absent, vide ou inattendu.
+  //   `plierType` (`functions/src/clients/historiqueClient.js`) rend « depot »
+  //   ou « retrait » sur les variantes connues, mais rend la valeur pliée
+  //   telle quelle sur tout autre type : un ravitaillement de 750 000 FCFA
+  //   partait en accusant la boutique d'un retard de trois jours sur une
+  //   opération qui n'est même pas un remboursement de client.
+  //   C'est le défaut de R24 pris par l'autre bout : là, une durée nue se
+  //   lisait comme celle du client ; ici, une durée mal étiquetée se lit comme
+  //   celle de la boutique. Sur une direction inconnue, la seule réponse
+  //   honnête est de taire la durée — le montant, la date et le statut, eux,
+  //   restent exacts et partent.
+  const sens = o?.typePlie === 'depot' || o?.typePlie === 'retrait' ? o.typePlie : null
+  const dureeTexte = duree && sens
+    ? (sens === 'retrait' ? `remis par la boutique en ${duree.texte}` : `réglé en ${duree.texte}`)
+    : ''
 
-  // ⚠ « 0 j » DIT L'INVERSE DE CE QU'IL VEUT DIRE : `delaiMoyen` arrondit au
-  //   jour, donc tout règlement sous 12 h donne zéro. Même traitement qu'à
-  //   l'écran (tâche 5, M-1).
-  const combien = jours === 0 ? "moins d'un jour" : `${jours} j`
-
-  return `Ramène l'argent en ${combien} en moyenne `
-    + `(sur ${mesurees} dépôt${s(mesurees)} mesuré${s(mesurees)} `
-    + `sur ${total} opération${s(total)} chargée${s(total)}).`
+  return [
+    '-',
+    o?.date ?? '',
+    o?.type ?? '',
+    montant ? `${montant} FCFA` : '',
+    dureeTexte ? `(${dureeTexte})` : '',
+    statut.toLowerCase() !== 'validée' ? `— ${statut}` : '',
+  ].filter(Boolean).join(' ')
 }
 
 /**
@@ -63,33 +87,46 @@ function phraseDelai(delai) {
  *   charger la suite et voir le chiffre se préciser ; celui qui reçoit le
  *   message ne le peut pas. La dernière ligne le dit, et elle n'est pas
  *   facultative.
+ *
+ * ⚠ RONDE DE CORRECTION 1 (R23) — LES LIGNES SUPPRIMÉES SONT ÉCARTÉES AVANT LE
+ *   `slice(0, 4)`, PAS APRÈS. Le serveur ne filtre ni `deletedAt` ni `statut`
+ *   (`listClientHistory.js`, et `reopenHistory` crée justement des lignes
+ *   supprimées) : à l'écran, ces lignes se reconnaissent à l'opacité réduite,
+ *   mais le CRM les considère hors d'usage. Filtrer APRÈS aurait fait manger
+ *   une place à une ligne que le CRM ne compte plus, et la fiche aurait montré
+ *   trois opérations réelles là où quatre tiennent.
  */
 export function texteFiche({ client, lignes = [], delai } = {}) {
   const agent = champsAgent(client ?? {})
-  const dernieres = (Array.isArray(lignes) ? lignes : []).slice(0, 4)
+  const lignesValides = (Array.isArray(lignes) ? lignes : []).filter((o) => !o?.deletedAt)
+  const dernieres = lignesValides.slice(0, 4)
+  const { titre, detail } = phraseDelai(delai)
+
+  // ⚠ RONDE DE CORRECTION 1 (M-6) — « N DES M DERNIÈRES », PAS UN TITRE NU.
+  //   « DERNIERES OPERATIONS » ne disait pas si quatre lignes étaient TOUTES
+  //   les opérations chargées ou seulement les quatre plus récentes d'un
+  //   historique plus long — une ambiguïté qu'un titre sans chiffre entretient
+  //   sans le vouloir.
+  const entete = dernieres.length < lignesValides.length
+    ? `${dernieres.length} des ${lignesValides.length} dernières opérations`
+    : `${lignesValides.length} dernière${s(lignesValides.length)} opération${s(lignesValides.length)}`
 
   return [
     'FICHE CLIENT — C2EGF',
     '--------------------',
-    `${client?.nom ?? ''} ${client?.prenom ?? ''}`.trim(),
+    // ⚠ RONDE DE CORRECTION 1 (M-2) — REPLI SUR « CLIENT », COMME L'ÉCRAN.
+    //   Sans lui, une fiche sans nom ni prénom laissait deux lignes vides
+    //   (`.filter(l => l !== null)` ne retire pas une chaîne vide) ; l'écran,
+    //   lui, replie déjà sur « Client » (`PatronHistoriqueClient.jsx:138`).
+    `${client?.nom ?? ''} ${client?.prenom ?? ''}`.trim() || 'Client',
     agent.codeAgent ? `Code agent : ${agent.codeAgent}` : null,
-    agent.numeroAgent ? `Numero agent : ${agent.numeroAgent}` : null,
-    client?.localite ? `Localite : ${client.localite}` : null,
+    agent.numeroAgent ? `Numéro agent : ${agent.numeroAgent}` : null,
+    client?.localite ? `Localité : ${client.localite}` : null,
     client?.registeredStoreName ? `Boutique : ${client.registeredStoreName}` : null,
     '',
-    phraseDelai(delai),
+    `${titre} — ${detail}`,
     ...(dernieres.length
-      ? ['', 'DERNIERES OPERATIONS', ...dernieres.map((o) => {
-          const duree = dureeDe(o)
-          const montant = francs(o?.montant)
-          return [
-            '-',
-            o?.date ?? '',
-            o?.type ?? '',
-            montant ? `${montant} FCFA` : '',
-            duree ? `(${duree.texte})` : '',
-          ].filter(Boolean).join(' ')
-        })]
+      ? ['', entete, ...dernieres.map(ligneTexte)]
       : []),
     '',
     "Délai calculé sur les opérations déjà chargées, pas sur tout l'historique.",

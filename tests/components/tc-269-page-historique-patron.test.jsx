@@ -207,6 +207,60 @@ describe('TC-269 — les boutons empruntés tiennent sous le doigt (44 px)', () 
     pousserClients([{ id: 'c1', nom: 'OUEDRAOGO', prenom: 'Salif' }])
     expect(screen.getByRole('button', { name: /réessayer/i })).toHaveClass('min-h-11')
   })
+
+  /** ⚠ RONDE DE CORRECTION 1 (M-4) — LE LIEN « ENVOYER » EST AUSSI UNE CIBLE
+   *   TACTILE EMPRUNTÉE À UN DOIGT, MÊME CONTRAINTE QUE LES DEUX CI-DESSUS. */
+  it('[TC-269-13] le lien « Envoyer » porte `h-11`', () => {
+    etatHook = { ...etatHook, etat: 'pret', lignes: [op(4)], encore: false, erreur: null }
+    page()
+    pousserClients([{ id: 'c1', nom: 'OUEDRAOGO', prenom: 'Salif' }])
+    expect(screen.getByRole('link', { name: /envoyer/i })).toHaveClass('h-11')
+  })
+})
+
+/**
+ * ⚠ RONDE DE CORRECTION 1 (C-1, R22) — LE LIEN NE DOIT JAMAIS PARLER QUAND LE
+ *   BLOC `delai-moyen` SE TAIT. Avant ce correctif, le lien se rendait dès que
+ *   `client` existait, SANS regarder `etat` : en `chargement`, le message
+ *   serait parti en disant « Jamais mesuré » sur un agent qui a peut-être 300
+ *   opérations pas encore arrivées ; en `erreur` sans ligne, il en aurait
+ *   envoyé un alors que la lecture a échoué ; et le pire des trois — une
+ *   `erreur` survenue APRÈS qu'une première page a répondu, où le `catch` du
+ *   hook NE VIDE PAS `lignes` (`useHistoriqueClient.js:73-83`) — aurait fait
+ *   partir un chiffre que l'écran, lui, ne montre plus du tout (le bloc
+ *   `delai-moyen` est verrouillé sur `pret`/`chargementPage`, donc il
+ *   disparaît en `erreur` même si `lignes` n'est pas vide).
+ */
+describe('TC-269 — « Envoyer » ne parle pas quand l’écran se tait', () => {
+  it('[TC-269-14] pendant le chargement, aucun lien « Envoyer » n’est atteignable', () => {
+    etatHook = { ...etatHook, etat: 'chargement', lignes: [] }
+    page()
+    pousserClients([{ id: 'c1', nom: 'OUEDRAOGO', prenom: 'Salif' }])
+    expect(screen.queryByRole('link', { name: /envoyer/i })).not.toBeInTheDocument()
+  })
+
+  it('[TC-269-15] en erreur sans aucune ligne reçue, aucun lien « Envoyer »', () => {
+    etatHook = { ...etatHook, etat: 'erreur', erreur: 'Service indisponible.', lignes: [] }
+    page()
+    pousserClients([{ id: 'c1', nom: 'OUEDRAOGO', prenom: 'Salif' }])
+    expect(screen.queryByRole('link', { name: /envoyer/i })).not.toBeInTheDocument()
+  })
+
+  /**
+   * ⚠ LE PIRE DES TROIS CAS (R22, point 3) — CELUI QUE LES DEUX TESTS
+   *   CI-DESSUS NE COUVRENT PAS. `lignes` N'EST PAS VIDE ICI : une erreur
+   *   survenue après une première page garde les lignes déjà chargées en
+   *   mémoire (le `catch` du hook ne les efface pas). Sans ce correctif, le
+   *   lien restait rendu avec un `delai` calculé sur ces lignes alors que le
+   *   bloc `delai-moyen` avait disparu — un message serait parti avec un
+   *   chiffre que l'écran ne montre plus.
+   */
+  it('[TC-269-16] en erreur APRÈS une première page (lignes retenues), aucun lien « Envoyer »', () => {
+    etatHook = { ...etatHook, etat: 'erreur', erreur: 'Service indisponible.', lignes: [op(4)] }
+    page()
+    pousserClients([{ id: 'c1', nom: 'OUEDRAOGO', prenom: 'Salif' }])
+    expect(screen.queryByRole('link', { name: /envoyer/i })).not.toBeInTheDocument()
+  })
 })
 
 /**
@@ -217,9 +271,17 @@ describe('TC-269 — les boutons empruntés tiennent sous le doigt (44 px)', () 
  *   existe ni qu'il porte le bon texte : c'est le nom du client ET la phrase de
  *   délai — le chiffre qui sort réellement du CRM — qui sont vérifiés ici,
  *   décodés depuis le `href`, pas recopiés à la main dans l'assertion.
+ *
+ * ⚠ RONDE DE CORRECTION 1 (I-3) — L'ATTENDU VIENT DU `textContent` DU BLOC
+ *   `delai-moyen` RENDU (`data-testid="delai-titre"`/`"delai-detail"`), PAS
+ *   D'UNE PHRASE RECOPIÉE À LA MAIN. La version précédente écrivait `/4 j en
+ *   moyenne/` et `/1 dépôt mesuré sur 2 opérations chargées/` en dur : reformuler
+ *   l'écran (ou `phraseDelai.js`) demain aurait laissé ce test vert pendant
+ *   que le message et l'écran divergent silencieusement — exactement le défaut
+ *   que ce chantier existe pour éviter.
  */
 describe('TC-269 — « Envoyer » ouvre la fiche sur WhatsApp', () => {
-  it('[TC-269-12] le lien vise wa.me et porte le nom et le délai affichés', () => {
+  it('[TC-269-12] le lien vise wa.me et porte le nom et le même délai que le bloc affiché', () => {
     etatHook = {
       ...etatHook,
       etat: 'pret',
@@ -229,15 +291,16 @@ describe('TC-269 — « Envoyer » ouvre la fiche sur WhatsApp', () => {
     page()
     pousserClients([{ id: 'c1', nom: 'OUEDRAOGO', prenom: 'Salif', codeAgent: '6412887' }])
 
+    const titreAffiche = screen.getByTestId('delai-titre').textContent
+    const detailAffiche = screen.getByTestId('delai-detail').textContent
+
     const lien = screen.getByRole('link', { name: /envoyer/i })
     expect(lien.getAttribute('href')).toMatch(/^https:\/\/wa\.me\/\?text=/)
 
     const texte = decodeURIComponent(lien.getAttribute('href').replace('https://wa.me/?text=', ''))
     expect(texte).toContain('OUEDRAOGO Salif')
-    // Même chiffre qu'à l'écran pour ce jeu de lignes : 4 j, 1 dépôt mesuré sur
-    // 2 opérations chargées (voir TC-269-02, mêmes `lignes`).
-    expect(texte).toMatch(/4 j en moyenne/)
-    expect(texte).toMatch(/1 dépôt mesuré sur 2 opérations chargées/)
+    expect(texte).toContain(titreAffiche)
+    expect(texte).toContain(detailAffiche)
 
     // ⚠ `target="_blank"` SANS `rel="noopener"` laisserait la nouvelle page
     //   WhatsApp accéder à `window.opener` — faille classique de reverse

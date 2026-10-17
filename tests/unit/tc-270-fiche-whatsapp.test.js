@@ -80,11 +80,22 @@ describe('TC-270 — ce que le texte contient', () => {
     expect(t).toMatch(/moins d'un jour/i)
   })
 
-  /** ⚠ Un identifiant Firestore dans un message WhatsApp ne sert personne. */
+  /**
+   * ⚠ Un identifiant Firestore dans un message WhatsApp ne sert personne.
+   *
+   * ⚠ RONDE DE CORRECTION 1 (M-5) — CETTE LIGNE PREND LA FORME RÉELLE DU
+   *   SERVEUR (`functions/src/clients/historiqueClient.js:150-160` :
+   *   `typePlie`, `statut`), PAS UNE FORME DÉGÉNÉRÉE. C'était le seul test du
+   *   fichier à monter des lignes, et il n'en asserte rien — c'est ce vide qui
+   *   a laissé passer R23 (voir TC-270-14 à TC-270-17, qui asserte le bloc).
+   */
   it('[TC-270-08] aucun identifiant technique ne fuit', () => {
     const t = texteFiche({
       client,
-      lignes: [{ id: 'h-abc123', date: '01/10', type: 'Depot', montant: 1000 }],
+      lignes: [{
+        id: 'h-abc123', date: '01/10', type: 'Depot', typePlie: 'depot',
+        statut: 'Validée', montant: 1000,
+      }],
       delai,
     })
     expect(t).not.toContain('ZZQ-ID-7788')
@@ -99,6 +110,136 @@ describe('TC-270 — ce que le texte contient', () => {
   /** ⚠ Un appel sans `delai` ne doit pas jeter : l'en-tête se rend avant tout. */
   it('[TC-270-10] un appel sans délai ni client ne jette pas', () => {
     expect(() => texteFiche({})).not.toThrow()
+  })
+
+  /**
+   * ⚠ RONDE DE CORRECTION 1 (M-2) — REPLI SUR « CLIENT ». Sans ce repli, une
+   *   fiche sans nom ni prénom laisse une ligne vide à la place du nom — le
+   *   même défaut que `.filter(l => l !== null)` laisse passer une chaîne
+   *   vide. L'écran replie déjà sur « Client » ; le message doit faire pareil.
+   */
+  it('[TC-270-13] un client sans nom ni prenom affiche « Client »', () => {
+    const t = texteFiche({ client: { id: 'x' }, lignes: [], delai })
+    expect(t).toMatch(/^Client$/m)
+  })
+
+  /**
+   * ⚠ RONDE DE CORRECTION 1, C-2 (R23) — LA RÈGLE CENTRALE DU FICHIER, « NE
+   *   JAMAIS AFFIRMER PLUS QUE L'ÉCRAN », S'APPLIQUE AUSSI AU BLOC DES
+   *   OPÉRATIONS. `LigneHistorique.jsx` montre une ligne supprimée barrée et à
+   *   opacité réduite, et une ligne annulée sous une pastille rouge — le texte
+   *   simple n'a ni l'un ni l'autre, et le serveur ne filtre ni `deletedAt` ni
+   *   `statut` (`listClientHistory.js`). Scénario qui a motivé ce correctif :
+   *   un retrait annulé de 500 000 FCFA, et une ligne supprimée de 999 999
+   *   FCFA (rouverte par `reopenHistory`) — la première doit sortir AVEC son
+   *   statut, la seconde ne doit pas sortir DU TOUT.
+   */
+  it('[TC-270-14] une opération annulée porte son statut, une opération supprimée ne part pas', () => {
+    const annulee = {
+      id: 'h1', date: '14/10', type: 'Retrait', typePlie: 'retrait',
+      montant: 500000, statut: 'Annulée',
+    }
+    const supprimee = {
+      id: 'h2', date: '13/10', type: 'Depot', typePlie: 'depot',
+      montant: 999999, statut: 'Validée', deletedAt: 1760000000000,
+    }
+    const t = texteFiche({ client, lignes: [annulee, supprimee], delai })
+    const montantAnnule = (500000).toLocaleString('fr-FR')
+    const montantSupprime = (999999).toLocaleString('fr-FR')
+    expect(t).toContain(montantAnnule)
+    expect(t).toMatch(/Annulée/)
+    expect(t).not.toContain(montantSupprime)
+  })
+
+  /**
+   * ⚠ RONDE DE CORRECTION 1, I-1 (R24) — LA DURÉE NOMME CELUI QU'ELLE MESURE.
+   *   `dureeDe` mesure `validatedAt − createdAt`, quel que soit le sens de
+   *   l'opération. Sur un retrait, c'est le temps que LA BOUTIQUE a mis à
+   *   remettre l'argent — pas un retard du client. Juste sous la seule autre
+   *   phrase chiffrée du message (le délai de remboursement DU CLIENT), un
+   *   « (3j 00:00) » nu ferait porter au client un délai qui est parfois celui
+   *   de sa propre boutique.
+   */
+  it('[TC-270-15] la durée d’un dépôt et celle d’un retrait ne disent pas la même chose', () => {
+    const debut = new Date('2026-10-10T08:00:00Z')
+    const troisJoursPlusTard = new Date(debut.getTime() + 3 * 24 * 60 * 60 * 1000)
+    const depot = {
+      id: 'd1', date: '10/10', type: 'Dépôt', typePlie: 'depot', montant: 20000,
+      statut: 'Validée', createdAt: debut, validatedAt: troisJoursPlusTard,
+    }
+    const retrait = {
+      id: 'r1', date: '11/10', type: 'Retrait', typePlie: 'retrait', montant: 30000,
+      statut: 'Validée', createdAt: debut, validatedAt: troisJoursPlusTard,
+    }
+
+    const tDepot = texteFiche({ client, lignes: [depot], delai })
+    expect(tDepot).toMatch(/réglé en 3j/)
+    expect(tDepot).not.toMatch(/remis par la boutique/)
+
+    const tRetrait = texteFiche({ client, lignes: [retrait], delai })
+    expect(tRetrait).toMatch(/remis par la boutique en 3j/)
+    expect(tRetrait).not.toMatch(/\bréglé en\b/)
+  })
+
+  /**
+   * ⚠ RONDE DE CORRECTION 1 (M-6) — « N DES M DERNIÈRES », PAS UN TITRE NU.
+   *   Le patron voit un bloc « DERNIERES OPERATIONS » suivi de quatre lignes :
+   *   rien ne dit si c'est tout l'historique chargé ou les quatre plus
+   *   récentes d'un historique plus long.
+   */
+  it('[TC-270-16] avec plus de quatre opérations, l’en-tête dit combien sont affichées sur combien', () => {
+    const six = Array.from({ length: 6 }, (_, i) => ({
+      id: `h${i}`, date: `0${i + 1}/10`, type: 'Depot', typePlie: 'depot',
+      statut: 'Validée', montant: 1000 * (i + 1),
+    }))
+    const t = texteFiche({ client, lignes: six, delai })
+    expect(t).toMatch(/4 des 6 dernières opérations/i)
+  })
+
+  /**
+   * ⚠ UNE DIRECTION INCONNUE NE S'ÉTIQUETTE PAS. `estRetrait` était écrit
+   *   `typePlie !== 'depot'`, donc TOUT ce qui n'est pas un dépôt — y compris
+   *   une ligne dont le `typePlie` est absent, vide ou inattendu — repartait
+   *   étiqueté « remis par la boutique », c'est-à-dire en accusant la
+   *   boutique d'un retard dont rien ne dit qu'il est le sien. `plierType`
+   *   (`functions/src/clients/historiqueClient.js`) replie le type réel du
+   *   serveur : il rend `'depot'` ou `'retrait'` sur les variantes connues,
+   *   mais rend la valeur pliée telle quelle sur tout autre type.
+   *
+   *   C'est le même défaut que R24 corrigeait, par l'autre bout : là, une
+   *   durée non étiquetée se lisait comme celle du client ; ici, une durée
+   *   étiquetée à tort se lit comme celle de la boutique. La seule réponse
+   *   honnête sur une direction inconnue est de ne pas publier la durée —
+   *   le montant, la date et le statut, eux, restent exacts et partent.
+   */
+  it('[TC-270-18] une opération de direction inconnue ne fait porter son délai à personne', () => {
+    const debut = new Date('2026-10-10T08:00:00Z')
+    const troisJoursPlusTard = new Date(debut.getTime() + 3 * 24 * 60 * 60 * 1000)
+    const inconnue = {
+      id: 'x1', date: '12/10', type: 'Ravitaillement', typePlie: 'ravitaillement',
+      montant: 750000, statut: 'Validée', createdAt: debut, validatedAt: troisJoursPlusTard,
+    }
+
+    const t = texteFiche({ client, lignes: [inconnue], delai })
+    expect(t).not.toMatch(/remis par la boutique/)
+    expect(t).not.toMatch(/réglé en/)
+    // Rien n'est inventé, mais rien de vrai n'est perdu non plus.
+    // ⚠ LE SÉPARATEUR DE MILLIERS DE `toLocaleString('fr-FR')` N'EST PAS UNE
+    //   ESPACE ORDINAIRE (c'est une espace insécable étroite, U+202F). Un
+    //   `toContain('750 000')` tapé à la main échoue sur un texte pourtant
+    //   juste — on construit donc l'attendu par le même chemin que le code.
+    expect(t).toContain(`${(750000).toLocaleString('fr-FR')} FCFA`)
+    expect(t).toContain('12/10')
+  })
+
+  it('[TC-270-17] avec quatre opérations ou moins, pas de « des N » redondant', () => {
+    const trois = Array.from({ length: 3 }, (_, i) => ({
+      id: `h${i}`, date: `0${i + 1}/10`, type: 'Depot', typePlie: 'depot',
+      statut: 'Validée', montant: 1000 * (i + 1),
+    }))
+    const t = texteFiche({ client, lignes: trois, delai })
+    expect(t).toMatch(/3 dernières opérations/i)
+    expect(t).not.toMatch(/des 3/i)
   })
 })
 
