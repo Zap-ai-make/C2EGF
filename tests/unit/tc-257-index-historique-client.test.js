@@ -113,15 +113,19 @@ describe('TC-257 — une requête, un index', () => {
    *   parce qu'elles comptaient des lignes annulées dont l'argent était déjà
    *   revenu aux soldes. Firestore maintient un index mort à CHAQUE écriture.
    *
-   * ⚠ {statut ASC, createdAt ASC} N'EST PAS CELUI DE `listClientHistory` — IL
-   *   APPARTIENT À `chiffreAffairesService.js` (tâche 9), AJOUTÉ ICI DÉLIBÉRÉMENT.
-   *   Il sert les deux agrégations de soustraction du chiffre d'affaires réseau
-   *   (`where('statut', '==', 'Annulée'|'Supprimée')` combiné à la plage de
-   *   `createdAt`) — PAS la requête `not-in` du plan d'origine, écartée
-   *   précisément parce qu'elle sous-évalue le CA en silence (brief de la
-   *   tâche 9, §1). Ce fichier ne sert que `listClientHistory` ; il n'était pas
-   *   le bon endroit pour documenter la table requête↔index de la tâche 9 —
-   *   seule l'absence de surplus est vérifiée ici.
+   * ⚠ {statut ASC, createdAt ASC} ET {type ASC, createdAt ASC} NE SONT PAS
+   *   CEUX DE `listClientHistory` — ILS APPARTIENNENT À
+   *   `chiffreAffairesService.js` (tâche 9), AJOUTÉS ICI DÉLIBÉRÉMENT. Le
+   *   premier sert les deux agrégations de soustraction sur `statut`
+   *   (`== 'Annulée'|'Supprimée'`, combiné à la plage de `createdAt`) ; le
+   *   second sert les trois agrégations de soustraction sur `type`
+   *   (`== 'Ravitaillement'|'Retour'|'Clôture'` — le float du dealer, qui
+   *   n'est pas du chiffre d'affaires client, ronde de correction 1 de la
+   *   tâche 9). Aucun des deux n'est la requête `not-in` ou `type in [...]`
+   *   du plan d'origine, écartées précisément parce qu'elles sous-évaluent le
+   *   CA en silence. Ce fichier ne sert que `listClientHistory` ; il n'était
+   *   pas le bon endroit pour documenter la table requête↔index de la tâche
+   *   9 — seule l'absence de surplus est vérifiée ici.
    */
   it('[TC-257-05] aucun index composite de trop sur history ou drafts', () => {
     const attendus = [
@@ -131,6 +135,10 @@ describe('TC-257 — une requête, un index', () => {
       ]),
       JSON.stringify([
         { fieldPath: 'statut', order: 'ASCENDING' },
+        { fieldPath: 'createdAt', order: 'ASCENDING' },
+      ]),
+      JSON.stringify([
+        { fieldPath: 'type', order: 'ASCENDING' },
         { fieldPath: 'createdAt', order: 'ASCENDING' },
       ]),
     ]

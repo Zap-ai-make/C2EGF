@@ -3,7 +3,7 @@ import { listNetworkCaisses, listArgentDehors } from '../../services/dealerServi
 import { chiffreAffaires } from '../../services/chiffreAffairesService.js'
 import { TRIS, TRI_DEFAUT, trierCaisses, filtrerCaisses, triParId } from '../../utils/caissesReseau.js'
 import { formatCurrency } from '../../utils/formatCurrency.js'
-import { businessDateKey } from '../../utils/businessDate.js'
+import { businessDateKey, millisecondsUntilNextBusinessDay } from '../../utils/businessDate.js'
 import { DEALER_NETWORK } from '../../constants/dealerConstants.js'
 import ErrorState from '../../components/ui/ErrorState.jsx'
 
@@ -133,6 +133,29 @@ function PatronBoutiques() {
     return () => { vivant = false }
   }, [periode])
 
+  // ⚠ RONDE DE CORRECTION 1 (I3) — « AUJOURD'HUI » NE DOIT PAS GELER À
+  //   L'HEURE DU MONTAGE. `businessDateKey()` n'était lu qu'une fois, dans
+  //   l'initialiseur de `useState` : un patron qui laisse l'écran ouvert à
+  //   23 h 40 et le regarde à 00 h 15 lisait le total d'HIER sous le mot
+  //   « Aujourd'hui » — et recliquer le bouton ne corrigeait rien, puisqu'il
+  //   est déjà actif (`periode.type === 'jour'` ne change pas tout seul).
+  //   Même remède que `useTodayTransactions.js:16-26`, qui résout exactement
+  //   ce problème ailleurs dans le dépôt : un `setTimeout` qui se replanifie à
+  //   chaque bascule de journée d'exploitation. `setPeriode` ne touche QUE si
+  //   le patron regarde encore « aujourd'hui » au moment du basculement —
+  //   naviguer vers un mois ne doit jamais être écrasé par cette horloge.
+  useEffect(() => {
+    const planifier = () => {
+      const maintenant = new Date()
+      return setTimeout(() => {
+        setPeriode((p) => (p.type === 'jour' ? { type: 'jour', cle: businessDateKey() } : p))
+        idTimeout = planifier()
+      }, millisecondsUntilNextBusinessDay(maintenant) + 25)
+    }
+    let idTimeout = planifier()
+    return () => clearTimeout(idTimeout)
+  }, [])
+
   // ⚠ RONDE DE CORRECTION 1 (C2) — UNE RÉFÉRENCE DE MONTAGE PARTAGÉE, PAS UN
   //   DRAPEAU FERMÉ PAR TENTATIVE. La version précédente rouvrait l'effet via
   //   un compteur `tentative`, et le `catch` de l'argent dehors ne faisait que
@@ -261,6 +284,16 @@ function PatronBoutiques() {
             ? 'Aujourd\'hui'
             : (mois.find((m) => m.cle === periode.cle)?.label ?? periode.cle)}
         </p>
+        {/* ⚠ RONDE DE CORRECTION 1 (MINEUR) — ANNONCE VOCALE DU CHANGEMENT DE
+            PÉRIODE, MÊME CONVENTION QUE `tri.annonce` PLUS BAS. Un lecteur
+            d'écran qui choisit un mois dans le `<select>` ne « voit » pas le
+            texte visuel se mettre à jour tout seul ; cette région `status`
+            (polie, silencieuse tant que rien ne change) le dit explicitement. */}
+        <p role="status" className="sr-only">
+          {`Chiffre d'affaires affiché : ${
+            periode.type === 'jour' ? 'aujourd\'hui' : (mois.find((m) => m.cle === periode.cle)?.label ?? periode.cle)
+          }.`}
+        </p>
         <div className="mt-3 flex gap-2">
           <button
             type="button"
@@ -275,12 +308,18 @@ function PatronBoutiques() {
             Aujourd'hui
           </button>
           {/* ⚠ CIBLE TACTILE 44 PX (`min-h-11`), COMME LE RESTE DE L'ÉCRAN —
-              PAS LE `min-h-10` (40 px) DU BROUILLON DU PLAN. */}
+              PAS LE `min-h-10` (40 px) DU BROUILLON DU PLAN.
+              ⚠ RONDE DE CORRECTION 1 (MINEUR) — `bg-brand-500`, PAS
+              `bg-transparent`. Un fond transparent laisse le `<select>`
+              natif hériter d'un fond indéfini sur Android (le menu déroulant
+              peut s'ouvrir sur un blanc sans rapport avec la carte) ; un fond
+              explicite, même couleur que le dégradé qui l'entoure, rend le
+              contrôle lisible dans les deux cas. */}
           <select
             aria-label="Choisir un mois"
             value={periode.type === 'mois' ? periode.cle : ''}
             onChange={(e) => e.target.value && setPeriode({ type: 'mois', cle: e.target.value })}
-            className="min-h-11 rounded-lg border border-white/30 bg-transparent px-2 text-sm font-semibold text-white"
+            className="min-h-11 rounded-lg border border-white/30 bg-brand-500 px-2 text-sm font-semibold text-white"
           >
             <option value="">Choisir un mois…</option>
             {mois.map((m) => (

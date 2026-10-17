@@ -1,6 +1,10 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { StrictMode } from 'react'
 import { render, screen, cleanup, fireEvent, act, waitFor } from '@testing-library/react'
+// Module RÉEL, pas mocké : sert uniquement à calculer la valeur attendue
+// (`businessDateKey()`) sans la recopier en dur — recopiée en dur, elle se
+// serait fossilisée au jour de l'écriture du test (ronde de correction 1, I4).
+import { businessDateKey } from '../../src/utils/businessDate.js'
 
 /**
  * TC-271 — les 84 boutiques, et les quatre chiffres que le patron demande.
@@ -397,16 +401,36 @@ describe('TC-271 — une réponse périmée ne remasque pas un montant valide (r
  *   zéro et « indisponible » ne se confondent pas, comme pour les caisses.
  */
 describe('TC-271 — la carte du chiffre d’affaires', () => {
+  /**
+   * ⚠ RONDE DE CORRECTION 1 (I4) — CE TEST NE POUVAIT PAS ÉCHOUER AVANT.
+   *   `/aujourd/i` sur le texte ENTIER de la carte est satisfait par le
+   *   libellé du bouton « Aujourd'hui », rendu quelle que soit la période
+   *   active : si le défaut devenait le mois demain, ce test resterait vert.
+   *   Deux assertions de comportement RÉEL, pas de texte, le remplacent :
+   *   l'appel effectif à `chiffreAffaires` (avec la vraie clé du jour, jamais
+   *   recopiée en dur) et l'état `aria-pressed` du bouton.
+   */
   it('[TC-271-23] le jour est le défaut', async () => {
     render(<PatronBoutiques />)
-    expect(await screen.findByTestId('ca-reseau')).toHaveTextContent(/aujourd/i)
+    await screen.findByTestId('ca-reseau')
+    expect(chiffreAffaires).toHaveBeenCalledWith({ type: 'jour', cle: businessDateKey() })
+    expect(screen.getByRole('button', { name: /aujourd'hui/i })).toHaveAttribute('aria-pressed', 'true')
   })
 
+  /**
+   * ⚠ RONDE DE CORRECTION 1 (I4) — `toHaveTextContent('0')` ÉTAIT SATISFAIT
+   *   SANS RAPPORT AVEC LE TOTAL. `textContent` inclut les six `<option>` du
+   *   `<select>` « Choisir un mois », même collapsé — « Octobre 2026 »,
+   *   « Septembre 2026 »… portent chacun un « 0 » (dans l'année). Si la carte
+   *   n'affichait plus RIEN pour un total nul, ce test serait resté vert.
+   *   `'0 FCFA'` verrouille le format RÉEL rendu par `formatCurrency(0)`, une
+   *   sous-chaîne qu'aucun libellé de mois ne peut produire par accident.
+   */
   it('[TC-271-24] une journée vide affiche 0 FCFA, pas « indisponible »', async () => {
     chiffreAffaires.mockResolvedValue({ total: 0, incomplet: false })
     render(<PatronBoutiques />)
     const carte = await screen.findByTestId('ca-reseau')
-    expect(carte).toHaveTextContent('0')
+    expect(carte).toHaveTextContent('0 FCFA')
     expect(carte).not.toHaveTextContent(/indisponible/i)
   })
 
@@ -424,13 +448,25 @@ describe('TC-271 — la carte du chiffre d’affaires', () => {
     expect(await screen.findByTestId('ca-reseau')).toHaveTextContent(/incomplet/i)
   })
 
+  /**
+   * ⚠ RONDE DE CORRECTION 1 (MINEUR) — LA CLÉ DE MOIS N'EST PLUS RECOPIÉE EN
+   *   DUR. `'2026-09'` ne fait partie des six options du sélecteur QUE tant
+   *   qu'on se trouve dans les six mois qui suivent octobre 2026 —
+   *   `derniersMois()` glisse avec la date du jour (voir son propre
+   *   commentaire dans `PatronBoutiques.jsx`) : ce test serait devenu rouge en
+   *   mars 2027 SANS AUCUNE régression du code testé. Le mois précédent,
+   *   calculé de la même façon que `derniersMois`, est TOUJOURS dans la liste.
+   */
   it('[TC-271-27] choisir un mois relance la requête sur ce mois', async () => {
     chiffreAffaires.mockResolvedValue({ total: 100, incomplet: false })
+    const maintenant = new Date()
+    const moisPrecedent = new Date(Date.UTC(maintenant.getUTCFullYear(), maintenant.getUTCMonth() - 1, 1))
+    const cle = `${moisPrecedent.getUTCFullYear()}-${String(moisPrecedent.getUTCMonth() + 1).padStart(2, '0')}`
     render(<PatronBoutiques />)
     await screen.findByTestId('ca-reseau')
-    fireEvent.change(screen.getByLabelText(/choisir un mois/i), { target: { value: '2026-09' } })
+    fireEvent.change(screen.getByLabelText(/choisir un mois/i), { target: { value: cle } })
     await waitFor(() => {
-      expect(chiffreAffaires).toHaveBeenCalledWith({ type: 'mois', cle: '2026-09' })
+      expect(chiffreAffaires).toHaveBeenCalledWith({ type: 'mois', cle })
     })
   })
 
