@@ -5,6 +5,12 @@
  * Les rouges bruts passent au jeton `danger`, qui veut dire échec — distinct
  * d'`outflow`, qui veut dire « l'argent sort ». C'est la confusion que
  * l'application entretenait partout.
+ *
+ * ⚠ `min-h-11` SUR « RÉESSAYER » — RONDE DE CORRECTION 2 DE LA TÂCHE 5 (R20).
+ *   Ce composant sert neuf écrans ; `py-1.5` seul rendait son bouton à ~32 px,
+ *   sous les 44 px de cible tactile. Repéré en corrigeant l'espace patron, mais
+ *   le défaut appartenait déjà à tous les écrans qui le montent — la correction
+ *   leur profite tous, sans toucher le reste (texte, couleur, comportement).
  */
 function ErrorState({ message = 'Une erreur est survenue.', onRetry }) {
   return (
@@ -15,7 +21,7 @@ function ErrorState({ message = 'Une erreur est survenue.', onRetry }) {
         <button
           type="button"
           onClick={onRetry}
-          className="mt-3 rounded bg-danger px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-danger/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+          className="mt-3 inline-flex min-h-11 items-center rounded bg-danger px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-danger/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
         >
           Réessayer
         </button>

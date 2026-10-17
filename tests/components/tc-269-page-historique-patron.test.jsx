@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { render, screen, cleanup, act } from '@testing-library/react'
+import { render, screen, cleanup, act, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
 /**
@@ -32,13 +32,17 @@ vi.mock('../../src/services/firestore.js', () => ({
 
 const { default: PatronHistoriqueClient } = await import('../../src/pages/admin/PatronHistoriqueClient.jsx')
 
-const page = (id = 'c1') => render(
+// Extrait en fonction (plutôt qu'en JSX direct dans `page`) pour pouvoir
+// réinvoquer le MÊME arbre via `rerender(...)` — nécessaire à [TC-269-09],
+// qui observe une transition d'état SANS démonter le composant.
+const arbre = (id) => (
   <MemoryRouter initialEntries={[`/admin/clients/${id}/historique`]}>
     <Routes>
       <Route path="/admin/clients/:clientId/historique" element={<PatronHistoriqueClient />} />
     </Routes>
-  </MemoryRouter>,
+  </MemoryRouter>
 )
+const page = (id = 'c1') => render(arbre(id))
 
 /** Fait arriver la liste des clients, comme le ferait Firestore. */
 const pousserClients = (data) => act(() => { clientsCb(data) })
@@ -126,5 +130,81 @@ describe('TC-269 — l’abonnement clients peut être lent ou tomber', () => {
     page('inconnu')
     pousserClients([])
     expect(screen.getByText(/fiche introuvable/i)).toBeInTheDocument()
+  })
+})
+
+/**
+ * ⚠ RONDE DE CORRECTION 2 (R17) — `'chargementPage'` NE DÉMONTE PLUS LE
+ *   VERDICT. Mon doute n°1 de la ronde précédente : la condition stricte
+ *   `etat === 'pret'` faisait clignoter le bloc `delai-moyen` à chaque clic sur
+ *   « Charger plus ». Ce test clique réellement le bouton, puis simule la
+ *   transition que ferait le vrai hook (`useHistoriqueClient.js:55`), et
+ *   vérifie que le bloc traverse la transition sans disparaître.
+ */
+describe('TC-269 — « Charger plus » ne doit pas faire clignoter la moyenne', () => {
+  it('[TC-269-09] le bloc delai-moyen reste affiché pendant `chargementPage`', () => {
+    const chargerPlus = vi.fn()
+    etatHook = { ...etatHook, etat: 'pret', lignes: [op(4)], encore: true, chargerPlus }
+    const { rerender } = page()
+    pousserClients([{ id: 'c1', nom: 'OUEDRAOGO', prenom: 'Salif' }])
+    expect(screen.getByTestId('delai-moyen')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /charger plus/i }))
+    expect(chargerPlus).toHaveBeenCalled()
+
+    // Le clic n'a rebranché que le mock `chargerPlus` : c'est à ce test de
+    // reproduire la réponse du hook, exactement comme `charger(id, curseur)`
+    // le ferait avant que la page suivante n'arrive.
+    etatHook = { ...etatHook, etat: 'chargementPage' }
+    rerender(arbre('c1'))
+    expect(screen.getByTestId('delai-moyen')).toBeInTheDocument()
+  })
+})
+
+/**
+ * ⚠ RONDE DE CORRECTION 2 (R21) — « MOINS D'UN JOUR » N'ÉTAIT EXERCÉE PAR
+ *   AUCUN TEST. La correction M-1 (ronde 1) ajoutait la phrase mais rien ne la
+ *   déclenchait : `op(0.3)` règle un dépôt en ~7 h, une moyenne qui arrondit à
+ *   `jours: 0` (`delaiMoyen`, arrondi au jour) sans être nulle.
+ */
+describe('TC-269 — un délai mesuré sous un jour ne s’affiche jamais « 0 j »', () => {
+  it('[TC-269-10] un dépôt réglé en quelques heures affiche « Moins d’un jour en moyenne »', () => {
+    etatHook = { ...etatHook, etat: 'pret', lignes: [op(0.3)], encore: false }
+    page()
+    pousserClients([{ id: 'c1', nom: 'OUEDRAOGO', prenom: 'Salif' }])
+    const bloc = screen.getByTestId('delai-moyen')
+    expect(bloc).toHaveTextContent(/moins d.un jour/i)
+    expect(bloc).not.toHaveTextContent(/\b0\s*j\b/)
+  })
+})
+
+/**
+ * ⚠ RONDE DE CORRECTION 2 (R20) — LA CIBLE TACTILE DE `ErrorState` ET
+ *   `LoadMoreButton`. `jsdom` ne charge aucune feuille de style Tailwind (voir
+ *   `vitest.config.js`/`tests/setup.js`) : `getComputedStyle` n'y rendrait
+ *   jamais la hauteur réelle d'une classe utilitaire, donc la seule vérification
+ *   possible est la présence de la classe `min-h-11` elle-même — même logique
+ *   que `TC-267-10` (tâche 4), qui vérifie `sticky`/`left-0` par la même
+ *   contrainte.
+ *
+ *   PAS DANS `tc-107-composants-etats.test.jsx` : l'en-tête de ce fichier
+ *   interdit explicitement « jamais une classe » pour cette famille de tests
+ *   (TC-100 à TC-107, verrou anti-restyle). Une assertion de classe y
+ *   contredirait la règle que le fichier existe pour faire respecter. Ce test
+ *   vit donc ici, contre le rendu réel de la page qui monte les deux
+ *   composants.
+ */
+describe('TC-269 — les boutons empruntés tiennent sous le doigt (44 px)', () => {
+  it('[TC-269-11] « Charger plus » et « Réessayer » portent `min-h-11`', () => {
+    etatHook = { ...etatHook, etat: 'pret', lignes: [op(4)], encore: true, erreur: null }
+    page()
+    pousserClients([{ id: 'c1', nom: 'OUEDRAOGO', prenom: 'Salif' }])
+    expect(screen.getByRole('button', { name: /charger plus/i })).toHaveClass('min-h-11')
+    cleanup()
+
+    etatHook = { ...etatHook, etat: 'erreur', erreur: 'Service indisponible.', lignes: [], encore: false }
+    page()
+    pousserClients([{ id: 'c1', nom: 'OUEDRAOGO', prenom: 'Salif' }])
+    expect(screen.getByRole('button', { name: /réessayer/i })).toHaveClass('min-h-11')
   })
 })

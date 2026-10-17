@@ -122,14 +122,22 @@ function PatronHistoriqueClient() {
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-            {/* ⚠ RONDE DE CORRECTION 1 (I-1) — SEULEMENT SUR « PRÊT », MÊME
-                MOTIF QUE `HistoriqueClientPanel.jsx:144-150`. Le hook démarre à
-                `inactif` puis `chargement`, avec `lignes === []` : une condition
-                qui ne regarderait que `lignes` afficherait « Jamais mesuré —
-                Aucune opération chargée » sur un agent qui en a peut-être 300,
-                le temps que la première page arrive. Un écran ne rend pas de
-                verdict avant d'avoir demandé. */}
-            {etat === 'pret' && (
+            {/* ⚠ RONDE DE CORRECTION 1 (I-1) — PAS DE VERDICT AVANT D'AVOIR
+                DEMANDÉ, MÊME MOTIF QUE `HistoriqueClientPanel.jsx:144-150`. Le
+                hook démarre à `inactif` puis `chargement`, avec `lignes ===
+                []` : une condition qui ne regarderait que `lignes` afficherait
+                « Jamais mesuré — Aucune opération chargée » sur un agent qui en
+                a peut-être 300, le temps que la première page arrive.
+             ⚠ RONDE DE CORRECTION 2 (R17) — `'chargementPage'` EST ADMIS, ET
+                CE N'EST PAS LE MÊME CAS. Cet état n'est atteignable qu'APRÈS
+                qu'une première page a répondu : il exige un curseur
+                (`useHistoriqueClient.js:55`, posé par `charger(id, curseur)`
+                lors d'un « Charger plus »). La garantie d'I-1 — ne jamais
+                afficher un verdict avant la réponse du serveur — tient donc
+                encore : on A une réponse, et le chiffre affiché reste celui de
+                cette réponse-là. Le démonter pendant que la page suivante
+                arrive ferait clignoter un chiffre déjà valide pour rien. */}
+            {(etat === 'pret' || etat === 'chargementPage') && (
               // ⚠ L'EFFECTIF EST DANS LE MÊME BLOC QUE LA MOYENNE. Les séparer
               //   laisserait l'écran annoncer « 4 j » à côté de « 24 opérations »
               //   alors que la mesure n'en couvre qu'une partie.
