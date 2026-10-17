@@ -18,6 +18,16 @@ vi.mock('../../src/services/dealerService.js', () => ({
   listArgentDehors: (...a) => listArgentDehors(...a),
 }))
 
+// ⚠ TROISIÈME SOURCE, INDÉPENDANTE DES DEUX AUTRES (tâche 9). La carte du
+//   chiffre d'affaires appelle `chiffreAffairesService.js`, jamais
+//   `dealerService.js` — la mocker à part est ce qui permet de prouver
+//   qu'un échec de l'une n'affecte pas l'autre (TC-271-10, TC-271-11 restent
+//   verts même quand cette source est en défaut, et inversement).
+const chiffreAffaires = vi.fn().mockResolvedValue({ total: 847300000, incomplet: false })
+vi.mock('../../src/services/chiffreAffairesService.js', () => ({
+  chiffreAffaires: (...a) => chiffreAffaires(...a),
+}))
+
 const { default: PatronBoutiques } = await import('../../src/pages/admin/PatronBoutiques.jsx')
 
 const caisse = (i) => ({ storeId: 's' + i, name: 'BOUTIQUE ' + i, stock: 1000 * i, liquidite: 500 * i })
@@ -25,6 +35,7 @@ const caisse = (i) => ({ storeId: 's' + i, name: 'BOUTIQUE ' + i, stock: 1000 * 
 beforeEach(() => {
   listNetworkCaisses.mockReset()
   listArgentDehors.mockReset()
+  chiffreAffaires.mockReset()
   listNetworkCaisses.mockResolvedValue({
     caisses: [caisse(1), caisse(2)], total: 2,
     sommeStock: 3000, sommeLiquidite: 1500, illisibles: 0,
@@ -33,6 +44,7 @@ beforeEach(() => {
     parBoutique: [{ storeId: 's1', name: 'BOUTIQUE 1', depots: 70000, retraits: 20000, dehors: 50000 }],
     depots: 70000, retraits: 20000, dehors: 50000, illisibles: 0, horsReseau: 0,
   })
+  chiffreAffaires.mockResolvedValue({ total: 847300000, incomplet: false })
 })
 afterEach(cleanup)
 
@@ -373,5 +385,67 @@ describe('TC-271 — une réponse périmée ne remasque pas un montant valide (r
 
     expect(credit).toHaveTextContent('70 000')
     expect(credit).not.toHaveTextContent('—')
+  })
+})
+
+/**
+ * TC-271 — la carte du chiffre d'affaires (tâche 9).
+ *
+ * « Pour le chiffre d'affaire, on fait en option filtrable journalier par
+ *   défaut, avec un sélecteur de mois » — les mots du patron. La carte a sa
+ *   propre source (`chiffreAffairesService.js`), donc son propre état :
+ *   zéro et « indisponible » ne se confondent pas, comme pour les caisses.
+ */
+describe('TC-271 — la carte du chiffre d’affaires', () => {
+  it('[TC-271-23] le jour est le défaut', async () => {
+    render(<PatronBoutiques />)
+    expect(await screen.findByTestId('ca-reseau')).toHaveTextContent(/aujourd/i)
+  })
+
+  it('[TC-271-24] une journée vide affiche 0 FCFA, pas « indisponible »', async () => {
+    chiffreAffaires.mockResolvedValue({ total: 0, incomplet: false })
+    render(<PatronBoutiques />)
+    const carte = await screen.findByTestId('ca-reseau')
+    expect(carte).toHaveTextContent('0')
+    expect(carte).not.toHaveTextContent(/indisponible/i)
+  })
+
+  it('[TC-271-25] une panne dit « indisponible », jamais 0', async () => {
+    chiffreAffaires.mockResolvedValue({ total: null, incomplet: false })
+    render(<PatronBoutiques />)
+    const carte = await screen.findByTestId('ca-reseau')
+    expect(carte).toHaveTextContent(/indisponible/i)
+    expect(carte).not.toHaveTextContent(/\b0\b/)
+  })
+
+  it('[TC-271-26] une somme incomplète le dit', async () => {
+    chiffreAffaires.mockResolvedValue({ total: null, incomplet: true })
+    render(<PatronBoutiques />)
+    expect(await screen.findByTestId('ca-reseau')).toHaveTextContent(/incomplet/i)
+  })
+
+  it('[TC-271-27] choisir un mois relance la requête sur ce mois', async () => {
+    chiffreAffaires.mockResolvedValue({ total: 100, incomplet: false })
+    render(<PatronBoutiques />)
+    await screen.findByTestId('ca-reseau')
+    fireEvent.change(screen.getByLabelText(/choisir un mois/i), { target: { value: '2026-09' } })
+    await waitFor(() => {
+      expect(chiffreAffaires).toHaveBeenCalledWith({ type: 'mois', cle: '2026-09' })
+    })
+  })
+
+  /**
+   * ⚠ LA DEUXIÈME MOITIÉ DE L'INDÉPENDANCE (brief, Step 4) — PAS SEULEMENT
+   *   « une panne du CA n'emporte pas les caisses » (déjà couvert par
+   *   TC-271-10/11 qui restent verts avec ce mock par défaut), MAIS AUSSI
+   *   « une panne DES CAISSES n'emporte pas le CA ». Sans cette carte posée
+   *   au-dessus de la branche erreur/chargement des caisses, l'écran
+   *   d'erreur remplacerait tout, carte comprise.
+   */
+  it('[TC-271-28] un échec des caisses n’empêche pas la carte du CA de s’afficher', async () => {
+    listNetworkCaisses.mockRejectedValue(new Error('permission-denied'))
+    render(<PatronBoutiques />)
+    expect(await screen.findByTestId('ca-reseau')).toHaveTextContent(/847\s?300\s?000/)
+    expect(screen.getByRole('alert')).toBeInTheDocument()
   })
 })

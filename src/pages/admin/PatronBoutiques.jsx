@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { listNetworkCaisses, listArgentDehors } from '../../services/dealerService.js'
+import { chiffreAffaires } from '../../services/chiffreAffairesService.js'
 import { TRIS, TRI_DEFAUT, trierCaisses, filtrerCaisses, triParId } from '../../utils/caissesReseau.js'
 import { formatCurrency } from '../../utils/formatCurrency.js'
+import { businessDateKey } from '../../utils/businessDate.js'
 import { DEALER_NETWORK } from '../../constants/dealerConstants.js'
 import ErrorState from '../../components/ui/ErrorState.jsx'
 
@@ -61,6 +63,25 @@ const noteIllisibles = (illisibles) => (
  * second vocabulaire (« brouillon ») pour ce que l'utilisateur appelle déjà
  * une « opération ».
  */
+const MOIS_FR = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
+
+/**
+ * Les six derniers mois, du plus récent au plus ancien.
+ *
+ * ⚠ DÉRIVÉS DE `aujourdhui`, JAMAIS ÉCRITS EN DUR. Une liste figée au jour de
+ *   l'écriture serait fausse dès le mois suivant — et resterait verte en test
+ *   tout en mentant à l'écran.
+ */
+const derniersMois = (aujourdhui = new Date()) => Array.from({ length: 6 }, (_, i) => {
+  const d = new Date(Date.UTC(aujourdhui.getUTCFullYear(), aujourdhui.getUTCMonth() - i, 1))
+  const m = d.getUTCMonth()
+  return {
+    cle: `${d.getUTCFullYear()}-${String(m + 1).padStart(2, '0')}`,
+    label: `${MOIS_FR[m].charAt(0).toUpperCase()}${MOIS_FR[m].slice(1)} ${d.getUTCFullYear()}`,
+  }
+})
+
 function reservesDehors(illisibles, horsReseau) {
   const phrases = []
   if (illisibles > 0) {
@@ -83,6 +104,34 @@ function PatronBoutiques() {
   const [dehorsEnEchec, setDehorsEnEchec] = useState(false)
   const [tri, setTri] = useState(TRI_DEFAUT)
   const [filtre, setFiltre] = useState('')
+
+  // ⚠ LA CARTE DU CA A SA PROPRE SOURCE, DONC SON PROPRE ÉTAT — PAS CELUI DES
+  //   CAISSES. `chiffreAffaires()` interroge un agrégat entièrement distinct
+  //   (`chiffreAffairesService.js`) ; qu'il échoue ne doit emporter ni les
+  //   caisses ni l'argent dehors, et réciproquement (brief de la tâche 9,
+  //   Step 4). Un simple drapeau `vivant` LOCAL à l'effet suffit ici — pas
+  //   besoin du `vivantRef` / `generationRef` partagés plus bas : il n'y a
+  //   qu'une seule requête en vol par valeur de `periode`, et rien d'extérieur
+  //   à l'effet ne la relance (pas de bouton Réessayer pour cette carte) —
+  //   c'est précisément ce second point d'entrée qui rendait `vivantRef` seul
+  //   insuffisant pour les caisses (voir le commentaire de `generationRef`
+  //   plus bas) ; il n'existe pas ici.
+  const mois = useMemo(() => derniersMois(), [])
+  const [periode, setPeriode] = useState({ type: 'jour', cle: businessDateKey() })
+  const [ca, setCa] = useState(null)
+
+  useEffect(() => {
+    let vivant = true
+    setCa(null)
+    chiffreAffaires(periode)
+      .then((r) => { if (vivant) setCa(r) })
+      // Filet de sécurité : `chiffreAffaires` capture déjà ses propres échecs
+      // et ne rejette jamais en pratique, mais si ce contrat changeait un
+      // jour, une promesse rejetée ne doit pas rester muette indéfiniment
+      // (`ca` figé à `null`, soit « Chargement… » pour toujours).
+      .catch(() => { if (vivant) setCa({ total: null, incomplet: false }) })
+    return () => { vivant = false }
+  }, [periode])
 
   // ⚠ RONDE DE CORRECTION 1 (C2) — UNE RÉFÉRENCE DE MONTAGE PARTAGÉE, PAS UN
   //   DRAPEAU FERMÉ PAR TENTATIVE. La version précédente rouvrait l'effet via
@@ -171,6 +220,75 @@ function PatronBoutiques() {
           strict nécessaire), mais un lecteur d'écran arrivant ici doit pouvoir
           nommer l'écran, erreur et chargement compris. */}
       <h2 className="sr-only">Les boutiques et leurs soldes</h2>
+
+      {/* ⚠ ZÉRO ET « INDISPONIBLE » NE SE RESSEMBLENT PAS — MÊME PRINCIPE QUE
+          POUR LES CAISSES PLUS BAS. Une journée (ou un mois) sans opération
+          vaut 0 FCFA, et c'est une information que le patron doit pouvoir
+          lire. Une requête en échec n'est pas une période morte : afficher 0
+          lui ferait croire que le réseau n'a pas travaillé.
+          ⚠ CETTE CARTE RESTE AU-DESSUS DE LA BRANCHE CHARGEMENT/ERREUR/PRÊT
+          DES CAISSES CI-DESSOUS, EXPRÈS : elle a sa propre source et son
+          propre état (voir le commentaire de l'effet plus haut), donc elle
+          continue de s'afficher même quand les caisses chargent ou échouent —
+          et réciproquement. */}
+      <div
+        data-testid="ca-reseau"
+        className="mx-3 mt-3 flex-none rounded-2xl bg-gradient-to-br from-brand-500 to-brand-400 px-4 py-4 text-white"
+      >
+        <p className="text-[10px] font-bold uppercase tracking-widest text-brand-200">
+          Chiffre d'affaires du réseau
+        </p>
+        <p className="mt-0.5 text-3xl font-bold leading-tight tabular-nums">
+          {ca === null
+            // ⚠ « Lecture en cours… », PAS « Chargement… ». Le mot
+            //   « Chargement… » est déjà pris par l'état plein-écran des
+            //   caisses juste en dessous (TC-271-18) : deux éléments portant
+            //   le même texte casseraient `getByText(/chargement/i)`, qui
+            //   suppose un élément UNIQUE. Même vocabulaire que l'argent
+            //   dehors en vol (« lecture en cours… » un peu plus bas).
+            ? 'Lecture en cours…'
+            : ca.total === null
+              // ⚠ « Total incomplet », PAS « Somme incomplète » — même mot que
+              //   la note de l'argent dehors plus bas (`reservesDehors`), et un
+              //   choix qui compte : l'accent de la forme féminine (« è »)
+              //   romprait toute recherche ou assertion sur la sous-chaîne
+              //   « incomplet ».
+              ? (ca.incomplet ? 'Total incomplet' : 'Chiffre indisponible')
+              : formatCurrency(ca.total)}
+        </p>
+        <p className="mt-1 text-xs text-brand-200">
+          {periode.type === 'jour'
+            ? 'Aujourd\'hui'
+            : (mois.find((m) => m.cle === periode.cle)?.label ?? periode.cle)}
+        </p>
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            onClick={() => setPeriode({ type: 'jour', cle: businessDateKey() })}
+            aria-pressed={periode.type === 'jour'}
+            className={`min-h-11 rounded-lg border px-3 text-sm font-semibold transition-colors ${
+              periode.type === 'jour'
+                ? 'border-white bg-surface text-brand-500'
+                : 'border-white/30 text-white hover:bg-white/10'
+            }`}
+          >
+            Aujourd'hui
+          </button>
+          {/* ⚠ CIBLE TACTILE 44 PX (`min-h-11`), COMME LE RESTE DE L'ÉCRAN —
+              PAS LE `min-h-10` (40 px) DU BROUILLON DU PLAN. */}
+          <select
+            aria-label="Choisir un mois"
+            value={periode.type === 'mois' ? periode.cle : ''}
+            onChange={(e) => e.target.value && setPeriode({ type: 'mois', cle: e.target.value })}
+            className="min-h-11 rounded-lg border border-white/30 bg-transparent px-2 text-sm font-semibold text-white"
+          >
+            <option value="">Choisir un mois…</option>
+            {mois.map((m) => (
+              <option key={m.cle} value={m.cle} className="text-ink">{m.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
 
       {caissesErreur ? (
         <div className="px-4 py-6">

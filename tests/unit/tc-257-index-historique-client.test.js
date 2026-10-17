@@ -112,12 +112,26 @@ describe('TC-257 — une requête, un index', () => {
    *   heure dans ce dépôt ; il servait des sommes par type retirées depuis,
    *   parce qu'elles comptaient des lignes annulées dont l'argent était déjà
    *   revenu aux soldes. Firestore maintient un index mort à CHAQUE écriture.
+   *
+   * ⚠ {statut ASC, createdAt ASC} N'EST PAS CELUI DE `listClientHistory` — IL
+   *   APPARTIENT À `chiffreAffairesService.js` (tâche 9), AJOUTÉ ICI DÉLIBÉRÉMENT.
+   *   Il sert les deux agrégations de soustraction du chiffre d'affaires réseau
+   *   (`where('statut', '==', 'Annulée'|'Supprimée')` combiné à la plage de
+   *   `createdAt`) — PAS la requête `not-in` du plan d'origine, écartée
+   *   précisément parce qu'elle sous-évalue le CA en silence (brief de la
+   *   tâche 9, §1). Ce fichier ne sert que `listClientHistory` ; il n'était pas
+   *   le bon endroit pour documenter la table requête↔index de la tâche 9 —
+   *   seule l'absence de surplus est vérifiée ici.
    */
   it('[TC-257-05] aucun index composite de trop sur history ou drafts', () => {
     const attendus = [
       JSON.stringify([
         { fieldPath: 'clientId', order: 'ASCENDING' },
         { fieldPath: 'createdAt', order: 'DESCENDING' },
+      ]),
+      JSON.stringify([
+        { fieldPath: 'statut', order: 'ASCENDING' },
+        { fieldPath: 'createdAt', order: 'ASCENDING' },
       ]),
     ]
     const surplus = index.indexes
