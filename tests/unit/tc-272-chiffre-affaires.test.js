@@ -85,7 +85,7 @@ describe('TC-272 — les bornes', () => {
   })
 })
 
-describe('TC-272 — les deux index existent réellement (ronde de correction 1, I5)', () => {
+describe('TC-272 — les trois index existent réellement (ronde de correction 1, I5 ; ronde 2, R52)', () => {
   /**
    * ⚠ UNE LISTE BLANCHE (`tc-257`) N'EST QUE LA MOITIÉ DE LA GARDE. Rien
    *   n'empêchait quelqu'un de retirer un index de `firestore.indexes.json`
@@ -94,48 +94,74 @@ describe('TC-272 — les deux index existent réellement (ronde de correction 1,
    *   forme), et `tc-273` passerait aussi — L'ÉMULATEUR CRÉE SES INDEX À LA
    *   VOLÉE, contrairement à la production. Le déploiement casserait alors les
    *   agrégations filtrées en silence, et la carte dirait « Chiffre
-   *   indisponible » pour toujours. Ces deux tests lisent le fichier réel et
-   *   EXIGENT que les deux index existent.
+   *   indisponible » pour toujours. Ces trois tests lisent le fichier réel et
+   *   EXIGENT que les trois index existent.
    */
   const index = JSON.parse(readFileSync('firestore.indexes.json', 'utf8'))
-  const composite = (champ) => index.indexes.some((i) =>
+  const composite = (fields) => index.indexes.some((i) =>
     i.collectionGroup === 'history'
     && i.queryScope === 'COLLECTION_GROUP'
-    && JSON.stringify(i.fields) === JSON.stringify([
-      { fieldPath: champ, order: 'ASCENDING' },
-      { fieldPath: 'createdAt', order: 'ASCENDING' },
-    ]))
+    && JSON.stringify(i.fields) === JSON.stringify(fields))
 
   it('[TC-272-10] l’index {statut, createdAt} existe (sert les soustractions Annulée/Supprimée)', () => {
-    expect(composite('statut')).toBe(true)
+    expect(composite([
+      { fieldPath: 'statut', order: 'ASCENDING' },
+      { fieldPath: 'createdAt', order: 'ASCENDING' },
+    ])).toBe(true)
   })
 
   it('[TC-272-11] l’index {type, createdAt} existe (sert les soustractions Ravitaillement/Retour/Clôture)', () => {
-    expect(composite('type')).toBe(true)
+    expect(composite([
+      { fieldPath: 'type', order: 'ASCENDING' },
+      { fieldPath: 'createdAt', order: 'ASCENDING' },
+    ])).toBe(true)
+  })
+
+  /**
+   * ⚠ RONDE DE CORRECTION 2 (R52) — SERT LES SIX INTERSECTIONS DE
+   *   L'INCLUSION-EXCLUSION (`type == … ET statut == …`), nécessaires depuis
+   *   qu'une clôture ANNULÉE ou un retour SUPPRIMÉ se sont révélés possibles
+   *   (`cancelClosure`, `trashReplenishmentReturn` — voir l'en-tête du
+   *   service). Sans cet index, les six agrégations d'intersection échouent en
+   *   production et `chiffreAffaires` rend `{ total: null, incomplet: false }`
+   *   à chaque ouverture.
+   */
+  it('[TC-272-11b] l’index {type, statut, createdAt} existe (sert les six intersections)', () => {
+    expect(composite([
+      { fieldPath: 'type', order: 'ASCENDING' },
+      { fieldPath: 'statut', order: 'ASCENDING' },
+      { fieldPath: 'createdAt', order: 'ASCENDING' },
+    ])).toBe(true)
   })
 })
 
 describe('TC-272 — la somme', () => {
   /**
-   * ⚠ SIX AGRÉGATIONS, PAS UNE. Depuis la correction du brief de la tâche 9
-   *   puis la ronde de correction 1 (CRITIQUE), `chiffreAffaires` fait SIX
-   *   allers-retours : le total, puis cinq soustractions (`Annulée`,
-   *   `Supprimée`, `Ravitaillement`, `Retour`, `Clôture`) — jamais une seule
-   *   requête `not-in` ou `type in [...]`. Un mock unique (`mockResolvedValue`)
-   *   appliqué aux six renverrait 847 300 000 pour CHACUN des six appels, et
-   *   la soustraction donnerait un nombre négatif : on distingue donc les six
-   *   réponses avec `mockResolvedValueOnce`, dans l'ORDRE d'émission (voir
-   *   TC-272-14 plus bas, qui verrouille cet ordre et cette arithmétique
-   *   explicitement).
+   * ⚠ DOUZE AGRÉGATIONS, PAS UNE. Depuis la ronde de correction 2 (R52),
+   *   `chiffreAffaires` fait DOUZE allers-retours : le total, trois sommes par
+   *   type dealer, deux sommes par statut défait, et six intersections
+   *   type × statut (inclusion-exclusion complète — voir l'en-tête du
+   *   service) — jamais une seule requête `not-in` ou `type in [...]`. Un
+   *   mock unique (`mockResolvedValue`) appliqué aux douze renverrait
+   *   847 300 000 pour CHACUN des douze appels, et l'arithmétique ne
+   *   donnerait pas 847 300 000 : on distingue donc les douze réponses avec
+   *   `mockResolvedValueOnce`, dans l'ORDRE d'émission (voir TC-272-14 plus
+   *   bas, qui verrouille cet ordre et cette arithmétique explicitement).
    */
   it('[TC-272-03] elle agrège `montant` sur le groupe `history`', async () => {
     getAggregateFromServer
       .mockResolvedValueOnce({ data: () => ({ total: 847300000 }) }) // total
-      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // annulées
-      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // supprimées
-      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // ravitaillements
-      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // retours
-      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // clôtures
+      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // type: Ravitaillement
+      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // type: Retour
+      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // type: Clôture
+      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // statut: Annulée
+      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // statut: Supprimée
+      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // Ravitaillement∩Annulée
+      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // Ravitaillement∩Supprimée
+      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // Retour∩Annulée
+      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // Retour∩Supprimée
+      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // Clôture∩Annulée
+      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // Clôture∩Supprimée
     const r = await chiffreAffaires({ type: 'jour', cle: '2026-10-15' })
     expect(r).toEqual({ total: 847300000, incomplet: false })
     expect(sum).toHaveBeenCalledWith('montant')
@@ -215,45 +241,92 @@ describe('TC-272 — la somme', () => {
     const filtresType = where.mock.calls
       .filter(([f, op]) => f === 'type' && op === '==')
       .map(([, , v]) => v)
-    expect(filtresType.sort()).toEqual(['Clôture', 'Ravitaillement', 'Retour'])
+    // ⚠ CHAQUE TYPE APPARAÎT DEUX FOIS DEPUIS R52 : une fois seul (Σ(A)), une
+    //   fois dans chacune des deux intersections — d'où `expect.arrayContaining`
+    //   plutôt qu'une égalité stricte sur un ensemble de 3, et le test dédié
+    //   ci-dessous (TC-272-12) qui verrouille spécifiquement les SIX paires.
+    expect(filtresType).toEqual(expect.arrayContaining(['Clôture', 'Ravitaillement', 'Retour']))
   })
 
   /**
-   * ⚠ SIX AGRÉGATIONS ÉMISES, ET L'ARITHMÉTIQUE EXACTE. C'est le montage
-   *   corrigé : total − annulées − supprimées − ravitaillements − retours
-   *   − clôtures, jamais une seule requête `not-in` ou `type in [...]`.
-   *   100000 − 10000 − 5000 − 30000 − 20000 − 15000 = 20000.
+   * ⚠ RONDE DE CORRECTION 2 (R52) — LES SIX INTERSECTIONS type × statut SONT
+   *   ÉMISES, EN BOUCLE. Chaque appel à `query()` reçoit les clauses `where`
+   *   de CETTE requête précise (`query(base, ...clauses)`) : on peut donc
+   *   retrouver, par appel, quelle paire (type, statut) a été interrogée
+   *   ENSEMBLE — pas seulement que les deux champs ont chacun été utilisés
+   *   quelque part. Sans ces six requêtes, une clôture annulée ou un retour
+   *   supprimé seraient de nouveau comptés deux fois (voir `tc-273-05`, qui
+   *   mesure ce défaut contre l'émulateur : −1 870 000 au lieu de 350 000).
    */
-  it('[TC-272-14] six agrégations sont émises, et le résultat est total moins les cinq exclusions', async () => {
+  it('[TC-272-12] les six intersections type × statut sont bien émises, chacune sur sa propre requête', async () => {
+    getAggregateFromServer.mockResolvedValue({ data: () => ({ total: 0 }) })
+    await chiffreAffaires({ type: 'jour', cle: '2026-10-15' })
+    const combinaisons = query.mock.calls
+      .map(([, ...clauses]) => clauses)
+      .filter((clauses) => clauses.some((c) => c.f === 'type') && clauses.some((c) => c.f === 'statut'))
+      .map((clauses) => {
+        const type = clauses.find((c) => c.f === 'type').v
+        const statut = clauses.find((c) => c.f === 'statut').v
+        return `${type}×${statut}`
+      })
+    expect(combinaisons.sort()).toEqual([
+      'Clôture×Annulée', 'Clôture×Supprimée',
+      'Ravitaillement×Annulée', 'Ravitaillement×Supprimée',
+      'Retour×Annulée', 'Retour×Supprimée',
+    ].sort())
+  })
+
+  /**
+   * ⚠ DOUZE AGRÉGATIONS ÉMISES, ET L'ARITHMÉTIQUE EXACTE DE L'INCLUSION-
+   *   EXCLUSION (ronde de correction 2, R52) : total − Σ(A) − Σ(B∪C) +
+   *   Σ(intersections), JAMAIS la simple soustraction à six termes de la
+   *   ronde 1 (qui double-comptait — voir `tc-273-05`). Dans l'ORDRE
+   *   d'émission : total, 3× type, 2× statut, 6× intersection.
+   *   100000 − (1000+2000+3000) − (4000+5000) + (100+200+300+400+500+600)
+   *   = 100000 − 6000 − 9000 + 2100 = 87100.
+   */
+  it('[TC-272-14] douze agrégations sont émises, et le résultat suit l’inclusion-exclusion complète', async () => {
     getAggregateFromServer
       .mockResolvedValueOnce({ data: () => ({ total: 100000 }) }) // total
-      .mockResolvedValueOnce({ data: () => ({ total: 10000 }) })  // annulées
-      .mockResolvedValueOnce({ data: () => ({ total: 5000 }) })   // supprimées
-      .mockResolvedValueOnce({ data: () => ({ total: 30000 }) })  // ravitaillements
-      .mockResolvedValueOnce({ data: () => ({ total: 20000 }) })  // retours
-      .mockResolvedValueOnce({ data: () => ({ total: 15000 }) })  // clôtures
+      .mockResolvedValueOnce({ data: () => ({ total: 1000 }) })   // type: Ravitaillement
+      .mockResolvedValueOnce({ data: () => ({ total: 2000 }) })   // type: Retour
+      .mockResolvedValueOnce({ data: () => ({ total: 3000 }) })   // type: Clôture
+      .mockResolvedValueOnce({ data: () => ({ total: 4000 }) })   // statut: Annulée
+      .mockResolvedValueOnce({ data: () => ({ total: 5000 }) })   // statut: Supprimée
+      .mockResolvedValueOnce({ data: () => ({ total: 100 }) })    // Ravitaillement∩Annulée
+      .mockResolvedValueOnce({ data: () => ({ total: 200 }) })    // Ravitaillement∩Supprimée
+      .mockResolvedValueOnce({ data: () => ({ total: 300 }) })    // Retour∩Annulée
+      .mockResolvedValueOnce({ data: () => ({ total: 400 }) })    // Retour∩Supprimée
+      .mockResolvedValueOnce({ data: () => ({ total: 500 }) })    // Clôture∩Annulée
+      .mockResolvedValueOnce({ data: () => ({ total: 600 }) })    // Clôture∩Supprimée
     const r = await chiffreAffaires({ type: 'jour', cle: '2026-10-15' })
-    expect(getAggregateFromServer).toHaveBeenCalledTimes(6)
-    expect(r).toEqual({ total: 20000, incomplet: false })
+    expect(getAggregateFromServer).toHaveBeenCalledTimes(12)
+    expect(r).toEqual({ total: 87100, incomplet: false })
   })
 
   /**
    * ⚠ UN SEUL TERME MANQUANT INTERDIT LA SOUSTRACTION ENTIÈRE — Y COMPRIS UN
-   *   TERME DU MILIEU. Une soustraction dont un terme manque n'est pas un
-   *   chiffre d'affaires partiel : c'est une absence totale d'information
-   *   fiable. Le terme en échec ici est `ravitaillements` (le 4ᵉ des six,
-   *   celui de la ronde de correction 1 CRITIQUE) — le plus sournois à rater,
-   *   parce qu'un code qui ne teste que le premier et le dernier terme d'une
-   *   liste laisserait passer une panne logée au milieu.
+   *   TERME DU MILIEU, ET DÉSORMAIS PARMI LES INTERSECTIONS DE LA RONDE 2.
+   *   Une soustraction dont un terme manque n'est pas un chiffre d'affaires
+   *   partiel : c'est une absence totale d'information fiable. Le terme en
+   *   échec ici est la 7ᵉ des douze requêtes (la première intersection,
+   *   Ravitaillement∩Annulée — pile au milieu, et le genre de terme ajouté
+   *   par R52 qu'un code bâclé pourrait exclure de sa vérification).
    */
-  it('[TC-272-15] une panne sur le terme du MILIEU (ravitaillements) rend { total: null, incomplet: false }, jamais un total partiel', async () => {
+  it('[TC-272-15] une panne sur le terme du MILIEU (une intersection) rend { total: null, incomplet: false }, jamais un total partiel', async () => {
     getAggregateFromServer
       .mockResolvedValueOnce({ data: () => ({ total: 100000 }) }) // total : OK
-      .mockResolvedValueOnce({ data: () => ({ total: 10000 }) })  // annulées : OK
-      .mockResolvedValueOnce({ data: () => ({ total: 5000 }) })   // supprimées : OK
-      .mockRejectedValueOnce(new Error('index manquant'))          // ravitaillements : échoue
-      .mockResolvedValueOnce({ data: () => ({ total: 20000 }) })  // retours : OK
-      .mockResolvedValueOnce({ data: () => ({ total: 15000 }) })  // clôtures : OK
+      .mockResolvedValueOnce({ data: () => ({ total: 1000 }) })   // type: Ravitaillement : OK
+      .mockResolvedValueOnce({ data: () => ({ total: 2000 }) })   // type: Retour : OK
+      .mockResolvedValueOnce({ data: () => ({ total: 3000 }) })   // type: Clôture : OK
+      .mockResolvedValueOnce({ data: () => ({ total: 4000 }) })   // statut: Annulée : OK
+      .mockResolvedValueOnce({ data: () => ({ total: 5000 }) })   // statut: Supprimée : OK
+      .mockRejectedValueOnce(new Error('index manquant'))          // Ravitaillement∩Annulée : échoue
+      .mockResolvedValueOnce({ data: () => ({ total: 200 }) })    // Ravitaillement∩Supprimée : OK
+      .mockResolvedValueOnce({ data: () => ({ total: 300 }) })    // Retour∩Annulée : OK
+      .mockResolvedValueOnce({ data: () => ({ total: 400 }) })    // Retour∩Supprimée : OK
+      .mockResolvedValueOnce({ data: () => ({ total: 500 }) })    // Clôture∩Annulée : OK
+      .mockResolvedValueOnce({ data: () => ({ total: 600 }) })    // Clôture∩Supprimée : OK
     const r = await chiffreAffaires({ type: 'jour', cle: '2026-10-15' })
     expect(r).toEqual({ total: null, incomplet: false })
   })

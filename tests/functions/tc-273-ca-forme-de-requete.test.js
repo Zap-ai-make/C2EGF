@@ -42,12 +42,16 @@
  *   retour en arrière est `[TC-272-07]` (`tests/unit/tc-272-chiffre-affaires.test.js`),
  *   qui inspecte les appels `where` du VRAI service.
  *
- * Deux rondes de correction supplémentaires, mesurées ici :
+ * Rondes de correction supplémentaires, mesurées ici :
  *   - [TC-273-03] : `history` porte aussi du float dealer (ravitaillement,
  *     retour, clôture) qui n'est pas du chiffre d'affaires client — voir son
  *     en-tête.
  *   - [TC-273-04] : ce que `sum()` fait RÉELLEMENT d'un `montant` en chaîne
  *     (mesuré, pas supposé) — voir son en-tête.
+ *   - [TC-273-05]/[TC-273-06] (ronde 2, R52) : une ligne dealer PEUT porter
+ *     `Annulée`/`Supprimée` (`cancelClosure`, `trashReplenishmentReturn`) —
+ *     le montage à six agrégations double-comptait ; l'inclusion-exclusion
+ *     corrige — voir leur en-tête.
  */
 
 import { describe, it, beforeAll, afterAll, beforeEach, expect } from 'vitest'
@@ -95,6 +99,7 @@ const BOUTIQUES = [
   'boutique-a', 'boutique-b', 'boutique-c', 'boutique-d',
   'boutique-e', 'boutique-f', 'boutique-g', 'boutique-h',
   'boutique-montant-texte',
+  'boutique-i', 'boutique-j', 'boutique-k',
 ]
 
 const effacer = async (chemin) => {
@@ -277,5 +282,137 @@ describe('TC-273 — ronde de correction 1 (I2) : sum() et un montant en chaîne
       .get()
 
     expect(snap.data().total).toBe(1000)
+  })
+})
+
+/**
+ * TC-273 — ronde de correction 2 (R52), CRITIQUE : une ligne dealer PEUT
+ * porter `Annulée` ou `Supprimée` — l'invariant de la ronde 1 était faux.
+ *
+ * ⚠ CE QUE J'AVAIS ÉCRIT EN COMMENTAIRE, ET QUI ÉTAIT UN NON-SEQUITUR. La
+ *   ronde 1 affirmait : `refuserSiIntouchable` refuse l'annulation et la
+ *   suppression sur les trois types dealer, DONC aucune ligne dealer ne porte
+ *   jamais ces statuts. Ce raisonnement ne tient QUE si
+ *   `refuserSiIntouchable` est le SEUL écrivain de ces statuts — jamais
+ *   vérifié. Il ne l'est pas :
+ *   - `cancelClosure` (`storeTransactionCommand.js:513-538`) exige
+ *     `type === 'Clôture'`, écrit `statut: 'Annulée'`, et N'APPELLE JAMAIS
+ *     `refuserSiIntouchable`. Restreint à la clôture du jour.
+ *   - `trashReplenishmentReturn` (`:803-829`) exige `type === 'Retour'`,
+ *     écrit `statut: 'Supprimée'`, même contournement — SANS restriction de
+ *     date.
+ *   Les deux sont câblés et testés (`tc-244`, `tc-245`) : ce n'est pas du
+ *   code mort.
+ *
+ * ⚠ CONSÉQUENCE DÉTERMINISTE, PAS UNE COURSE DE QUELQUES MILLISECONDES.
+ *   Annuler une clôture est un geste normal et supporté. Sa ligne entre dans
+ *   `total` (+montant), PUIS se fait soustraire DEUX FOIS par le montage à
+ *   six agrégations de la ronde 1 : une fois via `type == 'Clôture'`, une
+ *   fois via `statut == 'Annulée'`. Le montant d'une clôture vaut la somme
+ *   stock + liquidité de la boutique : le CA peut devenir lourdement négatif
+ *   à chaque annulation de clôture — déterministe, reproductible, pas une
+ *   fenêtre de course.
+ *
+ * ⚠ LA CORRECTION EST GÉNÉRALE (inclusion-exclusion), PAS UN PATCH SUR CES
+ *   DEUX CHEMINS. Poser A = les trois types dealer, B = `statut ==
+ *   'Annulée'`, C = `statut == 'Supprimée'` :
+ *     Σ(A∪B∪C) = Σ(A) + Σ(B) + Σ(C) − Σ(A∩B) − Σ(A∩C)
+ *     CA        = total − Σ(A∪B∪C)
+ *   `B∩C = ∅` EST solide : `statut` est un champ unique, qui ne porte qu'UNE
+ *   valeur à la fois — c'est une propriété du MODÈLE DE DONNÉES, pas une
+ *   promesse de comportement serveur. `A∩B` et `A∩C`, en revanche, ne sont
+ *   PAS vides : c'est exactement ce que `cancelClosure` et
+ *   `trashReplenishmentReturn` peuplent. Cette arithmétique ne dépend plus
+ *   d'aucune promesse sur QUI écrit quoi — elle reste juste même si un
+ *   troisième chemin d'écriture apparaît demain.
+ */
+describe('TC-273 — une ligne dealer PEUT porter Annulée/Supprimée (ronde de correction 2, R52)', () => {
+  async function semerLaClotureAnnuleeEtLeRetourSupprime() {
+    await Promise.all([
+      // Une clôture ANNULÉE : type dealer ET statut défait, sur la MÊME ligne.
+      db.doc('clients/boutique-i/history/cloture-annulee').set({
+        type: 'Clôture', statut: 'Annulée', montant: 1800000, createdAt: DANS_LA_PLAGE,
+      }),
+      // Un retour SUPPRIMÉ : même recoupement, l'autre paire type/statut.
+      db.doc('clients/boutique-j/history/retour-supprime').set({
+        type: 'Retour', statut: 'Supprimée', montant: 420000, createdAt: DANS_LA_PLAGE,
+      }),
+      db.doc('clients/boutique-k/history/depot-client').set({
+        type: 'Dépôt', statut: 'Validée', montant: 350000, createdAt: DANS_LA_PLAGE,
+      }),
+    ])
+  }
+
+  /**
+   * ⚠ CE TEST DOCUMENTE LE DÉFAUT, IL NE LE CORRIGE PAS. Il reproduit le
+   *   montage à SIX agrégations de la ronde 1 (total − annulées − supprimées
+   *   − ravitaillements − retours − clôtures) sur ce jeu précis, et verrouille
+   *   qu'il reste cassé — pour que personne ne revienne à ce montage plus
+   *   simple en pensant qu'il suffisait.
+   */
+  it('[TC-273-05] le montage à SIX agrégations de la ronde 1 double-compte et rend -1870000, pas 350000', async () => {
+    await semerLaClotureAnnuleeEtLeRetourSupprime()
+
+    const base = db.collectionGroup('history')
+      .where('createdAt', '>=', DEBUT)
+      .where('createdAt', '<', FIN)
+
+    const [total, annulees, supprimees, ravitaillements, retours, clotures] = await Promise.all([
+      base.aggregate({ total: AggregateField.sum('montant') }).get(),
+      base.where('statut', '==', 'Annulée').aggregate({ total: AggregateField.sum('montant') }).get(),
+      base.where('statut', '==', 'Supprimée').aggregate({ total: AggregateField.sum('montant') }).get(),
+      base.where('type', '==', 'Ravitaillement').aggregate({ total: AggregateField.sum('montant') }).get(),
+      base.where('type', '==', 'Retour').aggregate({ total: AggregateField.sum('montant') }).get(),
+      base.where('type', '==', 'Clôture').aggregate({ total: AggregateField.sum('montant') }).get(),
+    ])
+
+    const resultat = (total.data().total ?? 0)
+      - (annulees.data().total ?? 0)
+      - (supprimees.data().total ?? 0)
+      - (ravitaillements.data().total ?? 0)
+      - (retours.data().total ?? 0)
+      - (clotures.data().total ?? 0)
+    expect(resultat).toBe(-1870000)
+  })
+
+  /**
+   * ⚠ LE MONTAGE CORRIGÉ : INCLUSION-EXCLUSION COMPLÈTE. Douze agrégations :
+   *   le total, les trois types dealer, les deux statuts défaits, et les six
+   *   intersections type × statut. Sur ce même jeu, le résultat attendu est
+   *   350 000 — la clôture annulée et le retour supprimé n'entrent plus dans
+   *   le CA, et ne sont plus comptés deux fois non plus.
+   */
+  it('[TC-273-06] le montage par inclusion-exclusion (12 agrégations) rend 350000', async () => {
+    await semerLaClotureAnnuleeEtLeRetourSupprime()
+
+    const base = db.collectionGroup('history')
+      .where('createdAt', '>=', DEBUT)
+      .where('createdAt', '<', FIN)
+
+    const TYPES_DEALER = ['Ravitaillement', 'Retour', 'Clôture']
+    const STATUTS_DEFAITS = ['Annulée', 'Supprimée']
+
+    const sommer = (snap) => snap.data().total ?? 0
+
+    const [total, parType, parStatut, intersections] = await Promise.all([
+      base.aggregate({ total: AggregateField.sum('montant') }).get(),
+      Promise.all(TYPES_DEALER.map((t) =>
+        base.where('type', '==', t).aggregate({ total: AggregateField.sum('montant') }).get())),
+      Promise.all(STATUTS_DEFAITS.map((s) =>
+        base.where('statut', '==', s).aggregate({ total: AggregateField.sum('montant') }).get())),
+      Promise.all(
+        TYPES_DEALER.flatMap((t) => STATUTS_DEFAITS.map((s) =>
+          base.where('type', '==', t).where('statut', '==', s)
+            .aggregate({ total: AggregateField.sum('montant') }).get())),
+      ),
+    ])
+
+    const sommeA = parType.reduce((s, snap) => s + sommer(snap), 0)
+    const sommeBC = parStatut.reduce((s, snap) => s + sommer(snap), 0)
+    const sommeIntersections = intersections.reduce((s, snap) => s + sommer(snap), 0)
+
+    // CA = total − Σ(A∪B∪C) = total − (Σ(A) + Σ(B) + Σ(C) − Σ(intersections))
+    const resultat = sommer(total) - sommeA - sommeBC + sommeIntersections
+    expect(resultat).toBe(350000)
   })
 })

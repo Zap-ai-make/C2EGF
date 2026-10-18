@@ -113,19 +113,22 @@ describe('TC-257 — une requête, un index', () => {
    *   parce qu'elles comptaient des lignes annulées dont l'argent était déjà
    *   revenu aux soldes. Firestore maintient un index mort à CHAQUE écriture.
    *
-   * ⚠ {statut ASC, createdAt ASC} ET {type ASC, createdAt ASC} NE SONT PAS
-   *   CEUX DE `listClientHistory` — ILS APPARTIENNENT À
-   *   `chiffreAffairesService.js` (tâche 9), AJOUTÉS ICI DÉLIBÉRÉMENT. Le
-   *   premier sert les deux agrégations de soustraction sur `statut`
-   *   (`== 'Annulée'|'Supprimée'`, combiné à la plage de `createdAt`) ; le
-   *   second sert les trois agrégations de soustraction sur `type`
-   *   (`== 'Ravitaillement'|'Retour'|'Clôture'` — le float du dealer, qui
-   *   n'est pas du chiffre d'affaires client, ronde de correction 1 de la
-   *   tâche 9). Aucun des deux n'est la requête `not-in` ou `type in [...]`
-   *   du plan d'origine, écartées précisément parce qu'elles sous-évaluent le
-   *   CA en silence. Ce fichier ne sert que `listClientHistory` ; il n'était
-   *   pas le bon endroit pour documenter la table requête↔index de la tâche
-   *   9 — seule l'absence de surplus est vérifiée ici.
+   * ⚠ {statut ASC, createdAt ASC}, {type ASC, createdAt ASC} ET
+   *   {type ASC, statut ASC, createdAt ASC} NE SONT PAS CEUX DE
+   *   `listClientHistory` — ILS APPARTIENNENT À `chiffreAffairesService.js`
+   *   (tâche 9), AJOUTÉS ICI DÉLIBÉRÉMENT. Le premier sert les deux
+   *   agrégations sur `statut` seul (`== 'Annulée'|'Supprimée'`) ; le second
+   *   sert les trois agrégations sur `type` seul (`== 'Ravitaillement'|
+   *   'Retour'|'Clôture'` — le float du dealer, ronde de correction 1) ; le
+   *   troisième sert les SIX intersections `type == … ET statut == …`
+   *   (ronde de correction 2, R52) — une clôture ANNULÉE ou un retour
+   *   SUPPRIMÉ, que le code de la tâche 9 croyait d'abord impossibles avant
+   *   de mesurer le contraire (`cancelClosure`, `trashReplenishmentReturn`).
+   *   Aucun des trois n'est la requête `not-in` ou `type in [...]` du plan
+   *   d'origine, écartées précisément parce qu'elles sous-évaluent le CA en
+   *   silence. Ce fichier ne sert que `listClientHistory` ; il n'était pas le
+   *   bon endroit pour documenter la table requête↔index de la tâche 9 —
+   *   seule l'absence de surplus est vérifiée ici.
    */
   it('[TC-257-05] aucun index composite de trop sur history ou drafts', () => {
     const attendus = [
@@ -139,6 +142,11 @@ describe('TC-257 — une requête, un index', () => {
       ]),
       JSON.stringify([
         { fieldPath: 'type', order: 'ASCENDING' },
+        { fieldPath: 'createdAt', order: 'ASCENDING' },
+      ]),
+      JSON.stringify([
+        { fieldPath: 'type', order: 'ASCENDING' },
+        { fieldPath: 'statut', order: 'ASCENDING' },
         { fieldPath: 'createdAt', order: 'ASCENDING' },
       ]),
     ]

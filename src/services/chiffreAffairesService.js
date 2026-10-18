@@ -14,11 +14,11 @@ import { getBusinessDayBounds } from '../utils/businessDate.js'
  *   depuis le navigateur : `firestore.rules:557-559` autorise ce chemin pour
  *   `isSystemManager()` SEUL (le rôle du patron) — PAS pour `isDealer()`, qui
  *   n'a droit qu'à un agrégat anonymisé par un autre chemin. `createdAt` porte
- *   déjà sa surcharge d'index COLLECTION_GROUP dans les deux sens ; `statut`
- *   et `type` demandent chacun leur propre index composite avec `createdAt`
+ *   déjà sa surcharge d'index COLLECTION_GROUP dans les deux sens ; `statut`,
+ *   `type`, et leur combinaison demandent chacun leur propre index composite
  *   (`firestore.indexes.json`).
  *
- * ⚠ SIX AGRÉGATIONS, PAS UN `not-in` — C'EST LE CŒUR DE LA TÂCHE 9.
+ * ⚠ DOUZE AGRÉGATIONS, PAS UN `not-in` — C'EST LE CŒUR DE LA TÂCHE 9.
  *   Le plan d'origine filtrait avec `where('statut', 'not-in', [...])`. Cette
  *   requête est acceptée par Firestore (vérifié contre l'émulateur,
  *   `tests/functions/tc-273-ca-forme-de-requete.test.js`) — mais `not-in`
@@ -31,15 +31,10 @@ import { getBusinessDayBounds } from '../utils/businessDate.js'
  *   Mesuré sur un jeu de quatre lignes : `not-in` rend 1 000 là où la vérité
  *   est 8 000 (soit une sous-évaluation de 87 % sur ce jeu).
  *
- *   La seule alternative que Firestore accepte est donc une soustraction :
- *   le total de la plage, sans aucun filtre, MOINS les cinq catégories qui ne
- *   sont pas du chiffre d'affaires client (ci-dessous). JAMAIS un `type in
- *   [...]` positif non plus : il écarterait en silence tout type inattendu ou
- *   absent — exactement le piège de `not-in` que cette tâche corrige. Une
+ *   JAMAIS un `type in [...]` positif non plus : il écarterait en silence
+ *   tout type inattendu ou absent — exactement le piège de `not-in`. Une
  *   liste d'exclusion peut sur-compter (visible, corrigeable) ; une liste
- *   d'inclusion peut sous-compter en silence (invisible). Six agrégations au
- *   lieu d'une coûtent environ 1 lecture par millier de documents chacune : le
- *   surcoût est négligeable face au risque de sous-évaluation silencieuse.
+ *   d'inclusion peut sous-compter en silence (invisible).
  *
  * ⚠ RONDE DE CORRECTION 1 (CRITIQUE) — `history` NE PORTE PAS QUE DES
  *   OPÉRATIONS CLIENTS. La première version de ce service sommait `montant`
@@ -58,21 +53,52 @@ import { getBusinessDayBounds } from '../utils/businessDate.js'
  *   l'export remis au gérant pour cette exacte raison. Mesuré (`tc-273-03`) :
  *   un ravitaillement de 2 000 000 + une clôture à 1 800 000 + un retour de
  *   420 000, à côté de 350 000 de vraie activité cliente, faisait lire
- *   4 570 000 au lieu de 350 000 — le chiffre dominé par de l'argent que le
- *   réseau s'envoie à lui-même, pas par ce que les clients ont déposé.
+ *   4 570 000 au lieu de 350 000.
  *
- * ⚠ PAS DE DOUBLE COMPTAGE ENTRE LES SIX TERMES — UN INVARIANT SERVEUR, PAS
- *   UNE COÏNCIDENCE. Une ligne pourrait en théorie être soustraite deux fois
- *   (une fois comme `'Annulée'`, une fois comme `'Ravitaillement'`) si les
- *   deux catégories se recoupaient. Elles ne se recoupent PAS aujourd'hui :
- *   `storeTransactionCommand.js:49` définit `UNCANCELLABLE_TYPES` comme
- *   EXACTEMENT `[Ravitaillement, Clôture, Retour]`, et `refuserSiIntouchable`
- *   (`:79`) refuse l'annulation, la suppression ET la réouverture sur ces
- *   trois types. Un ravitaillement ne peut donc jamais porter `statut:
- *   'Annulée'` ou `'Supprimée'`. **Le jour où un de ces types deviendrait
- *   annulable, cette soustraction double-compterait en silence** — à
- *   revérifier si `UNCANCELLABLE_TYPES` change.
+ * ⚠ RONDE DE CORRECTION 2 (R52, CRITIQUE) — LA PREMIÈRE CORRECTION
+ *   DOUBLE-COMPTAIT, PARCE QUE SON INVARIANT ÉTAIT FAUX. La ronde 1 soustrayait
+ *   SIX termes indépendants (`statut == 'Annulée'`, `'Supprimée'`, et
+ *   `type == 'Ravitaillement'|'Retour'|'Clôture'`) en supposant qu'ils ne se
+ *   recoupaient JAMAIS — parce que `refuserSiIntouchable`
+ *   (`storeTransactionCommand.js:79`) refuse l'annulation et la suppression
+ *   sur les trois types dealer (`UNCANCELLABLE_TYPES`, `:49`). **Ce
+ *   raisonnement était un non-sequitur** : il suppose que
+ *   `refuserSiIntouchable` est le SEUL écrivain de ces statuts, jamais
+ *   vérifié. Il ne l'est pas :
+ *   - `cancelClosure` (`:513-538`) exige `type === 'Clôture'`, écrit
+ *     `statut: 'Annulée'`, et N'APPELLE JAMAIS `refuserSiIntouchable` ;
+ *   - `trashReplenishmentReturn` (`:803-829`) exige `type === 'Retour'`,
+ *     écrit `statut: 'Supprimée'`, même contournement.
+ *   Une clôture annulée entrait donc dans `total`, PUIS se faisait soustraire
+ *   DEUX FOIS (une fois via `type == 'Clôture'`, une fois via
+ *   `statut == 'Annulée'`) — mesuré (`tc-273-05`) : −1 870 000 au lieu de
+ *   350 000 sur un jeu avec une clôture annulée de 1 800 000 et un retour
+ *   supprimé de 420 000. Déterministe, reproductible à chaque annulation de
+ *   clôture — pas une fenêtre de course.
+ *
+ *   LA CORRECTION EST DONC UNE INCLUSION-EXCLUSION COMPLÈTE, PAS UN PATCH SUR
+ *   CES DEUX CHEMINS CONNUS — précisément parce qu'un raisonnement ciblé sur
+ *   des chemins de code nommés vient d'échouer une fois ; un troisième chemin
+ *   d'écriture inconnu aujourd'hui ne doit pas pouvoir recasser ce calcul.
+ *   Poser A = les trois types dealer, B = `statut == 'Annulée'`,
+ *   C = `statut == 'Supprimée'` :
+ *
+ *     Σ(A∪B∪C) = Σ(A) + Σ(B) + Σ(C) − Σ(A∩B) − Σ(A∩C)
+ *     CA        = total − Σ(A∪B∪C)
+ *
+ *   `B∩C = ∅` est la SEULE hypothèse que cette arithmétique s'autorise encore
+ *   — et elle est solide : `statut` est un champ unique, qui ne porte qu'UNE
+ *   valeur à la fois (propriété du MODÈLE DE DONNÉES, pas du comportement
+ *   serveur). `A∩B` et `A∩C`, en revanche, ne sont PAS supposés vides : ils
+ *   sont CALCULÉS, via les six intersections `type × statut` ci-dessous.
+ *   Douze agrégations au lieu de six : le coût (environ 1 lecture par millier
+ *   de documents chacune) reste négligeable sur un écran que seul le patron
+ *   ouvre ; le prix est en lisibilité, payé pour ne dépendre d'aucune promesse
+ *   sur qui écrit quoi.
  */
+
+const TYPES_DEALER = Object.freeze(['Ravitaillement', 'Retour', 'Clôture'])
+const STATUTS_DEFAITS = Object.freeze(['Annulée', 'Supprimée'])
 
 /**
  * Les bornes d'une période.
@@ -104,9 +130,10 @@ export function bornesPeriode({ type, cle }) {
 }
 
 /**
- * Une seule agrégation `sum(montant)`, sur la plage donnée, avec UN filtre
- * d'égalité optionnel — `statut` OU `type`, jamais `not-in` ni `in` (voir le
- * commentaire d'en-tête).
+ * Une seule agrégation `sum(montant)`, sur la plage donnée, avec un filtre
+ * d'égalité optionnel sur `statut` ET/OU `type` — jamais `not-in` ni `in`
+ * (voir le commentaire d'en-tête). Les deux filtres combinés servent les six
+ * intersections de l'inclusion-exclusion (ronde de correction 2).
  *
  * ⚠ TROIS ISSUES DISTINCTES, PAS DEUX. `chiffreAffaires` doit pouvoir
  *   distinguer « cette agrégation a échoué » (la requête a levé — index
@@ -156,76 +183,69 @@ async function agregerMontant({ debut, fin, statut, type }) {
 
 /**
  * @returns {Promise<{total: number|null, incomplet: boolean}>}
- *   `total: null` + `incomplet: false` → au moins une des six requêtes a
+ *   `total: null` + `incomplet: false` → au moins une des douze requêtes a
  *     échoué. Jamais un total partiel : une soustraction dont un terme manque
- *     n'est pas un chiffre d'affaires — vérifié y compris quand c'est un terme
- *     du MILIEU qui manque (`tc-272`, panne sur l'agrégat « ravitaillement »).
- *   `total: null` + `incomplet: true`  → au moins une des six réponses n'a pas
- *     la forme attendue (`total` absent ou non numérique côté SDK). En
- *     pratique, un `montant` non numérique EN BASE n'emprunte PAS ce chemin —
- *     voir la mise en garde sur `agregerMontant` ci-dessus.
+ *     n'est pas un chiffre d'affaires.
+ *   `total: null` + `incomplet: true`  → les douze requêtes ont répondu, mais
+ *     au moins une n'a pas la forme attendue (`total` absent ou non numérique
+ *     côté SDK). En pratique, un `montant` non numérique EN BASE n'emprunte
+ *     PAS ce chemin — voir la mise en garde sur `agregerMontant` ci-dessus.
  *   `total: 0` → une vraie période sans opération, et c'est une information.
  *
- * ⚠ TOTAL NÉGATIF — ASSUMÉ, PAS MASQUÉ. Les six agrégations ne sont pas
+ * ⚠ TOTAL NÉGATIF — ASSUMÉ, PAS MASQUÉ. Les douze agrégations ne sont pas
  *   atomiques : une opération créée PUIS annulée entre deux instantanés serait
  *   soustraite sans avoir été comptée dans le total, sur une fenêtre de
  *   quelques millisecondes. Un plancher à 0 rendrait cette incohérence
  *   invisible ; elle ne l'est pas ici, délibérément — un total négatif est une
  *   anomalie assez rare et assez parlante pour qu'on préfère la montrer que la
- *   maquiller. Aucun garde-fou ajouté : son coût (une septième lecture pour
- *   vérifier la cohérence) dépasserait ce qu'il rapporte pour une fenêtre de
- *   course aussi étroite.
+ *   maquiller. Ceci est DISTINCT du double comptage corrigé en ronde 2 (R52),
+ *   qui était déterministe et reproductible, pas une course.
  */
 export async function chiffreAffaires({ type, cle }) {
   const { debut, fin } = bornesPeriode({ type, cle })
 
-  const [total, annulees, supprimees, ravitaillements, retours, clotures] = await Promise.all([
-    // Le total brut de la plage, SANS AUCUN FILTRE : c'est la seule des six
+  const [total, parType, parStatut, intersections] = await Promise.all([
+    // Le total brut de la plage, SANS AUCUN FILTRE : c'est la seule des douze
     // qui n'a besoin d'aucun index nouveau (`createdAt` porte déjà sa
     // surcharge COLLECTION_GROUP dans les deux sens).
     agregerMontant({ debut, fin }),
-    // Une opération annulée n'a jamais eu lieu : `reverseHistoryTransactionImpact`
-    // défait son impact sur les soldes (`storeTransactionCommand.js:556-557`).
-    // La compter dans le CA afficherait de l'argent qui n'a jamais bougé.
-    agregerMontant({ debut, fin, statut: 'Annulée' }),
-    // ⚠ DIVERGENCE VOLONTAIRE AVEC `reseauStats.js` — NE PAS ALIGNER L'UN SUR
-    //   L'AUTRE. `compteCommeVolume` (src/utils/reseauStats.js:57-58), qui sert
-    //   au classement des agents, N'exclut PAS les opérations supprimées : le
-    //   volume y reste donc gonflé de ce qui a été effacé. Le CA réseau, lui,
-    //   exclut `'Supprimée'` : une suppression appelle elle aussi
-    //   `reverseHistoryTransactionImpact` (`storeTransactionCommand.js:583-585`)
-    //   — les soldes ont été défaits exactement comme pour une annulation.
-    //   Compter cette ligne ferait lire au patron de l'argent qui a été rendu.
-    //   Décision produit assumée (brief de la tâche 9, §4) : à remonter au
-    //   patron comme un écart entre les deux écrans, pas à corriger ici en
-    //   silence.
-    agregerMontant({ debut, fin, statut: 'Supprimée' }),
-    // ⚠ RONDE DE CORRECTION 1 (CRITIQUE) — LES TROIS LIGNES SUIVANTES SONT LA
-    //   CORRECTION, PAS UN DÉTAIL. Voir le commentaire d'en-tête : sans elles,
-    //   la carte additionne le float que le dealer fait transiter par la
-    //   boutique, pas ce que les clients ont déposé.
-    agregerMontant({ debut, fin, type: 'Ravitaillement' }),
-    agregerMontant({ debut, fin, type: 'Retour' }),
-    agregerMontant({ debut, fin, type: 'Clôture' }),
+    // Σ(A) — décomposée par type (3 agrégations indépendantes), jamais un
+    // `type in [...]` unique (voir le commentaire d'en-tête).
+    Promise.all(TYPES_DEALER.map((t) => agregerMontant({ debut, fin, type: t }))),
+    // Σ(B) + Σ(C) — annulée et supprimée, qui ne se recoupent jamais entre
+    // elles (`statut` est un champ unique, voir le commentaire d'en-tête).
+    Promise.all(STATUTS_DEFAITS.map((s) => agregerMontant({ debut, fin, statut: s }))),
+    // ⚠ RONDE DE CORRECTION 2 (R52) — Σ(A∩B) ET Σ(A∩C), EN BOUCLE SUR LES DEUX
+    //   LISTES, PAS À LA MAIN. Six intersections type × statut : copiées-collées
+    //   une par une, elles auraient fini par diverger (un type oublié, un
+    //   statut mal orthographié) sans qu'aucun test ne le voie passer avant
+    //   l'émulateur. La boucle les fait toutes exister par construction dès
+    //   qu'un type ou un statut s'ajoute aux deux listes ci-dessus.
+    Promise.all(
+      TYPES_DEALER.flatMap((t) => STATUTS_DEFAITS.map((s) => agregerMontant({ debut, fin, type: t, statut: s }))),
+    ),
   ])
 
-  const termes = [total, annulees, supprimees, ravitaillements, retours, clotures]
+  const termes = [total, ...parType, ...parStatut, ...intersections]
 
-  // Une panne prime sur tout le reste : si l'un des six termes n'a pas pu être
-  // lu, la soustraction entière est invalide, que les cinq autres soient
-  // lisibles ou non — y compris si le terme en échec est un terme du MILIEU
-  // (`tc-272` verrouille ce cas précisément parce que c'est le plus facile à
-  // rater : un `if` qui ne teste que le premier et le dernier terme le
-  // laisserait passer).
+  // Une panne prime sur tout le reste : si l'un des douze termes n'a pas pu
+  // être lu, la soustraction entière est invalide, que les onze autres soient
+  // lisibles ou non — y compris un terme du MILIEU (`tc-272` le verrouille).
   if (termes.some((t) => t.echec)) {
     return { total: null, incomplet: false }
   }
   if (termes.some((t) => !t.ok)) {
     return { total: null, incomplet: true }
   }
+
+  const sommeTypes = parType.reduce((s, t) => s + t.valeur, 0)
+  const sommeStatuts = parStatut.reduce((s, t) => s + t.valeur, 0)
+  const sommeIntersections = intersections.reduce((s, t) => s + t.valeur, 0)
+
+  // CA = total − Σ(A∪B∪C) = total − (Σ(A) + Σ(B) + Σ(C) − Σ(intersections))
+  // Voir le commentaire d'en-tête pour la dérivation complète.
   return {
-    total: total.valeur - annulees.valeur - supprimees.valeur
-      - ravitaillements.valeur - retours.valeur - clotures.valeur,
+    total: total.valeur - sommeTypes - sommeStatuts + sommeIntersections,
     incomplet: false,
   }
 }
