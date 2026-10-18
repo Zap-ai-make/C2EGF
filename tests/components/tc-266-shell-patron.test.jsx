@@ -67,6 +67,34 @@ describe('TC-266 — deux destinations, pas neuf', () => {
    * remonter la nav au-dessus du contenu — ce test le ferait échouer : les
    * onglets vivent EN PIED, pas en tête, parce que c'est là qu'est le pouce.
    */
+  /**
+   * LE PIED NE TIENT QUE SI LA COQUILLE S'ARRÊTE AU BORD VISIBLE.
+   *
+   * `min-h-screen` vaut `min-height: 100vh`, et sur un téléphone `100vh` est la
+   * hauteur de l'écran SANS la barre d'adresse du navigateur. La coquille
+   * dépassait donc d'une soixantaine de pixels vers le bas : les onglets
+   * existaient, mais sous le pli, et il fallait faire défiler la page entière
+   * pour les atteindre — exactement ce que ce lot prétend éviter. `100dvh` suit
+   * la barre d'adresse au lieu de l'ignorer.
+   *
+   * Et c'est une HAUTEUR, pas un minimum. Les trois pages patron posent déjà
+   * `h-full min-h-0` et leur propre conteneur défilant ; un `min-height`
+   * laisserait la coquille grandir avec son contenu et repousserait le pied
+   * hors de l'écran malgré le `dvh`.
+   *
+   * ⚠ LE REPLI `h-screen` RESTE. Un navigateur sans `dvh` (Chrome < 108, qui
+   *   traîne encore sur les téléphones d'entrée de gamme) ignorerait une
+   *   déclaration `100dvh` isolée, `height` retomberait sur `auto` et la
+   *   coquille s'effondrerait — pire que le défaut qu'on corrige.
+   */
+  it('[TC-266-10] la coquille se cale sur la hauteur visible, pas sur 100vh', () => {
+    shell()
+    const classes = screen.getByTestId('admin-layout').className.split(' ')
+    expect(classes).not.toContain('min-h-screen')
+    expect(classes).toContain('h-screen')
+    expect(classes).toContain('supports-[height:100dvh]:h-[100dvh]')
+  })
+
   it('[TC-266-08] la navigation vient après le contenu principal dans le DOM', () => {
     shell()
     const main = screen.getByRole('main')

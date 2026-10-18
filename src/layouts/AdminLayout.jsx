@@ -13,6 +13,17 @@ import { APP_NAME } from '../constants/branding'
  *   sont à portée du pouce, qui est la seule main disponible quand on consulte
  *   une fiche en parlant au téléphone.
  *
+ * ⚠ LA COQUILLE SE CALE SUR LA HAUTEUR VISIBLE, PAS SUR `100vh`. Elle portait
+ *   `min-h-screen` ; sur un téléphone, `100vh` est la hauteur de l'écran SANS la
+ *   barre d'adresse, donc la coquille dépassait d'une soixantaine de pixels et
+ *   les onglets tombaient sous le pli — il fallait faire défiler la page entière
+ *   pour atteindre le pouce qu'on prétendait servir. `100dvh` suit la barre
+ *   d'adresse. Et c'est une HAUTEUR : un `min-height` laisserait la coquille
+ *   grandir avec son contenu et repousserait le pied dehors malgré le `dvh`.
+ *   Le repli `h-screen` reste pour les navigateurs sans `dvh` (Chrome < 108),
+ *   où une déclaration isolée serait ignorée et `height` retomberait sur `auto`.
+ *   Verrouillé par TC-266-10.
+ *
  * ⚠ CONTRAT DE DÉFILEMENT : `<main>` ne défile PAS (`overflow-hidden`), parce
  *   que l'en-tête et les onglets doivent rester fixes au pouce — c'est l'argument
  *   même de ce lot. Chaque page montée dans l'`<Outlet>` ci-dessous est donc
@@ -38,7 +49,10 @@ function AdminLayout() {
   const { logout, userProfile } = useAuth()
 
   return (
-    <div className="flex min-h-screen flex-col bg-canvas" data-testid="admin-layout">
+    <div
+      className="flex h-screen supports-[height:100dvh]:h-[100dvh] flex-col bg-canvas"
+      data-testid="admin-layout"
+    >
       <header className="flex flex-none items-center justify-between gap-3 bg-brand-500 px-4 py-3">
         <div className="min-w-0">
           <p className="truncate text-base font-bold leading-tight text-white">{APP_NAME}</p>
