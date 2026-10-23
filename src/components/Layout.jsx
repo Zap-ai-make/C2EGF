@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import { useTheme } from '../context/ThemeContext'
+import Assistant from './Assistant'
 import BandeauMarque from './BandeauMarque'
 import NavBar from './NavBar'
 import NetworkCardsDrawer from './network/NetworkCardsDrawer'
@@ -60,6 +61,10 @@ function Layout({ children }) {
       <main className="w-full px-4 py-6">
         {children !== undefined ? children : <Outlet />}
       </main>
+
+      {/* Hors du <main> : il flotte au-dessus et ne doit pas entrer dans le
+          flux de la page, ni décaler ce qu'on est en train de lire. */}
+      <Assistant />
     </div>
   )
 }
