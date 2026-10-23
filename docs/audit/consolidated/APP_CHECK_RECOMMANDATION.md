@@ -4,6 +4,16 @@
 > sécurité (corrections minimales, émulateur-only). À traiter comme un lot dédié
 > avec plan client + tests émulateur avant tout `enforce` en production.
 
+> ⚠ **SUPPLANTÉ SUR UN POINT PRÉCIS — voir `docs/ia/LOT-APPCHECK.md` §1.**
+> L'étape 2 ci-dessous (initialiser dans `src/config/firebase.js`, donc **au
+> démarrage de l'application**) est le montage qui a provoqué une panne de
+> production sur un autre projet : script reCAPTCHA injoignable → **plus personne
+> ne peut se connecter**, Auth rendant `auth/network-request-failed`. Retenir
+> l'**activation paresseuse**, à l'ouverture de l'assistant seulement.
+>
+> Le reste de ce document — la fenêtre de mesure (étape 3), les critères
+> d'acceptation, le rollback — **reste valable et est repris tel quel**.
+
 ## Contexte
 
 Les règles Firestore et les Cloud Functions (`onCall`) authentifient l'**utilisateur**
