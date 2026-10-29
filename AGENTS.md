@@ -17,7 +17,8 @@ TESTER     : npm run test:unit && npm run test:components
              (émulateurs : test:firestore, test:integration, test:functions)
 PARTICULARITÉS :
   • Ce dépôt est une INSTANCE du produit standard « AKAYIS CRM ». Il en a été
-    copié sans historique git : aucun remote, aucun lien avec le dépôt d'origine.
+    copié sans historique git : aucun lien avec le dépôt d'origine. Il a son
+    propre remote, `origin` (GitHub, dépôt du client C2EGF).
   • Toute la variation client passe par un PROFIL déclaratif — voir ci-dessous.
   • Profil C2EGF : 1 réseau (Orange), dealer Orange, marque « C2EGF », thème bleu.
   • La configuration locale référence le projet Firebase C2EGF `c2egf-b0b5a` via
@@ -124,7 +125,7 @@ La configuration locale désigne `c2egf-b0b5a` comme projet C2EGF. Son état dis
 - **Jamais déployer** (Firebase, Vercel, Netlify) à l'initiative d'un agent. Un déploiement est une décision humaine, exécutée par un humain.
 - **Jamais utiliser les identifiants de production**, ni écrire dans le Firestore de production.
 - **Jamais déployer vers le projet Firebase d'un autre client.** L'alias `production` désigne actuellement C2EGF (`c2egf-b0b5a`) ; toute modification exige une décision humaine et une vérification explicite.
-- **Jamais `git push` ni pull request distante** sans demande explicite. Ce dépôt n'a volontairement aucun remote.
+- **Jamais `git push` ni pull request distante** sans demande explicite. Le remote `origin` existe : un push publie le code et son historique, et il ne se reprend pas.
 
 ---
 
