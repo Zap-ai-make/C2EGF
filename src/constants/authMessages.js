@@ -86,11 +86,6 @@ export const AUTH_ROLES = Object.freeze({
   DEALER: 'dealer',
 })
 
-export const GLOBAL_ROLES = Object.freeze([
-  AUTH_ROLES.SYSTEM_MANAGER,
-  AUTH_ROLES.DEALER,
-])
-
 export const AUTH_ROLE_LABELS = {
   [AUTH_ROLES.STORE_ADMIN]: 'Compte boutique',
   [AUTH_ROLES.SYSTEM_MANAGER]: 'Gérant global',

@@ -1,5 +1,4 @@
-import { AUTH_ERRORS, AUTH_CONFIG, AUTH_ROLES } from '../constants/authMessages'
-import { serverTimestamp } from 'firebase/firestore'
+import { AUTH_ERRORS, AUTH_CONFIG } from '../constants/authMessages'
 
 /**
  * Fonctions utilitaires pour l'authentification
@@ -25,14 +24,6 @@ export const isValidNewPassword = (password) => {
 // Vérification de la correspondance des mots de passe
 export const doPasswordsMatch = (password, confirmPassword) => {
   return password === confirmPassword
-}
-
-// Nettoyage et formatage des noms
-export const formatUserName = (name) => {
-  if (!name) return ''
-  return name.trim().split(' ').map(word =>
-    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-  ).join(' ')
 }
 
 // Génération d'avatar à partir du nom
@@ -78,36 +69,9 @@ export const formatDate = (dateString, options = {}) => {
   }
 }
 
-// Calcul du temps écoulé depuis une date
-export const getDaysFromDate = (dateString) => {
-  if (!dateString) return 0
-
-  try {
-    const dateValue = typeof dateString?.toDate === 'function'
-      ? dateString.toDate()
-      : dateString
-    const date = new Date(dateValue)
-    if (isNaN(date.getTime())) return 0
-    const now = new Date()
-    const diffTime = Math.abs(now - date)
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
-    return diffDays
-  } catch {
-    return 0
-  }
-}
-
 // Gestion des erreurs d'authentification
 export const getAuthErrorMessage = (errorCode, fallbackMessage = AUTH_ERRORS.GENERIC_ERROR) => {
   return AUTH_ERRORS[errorCode] || fallbackMessage
-}
-
-// Nettoyage des données utilisateur sensibles pour l'affichage
-export const sanitizeUserDataForDisplay = (userData) => {
-  if (!userData) return {}
-
-  const { password: _password, ...safeData } = userData
-  return safeData
 }
 
 // Validation des champs de formulaire
@@ -181,48 +145,3 @@ export const createTimeoutWithCleanup = (callback, delay) => {
     clear: () => clearTimeout(timeoutId)
   }
 }
-
-// Génération d'identifiants uniques pour les formulaires
-export const generateFormId = (prefix = 'form') => {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-}
-
-// Vérification du support des fonctionnalités du navigateur
-export const checkBrowserSupport = () => {
-  return {
-    localStorage: typeof(Storage) !== 'undefined',
-    sessionStorage: typeof(sessionStorage) !== 'undefined',
-    indexedDB: typeof(indexedDB) !== 'undefined',
-    webCrypto: typeof(crypto) !== 'undefined' && typeof(crypto.subtle) !== 'undefined'
-  }
-}
-
-// Utilitaires pour la gestion des états de chargement
-export const createLoadingState = () => {
-  let loadingCount = 0
-
-  return {
-    start: () => {
-      loadingCount++
-      return loadingCount > 0
-    },
-    stop: () => {
-      loadingCount = Math.max(0, loadingCount - 1)
-      return loadingCount > 0
-    },
-    reset: () => {
-      loadingCount = 0
-      return false
-    },
-    isLoading: () => loadingCount > 0
-  }
-}
-
-// Configuration par défaut pour les profils utilisateur
-export const getDefaultUserProfile = (email) => ({
-  name: email ? email.split('@')[0] : 'Utilisateur',
-  email: email || '',
-  role: AUTH_ROLES.STORE_ADMIN,
-  createdAt: serverTimestamp(),
-  lastLogin: serverTimestamp()
-})
