@@ -16,16 +16,13 @@
 export const TYPES_MOUVEMENT_BOUTIQUE = Object.freeze(['ravitaillement', 'cloture'])
 
 /**
- * Les écritures du type rencontrées en base.
+ * Accents et casse retirés — « Dépôt » et « Depot » deviennent « depot ».
  *
- * ⚠ « Dépôt » ET « Depot » COEXISTENT, et ce n'est pas une hypothèse :
+ * ⚠ « Dépôt » ET « Depot » COEXISTENT en base, et ce n'est pas une hypothèse :
  *   `src/utils/caisse.js` plie déjà les accents pour cette raison exacte. Toute
- *   comparaison directe en manquerait la moitié.
+ *   comparaison directe en manquerait la moitié — d'où le pli, et aucune liste
+ *   de variantes à tenir à jour.
  */
-export const VARIANTES_DEPOT = Object.freeze(['Dépôt', 'Depot', 'dépôt', 'depot', 'DÉPÔT', 'DEPOT'])
-export const VARIANTES_RETRAIT = Object.freeze(['Retrait', 'retrait', 'RETRAIT'])
-
-/** Accents et casse retirés — « Dépôt » et « Depot » deviennent « depot ». */
 export const plierType = (valeur) => String(valeur ?? '')
   .normalize('NFD')
   .replace(/[̀-ͯ]/g, '')

@@ -95,14 +95,5 @@ try {
   throw error
 }
 
-// Configuration utile pour debugging
-export const firebaseInfo = {
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  isDev: import.meta.env.DEV,
-  runtimeMode: import.meta.env.VITE_FIREBASE_RUNTIME_MODE || (import.meta.env.DEV ? 'development' : 'production'),
-  useEmulators: (import.meta.env.VITE_FIREBASE_RUNTIME_MODE || (import.meta.env.DEV ? 'development' : 'production')) !== 'production'
-}
-
 export { auth, db, functions }
 export default app

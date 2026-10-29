@@ -21,8 +21,3 @@ export const getFirestoreCollectionPath = (collectionName) => {
 
   return `clients/${CLIENT_ID}/${collectionName}`
 }
-
-export const clientIsolationInfo = {
-  clientId: CLIENT_ID,
-  firestoreNamespaceEnabled: import.meta.env.VITE_FIRESTORE_USE_CLIENT_NAMESPACE !== 'false'
-}
