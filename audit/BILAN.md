@@ -458,11 +458,14 @@ Branche `feat/espace-patron`, HEAD `f6d3be6`, arbre de travail conservé : `src/
 - Correction : le bilan reprend la journée du tableau de bord (`useTodayTransactions`) au lieu d'en écrire une seconde : date saisie dans la journée métier du profil, via `businessDate.js`. Les annulées et les lignes sans date lisible sont écartées. Les créances en cours restent toutes comptées.
 - Test : `tc-301` [OJ-01] rouge avant (4 opérations au lieu de 2 : la veille à 23 h 55 et une ligne sans date comptaient), vert après ; [OJ-02] empêche le filtre de s'étendre aux créances. Suites unitaires (112 fichiers, 3 005 tests) et composants (48, 652), lint et build réussis.
 
-### Observations restantes sur l'assistant, non corrigées
+### Observations sur l'assistant
 
-- **Fraîcheur.** `getHistory`, `getDrafts` et `getClients` passent par `getCollection`, dont le cache garde 5 minutes. Les opérations de caisse passent par la callable `storeTransactionCommand`, qui n'invalide pas ce cache. Deux questions à trois minutes d'écart peuvent donc rendre le même bilan, alors que des opérations ont eu lieu entre-temps. Constaté à la lecture du code, sans test. Trancher entre une lecture sans cache pour l'assistant et une invalidation après commande.
-- **Volume.** Chaque lecture d'historique charge toute la collection de la boutique, sans limite, puis filtre en mémoire. Une requête bornée par `createdAt`, comme l'écoute journalière de `transactions.jsx`, coûterait moins, au prix d'une définition de journée à aligner avec le champ `date`.
-- **`operations_recentes`** rend des totaux sur tout l'historique, alors que sa description cite « les dépôts de cette semaine » comme exemple. Il n'a aucun paramètre de période : le modèle ne peut pas restreindre ce qu'il annonce.
+**Traitées le 29 octobre 2026 · commit `a6915f4`.** Décision du responsable : un bilan frais et borné, sur la période que la personne demande (la journée par défaut ; « 10 jours », « 1 mois », « 3 mois » sinon).
+
+- **Fraîcheur.** `getHistory`, `getDrafts` et `getClients` passent par `getCollection`, dont le cache garde 5 minutes. Les opérations de caisse passent par la callable `storeTransactionCommand`, qui n'invalide pas ce cache. Deux questions à trois minutes d'écart pouvaient donc rendre le même bilan. **Traité pour le bilan** : `getHistoryBetween` lit sans cache ; `tc-301` [OJ-04] le prouve.
+- **Volume.** Chaque lecture d'historique chargeait toute la collection de la boutique. **Traité pour toute lecture avec période** : requête bornée par `createdAt`, la fenêtre de l'écoute journalière de `transactions.jsx` ; les lignes lues passent ensuite par la règle du tableau de bord (champ `date`). Une période est plafonnée à 366 jours.
+- **`operations_recentes`** n'avait aucun paramètre de période. **Traité** : `jours`, même lecture bornée ; chaque réponse avec période porte `periode` (du, au), que la déclaration oblige le modèle à annoncer.
+- **Restant, assumé.** Sans `jours`, `operations_recentes` lit encore tout l'historique, avec cache : c'est le comportement d'avant, gardé pour « retrouve l'opération de X » sans date. Clients et créances restent lus avec le cache de 5 minutes. Dans `assistant.js`, travail App Check non commité, `nommerLecture('bilan_du_jour')` affiche « je fais le point de la journée » même pour trois mois : à ajuster avec ce chantier.
 
 ### QUA-06 — La porte qualité ne peut plus passer : avis `re2js`
 
