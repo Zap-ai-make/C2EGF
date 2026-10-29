@@ -32,6 +32,7 @@
 //   perdent leur `this` et lèvent un TypeError à chaque lecture. C'est arrivé
 //   ici, et `traduirePanne` le maquillait en « Je n'ai pas pu lire » (tc-301).
 import { firestoreService } from '../../services/firestore.js'
+import { businessDateKey, storedBusinessDateKey } from '../../utils/businessDate.js'
 import { CLES_DESTINATIONS } from './destinations.js'
 
 const EXTRAIT_MAX = 50
@@ -76,6 +77,20 @@ function estDefait(transaction) {
 function montantDe(transaction) {
   const montant = Number(transaction?.montant)
   return Number.isFinite(montant) ? montant : 0
+}
+
+/**
+ * La journée du tableau de bord (`useTodayTransactions`), pas une seconde
+ * définition : date saisie dans la journée métier du profil. Une ligne sans
+ * date lisible n'est pas « du jour » — la compter gonflerait le bilan.
+ */
+function estDuJour(ligne, cleDuJour) {
+  if (!ligne?.date) return false
+  try {
+    return storedBusinessDateKey(ligne.date) === cleDuJour
+  } catch {
+    return false
+  }
 }
 
 /** Totaux sur TOUT ce qui a été retenu, puis extrait borné. */
@@ -212,7 +227,11 @@ async function bilanDuJour() {
 
   if (historique.status === 'rejected') return traduirePanne(historique.reason, "l'historique")
 
-  const lignes = Array.isArray(historique.value) ? historique.value : []
+  // ⚠ BORNÉ À LA JOURNÉE. Sans ce filtre, le « bilan du jour » additionnait
+  //   tout l'historique : le cumul depuis l'ouverture, au chiffre près, sous
+  //   l'étiquette d'aujourd'hui. Les créances, elles, ne se périment pas.
+  const cleDuJour = businessDateKey()
+  const lignes = (Array.isArray(historique.value) ? historique.value : []).filter((l) => estDuJour(l, cleDuJour))
   const { nombre, total, parType } = totaliser(lignes)
 
   const creances = brouillons.status === 'fulfilled' && Array.isArray(brouillons.value) ? brouillons.value : []

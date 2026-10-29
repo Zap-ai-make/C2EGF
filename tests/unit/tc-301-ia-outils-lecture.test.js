@@ -160,3 +160,47 @@ describe('[OL] outils de lecture, sur le vrai firestoreService', () => {
     expect(reponse.operations[0].clientNom).toBe('ZIDA Kassoum')
   })
 })
+
+/**
+ * « Le point de la journée », dit la déclaration lue par le modèle. Sans borne,
+ * le bilan additionnait TOUT l'historique de la boutique : le cumul depuis
+ * l'ouverture, présenté comme le chiffre du jour. La journée est celle du
+ * tableau de bord (`useTodayTransactions`) : date saisie dans la journée
+ * métier du profil, annulées et lignes sans date écartées.
+ */
+describe('[OJ] bilan_du_jour s\'en tient à la journée métier', () => {
+  beforeEach(() => {
+    // Seule l'horloge est figée : les minuteries du cache restent réelles.
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-29T12:00:00Z') })
+    base.collections['clients/boutique-a/history'] = [
+      { id: 'j1', clientNom: 'KINDA Adjara', type: 'Retrait', montant: 20000, statut: 'Validée', date: '29/10/2026 00:05:00' },
+      { id: 'j2', clientNom: 'OUEDRAOGO Souleymane', type: 'Dépôt', montant: 50000, statut: 'Validée', date: '28/10/2026 23:55:00' },
+      { id: 'j3', clientNom: 'ZIDA Kassoum', type: 'Dépôt', montant: 7000, statut: 'Annulée', date: '29/10/2026 11:00:00' },
+      { id: 'j4', clientNom: 'ZIDA Kassoum', type: 'Dépôt', montant: 4000, statut: 'Validée', date: '29/10/2026 11:30:00' },
+      { id: 'j5', clientNom: 'KINDA Adjara', type: 'Dépôt', montant: 1000, statut: 'Validée' },
+    ]
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('[OJ-01] la veille, une annulée et une ligne sans date ne comptent pas', async () => {
+    const reponse = await executerOutil('bilan_du_jour')
+
+    expect(reponse.operations_terminees).toBe(2)
+    expect(reponse.total_encaisse).toBe(24000)
+    expect(reponse.par_type).toEqual({ Retrait: 20000, Dépôt: 4000 })
+  })
+
+  it('[OJ-02] les créances en cours restent toutes comptées, quel que soit leur âge', async () => {
+    base.collections['clients/boutique-a/drafts'] = [
+      { id: 'v1', clientNom: 'KINDA Adjara', type: 'Dépôt', montant: 15000, statut: 'Non Terminées', date: '12/10/2026 09:00:00' },
+    ]
+
+    const reponse = await executerOutil('bilan_du_jour')
+
+    expect(reponse.creances_en_cours).toBe(1)
+    expect(reponse.total_des_creances).toBe(15000)
+  })
+})
