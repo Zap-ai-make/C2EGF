@@ -37,6 +37,19 @@ describe('TC-211 — durcissement du lot 3B', () => {
     expect(headers['Permissions-Policy']).toContain('camera=()')
   })
 
+  // Ouvrir tout www.google.com aux scripts laisse passer ses points JSONP, qui
+  // exécutent ce qu'on leur fait rappeler : la CSP ne protégerait plus rien.
+  // reCAPTCHA n'a besoin que de ses chemins /recaptcha/.
+  it.each(['script-src', 'frame-src'])('%s n’ouvre Google qu’aux chemins de reCAPTCHA', (directive) => {
+    const config = JSON.parse(readFileSync('vercel.json', 'utf8'))
+    const csp = config.headers[0].headers.find(({ key }) => key === 'Content-Security-Policy').value
+    const sources = csp.split(';').map((d) => d.trim().split(/\s+/)).find(([nom]) => nom === directive)?.slice(1) ?? []
+    const externes = sources.filter((s) => s !== "'self'")
+
+    expect(externes.length).toBeGreaterThan(0)
+    for (const source of externes) expect(source).toMatch(/^https:\/\/[a-z.]+\.(google|gstatic)\.com\/recaptcha\/$/)
+  })
+
   it('rejette les fichiers Excel trop gros et les tableaux démesurés', () => {
     expect(validateExcelFile({
       name: 'clients.xlsx',

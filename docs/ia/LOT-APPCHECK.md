@@ -91,18 +91,32 @@ Valeur à poser :
 ```
 default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none';
 form-action 'self';
-script-src 'self' https://www.google.com https://www.gstatic.com;
+script-src 'self' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/;
 style-src 'self' 'unsafe-inline';
 img-src 'self' data: blob: https://www.google.com https://www.gstatic.com;
 font-src 'self' data:;
 connect-src 'self' https://*.googleapis.com https://*.firebaseio.com
   wss://*.firebaseio.com https://*.cloudfunctions.net
-  https://www.google.com https://www.gstatic.com;
-frame-src https://www.google.com;
+  https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/;
+frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/;
 worker-src 'self' blob:; manifest-src 'self'
 ```
 
 (à écrire sur une seule ligne dans `vercel.json`)
+
+⚠ **Les chemins `/recaptcha/`, pas les domaines nus** (corrigé le 30 octobre 2026).
+La première version de ce document ouvrait `www.google.com` et `www.gstatic.com`
+en entier à `script-src`. Ces domaines servent des points JSONP qui exécutent ce
+qu'on leur fait rappeler : la CSP ne protégeait plus contre une injection de
+script. reCAPTCHA n'a besoin que de ses chemins ; `tc-211` le vérifie. Si la
+fenêtre de mesure montre un script bloqué hors de ces chemins, l'ajouter
+**nommément**, jamais en rouvrant le domaine.
+
+⚠ **Le jeton de débogage ne se lit qu'en développement.** `appCheck.js` ne lit
+`VITE_APPCHECK_DEBUG_TOKEN` que sous `import.meta.env.DEV`, et aucun code ne passe
+`import.meta.env` entier (Vite recopierait alors tout le `.env` dans le bundle).
+Le placer de préférence dans `.env.development.local`, que Vite ne charge pas pour
+un build de production.
 
 Trois remarques :
 

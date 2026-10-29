@@ -31,7 +31,7 @@
 
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check'
 import app from './firebase.js'
-import { resolveFirebaseRuntime } from './firebaseRuntime.js'
+import { lireEnvRuntime, resolveFirebaseRuntime } from './firebaseRuntime.js'
 
 let etat = null
 
@@ -50,7 +50,7 @@ export function activerAppCheck() {
   }
 
   // garde 3 : les émulateurs n'ont pas de service App Check.
-  const runtime = resolveFirebaseRuntime(import.meta.env)
+  const runtime = resolveFirebaseRuntime(lireEnvRuntime())
   if (runtime.useEmulators) {
     etat = { actif: false, raison: 'émulateurs' }
     return etat
@@ -66,7 +66,15 @@ export function activerAppCheck() {
   try {
     // En local, le jeton de débogage remplace reCAPTCHA. Il doit être posé
     // AVANT l'initialisation, sinon il est ignoré.
-    const jetonDebogage = import.meta.env.VITE_APPCHECK_DEBUG_TOKEN
+    //
+    // ⚠ EN DÉVELOPPEMENT SEULEMENT, et la condition doit envelopper la LECTURE.
+    //   Vite remplace `import.meta.env.VITE_…` par sa valeur en clair : lu sans
+    //   condition, le jeton partait dans tout bundle de production construit
+    //   avec ce `.env` — vérifié dans `dist/` le 30 octobre 2026. Quiconque le
+    //   lit obtient des attestations valides, donc le modèle à nos frais.
+    //   Sous `import.meta.env.DEV`, faux en production, la branche disparaît
+    //   du bundle, valeur comprise.
+    const jetonDebogage = import.meta.env.DEV ? import.meta.env.VITE_APPCHECK_DEBUG_TOKEN : undefined
     if (jetonDebogage) {
       // `true` fait imprimer un jeton à enregistrer dans la console Firebase ;
       // une chaîne emploie un jeton déjà enregistré.
