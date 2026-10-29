@@ -106,7 +106,6 @@ vi.mock('../../src/utils/cacheManager', () => ({
 
 import { DraftService } from '../../src/services/draftService.js'
 import { FirestoreService } from '../../src/services/firestore.js'
-import * as firestoreModule from '../../src/services/firestore.js'
 import { runTransaction, getDoc, onSnapshot } from 'firebase/firestore'
 import { FIRESTORE_CONFIG } from '../../src/constants/firestoreConstants.js'
 
@@ -859,17 +858,6 @@ describe('TC-018-I — Façade FirestoreService : lectures locales et écritures
     expect(typeof firestoreSvc.getClients).toBe('function')
     expect(typeof firestoreSvc.subscribeToHistory).toBe('function')
     expect(typeof firestoreSvc.deleteFromHistory).toBe('function')
-  })
-
-  it('les exports de fonctions nommées fonctionnent sans modification', () => {
-    // Vérifie que le module firestore.js exporte toujours les fonctions nommées
-    // Ces imports directs sont utilisés par certains composants
-    expect(typeof firestoreModule.getDrafts).toBe('function')
-    expect(typeof firestoreModule.addDraft).toBe('function')
-    expect(typeof firestoreModule.updateDraft).toBe('function')
-    expect(typeof firestoreModule.deleteDraft).toBe('function')
-    expect(typeof firestoreModule.subscribeToDrafts).toBe('function')
-    expect(typeof firestoreModule.validateTransaction).toBe('function')
   })
 })
 

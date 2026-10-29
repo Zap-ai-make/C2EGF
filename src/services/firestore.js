@@ -1249,27 +1249,8 @@ export class FirestoreService {
   }
 }
 
-// Instance singleton du service
+// Instance singleton du service.
+// ⚠ Aucun export déstructuré de ses méthodes : détachées, elles perdent leur
+//   `this` et lèvent à chaque appel. Un tel bloc a vécu ici et a cassé les
+//   lectures de l'assistant (tc-301). Toujours `firestoreService.methode()`.
 export const firestoreService = new FirestoreService()
-
-// Exports de fonctions spécialisées pour faciliter l'utilisation
-export const {
-  getClients,
-  addClient,
-  updateClient,
-  deleteClient,
-  subscribeToClients,
-  getDrafts,
-  addDraft,
-  updateDraft,
-  deleteDraft,
-  subscribeToDrafts,
-  getHistory,
-  addToHistory,
-  deleteFromHistory,
-  subscribeToHistory,
-  validateTransaction,
-  migrateLocalStorageData,
-  unsubscribeAll,
-  unsubscribeFromCollection
-} = firestoreService
