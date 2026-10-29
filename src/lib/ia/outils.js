@@ -32,10 +32,18 @@
 //   perdent leur `this` et lèvent un TypeError à chaque lecture. C'est arrivé
 //   ici, et `traduirePanne` le maquillait en « Je n'ai pas pu lire » (tc-301).
 import { firestoreService } from '../../services/firestore.js'
-import { businessDateKey, storedBusinessDateKey } from '../../utils/businessDate.js'
+import {
+  addCalendarDays,
+  businessDateKey,
+  getBusinessDayBounds,
+  storedBusinessDateKey,
+} from '../../utils/businessDate.js'
 import { CLES_DESTINATIONS } from './destinations.js'
 
 const EXTRAIT_MAX = 50
+// Un an et un jour : au-delà, la lecture coûte tout l'historique d'une boutique
+// pour une question qu'un écran d'archives sert mieux.
+const JOURS_MAX = 366
 const STATUTS_DEFAITS = Object.freeze(['Annulée', 'Supprimée'])
 
 /** Un refus nommé, lisible par le modèle, sans une once de jargon. */
@@ -80,17 +88,60 @@ function montantDe(transaction) {
 }
 
 /**
- * La journée du tableau de bord (`useTodayTransactions`), pas une seconde
- * définition : date saisie dans la journée métier du profil. Une ligne sans
- * date lisible n'est pas « du jour » — la compter gonflerait le bilan.
+ * La période demandée : les `jours` dernières journées métier, aujourd'hui
+ * compris (1 = la journée en cours). `undefined` prend la valeur par défaut ;
+ * tout le reste qui n'est pas un entier de 1 à JOURS_MAX est un refus.
  */
-function estDuJour(ligne, cleDuJour) {
+function lirePeriode(jours, parDefaut) {
+  const voulu = jours === undefined || jours === null ? parDefaut : Number(jours)
+  if (!Number.isInteger(voulu) || voulu < 1 || voulu > JOURS_MAX) {
+    return { refus: refus(`Je peux faire le point sur 1 à ${JOURS_MAX} jours, aujourd'hui compris.`) }
+  }
+  const finCle = businessDateKey()
+  const debutCle = addCalendarDays(finCle, 1 - voulu)
+  return {
+    jours: voulu,
+    debutCle,
+    finCle,
+    start: getBusinessDayBounds(debutCle).start,
+    endExclusive: getBusinessDayBounds(finCle).end,
+  }
+}
+
+/** « 2026-10-20 » → « 20/10/2026 », la forme qu'on lit au comptoir. */
+function cleEnDate(cle) {
+  const [annee, mois, jour] = cle.split('-')
+  return `${jour}/${mois}/${annee}`
+}
+
+/** Ce que le modèle doit annoncer : sur quoi portent les chiffres qu'il rend. */
+function decrirePeriode(periode) {
+  return { du: cleEnDate(periode.debutCle), au: cleEnDate(periode.finCle), jours: periode.jours }
+}
+
+/**
+ * La journée du tableau de bord (`useTodayTransactions`), étendue à une
+ * période, pas une seconde définition : date SAISIE dans les journées métier
+ * du profil. Une ligne sans date lisible n'appartient à aucune période — la
+ * compter gonflerait le bilan. Les clés `AAAA-MM-JJ` se comparent en texte.
+ */
+function estDansLaPeriode(ligne, { debutCle, finCle }) {
   if (!ligne?.date) return false
   try {
-    return storedBusinessDateKey(ligne.date) === cleDuJour
+    const cle = storedBusinessDateKey(ligne.date)
+    return cle >= debutCle && cle <= finCle
   } catch {
     return false
   }
+}
+
+/** L'historique de la période, lu frais et borné, puis aligné sur la règle de l'écran. */
+async function historiqueDeLaPeriode(periode) {
+  const lignes = await firestoreService.getHistoryBetween({
+    start: periode.start,
+    endExclusive: periode.endExclusive,
+  })
+  return (Array.isArray(lignes) ? lignes : []).filter((l) => estDansLaPeriode(l, periode))
 }
 
 /** Totaux sur TOUT ce qui a été retenu, puis extrait borné. */
@@ -118,16 +169,31 @@ function nomComplet(client) {
 //   dit QUAND s'en servir.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Une seule description pour les deux outils : la même durée doit se traduire
+// pareil, sinon « un mois » vaudrait 30 jours ici et 31 là.
+const PARAM_JOURS = Object.freeze({
+  type: 'INTEGER',
+  description:
+    "Nombre de journées, aujourd'hui compris, quand la personne nomme une durée : " +
+    '« les 10 derniers jours » = 10, « la semaine » = 7, « un mois » = 30, ' +
+    '« trois mois » = 90, « depuis le 1er » = les jours écoulés depuis le 1er. ' +
+    `Entre 1 et ${JOURS_MAX}. Sans durée nommée, ne mets rien.`,
+})
+
 export const DECLARATIONS = Object.freeze([
   {
     name: 'bilan_du_jour',
     description:
-      "Le point complet de la journée pour cette boutique : nombre d'opérations, " +
-      "total encaissé, répartition par type, créances en cours et nombre de clients. " +
+      "Le point complet de la boutique : nombre d'opérations, total encaissé, " +
+      'répartition par type, créances en cours et nombre de clients. Par défaut la ' +
+      'journée en cours ; sur une durée si la personne en nomme une (« les 10 derniers ' +
+      'jours », « ce mois », « 3 mois ») : passe-la dans `jours`. La réponse porte ' +
+      '`periode` (du, au) : annonce TOUJOURS la période réelle de tes chiffres. Les ' +
+      'créances en cours sont toutes comptées, quelle que soit la période. ' +
       "À EMPLOYER DÈS QU'ON DEMANDE « où on en est », « fais le point », « le bilan », " +
       "« la situation », « ça donne quoi aujourd'hui ». Rend tout d'un coup : ne lance " +
       'pas plusieurs autres outils pour reconstituer ce que celui-ci donne déjà.',
-    parameters: { type: 'OBJECT', properties: {} },
+    parameters: { type: 'OBJECT', properties: { jours: PARAM_JOURS } },
   },
   {
     name: 'chercher_client',
@@ -159,14 +225,17 @@ export const DECLARATIONS = Object.freeze([
   {
     name: 'operations_recentes',
     description:
-      "L'historique récent des opérations terminées de la boutique, avec les totaux. " +
-      "À employer pour « qu'est-ce qu'on a fait », « retrouve l'opération de X », " +
-      '« les dépôts de cette semaine ».',
+      "L'historique des opérations terminées de la boutique, avec les totaux. Sans " +
+      '`jours`, tout l\'historique ; avec, la durée nommée (« les dépôts de cette ' +
+      'semaine » : jours = 7). Quand la réponse porte `periode`, annonce-la avec les ' +
+      "chiffres. À employer pour « qu'est-ce qu'on a fait », « retrouve l'opération " +
+      'de X », « les retraits du mois ».',
     parameters: {
       type: 'OBJECT',
       properties: {
         client: { type: 'STRING', description: "Nom ou code d'un client" },
         type: { type: 'STRING', description: 'Dépôt ou Retrait' },
+        jours: PARAM_JOURS,
       },
     },
   },
@@ -217,28 +286,33 @@ function correspond(client, recherche) {
     .some((champ) => String(champ).toLowerCase().includes(aiguille))
 }
 
-async function bilanDuJour() {
+async function bilanDuJour({ jours } = {}) {
+  // ⚠ BORNÉ À LA PÉRIODE, la journée par défaut. Sans borne, le bilan
+  //   additionnait tout l'historique : le cumul depuis l'ouverture, au chiffre
+  //   près, sous l'étiquette d'aujourd'hui. Les créances, elles, ne se
+  //   périment pas : elles restent toutes comptées, quelle que soit la période.
+  const periode = lirePeriode(jours, 1)
+  if (periode.refus) return periode.refus
+
   // Lectures en parallèle : les enchaîner doublait l'attente au comptoir.
   const [clients, brouillons, historique] = await Promise.allSettled([
     firestoreService.getClients(),
     firestoreService.getDrafts(),
-    firestoreService.getHistory(),
+    historiqueDeLaPeriode(periode),
   ])
 
   if (historique.status === 'rejected') return traduirePanne(historique.reason, "l'historique")
 
-  // ⚠ BORNÉ À LA JOURNÉE. Sans ce filtre, le « bilan du jour » additionnait
-  //   tout l'historique : le cumul depuis l'ouverture, au chiffre près, sous
-  //   l'étiquette d'aujourd'hui. Les créances, elles, ne se périment pas.
-  const cleDuJour = businessDateKey()
-  const lignes = (Array.isArray(historique.value) ? historique.value : []).filter((l) => estDuJour(l, cleDuJour))
-  const { nombre, total, parType } = totaliser(lignes)
+  const { nombre, total, parType } = totaliser(historique.value)
 
   const creances = brouillons.status === 'fulfilled' && Array.isArray(brouillons.value) ? brouillons.value : []
   const creancesRetenues = creances.filter((c) => !estDefait(c))
   const totalCreances = creancesRetenues.reduce((somme, c) => somme + montantDe(c), 0)
 
   return {
+    // Les chiffres DISENT leur période : sans elle, le modèle peut annoncer
+    // « aujourd'hui » pour un total de trois mois.
+    periode: decrirePeriode(periode),
     operations_terminees: nombre,
     total_encaisse: total,
     par_type: parType,
@@ -315,10 +389,16 @@ async function creancesEnCours({ client } = {}) {
   }
 }
 
-async function operationsRecentes({ client, type } = {}) {
+async function operationsRecentes({ client, type, jours } = {}) {
+  // Sans durée demandée : tout l'historique, comme avant. Avec une durée : la
+  // même lecture bornée et fraîche que le bilan, et la période dite.
+  const periode = jours === undefined || jours === null ? null : lirePeriode(jours, 1)
+  if (periode?.refus) return periode.refus
+  const cadre = periode ? { periode: decrirePeriode(periode) } : {}
+
   let historique
   try {
-    historique = await firestoreService.getHistory()
+    historique = periode ? await historiqueDeLaPeriode(periode) : await firestoreService.getHistory()
   } catch (cause) {
     return traduirePanne(cause, "l'historique")
   }
@@ -339,10 +419,11 @@ async function operationsRecentes({ client, type } = {}) {
 
   const { nombre, total, parType, retenues } = totaliser(lignes)
   if (nombre === 0) {
-    return { nombre: 0, total: 0, operations: [], message: 'Aucune opération ne correspond.' }
+    return { ...cadre, nombre: 0, total: 0, operations: [], message: 'Aucune opération ne correspond.' }
   }
 
   return {
+    ...cadre,
     nombre,
     total,
     par_type: parType,

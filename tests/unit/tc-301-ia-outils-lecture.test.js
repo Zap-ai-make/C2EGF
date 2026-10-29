@@ -21,16 +21,35 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const base = vi.hoisted(() => ({ collections: {} }))
 
+// Les `where` sont APPLIQUÉS, comme le ferait Firestore : une lecture bornée
+// ne doit rendre que sa fenêtre, sinon le test ne prouverait pas la borne.
+const filtre = vi.hoisted(() => ({
+  respecte(document_, { champ, op, valeur }) {
+    const v = document_[champ]
+    if (v === undefined || v === null) return false
+    if (op === '>=') return v >= valeur
+    if (op === '<') return v < valeur
+    if (op === '<=') return v <= valeur
+    if (op === '==') return v === valeur
+    throw new Error(`opérateur non simulé : ${op}`)
+  },
+}))
+
 vi.mock('firebase/firestore', () => ({
-  collection: vi.fn((_db, path) => ({ path })),
+  collection: vi.fn((_db, path) => ({ path, contraintes: [] })),
   doc: vi.fn((_db, ...segments) => ({ path: segments.join('/') })),
-  query: vi.fn((ref) => ref),
+  query: vi.fn((ref, ...contraintes) => ({
+    path: ref.path,
+    contraintes: [...(ref.contraintes ?? []), ...contraintes.filter(Boolean)],
+  })),
   orderBy: vi.fn(),
-  where: vi.fn(),
+  where: vi.fn((champ, op, valeur) => ({ champ, op, valeur })),
   limit: vi.fn(),
   startAfter: vi.fn(),
   getDocs: vi.fn(async (ref) => ({
-    docs: (base.collections[ref.path] ?? []).map(({ id, ...donnees }) => ({ id, data: () => donnees })),
+    docs: (base.collections[ref.path] ?? [])
+      .filter((d) => (ref.contraintes ?? []).every((c) => filtre.respecte(d, c)))
+      .map(({ id, ...donnees }) => ({ id, data: () => donnees })),
   })),
   getDoc: vi.fn(),
   addDoc: vi.fn(),
@@ -61,8 +80,9 @@ vi.mock('../../src/config/clientIsolation', () => ({
   getFirestoreCollectionPath: vi.fn((name) => name),
 }))
 
+import { getDocs } from 'firebase/firestore'
 import { firestoreService } from '../../src/services/firestore.js'
-import { executerOutil } from '../../src/lib/ia/outils.js'
+import { DECLARATIONS, executerOutil } from '../../src/lib/ia/outils.js'
 
 // ---------------------------------------------------------------------------
 // Jeux de données — valeurs attendues écrites à la main
@@ -162,23 +182,37 @@ describe('[OL] outils de lecture, sur le vrai firestoreService', () => {
 })
 
 /**
- * « Le point de la journée », dit la déclaration lue par le modèle. Sans borne,
- * le bilan additionnait TOUT l'historique de la boutique : le cumul depuis
- * l'ouverture, présenté comme le chiffre du jour. La journée est celle du
- * tableau de bord (`useTodayTransactions`) : date saisie dans la journée
- * métier du profil, annulées et lignes sans date écartées.
+ * « Le point », par défaut sur la journée ; sur la période que la personne
+ * nomme sinon (« les 10 derniers jours », « 3 mois »). Sans borne, le bilan
+ * additionnait TOUT l'historique : le cumul depuis l'ouverture, présenté comme
+ * le chiffre du jour. La journée est celle du tableau de bord
+ * (`useTodayTransactions`) : date saisie dans la journée métier du profil,
+ * annulées et lignes sans date écartées.
+ *
+ * Ouagadougou est à UTC+0 : les bornes attendues s'écrivent en UTC à la main.
  */
-describe('[OJ] bilan_du_jour s\'en tient à la journée métier', () => {
+const HISTORIQUE_DATE = [
+  { id: 'j1', clientNom: 'KINDA Adjara', type: 'Retrait', montant: 20000, statut: 'Validée', date: '29/10/2026 00:05:00', createdAt: new Date('2026-10-29T00:05:00Z') },
+  { id: 'j2', clientNom: 'OUEDRAOGO Souleymane', type: 'Dépôt', montant: 50000, statut: 'Validée', date: '28/10/2026 23:55:00', createdAt: new Date('2026-10-28T23:55:00Z') },
+  { id: 'j3', clientNom: 'ZIDA Kassoum', type: 'Dépôt', montant: 7000, statut: 'Annulée', date: '29/10/2026 11:00:00', createdAt: new Date('2026-10-29T11:00:00Z') },
+  { id: 'j4', clientNom: 'ZIDA Kassoum', type: 'Dépôt', montant: 4000, statut: 'Validée', date: '29/10/2026 11:30:00', createdAt: new Date('2026-10-29T11:30:00Z') },
+  { id: 'j5', clientNom: 'KINDA Adjara', type: 'Dépôt', montant: 1000, statut: 'Validée', createdAt: new Date('2026-10-29T11:45:00Z') },
+  { id: 'j6', clientNom: 'KINDA Adjara', type: 'Retrait', montant: 3000, statut: 'Validée', date: '20/10/2026 10:00:00', createdAt: new Date('2026-10-20T10:00:00Z') },
+  { id: 'j7', clientNom: 'ZIDA Kassoum', type: 'Dépôt', montant: 9000, statut: 'Validée', date: '19/10/2026 23:59:00', createdAt: new Date('2026-10-19T23:59:00Z') },
+]
+
+/** Les contraintes de la dernière lecture d'historique envoyée au SDK. */
+function bornesLues() {
+  const appels = vi.mocked(getDocs).mock.calls.filter(([ref]) => ref.path === 'clients/boutique-a/history')
+  return appels.at(-1)?.[0].contraintes ?? null
+}
+
+describe('[OJ] bilan_du_jour : la journée, ou la période demandée', () => {
   beforeEach(() => {
     // Seule l'horloge est figée : les minuteries du cache restent réelles.
     vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-29T12:00:00Z') })
-    base.collections['clients/boutique-a/history'] = [
-      { id: 'j1', clientNom: 'KINDA Adjara', type: 'Retrait', montant: 20000, statut: 'Validée', date: '29/10/2026 00:05:00' },
-      { id: 'j2', clientNom: 'OUEDRAOGO Souleymane', type: 'Dépôt', montant: 50000, statut: 'Validée', date: '28/10/2026 23:55:00' },
-      { id: 'j3', clientNom: 'ZIDA Kassoum', type: 'Dépôt', montant: 7000, statut: 'Annulée', date: '29/10/2026 11:00:00' },
-      { id: 'j4', clientNom: 'ZIDA Kassoum', type: 'Dépôt', montant: 4000, statut: 'Validée', date: '29/10/2026 11:30:00' },
-      { id: 'j5', clientNom: 'KINDA Adjara', type: 'Dépôt', montant: 1000, statut: 'Validée' },
-    ]
+    base.collections['clients/boutique-a/history'] = [...HISTORIQUE_DATE]
+    vi.mocked(getDocs).mockClear()
   })
 
   afterEach(() => {
@@ -191,7 +225,75 @@ describe('[OJ] bilan_du_jour s\'en tient à la journée métier', () => {
     expect(reponse.operations_terminees).toBe(2)
     expect(reponse.total_encaisse).toBe(24000)
     expect(reponse.par_type).toEqual({ Retrait: 20000, Dépôt: 4000 })
+    expect(reponse.periode).toEqual({ du: '29/10/2026', au: '29/10/2026', jours: 1 })
   })
+
+  it('[OJ-03] la lecture est bornée à la journée, pas à tout l\'historique', async () => {
+    await executerOutil('bilan_du_jour')
+
+    expect(bornesLues()).toEqual(expect.arrayContaining([
+      { champ: 'createdAt', op: '>=', valeur: new Date('2026-10-29T00:00:00Z') },
+      { champ: 'createdAt', op: '<', valeur: new Date('2026-10-30T00:00:00Z') },
+    ]))
+  })
+
+  it('[OJ-04] une opération faite entre deux questions apparaît à la seconde', async () => {
+    await executerOutil('bilan_du_jour')
+    base.collections['clients/boutique-a/history'].push(
+      { id: 'j8', clientNom: 'KINDA Adjara', type: 'Dépôt', montant: 6000, statut: 'Validée', date: '29/10/2026 11:59:00', createdAt: new Date('2026-10-29T11:59:00Z') },
+    )
+
+    const reponse = await executerOutil('bilan_du_jour')
+
+    expect(reponse.operations_terminees).toBe(3)
+    expect(reponse.total_encaisse).toBe(30000)
+  })
+
+  it('[OJ-05] « les 10 derniers jours » : aujourd\'hui compris, le 19 exclu', async () => {
+    const reponse = await executerOutil('bilan_du_jour', { jours: 10 })
+
+    expect(reponse.periode).toEqual({ du: '20/10/2026', au: '29/10/2026', jours: 10 })
+    expect(reponse.operations_terminees).toBe(4)
+    expect(reponse.total_encaisse).toBe(77000)
+    expect(reponse.par_type).toEqual({ Retrait: 23000, Dépôt: 54000 })
+    expect(bornesLues()).toEqual(expect.arrayContaining([
+      { champ: 'createdAt', op: '>=', valeur: new Date('2026-10-20T00:00:00Z') },
+      { champ: 'createdAt', op: '<', valeur: new Date('2026-10-30T00:00:00Z') },
+    ]))
+  })
+
+  it.each([0, -3, 2.5, 400, 'dix'])(
+    '[OJ-06] une période impossible (%s) est refusée sans rien lire',
+    async (jours) => {
+      const reponse = await executerOutil('bilan_du_jour', { jours })
+
+      expect(reponse.erreur).toBe(true)
+      expect(bornesLues()).toBeNull()
+    },
+  )
+
+  it('[OJ-07] operations_recentes sur 7 jours : bornée, totalisée, période dite', async () => {
+    const reponse = await executerOutil('operations_recentes', { jours: 7 })
+
+    expect(reponse.periode).toEqual({ du: '23/10/2026', au: '29/10/2026', jours: 7 })
+    expect(reponse.nombre).toBe(3)
+    expect(reponse.total).toBe(74000)
+    expect(bornesLues()).toEqual(expect.arrayContaining([
+      { champ: 'createdAt', op: '>=', valeur: new Date('2026-10-23T00:00:00Z') },
+    ]))
+  })
+
+  // Le modèle ne passe que ce que la déclaration décrit : un paramètre lu par
+  // l'exécutant mais absent de la déclaration ne serait JAMAIS envoyé.
+  it.each(['bilan_du_jour', 'operations_recentes'])(
+    '[OJ-08] %s déclare au modèle le paramètre `jours` que son exécutant lit',
+    (nom) => {
+      const declaration = DECLARATIONS.find((d) => d.name === nom)
+
+      expect(declaration.parameters.properties.jours?.type).toBe('INTEGER')
+      expect(declaration.parameters.required ?? []).not.toContain('jours')
+    },
+  )
 
   it('[OJ-02] les créances en cours restent toutes comptées, quel que soit leur âge', async () => {
     base.collections['clients/boutique-a/drafts'] = [

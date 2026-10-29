@@ -34,7 +34,7 @@ function parseDateKey(dateKey) {
   return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) }
 }
 
-function addCalendarDays(dateKey, days) {
+export function addCalendarDays(dateKey, days) {
   const { year, month, day } = parseDateKey(dateKey)
   const next = new Date(Date.UTC(year, month - 1, day + days))
   return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}-${String(next.getUTCDate()).padStart(2, '0')}`

@@ -62,6 +62,7 @@ export class HistoryService {
   _docRef(name, id) { return this._ctx.docRef(name, id) }
   async _addDocument(name, data) { return this._ctx.addDocument(name, data) }
   async _getCollection(name, opts) { return this._ctx.getCollection(name, opts) }
+  async _getCollectionFresh(name, opts) { return this._ctx.getCollection(name, opts, false) }
   _collectionRef(name) { return this._ctx.collectionRef(name) }
   _subscribeToCollection(name, cb, opts) { return this._ctx.subscribeToCollection(name, cb, opts) }
   _normalizeTransactionLabel(value) { return this._ctx.normalizeTransactionLabel(value) }
@@ -75,6 +76,28 @@ export class HistoryService {
 
   async getHistory() {
     return this._getCollection(FIRESTORE_CONFIG.COLLECTIONS.HISTORY)
+  }
+
+  /**
+   * L'historique d'une fenêtre `[start, endExclusive)` sur `createdAt`, lu une
+   * fois et SANS cache.
+   *
+   * Même fenêtre que l'écoute journalière de `transactions.jsx`. Sans cache,
+   * parce que les opérations de caisse passent par la callable, qui n'invalide
+   * pas `getCollection` : une réponse vieille de cinq minutes ignorerait ce qui
+   * vient d'être encaissé. Bornée, parce que relire toute la boutique à chaque
+   * question coûterait ce que coûte tout l'historique.
+   */
+  async getHistoryBetween({ start, endExclusive }) {
+    this._requireActiveStore()
+    return this._getCollectionFresh(FIRESTORE_CONFIG.COLLECTIONS.HISTORY, {
+      where: [
+        { field: 'createdAt', operator: '>=', value: start },
+        { field: 'createdAt', operator: '<', value: endExclusive },
+      ],
+      orderByField: 'createdAt',
+      orderDirection: 'desc',
+    })
   }
 
   async getHistoryPage({ lastDoc = null, pageSize = HISTORY_PAGE_SIZE } = {}) {

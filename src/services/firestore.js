@@ -1079,6 +1079,10 @@ export class FirestoreService {
     return this._historyService.getHistory()
   }
 
+  async getHistoryBetween(fenetre) {
+    return this._historyService.getHistoryBetween(fenetre)
+  }
+
   async getHistoryPage(options = {}) {
     return this._historyService.getHistoryPage(options)
   }
