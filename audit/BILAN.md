@@ -484,7 +484,7 @@ Branche `feat/espace-patron`, HEAD `f6d3be6`, arbre de travail conservé : `src/
 
 ### QUA-07 — Code mort apparu ou resté depuis septembre
 
-**MINEUR · effort S par fichier · aucune suppression faite.** Chaque suppression suit la règle d'`AGENTS.md` : imports statiques et dynamiques, scripts, configuration, usage métier, tests avant et après, commit local réversible.
+**MINEUR · CORRIGÉ le 29 octobre 2026 · commits `75c3344`, `c44373d`, `ac06e74`, `3d23303`, `1ef0a5d`, `e97070b`.** Chaque suppression suit la règle d'`AGENTS.md` : imports statiques et dynamiques, scripts, configuration, usage métier, tests avant et après, commit local réversible. Le constat initial ci-dessous est conservé ; le résultat suit la liste.
 
 Fichiers sans usage en production :
 
@@ -503,9 +503,30 @@ Déclarations présentes une seule fois dans leur fichier, à leur définition, 
 - `src/constants/collaborationConstants.js` : `DEBT_SETTLEMENT_STATUS_LABELS`, `COLLAB_DIRECTION_LABELS`, `DEBT_DIRECTION_LABELS`.
 - `src/constants/workspaceTheme.js` : `getRoleAccent`, `BTN_PRIMARY`. `src/utils/helpers.js` : `getNetworkCode`, `formatTime`. `src/components/ui/ErrorBoundary.jsx` : `withErrorBoundary`. `src/constants/authMessages.js` : `GLOBAL_ROLES`. `src/constants/index.js` : `TOAST_TYPES`. `src/config/firebase.js` : `firebaseInfo`. `src/config/clientIsolation.js` : `clientIsolationInfo`.
 - `functions/src/clients/historiqueClient.js` : `VARIANTES_DEPOT`, `VARIANTES_RETRAIT`.
-- `scripts/lib/adminApp.mjs` : `db`, `isEmulator`, `closeAdminApp`. `scripts/lib/importChampsAgent.mjs` : ré-exports `COLONNE_INTERDITE`, `LONGUEUR_NUMERO`, `champParCle`.
+- `scripts/lib/adminApp.mjs` : `db`, `isEmulator`, `closeAdminApp`. `scripts/lib/importChampsAgent.mjs` : ré-exports `COLONNE_INTERDITE`, `LONGUEUR_NUMERO`, `champParCle`. **Erreur de ce constat pour `adminApp.mjs`, voir le résultat.**
 
 Utilisées par les tests seulement : `SkeletonCards` (`SkeletonList.jsx`), `LONGUEUR_CODE_AGENT` (`agentFields.js`), `retoursDe` (`ravitaillement.js`), `compterRangees` (`regroupement.js`). Environ soixante autres exports ne servent que dans leur propre fichier ou dans les tests : le mot `export` y est superflu, mais ce n'est pas du code mort, et ces exports ne justifient pas un lot.
+
+Résultat du lot R4 :
+
+| Commit | Retiré |
+|---|---|
+| `75c3344` | `adminService.js` entier, avec `tc-073` et `tc-078` qui n'existaient que pour lui. Bundle identique à l'octet : le module n'était déjà plus embarqué |
+| `c44373d` | `closureService` : `listDealerOwnClosures`, `listAllClosures`, `getClosureCount`, et les imports qu'elles seules utilisaient |
+| `ac06e74` | `chartHelpers` (7 fonctions) et `dashboardTheme` (`CHART_TEXT_COLORS`, `getColorTheme`, `calculatePercentage`, `LEGACY_ALIASES`) |
+| `3d23303` | `authHelpers` (7 fonctions, dont `getDefaultUserProfile`, qui fabriquait un profil `store_admin` par défaut) et `GLOBAL_ROLES` |
+| `1ef0a5d` | Trois tables de libellés de collaboration, `TOAST_TYPES`, `getNetworkCode`, `formatTime`, `withErrorBoundary` |
+| `e97070b` | `firebaseInfo`, `clientIsolationInfo`, et `VARIANTES_DEPOT` / `VARIANTES_RETRAIT` côté Functions (leur avertissement remonte sur `plierType`) |
+
+Mesure de sortie (`node audit/inventory.mjs`) : 307 fichiers source et 52 303 lignes, contre 308 et 52 747 ; seuls les modules déjà connus (`ProtectedRoute`, preview) restent hors du graphe de `main.jsx`. Les 41 fenêtres identiques ne bougent pas : les clones de `closureService` faisaient moins de 12 lignes. `quality:check` : unitaires 110 fichiers et 2 982 tests (les 22 de `tc-073` et `tc-078` en moins), composants 652, lint et build.
+
+Conservé volontairement :
+
+- **`scripts/lib/adminApp.mjs` : le constat ci-dessus était faux.** Les trois scripts d'utilisateur technique chargent le module par `await import()` dans une variable `adminMod`, puis le déstructurent ; knip ne suit pas ce chemin. Les cinq exports servent. Vérifier les imports dynamiques, comme l'exige `AGENTS.md`, a évité de casser `createTechnicalUser`, `deleteTechnicalUser` et `verifyTechnicalUser`.
+- `workspaceTheme.js` (`getRoleAccent`, `ROLE_ACCENT`, `BTN_PRIMARY`) : des jetons de design, que `specs/S3-le-poste-shell-dealer.md` demande de réutiliser.
+- La façade de ré-export d'`importChampsAgent.mjs` : quatre noms en trop dans des scripts qui écrivent en production, sans gain qui justifie d'y toucher.
+- `ProtectedRoute.jsx`, la preview et ses doublures, pour les raisons déjà dites ; les symboles qui ne servent qu'aux tests.
+- 36 doublures de test déclarent encore `firebaseInfo: {}` dans leur `vi.mock` : une clé en trop n'y casse rien.
 
 ### QUA-04 (suite) — Duplication : de 25 à 41 fenêtres
 
@@ -544,5 +565,5 @@ Utilisées par les tests seulement : `SkeletonCards` (`SkeletonList.jsx`), `LONG
 | R1 | BUG-06 : `outils.js` appelle le singleton ; test qui exécute les quatre outils de lecture. BUG-07, trouvé en chemin : bilan borné à la journée | ✅ Terminé le 29 octobre (`c81ee38`, `ef38abf`) ; tests rouges puis verts, suites globales, lint et build |
 | R2 | QUA-06 : `re2js` seul ; SEC-10 : `.gitignore` | ✅ Terminé le 29 octobre (`2e02fd8`, `039e2f3`) ; `quality:check` et intégration verts, classeurs ignorés |
 | R3 | Retrait du bloc d'exports déstructurés de `firestore.js` | ✅ Terminé le 29 octobre (`c5887c1`) ; aucun import restant, le test de `tc-018` qui figeait le bloc est retiré, `quality:check` vert |
-| R4 | QUA-07 : `adminService.js`, `closureService` et déclarations mortes, par petits commits | Règle de suppression d'`AGENTS.md` appliquée à chaque fichier |
+| R4 | QUA-07 : `adminService.js`, `closureService` et déclarations mortes, par petits commits | ✅ Terminé le 29 octobre (six commits, `75c3344` à `e97070b`) ; règle d'`AGENTS.md` appliquée, faux positif `adminApp.mjs` écarté, `quality:check` vert |
 | Backlog | QUA-04 suite, PERF-03 (mesure d'abord), DOC-02 | Au fil de l'eau |
