@@ -466,19 +466,21 @@ Branche `feat/espace-patron`, HEAD `f6d3be6`, arbre de travail conservé : `src/
 
 ### QUA-06 — La porte qualité ne peut plus passer : avis `re2js`
 
-**IMPORTANT pour le processus · effort S.**
+**IMPORTANT pour le processus · CORRIGÉ le 29 octobre 2026 · commit `039e2f3`.**
 
 - `check:audit` échoue : `re2js` 2.8.6, GHSA-gg6h-894w-4m9c (high, déni de service quadratique sur lookbehind), via `firebase` → `@firebase/firestore` 4.17.2. Dépendance de production du navigateur.
 - `quality:check` s'arrête donc à cette étape ; lint, tests et build ne sont plus enchaînés par lui.
 - Correction : `re2js` 2.8.7 et plus corrige, dans la plage `^2.8.3` déjà déclarée par Firestore. Mettre à jour ce seul paquet dans le lockfile (`npm update re2js`), puis relancer `check:audit` et les suites. Pas de mise à jour groupée.
+- Résultat : `npm update re2js` a résolu 2.9.1, la plus haute version de la plage ; c'est la seule entrée du lockfile modifiée. `quality:check` passe entièrement (unitaires 3 005, composants 652, build), l'intégration sur émulateur aussi (42 tests). Le bundle principal prend 4,9 kB (2,5 kB gzip).
 
 ### SEC-10 — Classeurs clients à la racine, ni suivis ni ignorés
 
-**IMPORTANT préventif · effort S.**
+**IMPORTANT préventif · CORRIGÉ le 29 octobre 2026 · commit `2e02fd8`.**
 
 - `commerciaux/` (8 `.xlsx` et leurs `.inspect.ndjson` d'environ 600 kB chacun) et `numeros-agent/` (10 `.xlsx`) contiennent des données d'agents. Ils sont hors `.gitignore`, alors que le dépôt a un remote GitHub (`origin`). Un `git add .` les publierait.
 - Vérifié : `git log --all` ne trouve aucun commit qui les contienne. Rien n'a fuité.
 - Correction : les ajouter à `.gitignore`, avec `/*.xlsx` et `*.inspect.ndjson`, sur le modèle de la règle `/*.csv` déjà en place.
+- Résultat : les deux dossiers, `/*.xlsx`, `/*.xls` et `*.inspect.ndjson` sont ignorés ; `git status` ne les liste plus, et `git check-ignore` confirme qu'un classeur sous `tests/` reste versionnable.
 
 ### QUA-07 — Code mort apparu ou resté depuis septembre
 
@@ -540,7 +542,7 @@ Utilisées par les tests seulement : `SkeletonCards` (`SkeletonList.jsx`), `LONG
 | Lot | Contenu | Critère de sortie |
 |---|---|---|
 | R1 | BUG-06 : `outils.js` appelle le singleton ; test qui exécute les quatre outils de lecture. BUG-07, trouvé en chemin : bilan borné à la journée | ✅ Terminé le 29 octobre (`c81ee38`, `ef38abf`) ; tests rouges puis verts, suites globales, lint et build |
-| R2 | QUA-06 : `re2js` seul ; SEC-10 : `.gitignore` | `quality:check` repasse entièrement ; `git status` ne liste plus les classeurs |
+| R2 | QUA-06 : `re2js` seul ; SEC-10 : `.gitignore` | ✅ Terminé le 29 octobre (`2e02fd8`, `039e2f3`) ; `quality:check` et intégration verts, classeurs ignorés |
 | R3 | Retrait du bloc d'exports déstructurés de `firestore.js` | Aucun import restant ; suites vertes |
 | R4 | QUA-07 : `adminService.js`, `closureService` et déclarations mortes, par petits commits | Règle de suppression d'`AGENTS.md` appliquée à chaque fichier |
 | Backlog | QUA-04 suite, PERF-03 (mesure d'abord), DOC-02 | Au fil de l'eau |
