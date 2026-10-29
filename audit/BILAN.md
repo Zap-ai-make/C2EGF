@@ -535,7 +535,7 @@ Conservé volontairement :
 | Paire | Fenêtres | Avis |
 |---|---|---|
 | Scripts de purge clients : `arbitrerCodesAgent`, `fusionnerClients`, `relireFusions`, `lib/executerImportAgent` | 19 | Nouveau. Prélude de chargement du compte de service et de résolution du projet recopié, de la même famille que `initializeGuardedAdminAuth`. Ces scripts écrivent en production et la purge est finie : factoriser seulement s'ils resservent |
-| `NavBar.jsx` / `DealerLayout.jsx` : `initiales` | (jscpd 22 l.) | Nouveau. Fonction identique ; seule celle de `NavBar` est testée. Un module commun suffit |
+| `NavBar.jsx` / `DealerLayout.jsx` : `initiales` | (jscpd 22 l.) | **Corrigé (`dc9f008`)** : `src/utils/initiales.js`, testé par NAV-18 pour les deux barres |
 | `dealerService` / `storeTransferService` | 3 | Déjà au backlog |
 | `findClient` / `inspectPath` | 3 | Déjà au backlog |
 | `DealerInventoryBar` / `DealerTransferForm` / `DealerTransfers` | 2 | Déjà au backlog |
@@ -544,15 +544,18 @@ Conservé volontairement :
 
 ### PERF-03 — L'assistant entre dans le bundle initial
 
-**MINEUR · effort M · à mesurer avant d'agir.**
+**MINEUR · effort M · mesuré le 29 octobre 2026, correction à faire après le commit d'App Check.**
 
 - `Layout.jsx` importe `Assistant` de façon statique : `firebase/ai`, et `firebase/app-check` dans le travail en cours, sont chargés par chaque session boutique, que l'assistant s'ouvre ou non.
 - Le bundle principal a pris 113 kB (31 kB gzip) depuis septembre. L'assistant est la cause probable ; ce n'est pas mesuré.
 - Correction : mesurer la composition du bundle, puis charger le panneau à la demande (`lazy`) s'il pèse ce que l'on suppose.
+- Mesure (build avec sourcemaps hors de `dist/`, `source-map-explorer`, arbre de travail compris) : sur 1 293,7 KiB minifiés, l'assistant en porte **83,8** : `@firebase/ai` 46,5, `@firebase/app-check` 22,2, `src/lib/ia` 15,1, sans compter `Assistant.jsx`. L'hypothèse tient. Le reste : `@firebase/firestore` 416,5, `react-dom` 171,5, `re2js` 146,5, `@firebase/auth` 121,6, le code de l'application 175,1.
+- `re2js` n'explique pas la hausse : même version de Firestore (4.17.2) et de `re2js` en septembre. Il fait partie de Firestore et ne se retire pas sans changer de SDK.
+- Le chargement à la demande passe par `Assistant.jsx` et `assistant.js`, au cœur du travail App Check non commité : à faire après lui, avec une capture du panneau ouvert, pour ne pas croiser deux chantiers.
 
 ### DOC-02 — `AGENTS.md` affirme que le dépôt n'a aucun remote
 
-**MINEUR · effort S.** `AGENTS.md` dit « aucun remote, aucun lien avec le dépôt d'origine » et « ce dépôt n'a volontairement aucun remote ». `origin` pointe vers `github.com/Zap-ai-make/C2EGF`. L'interdit de `git push` sans demande explicite reste juste ; la description de l'état doit être corrigée.
+**MINEUR · CORRIGÉ le 29 octobre 2026 · commit `1ed4488`.** `AGENTS.md` dit « aucun remote, aucun lien avec le dépôt d'origine » et « ce dépôt n'a volontairement aucun remote ». `origin` pointe vers `github.com/Zap-ai-make/C2EGF`. L'interdit de `git push` sans demande explicite reste juste ; la description de l'état doit être corrigée.
 
 ### Point de vigilance hors constat
 
@@ -566,4 +569,4 @@ Conservé volontairement :
 | R2 | QUA-06 : `re2js` seul ; SEC-10 : `.gitignore` | ✅ Terminé le 29 octobre (`2e02fd8`, `039e2f3`) ; `quality:check` et intégration verts, classeurs ignorés |
 | R3 | Retrait du bloc d'exports déstructurés de `firestore.js` | ✅ Terminé le 29 octobre (`c5887c1`) ; aucun import restant, le test de `tc-018` qui figeait le bloc est retiré, `quality:check` vert |
 | R4 | QUA-07 : `adminService.js`, `closureService` et déclarations mortes, par petits commits | ✅ Terminé le 29 octobre (six commits, `75c3344` à `e97070b`) ; règle d'`AGENTS.md` appliquée, faux positif `adminApp.mjs` écarté, `quality:check` vert |
-| Backlog | QUA-04 suite, PERF-03 (mesure d'abord), DOC-02 | Au fil de l'eau |
+| Backlog | QUA-04 suite, PERF-03 (mesure d'abord), DOC-02 | DOC-02 corrigé (`1ed4488`) ; `initiales` factorisée (`dc9f008`) ; PERF-03 mesuré, chargement à la demande après App Check. Le reste de QUA-04 attend un besoin testable : services de transfert dealer, scripts qui écrivent en production |
