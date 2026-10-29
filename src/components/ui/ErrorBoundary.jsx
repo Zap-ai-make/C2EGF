@@ -103,15 +103,4 @@ class ErrorBoundary extends Component {
   }
 }
 
-// Hook pour créer des error boundaries fonctionnels (optionnel)
-export const withErrorBoundary = (Component, fallback) => {
-  return function WrappedComponent(props) {
-    return (
-      <ErrorBoundary fallback={fallback}>
-        <Component {...props} />
-      </ErrorBoundary>
-    )
-  }
-}
-
 export default ErrorBoundary

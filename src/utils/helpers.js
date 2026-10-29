@@ -1,4 +1,4 @@
-import { NETWORK_CODES, TRANSACTION_STYLES, FILTER_CONFIG } from './constants.js'
+import { TRANSACTION_STYLES, FILTER_CONFIG } from './constants.js'
 import { parseFcfaAmount } from './fcfaAmount.js'
 import { BUSINESS_TIME_ZONE } from './businessDate.js'
 
@@ -12,13 +12,6 @@ export const getClientName = (client) => {
     return `${client.prenom || ''} ${client.nom || ''}`.trim()
   }
   return 'Client inconnu'
-}
-
-/**
- * Obtient le code réseau pour un réseau donné
- */
-export const getNetworkCode = (network) => {
-  return NETWORK_CODES[network] || '000000'
 }
 
 /**
@@ -181,22 +174,6 @@ export const isTransactionFromToday = (transaction) => {
  */
 export const getTransactionStyles = (type) => {
   return TRANSACTION_STYLES[type] || TRANSACTION_STYLES.default
-}
-
-/**
- * Formate une heure à partir d'une date string
- */
-export const formatTime = (dateString) => {
-  try {
-    const date = parsefrenchDate(dateString)
-    if (!date) return '--:--'
-    return date.toLocaleTimeString('fr-FR', {
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  } catch {
-    return '--:--'
-  }
 }
 
 /**

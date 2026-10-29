@@ -36,12 +36,6 @@ export const DEBT_STATUS_LABELS = Object.freeze({
   settled: 'Réglée',
 })
 
-export const DEBT_SETTLEMENT_STATUS_LABELS = Object.freeze({
-  declared: 'Déclaré',
-  confirmed: 'Confirmé',
-  rejected: 'Rejeté',
-})
-
 /**
  * Libellés des méthodes.
  *
@@ -70,14 +64,3 @@ export const DEBT_ONLY_SETTLEMENT_METHOD = 'Banque'
 export const DEBT_SETTLEMENT_METHODS = Object.freeze([
   ...new Set([...(activeProfile?.transactions?.paymentMethods ?? []), DEBT_ONLY_SETTLEMENT_METHOD]),
 ])
-
-// ── Sens d'une ligne, pour le code couleur entrée/sortie ─────────────────────
-export const COLLAB_DIRECTION_LABELS = Object.freeze({
-  incoming: 'Reçue',
-  outgoing: 'Envoyée',
-})
-
-export const DEBT_DIRECTION_LABELS = Object.freeze({
-  debt: 'Dette',
-  credit: 'Créance',
-})

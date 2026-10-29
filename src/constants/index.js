@@ -60,13 +60,6 @@ export const STORAGE_KEYS = {
   COMPLETED_TRANSACTIONS: getStorageKey('completed_transactions')
 }
 
-export const TOAST_TYPES = {
-  SUCCESS: 'success',
-  ERROR: 'error',
-  WARNING: 'warning',
-  INFO: 'info'
-}
-
 export const PAGINATION = {
   DEFAULT_PAGE_SIZE: 10,
   PAGE_SIZE_OPTIONS: [10, 25, 50, 100]
