@@ -418,3 +418,129 @@ firebase emulators:exec --only firestore --project demo-akayis-test 'node audit/
 ```
 
 Les jeux fictifs utilisent leurs propres projets `demo-c2egf-audit-repro` et `demo-c2egf-audit-backend`, uniquement sur l'hôte d'émulateur local. Les scripts ne doivent jamais être adaptés pour viser une base réelle.
+
+## 9. Audit de reprise — 29 octobre 2026
+
+Branche `feat/espace-patron`, HEAD `f6d3be6`, arbre de travail conservé : `src/lib/ia/assistant.js`, `vercel.json` modifiés et `src/config/appCheck.js` non suivi (App Check de l'assistant, travail en cours, non touché). Depuis le point de reprise du 29 septembre (`e78dcc7`) : 81 commits, environ 14 800 lignes ajoutées et 2 900 retirées dans `src`, `functions/src`, `config` et `scripts`. Aucun déploiement, accès distant ni script administrateur n'a été lancé ; les suites émulateur tournent sur `demo-akayis-test`.
+
+### Vérifications exécutées
+
+| Contrôle | Résultat |
+|---|---|
+| `npm run check:generated` | Les trois artefacts correspondent au profil |
+| `npm run check:secrets` | Aucune signature de secret dans les fichiers suivis |
+| `npm run check:audit` | **Échec**, voir QUA-06 |
+| `npm run lint` | Réussi |
+| `test:unit` | **111 fichiers, 2 998 tests réussis.** Une première passe, lancée en même temps que knip et jscpd, a laissé 7 fichiers sans worker (« Timeout waiting for worker ») et rendu le code 1 malgré « 104 passed » ; ces 7 fichiers relancés seuls passent (338 tests). Lire le code de sortie, pas le résumé |
+| `test:components` | **48 fichiers, 652 tests réussis** |
+| Suites émulateur, `demo-akayis-test` | Intégration **2 fichiers, 42 tests réussis**. Firestore **435 tests**, Functions **463 tests** : la passe complète a rendu 7 et 1 dépassements de délai (5 s et 10 s, aucune assertion fausse) dans `dealerRequests.rules.test.js` et `tc-044`, tournant en parallèle d'autres suites ; ces deux fichiers relancés seuls passent (176 et 35 tests) |
+| `npm run build` | Réussi ; bundle principal **1 320,03 kB, gzip 354,99 kB** (1 207,33 / 323,82 en septembre) ; chunk `Dashboard` 340,78 kB ; xlsx 499,86 kB |
+| `node audit/inventory.mjs` | 617 fichiers suivis, 308 fichiers source, 52 747 lignes ; **41 fenêtres identiques** (25 au 29 septembre) |
+| `jscpd` (8 lignes, 70 jetons) | 23 clones, 392 lignes, **0,65 %** du code source |
+| `knip`, entrées déclarées (main, preview, functions, scripts, audit, tests) | 5 fichiers sans usage en production, environ 45 déclarations jamais utilisées (détail QUA-07) |
+
+### BUG-06 — Les quatre outils de lecture de l'assistant plantent à chaque appel
+
+**IMPORTANT · CORRIGÉ le 29 octobre 2026 · commit `c81ee38`.**
+
+- Localisation : `src/lib/ia/outils.js` (import ligne 30 avant correction), [firestore.js:1256](../src/services/firestore.js#L1256).
+- `outils.js` importe `getClients`, `getDrafts` et `getHistory` depuis le bloc `export const { … } = firestoreService`. La déstructuration détache les méthodes de leur instance : appelées seules, `this` vaut `undefined`. Reproduit sur le vrai module, Firebase simulé : `getClients => TypeError: Cannot read properties of undefined (reading 'requireActiveStore')`, et de même pour `_draftService` et `_historyService`.
+- Effet : `bilanDuJour`, `chercherClient`, `creancesEnCours` et `operationsRecentes` échouent toujours. `traduirePanne` transforme l'erreur en « Je n'ai pas pu lire l'historique. », qui ressemble à une panne passagère et masque un défaut de code.
+- Pourquoi les tests passent : `tc-300` ne couvre que les modules purs ; aucun test n'exécute `executerOutil` contre `firestore.js`.
+- Correction : appeler `firestoreService.getClients()` (etc.) dans `outils.js`, avec un test qui exécute chaque outil de lecture sur le vrai singleton et des collections simulées. Retirer ensuite le bloc déstructuré, dans un lot distinct : ses 15 autres noms n'ont aucun appelant, et chacun lèverait la même erreur.
+- Résultat : les quatre outils passent par le singleton. `tc-301` les exécute contre le vrai `firestoreService`, avec seulement le SDK Firestore simulé, et vérifie que la boutique lue est bien la boutique active. Rouge avant (5 refus « Je n'ai pas pu lire »), vert après. Le bloc déstructuré reste en place (lot R3).
+
+### BUG-07 — Le « bilan du jour » additionnait tout l'historique
+
+**IMPORTANT · CORRIGÉ le 29 octobre 2026 · commit `ef38abf`.** Trouvé pendant BUG-06, qu'il suivait de près : tant qu'aucune lecture n'aboutissait, il ne pouvait pas se voir.
+
+- La déclaration lue par le modèle promet « le point complet de la journée », mais `bilanDuJour` totalisait toute la collection `history` de la boutique. Une fois BUG-06 corrigé seul, l'assistant aurait annoncé le cumul depuis l'ouverture comme le chiffre du jour.
+- Correction : le bilan reprend la journée du tableau de bord (`useTodayTransactions`) au lieu d'en écrire une seconde : date saisie dans la journée métier du profil, via `businessDate.js`. Les annulées et les lignes sans date lisible sont écartées. Les créances en cours restent toutes comptées.
+- Test : `tc-301` [OJ-01] rouge avant (4 opérations au lieu de 2 : la veille à 23 h 55 et une ligne sans date comptaient), vert après ; [OJ-02] empêche le filtre de s'étendre aux créances. Suites unitaires (112 fichiers, 3 005 tests) et composants (48, 652), lint et build réussis.
+
+### Observations restantes sur l'assistant, non corrigées
+
+- **Fraîcheur.** `getHistory`, `getDrafts` et `getClients` passent par `getCollection`, dont le cache garde 5 minutes. Les opérations de caisse passent par la callable `storeTransactionCommand`, qui n'invalide pas ce cache. Deux questions à trois minutes d'écart peuvent donc rendre le même bilan, alors que des opérations ont eu lieu entre-temps. Constaté à la lecture du code, sans test. Trancher entre une lecture sans cache pour l'assistant et une invalidation après commande.
+- **Volume.** Chaque lecture d'historique charge toute la collection de la boutique, sans limite, puis filtre en mémoire. Une requête bornée par `createdAt`, comme l'écoute journalière de `transactions.jsx`, coûterait moins, au prix d'une définition de journée à aligner avec le champ `date`.
+- **`operations_recentes`** rend des totaux sur tout l'historique, alors que sa description cite « les dépôts de cette semaine » comme exemple. Il n'a aucun paramètre de période : le modèle ne peut pas restreindre ce qu'il annonce.
+
+### QUA-06 — La porte qualité ne peut plus passer : avis `re2js`
+
+**IMPORTANT pour le processus · effort S.**
+
+- `check:audit` échoue : `re2js` 2.8.6, GHSA-gg6h-894w-4m9c (high, déni de service quadratique sur lookbehind), via `firebase` → `@firebase/firestore` 4.17.2. Dépendance de production du navigateur.
+- `quality:check` s'arrête donc à cette étape ; lint, tests et build ne sont plus enchaînés par lui.
+- Correction : `re2js` 2.8.7 et plus corrige, dans la plage `^2.8.3` déjà déclarée par Firestore. Mettre à jour ce seul paquet dans le lockfile (`npm update re2js`), puis relancer `check:audit` et les suites. Pas de mise à jour groupée.
+
+### SEC-10 — Classeurs clients à la racine, ni suivis ni ignorés
+
+**IMPORTANT préventif · effort S.**
+
+- `commerciaux/` (8 `.xlsx` et leurs `.inspect.ndjson` d'environ 600 kB chacun) et `numeros-agent/` (10 `.xlsx`) contiennent des données d'agents. Ils sont hors `.gitignore`, alors que le dépôt a un remote GitHub (`origin`). Un `git add .` les publierait.
+- Vérifié : `git log --all` ne trouve aucun commit qui les contienne. Rien n'a fuité.
+- Correction : les ajouter à `.gitignore`, avec `/*.xlsx` et `*.inspect.ndjson`, sur le modèle de la règle `/*.csv` déjà en place.
+
+### QUA-07 — Code mort apparu ou resté depuis septembre
+
+**MINEUR · effort S par fichier · aucune suppression faite.** Chaque suppression suit la règle d'`AGENTS.md` : imports statiques et dynamiques, scripts, configuration, usage métier, tests avant et après, commit local réversible.
+
+Fichiers sans usage en production :
+
+| Fichier | Consommateurs | Avis |
+|---|---|---|
+| `src/services/adminService.js` | `tc-073`, `tc-078` seulement | Devenu orphelin avec `eb95ad2` (retrait d'`AdminClients`). Candidat à la suppression avec ses tests |
+| `src/components/auth/ProtectedRoute.jsx` | `tc-026` seulement | Déjà connu (QUA-03) ; à retirer lors de la migration vers `RoleGuard` |
+| `src/preview.jsx`, `src/preview-doubles/*` | `preview.html`, `scripts/lib/banc.mjs` | Outils de QA, **à conserver** |
+
+Déclarations présentes une seule fois dans leur fichier, à leur définition, et utilisées nulle part, tests compris :
+
+- `src/utils/chartHelpers.js` : 7 des 9 exports (`getDateFromTransaction`, `isToday`, `isThisMonth`, `calculatePercentage`, `createChartData`, `getDaysSinceDate`, `formatDateRange`).
+- `src/utils/authHelpers.js` : `formatUserName`, `getDaysFromDate`, `sanitizeUserDataForDisplay`, `generateFormId`, `checkBrowserSupport`, `createLoadingState`, `getDefaultUserProfile`.
+- `src/services/closureService.js` : `listDealerOwnClosures`, `listAllClosures`, `getClosureCount`. Seule `listStoreClosures` sert. Ce sont aussi les deux clones internes que relève jscpd.
+- `src/constants/dashboardTheme.js` : `CHART_TEXT_COLORS`, `getColorTheme`, `calculatePercentage` (homonyme de celle de `chartHelpers.js`).
+- `src/constants/collaborationConstants.js` : `DEBT_SETTLEMENT_STATUS_LABELS`, `COLLAB_DIRECTION_LABELS`, `DEBT_DIRECTION_LABELS`.
+- `src/constants/workspaceTheme.js` : `getRoleAccent`, `BTN_PRIMARY`. `src/utils/helpers.js` : `getNetworkCode`, `formatTime`. `src/components/ui/ErrorBoundary.jsx` : `withErrorBoundary`. `src/constants/authMessages.js` : `GLOBAL_ROLES`. `src/constants/index.js` : `TOAST_TYPES`. `src/config/firebase.js` : `firebaseInfo`. `src/config/clientIsolation.js` : `clientIsolationInfo`.
+- `functions/src/clients/historiqueClient.js` : `VARIANTES_DEPOT`, `VARIANTES_RETRAIT`.
+- `scripts/lib/adminApp.mjs` : `db`, `isEmulator`, `closeAdminApp`. `scripts/lib/importChampsAgent.mjs` : ré-exports `COLONNE_INTERDITE`, `LONGUEUR_NUMERO`, `champParCle`.
+
+Utilisées par les tests seulement : `SkeletonCards` (`SkeletonList.jsx`), `LONGUEUR_CODE_AGENT` (`agentFields.js`), `retoursDe` (`ravitaillement.js`), `compterRangees` (`regroupement.js`). Environ soixante autres exports ne servent que dans leur propre fichier ou dans les tests : le mot `export` y est superflu, mais ce n'est pas du code mort, et ces exports ne justifient pas un lot.
+
+### QUA-04 (suite) — Duplication : de 25 à 41 fenêtres
+
+**MINEUR · effort S/M par paire.**
+
+| Paire | Fenêtres | Avis |
+|---|---|---|
+| Scripts de purge clients : `arbitrerCodesAgent`, `fusionnerClients`, `relireFusions`, `lib/executerImportAgent` | 19 | Nouveau. Prélude de chargement du compte de service et de résolution du projet recopié, de la même famille que `initializeGuardedAdminAuth`. Ces scripts écrivent en production et la purge est finie : factoriser seulement s'ils resservent |
+| `NavBar.jsx` / `DealerLayout.jsx` : `initiales` | (jscpd 22 l.) | Nouveau. Fonction identique ; seule celle de `NavBar` est testée. Un module commun suffit |
+| `dealerService` / `storeTransferService` | 3 | Déjà au backlog |
+| `findClient` / `inspectPath` | 3 | Déjà au backlog |
+| `DealerInventoryBar` / `DealerTransferForm` / `DealerTransfers` | 2 | Déjà au backlog |
+| `financialUtils` / `financialImpact` ; `resetDataToZero` / `restoreFromBackup` ; `resolveAndAssertAdminProject` / `resolveServiceAccountProject` | 5 / 4 / 3 | **À conserver** (parité testée, politiques de sécurité distinctes) |
+| `addTransactionPayment` / `addTransactionRefund` | (jscpd 34 l.) | Résidu du squelette d'appel aux helpers communs de `a8106ff` : conserver |
+
+### PERF-03 — L'assistant entre dans le bundle initial
+
+**MINEUR · effort M · à mesurer avant d'agir.**
+
+- `Layout.jsx` importe `Assistant` de façon statique : `firebase/ai`, et `firebase/app-check` dans le travail en cours, sont chargés par chaque session boutique, que l'assistant s'ouvre ou non.
+- Le bundle principal a pris 113 kB (31 kB gzip) depuis septembre. L'assistant est la cause probable ; ce n'est pas mesuré.
+- Correction : mesurer la composition du bundle, puis charger le panneau à la demande (`lazy`) s'il pèse ce que l'on suppose.
+
+### DOC-02 — `AGENTS.md` affirme que le dépôt n'a aucun remote
+
+**MINEUR · effort S.** `AGENTS.md` dit « aucun remote, aucun lien avec le dépôt d'origine » et « ce dépôt n'a volontairement aucun remote ». `origin` pointe vers `github.com/Zap-ai-make/C2EGF`. L'interdit de `git push` sans demande explicite reste juste ; la description de l'état doit être corrigée.
+
+### Point de vigilance hors constat
+
+`src/config/appCheck.js`, non suivi, affirme qu'App Check devient obligatoire pour AI Logic le 2 novembre 2026. Ce n'est pas vérifié ici. Si c'est exact, l'assistant cessera de répondre en production tant que ce travail n'est pas commité, configuré et déployé par un humain.
+
+### Plan de remédiation proposé
+
+| Lot | Contenu | Critère de sortie |
+|---|---|---|
+| R1 | BUG-06 : `outils.js` appelle le singleton ; test qui exécute les quatre outils de lecture. BUG-07, trouvé en chemin : bilan borné à la journée | ✅ Terminé le 29 octobre (`c81ee38`, `ef38abf`) ; tests rouges puis verts, suites globales, lint et build |
+| R2 | QUA-06 : `re2js` seul ; SEC-10 : `.gitignore` | `quality:check` repasse entièrement ; `git status` ne liste plus les classeurs |
+| R3 | Retrait du bloc d'exports déstructurés de `firestore.js` | Aucun import restant ; suites vertes |
+| R4 | QUA-07 : `adminService.js`, `closureService` et déclarations mortes, par petits commits | Règle de suppression d'`AGENTS.md` appliquée à chaque fichier |
+| Backlog | QUA-04 suite, PERF-03 (mesure d'abord), DOC-02 | Au fil de l'eau |
