@@ -83,20 +83,6 @@ export const DASHBOARD_COLORS = {
 }
 
 /**
- * Anciens noms décoratifs, conservés le temps que le tableau de bord soit
- * refait. Ils pointent tous sur `brand` — c'est ce qui éteint l'arc-en-ciel
- * sans toucher un seul appelant.
- */
-const LEGACY_ALIASES = {
-  blue: 'brand',
-  green: 'brand',
-  orange: 'brand',
-  purple: 'brand',
-  emerald: 'brand',
-  gray: 'neutral',
-}
-
-/**
  * Surface commune des cartes du tableau de bord. Une seule définition, pour que
  * les blocs ne dérivent pas les uns des autres au fil des retouches.
  */
@@ -106,21 +92,3 @@ const LEGACY_ALIASES = {
 // la PAGE qui defile horizontalement. Mesure a 390 px : 634 px de contenu, dont
 // 618 pour ces deux cartes. Une ligne, et le debordement disparait.
 export const CARTE = 'min-w-0 rounded-xl border border-line bg-surface p-6 shadow-sm'
-
-export const CHART_TEXT_COLORS = {
-  primary: 'text-gray-700',
-  secondary: 'text-gray-600',
-  muted: 'text-gray-500',
-}
-
-export const getColorTheme = (colorName) =>
-  DASHBOARD_COLORS[colorName] ??
-  DASHBOARD_COLORS[LEGACY_ALIASES[colorName]] ??
-  DASHBOARD_COLORS.neutral
-
-// NOTE (ARCHITECTURE.md §2) : cette fonction est de la logique de calcul dans
-// un fichier de configuration. À déplacer vers utils/ dans un lot dédié —
-// pas dans un lot de couleur, qui ne doit changer que des classes.
-export const calculatePercentage = (value, total) => {
-  return total > 0 ? ((value / total) * 100).toFixed(1) : 0
-}
