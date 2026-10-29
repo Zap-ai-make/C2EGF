@@ -83,6 +83,7 @@ vi.mock('../../src/config/clientIsolation', () => ({
 import { getDocs } from 'firebase/firestore'
 import { firestoreService } from '../../src/services/firestore.js'
 import { DECLARATIONS, executerOutil } from '../../src/lib/ia/outils.js'
+import { CLES_DESTINATIONS } from '../../src/lib/ia/destinations.js'
 
 // ---------------------------------------------------------------------------
 // Jeux de données — valeurs attendues écrites à la main
@@ -304,5 +305,83 @@ describe('[OJ] bilan_du_jour : la journée, ou la période demandée', () => {
 
     expect(reponse.creances_en_cours).toBe(1)
     expect(reponse.total_des_creances).toBe(15000)
+  })
+})
+
+/**
+ * Le mode d'emploi : l'assistant lit les fiches de l'onglet Aide, la même
+ * source que la caissière. Une fiche corrigée corrige l'aide ET l'assistant ;
+ * réciter la procédure de mémoire dans le prompt la ferait diverger.
+ * Les attentes viennent de `src/content/aideFiches.js`, relevées à la main.
+ */
+describe('[ME] mode_d_emploi : les fiches de l\'onglet Aide', () => {
+  it('[ME-01] sans sujet, le sommaire : quatre rubriques, dans l\'ordre de l\'aide', async () => {
+    const reponse = await executerOutil('mode_d_emploi')
+
+    expect(reponse.sommaire.map((r) => [r.rubrique, r.ecran, r.fiches.map((f) => f.numero)])).toEqual([
+      ['Enregistrer une opération', 'transactions', [1, 2, 3, 4, 5, 6, 7]],
+      ['Stock et espèces', 'transactions', [8, 9, 10]],
+      ['Rattraper une erreur', 'historique', [11, 12, 13, 14, 15]],
+      ['Les clients', 'clients', [16, 17]],
+    ])
+    expect(reponse.sommaire[0].fiches[2].titre).toBe('« Valider » ou « Non Terminées » : lequel choisir ?')
+  })
+
+  it('[ME-02] « encaisser » rend les deux fiches qui en parlent, libellés lisibles', async () => {
+    const reponse = await executerOutil('mode_d_emploi', { sujet: 'encaisser' })
+
+    expect(reponse.fiches.map((f) => f.numero)).toEqual([4, 6])
+    expect(reponse.fiches[0].texte).toContain('« Encaisser »')
+    expect(reponse.fiches[0].texte).toContain('« Payer par »')
+    expect(reponse.fiches[0].texte).not.toMatch(/\{\{|\*\*/)
+    expect(reponse.fiches[0].ecran).toBe('transactions')
+  })
+
+  it('[ME-03] des mots entiers : « rendre » ne trouve pas « prendre »', async () => {
+    const reponse = await executerOutil('mode_d_emploi', { sujet: 'rendre au dealer' })
+
+    expect(reponse.fiches[0].numero).toBe(9)
+    expect(reponse.fiches.map((f) => f.numero)).not.toContain(2)
+  })
+
+  it('[ME-04] un sujet sans fiche le dit, et rend le sommaire pour choisir', async () => {
+    const reponse = await executerOutil('mode_d_emploi', { sujet: 'photocopieuse' })
+
+    expect(reponse.erreur).toBeUndefined()
+    expect(reponse.fiches).toEqual([])
+    expect(reponse.message).toBeTruthy()
+    expect(reponse.sommaire).toHaveLength(4)
+  })
+
+  it('[ME-05] par numéro : la fiche entière, gras retiré', async () => {
+    const reponse = await executerOutil('mode_d_emploi', { numero: 10 })
+
+    expect(reponse.fiches).toHaveLength(1)
+    expect(reponse.fiches[0].numero).toBe(10)
+    expect(reponse.fiches[0].texte).toContain('stock et espèces à zéro')
+    expect(reponse.fiches[0].texte).not.toMatch(/\{\{|\*\*/)
+  })
+
+  it('[ME-06] un numéro qui n\'existe pas rend le sommaire, pas une fiche voisine', async () => {
+    const reponse = await executerOutil('mode_d_emploi', { numero: 99 })
+
+    expect(reponse.fiches).toEqual([])
+    expect(reponse.sommaire).toHaveLength(4)
+  })
+
+  it('[ME-07] chaque rubrique mène à un écran que l\'assistant sait ouvrir', async () => {
+    const reponse = await executerOutil('mode_d_emploi')
+
+    for (const rubrique of reponse.sommaire) {
+      expect(CLES_DESTINATIONS).toContain(rubrique.ecran)
+    }
+  })
+
+  it('[ME-08] la déclaration expose sujet et numéro, tous deux facultatifs', () => {
+    const declaration = DECLARATIONS.find((d) => d.name === 'mode_d_emploi')
+
+    expect(declaration.parameters.properties.sujet?.type).toBe('STRING')
+    expect(declaration.parameters.properties.numero?.type).toBe('INTEGER')
+    expect(declaration.parameters.required ?? []).toEqual([])
   })
 })

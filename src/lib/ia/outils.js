@@ -38,6 +38,7 @@ import {
   getBusinessDayBounds,
   storedBusinessDateKey,
 } from '../../utils/businessDate.js'
+import { FICHES, TITRES_GROUPES, groupesOrdonnes } from '../../content/aideFiches.js'
 import { CLES_DESTINATIONS } from './destinations.js'
 
 const EXTRAIT_MAX = 50
@@ -240,6 +241,24 @@ export const DECLARATIONS = Object.freeze([
     },
   },
   {
+    name: 'mode_d_emploi',
+    description:
+      "Les fiches de l'onglet Aide : comment faire chaque geste du logiciel, avec les " +
+      'mots de l\'écran (dépôt, retrait, « Valider » ou « Non Terminées », « Encaisser », ' +
+      '« Payer par », ravitaillement et « Retour », total caisse, corrections, clients). ' +
+      "À EMPLOYER pour « comment je fais… », « à quoi sert… », « qu'est-ce que je peux " +
+      'faire ici ». Consulte-le au lieu de réciter une procédure de mémoire. Sans sujet, ' +
+      "il rend le sommaire ; donne alors le numéro de la fiche voulue. Répète les libellés " +
+      "entre « » tels qu'ils sont : ce sont les boutons réels.",
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        sujet: { type: 'STRING', description: 'Le geste ou le mot cherché, en clair' },
+        numero: { type: 'INTEGER', description: 'Le numéro d’une fiche lu dans le sommaire' },
+      },
+    },
+  },
+  {
     name: 'proposer_l_ecran',
     description:
       "Pose un bouton SOUS ta réponse pour ouvrir un écran. C'est le cas NORMAL " +
@@ -434,11 +453,117 @@ async function operationsRecentes({ client, type, jours } = {}) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Le mode d'emploi
+//
+// ⚠ LA SOURCE EST L'ONGLET AIDE, PAS UN SECOND TEXTE. Une procédure récitée
+//   dans le prompt divergerait de la fiche à la première correction ; lue dans
+//   `aideFiches.js`, elle reste celle que la caissière a sous les yeux.
+//   Les fiches sont toutes de l'espace boutique, le seul que l'assistant sert :
+//   aucun filtre de rôle n'est à poser ici.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FICHES_MAX = 3
+
+/** La rubrique de l'aide → l'écran où elle se joue. Vérifié contre `destinations.js` (tc-301). */
+const ECRAN_DES_RUBRIQUES = Object.freeze({
+  transactions: 'transactions',
+  reserves: 'transactions', // le ravitaillement se fait depuis l'onglet Transactions
+  historique: 'historique',
+  clients: 'clients',
+})
+
+/** `{{Valider}}` → « Valider », `**gras**` → gras : la forme qu'on répète à voix haute. */
+function lisible(texte) {
+  return String(texte ?? '')
+    .replace(/\{\{([^}]+)\}\}/g, '« $1 »')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+}
+
+function corpsDe(fiche) {
+  const lignes = []
+  if (fiche.texte) lignes.push(lisible(fiche.texte))
+  ;(fiche.etapes ?? []).forEach((etape, i) => lignes.push(`${i + 1}. ${lisible(etape)}`))
+  if (fiche.texteFin) lignes.push(lisible(fiche.texteFin))
+  if (fiche.retenir) lignes.push(`À retenir — ${lisible(fiche.retenir.titre)} : ${lisible(fiche.retenir.texte)}`)
+  return lignes.join('\n')
+}
+
+function ficheComplete(fiche) {
+  return {
+    numero: fiche.id,
+    titre: lisible(fiche.titre),
+    rubrique: TITRES_GROUPES[fiche.groupe]?.titre,
+    ecran: ECRAN_DES_RUBRIQUES[fiche.groupe],
+    texte: corpsDe(fiche),
+  }
+}
+
+function sommaire() {
+  return groupesOrdonnes().map((groupe) => ({
+    rubrique: TITRES_GROUPES[groupe]?.titre,
+    ecran: ECRAN_DES_RUBRIQUES[groupe],
+    fiches: FICHES.filter((f) => f.groupe === groupe).map((f) => ({ numero: f.id, titre: lisible(f.titre) })),
+  }))
+}
+
+const plierTexte = (texte) => String(texte ?? '')
+  .normalize('NFD')
+  .replace(/[̀-ͯ]/g, '')
+  .toLowerCase()
+
+const motsDe = (texte) => plierTexte(texte).split(/[^a-z0-9]+/).filter(Boolean)
+
+/**
+ * Un mot de la fiche répond au mot cherché s'il le prolonge (« encaisser » →
+ * « encaissement ») ou s'il en est la racine (« encaisse » pour « encaisser »).
+ * ⚠ DES MOTS ENTIERS, PAS DES MORCEAUX : par morceaux, « rendre » trouvait
+ *   « prendre », et la fiche du retrait remontait pour une question de retour.
+ */
+const repond = (mot, cherche) => mot.startsWith(cherche) || (mot.length >= 5 && cherche.startsWith(mot))
+
+function score(fiche, cherches) {
+  const titre = motsDe(fiche.titre)
+  const corps = motsDe(corpsDe(fiche))
+  return cherches.reduce((total, cherche) => {
+    if (titre.some((mot) => repond(mot, cherche))) return total + 3
+    if (corps.some((mot) => repond(mot, cherche))) return total + 1
+    return total
+  }, 0)
+}
+
+function modeDEmploi({ sujet, numero } = {}) {
+  if (numero !== undefined && numero !== null) {
+    const fiche = FICHES.find((f) => f.id === Number(numero))
+    if (!fiche) {
+      return { fiches: [], message: `Il n'y a pas de fiche ${numero}.`, sommaire: sommaire() }
+    }
+    return { fiches: [ficheComplete(fiche)] }
+  }
+
+  // Les mots de moins de trois lettres (« à », « au », « le ») ne départagent rien.
+  const cherches = motsDe(sujet).filter((mot) => mot.length >= 3)
+  if (cherches.length === 0) return { sommaire: sommaire() }
+
+  const trouvees = FICHES
+    .map((fiche) => ({ fiche, points: score(fiche, cherches) }))
+    .filter(({ points }) => points > 0)
+    .sort((a, b) => b.points - a.points || a.fiche.id - b.fiche.id)
+    .slice(0, FICHES_MAX)
+
+  if (trouvees.length === 0) {
+    // « Il n'y a rien » n'est pas un refus : le sommaire permet de rebondir.
+    return { fiches: [], message: `Aucune fiche ne parle de « ${sujet} ».`, sommaire: sommaire() }
+  }
+  return { fiches: trouvees.map(({ fiche }) => ficheComplete(fiche)) }
+}
+
 const EXECUTANTS = Object.freeze({
   bilan_du_jour: bilanDuJour,
   chercher_client: chercherClient,
   creances_en_cours: creancesEnCours,
   operations_recentes: operationsRecentes,
+  mode_d_emploi: modeDEmploi,
 })
 
 /**
