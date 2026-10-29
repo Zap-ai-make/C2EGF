@@ -3,8 +3,10 @@ import { construirePrompt, INTERDITS } from '../../src/lib/ia/prompt.js'
 import {
   CLES_DESTINATIONS,
   DESTINATIONS,
+  clesAtteignables,
   resoudreDestination,
 } from '../../src/lib/ia/destinations.js'
+import { STORE_ACCOUNT_ITEM, STORE_NAV_ITEMS } from '../../src/constants/navigation.js'
 import { GESTES, lireGeste } from '../../src/lib/ia/gestes.js'
 import { analyserFragments, analyserMarkdown } from '../../src/lib/ia/markdown.js'
 
@@ -113,6 +115,39 @@ describe('[DE] catalogue de destinations', () => {
     for (const entree of [undefined, null, '', 42, {}]) {
       expect(resoudreDestination(entree).ok).toBe(false)
     }
+  })
+})
+
+/**
+ * L'assistant n'emmène que là où la barre de navigation mène. Le profil
+ * C2EGF masque le tableau de bord, le formulaire séparé et les demandes au
+ * dealer : les proposer, c'était ouvrir à la caissière un écran que sa
+ * navigation ne montre pas — et « les ravitaillements » y désignait les
+ * demandes au dealer, pas le ravitaillement de l'onglet Transactions.
+ */
+describe('[DA] destinations atteignables', () => {
+  it('[DA-01] barre C2EGF : Transactions, Clients, Historique, et le Profil', () => {
+    expect(clesAtteignables(['/transactions', '/clients', '/historique', '/profil']))
+      .toEqual(['clients', 'transactions', 'historique', 'profil'])
+  })
+
+  it('[DA-02] barre complète du pilote : tout sauf les clôtures, qu\'aucun lien ne mène', () => {
+    expect(clesAtteignables(['/', '/transactions', '/formulaire', '/dealer-requests', '/dettes', '/clients', '/historique', '/profil']))
+      .toEqual(['accueil', 'clients', 'transactions', 'historique', 'nouvelleTransaction', 'ravitaillements', 'profil'])
+  })
+
+  it('[DA-03] le catalogue réel ne contient que des écrans de la barre ou du compte', () => {
+    const chemins = new Set([...STORE_NAV_ITEMS.map((item) => item.path), STORE_ACCOUNT_ITEM.path])
+    for (const cle of CLES_DESTINATIONS) {
+      expect(chemins.has(DESTINATIONS[cle].chemin)).toBe(true)
+    }
+  })
+
+  it('[DA-04] un écran connu mais hors de la barre est refusé, nommément', () => {
+    const resultat = resoudreDestination('clotures')
+
+    expect(resultat.ok).toBe(false)
+    expect(resultat.raison).toBeTruthy()
   })
 })
 
