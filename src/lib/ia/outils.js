@@ -27,7 +27,11 @@
  * donc gratuitement, et un outil ne peut pas se tromper de boutique.
  */
 
-import { getClients, getDrafts, getHistory } from '../../services/firestore.js'
+// ⚠ LE SINGLETON, JAMAIS SES MÉTHODES DÉTACHÉES. `firestore.js` exporte aussi
+//   `getClients`, `getDrafts`… par déstructuration : appelées seules, elles
+//   perdent leur `this` et lèvent un TypeError à chaque lecture. C'est arrivé
+//   ici, et `traduirePanne` le maquillait en « Je n'ai pas pu lire » (tc-301).
+import { firestoreService } from '../../services/firestore.js'
 import { CLES_DESTINATIONS } from './destinations.js'
 
 const EXTRAIT_MAX = 50
@@ -201,9 +205,9 @@ function correspond(client, recherche) {
 async function bilanDuJour() {
   // Lectures en parallèle : les enchaîner doublait l'attente au comptoir.
   const [clients, brouillons, historique] = await Promise.allSettled([
-    getClients(),
-    getDrafts(),
-    getHistory(),
+    firestoreService.getClients(),
+    firestoreService.getDrafts(),
+    firestoreService.getHistory(),
   ])
 
   if (historique.status === 'rejected') return traduirePanne(historique.reason, "l'historique")
@@ -238,7 +242,7 @@ async function chercherClient({ recherche } = {}) {
 
   let clients
   try {
-    clients = await getClients()
+    clients = await firestoreService.getClients()
   } catch (cause) {
     return traduirePanne(cause, 'la liste des clients')
   }
@@ -262,7 +266,7 @@ async function chercherClient({ recherche } = {}) {
 async function creancesEnCours({ client } = {}) {
   let brouillons
   try {
-    brouillons = await getDrafts()
+    brouillons = await firestoreService.getDrafts()
   } catch (cause) {
     return traduirePanne(cause, 'les créances')
   }
@@ -295,7 +299,7 @@ async function creancesEnCours({ client } = {}) {
 async function operationsRecentes({ client, type } = {}) {
   let historique
   try {
-    historique = await getHistory()
+    historique = await firestoreService.getHistory()
   } catch (cause) {
     return traduirePanne(cause, "l'historique")
   }
