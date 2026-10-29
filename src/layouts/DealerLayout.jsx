@@ -20,6 +20,7 @@ import { useDealerInventory } from '../hooks/useDealerInventory'
 import { estSousSeuil } from '../constants/dealerConstants'
 import { DEALER_NAV_ITEMS } from '../constants/navigation'
 import DealerInventoryBar from '../components/dealer/DealerInventoryBar'
+import { initiales } from '../utils/initiales.js'
 
 /**
  * Le poste de ravitaillement — shell de l'espace dealer.
@@ -219,14 +220,6 @@ function NavItem({ item, badgeCount, onNavigate, replie }) {
       )}
     </NavLink>
   )
-}
-
-/** Les initiales du dealer. Un nom vide rend « ? » plutôt qu'une pastille muette. */
-export function initiales(nom) {
-  const mots = String(nom ?? '').trim().split(/\s+/).filter(Boolean)
-  if (mots.length === 0) return '?'
-  if (mots.length === 1) return mots[0].slice(0, 2).toUpperCase()
-  return (mots[0][0] + mots[mots.length - 1][0]).toUpperCase()
 }
 
 /**

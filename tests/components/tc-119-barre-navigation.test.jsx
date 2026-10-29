@@ -66,7 +66,8 @@ vi.mock('../../src/services/collaborationService', () => ({
 }))
 vi.mock('../../src/components/PWAInstallButton', () => ({ default: () => null }))
 
-import NavBar, { initiales } from '../../src/components/NavBar.jsx'
+import NavBar from '../../src/components/NavBar.jsx'
+import { initiales } from '../../src/utils/initiales.js'
 import {
   STORE_NAV_ITEMS,
   STORE_ACCOUNT_ITEM,
