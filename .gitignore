@@ -63,6 +63,19 @@ firestore.rules.prod-*.txt
 # Backups locaux de remise à zéro (données financières client).
 backups/
 
+# Classeurs d'import des fiches agents (`docs/purifier-les-clients.md`) : codes
+# agents, numéros et noms de commerciaux, par milliers. Les deux dossiers sont
+# ceux que la procédure désigne ; ils reviennent à chaque campagne d'import.
+# ⚠ AUSSI les `.inspect.ndjson` posés à côté par l'outil d'inspection de
+#   tableur : ils recopient les valeurs des feuilles, donc les mêmes données
+#   sous un autre nom. Et tout classeur de la racine, par la même raison que
+#   `/*.csv` plus haut : un motif qui dépend du nom choisi ne protège rien.
+commerciaux/
+numeros-agent/
+/*.xlsx
+/*.xls
+*.inspect.ndjson
+
 # ── Éditeurs et systèmes ──────────────────────────────────────────────────
 .vscode/*
 !.vscode/extensions.json
