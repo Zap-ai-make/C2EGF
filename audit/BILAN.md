@@ -448,7 +448,7 @@ Branche `feat/espace-patron`, HEAD `f6d3be6`, arbre de travail conservé : `src/
 - Effet : `bilanDuJour`, `chercherClient`, `creancesEnCours` et `operationsRecentes` échouent toujours. `traduirePanne` transforme l'erreur en « Je n'ai pas pu lire l'historique. », qui ressemble à une panne passagère et masque un défaut de code.
 - Pourquoi les tests passent : `tc-300` ne couvre que les modules purs ; aucun test n'exécute `executerOutil` contre `firestore.js`.
 - Correction : appeler `firestoreService.getClients()` (etc.) dans `outils.js`, avec un test qui exécute chaque outil de lecture sur le vrai singleton et des collections simulées. Retirer ensuite le bloc déstructuré, dans un lot distinct : ses 15 autres noms n'ont aucun appelant, et chacun lèverait la même erreur.
-- Résultat : les quatre outils passent par le singleton. `tc-301` les exécute contre le vrai `firestoreService`, avec seulement le SDK Firestore simulé, et vérifie que la boutique lue est bien la boutique active. Rouge avant (5 refus « Je n'ai pas pu lire »), vert après. Le bloc déstructuré reste en place (lot R3).
+- Résultat : les quatre outils passent par le singleton. `tc-301` les exécute contre le vrai `firestoreService`, avec seulement le SDK Firestore simulé, et vérifie que la boutique lue est bien la boutique active. Rouge avant (5 refus « Je n'ai pas pu lire »), vert après. Le bloc déstructuré a ensuite été retiré (lot R3, `c5887c1`).
 
 ### BUG-07 — Le « bilan du jour » additionnait tout l'historique
 
@@ -543,6 +543,6 @@ Utilisées par les tests seulement : `SkeletonCards` (`SkeletonList.jsx`), `LONG
 |---|---|---|
 | R1 | BUG-06 : `outils.js` appelle le singleton ; test qui exécute les quatre outils de lecture. BUG-07, trouvé en chemin : bilan borné à la journée | ✅ Terminé le 29 octobre (`c81ee38`, `ef38abf`) ; tests rouges puis verts, suites globales, lint et build |
 | R2 | QUA-06 : `re2js` seul ; SEC-10 : `.gitignore` | ✅ Terminé le 29 octobre (`2e02fd8`, `039e2f3`) ; `quality:check` et intégration verts, classeurs ignorés |
-| R3 | Retrait du bloc d'exports déstructurés de `firestore.js` | Aucun import restant ; suites vertes |
+| R3 | Retrait du bloc d'exports déstructurés de `firestore.js` | ✅ Terminé le 29 octobre (`c5887c1`) ; aucun import restant, le test de `tc-018` qui figeait le bloc est retiré, `quality:check` vert |
 | R4 | QUA-07 : `adminService.js`, `closureService` et déclarations mortes, par petits commits | Règle de suppression d'`AGENTS.md` appliquée à chaque fichier |
 | Backlog | QUA-04 suite, PERF-03 (mesure d'abord), DOC-02 | Au fil de l'eau |
