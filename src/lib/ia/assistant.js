@@ -8,6 +8,7 @@
 
 import { getAI, getGenerativeModel, GoogleAIBackend, VertexAIBackend } from 'firebase/ai'
 import app from '../../config/firebase.js'
+import { activerAppCheck } from '../../config/appCheck.js'
 import { construirePrompt } from './prompt.js'
 import { DECLARATIONS, OUTILS_DE_GESTE, executerOutil } from './outils.js'
 
@@ -33,6 +34,16 @@ const TOURS_MAX = 5
 let modeleMemorise = null
 
 function obtenirModele(instructionSysteme) {
+  // L'attestation s'active ICI et nulle part ailleurs : à la première question,
+  // jamais au démarrage de l'application. Si elle échoue, l'assistant se tait
+  // et le reste du logiciel ne s'en aperçoit pas.
+  const attestation = activerAppCheck()
+  if (!attestation.actif && attestation.raison === 'clé absente') {
+    const manque = new Error('app-check : clé absente')
+    manque.code = 'app-check/cle-absente'
+    throw manque
+  }
+
   // Le prompt change avec la personne connectée : on ne mémorise que si
   // l'instruction est identique.
   if (modeleMemorise?.instruction === instructionSysteme) return modeleMemorise.modele
@@ -65,9 +76,30 @@ export function traduireErreur(cause) {
   console.error('[assistant] échec du modèle', cause)
   const texte = `${cause?.message ?? ''} ${cause?.code ?? ''}`.toLowerCase()
 
-  // 401 ET 403 : le service rend 401 quand le jeton d'attestation manque,
-  // 403 quand il est refusé. Ne connaître que 403 laisse l'autre sans message.
-  if (texte.includes('401') || texte.includes('403') || texte.includes('app-check') || texte.includes('appcheck')) {
+  // ⚠ L'ORDRE DE CES TESTS EST LE SUJET, et il a déjà coûté un faux diagnostic.
+  //   Une API non activée répond 403, exactement comme une attestation refusée.
+  //   Tester « 401/403 » en premier faisait dire « pas autorisé sur cet
+  //   appareil » — donc accuser App Check — à quelqu'un dont le vrai problème
+  //   était une API jamais allumée. On cherche donc les causes NOMMÉES d'abord,
+  //   et les codes nus en dernier.
+  if (
+    texte.includes('api-not-enabled') || // le signal le plus net du SDK
+    texte.includes('to be enabled in your firebase project') ||
+    texte.includes('service_disabled') ||
+    texte.includes('has not been used in project') ||
+    texte.includes('has not been enabled') ||
+    texte.includes('api_key_service_blocked') ||
+    texte.includes('generativelanguage') ||
+    texte.includes('firebasevertexai') ||
+    texte.includes('aiplatform')
+  ) {
+    return "L'assistant n'est pas encore activé sur cette installation."
+  }
+  if (texte.includes('app-check/cle-absente')) {
+    return "L'assistant n'est pas encore configuré sur cette installation."
+  }
+  // Signaux EXPLICITES d'attestation seulement — pas un code nu.
+  if (texte.includes('app-check') || texte.includes('appcheck') || texte.includes('app check')) {
     return "L'assistant n'est pas autorisé sur cet appareil."
   }
   if (texte.includes('prepayment') || texte.includes('credits are depleted')) {
@@ -78,7 +110,11 @@ export function traduireErreur(cause) {
     // Pas « limite atteinte » : à cette seconde, la file était pleine.
     return 'Le service est occupé en ce moment. Réessayez dans quelques secondes.'
   }
-  if (texte.includes('service_disabled') || texte.includes('404') || texte.includes('not found')) {
+  if (texte.includes('404') || texte.includes('not found')) {
+    return "L'assistant n'est pas encore activé sur cette installation."
+  }
+  // Codes nus en DERNIER : ils ne désignent aucune cause à eux seuls.
+  if (texte.includes('401') || texte.includes('403') || texte.includes('permission_denied')) {
     return "L'assistant n'est pas encore activé sur cette installation."
   }
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
