@@ -37,6 +37,18 @@ describe('TC-211 — durcissement du lot 3B', () => {
     expect(headers['Permissions-Policy']).toContain('camera=()')
   })
 
+  // La dictée de l'assistant a besoin du micro, et de rien d'autre : ouvert à
+  // NOTRE origine seulement (jamais `*`), la caméra et la position restant
+  // fermées tant qu'aucun écran ne s'en sert.
+  it('n’ouvre le micro qu’à notre origine, et rien d’autre', () => {
+    const config = JSON.parse(readFileSync('vercel.json', 'utf8'))
+    const politique = config.headers[0].headers.find(({ key }) => key === 'Permissions-Policy').value
+    expect(politique).toContain('microphone=(self)')
+    expect(politique).toContain('camera=()')
+    expect(politique).toContain('geolocation=()')
+    expect(politique).not.toContain('*')
+  })
+
   // Ouvrir tout www.google.com aux scripts laisse passer ses points JSONP, qui
   // exécutent ce qu'on leur fait rappeler : la CSP ne protégerait plus rien.
   // reCAPTCHA n'a besoin que de ses chemins /recaptcha/.

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bot, Send, X } from 'lucide-react'
+import { Bot, Mic, Send, Square, X } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useClients } from '../../hooks/useClients'
 import { useTransactions } from '../../context/transactions.jsx'
@@ -13,6 +13,7 @@ import { poserQuestion } from '../../lib/ia/assistant.js'
 import { analyserMarkdown } from '../../lib/ia/markdown.js'
 import { lireGeste, GESTES } from '../../lib/ia/gestes.js'
 import { preparerOperation } from '../../lib/ia/preparations.js'
+import { demarrerDictee, dicteeDisponible } from '../../lib/ia/dictee.js'
 import { CarteAConfirmer } from './CarteAConfirmer.jsx'
 
 /**
@@ -83,6 +84,47 @@ function PanneauAssistant({ ouvert, onFermer }) {
   // Verrou synchrone : deux clics sur « Confirmer » dans le même tick ne
   // doivent pas enregistrer deux fois (même raison que RavitaillementForm).
   const verrouCarte = useRef(false)
+
+  // La dictée : la voix remplit le CHAMP, la caissière relit puis envoie.
+  const [ecoute, setEcoute] = useState(false)
+  const [erreurDictee, setErreurDictee] = useState('')
+  const dicteeRef = useRef(null)
+  const champRef = useRef(null)
+  const [dicteePossible] = useState(() => dicteeDisponible())
+
+  const couperLeMicro = useCallback(() => {
+    dicteeRef.current?.abandonner()
+    dicteeRef.current = null
+  }, [])
+
+  // Le micro ne survit ni à la fermeture du panneau, ni à son démontage.
+  useEffect(() => {
+    if (!ouvert) couperLeMicro()
+  }, [ouvert, couperLeMicro])
+  useEffect(() => couperLeMicro, [couperLeMicro])
+
+  const basculerDictee = useCallback(() => {
+    if (dicteeRef.current) {
+      dicteeRef.current.terminer()
+      return
+    }
+    setErreurDictee('')
+    // Ce qui est dicté s'ajoute à ce qui était déjà tapé, sans l'effacer.
+    const debut = question.trim()
+    const dictee = demarrerDictee({
+      surTexte: (texte) => setQuestion(debut ? `${debut} ${texte}` : texte),
+      surErreur: setErreurDictee,
+      surFin: () => {
+        dicteeRef.current = null
+        setEcoute(false)
+        champRef.current?.focus()
+      },
+    })
+    if (dictee) {
+      dicteeRef.current = dictee
+      setEcoute(true)
+    }
+  }, [question])
 
   const { clients } = useClients()
   const {
@@ -156,6 +198,8 @@ function PanneauAssistant({ ouvert, onFermer }) {
     // une opération dont on ne lit plus la demande.
     setProposition(null)
     setCarte(null)
+    couperLeMicro()
+    setErreurDictee('')
     setQuestion('')
     setEnCours(true)
     setAttente('je réfléchis')
@@ -228,7 +272,7 @@ function PanneauAssistant({ ouvert, onFermer }) {
     // Même `aller_a` attend la fin du texte : l'écran ne change pas pendant
     // qu'on lit.
     if (gesteDifferé) navigate(gesteDifferé.chemin)
-  }, [question, enCours, userProfile, currentUser, activeStore, navigate, onFermer])
+  }, [question, enCours, userProfile, currentUser, activeStore, navigate, onFermer, couperLeMicro])
 
   // Fermé, le panneau reste MONTÉ : la conversation, la carte en attente et
   // l'historique du modèle survivent à la fermeture, comme avant.
@@ -321,12 +365,27 @@ function PanneauAssistant({ ouvert, onFermer }) {
         </label>
         <input
           id="assistant-question"
+          ref={champRef}
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
           disabled={enCours}
-          placeholder="Votre question…"
+          placeholder={ecoute ? 'Je vous écoute…' : 'Votre question…'}
           className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-50"
         />
+        {dicteePossible && (
+          <button
+            type="button"
+            onClick={basculerDictee}
+            disabled={enCours}
+            aria-label={ecoute ? 'Arrêter la dictée' : 'Dicter la question'}
+            aria-pressed={ecoute}
+            className={`rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-brand-400 disabled:opacity-40 ${
+              ecoute ? 'motion-safe:animate-pulse bg-danger text-white' : 'border border-slate-300 text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            {ecoute ? <Square className="h-4 w-4" aria-hidden="true" /> : <Mic className="h-4 w-4" aria-hidden="true" />}
+          </button>
+        )}
         <button
           type="submit"
           disabled={enCours || question.trim() === ''}
@@ -336,6 +395,9 @@ function PanneauAssistant({ ouvert, onFermer }) {
           <Send className="h-4 w-4" aria-hidden="true" />
         </button>
       </form>
+      {erreurDictee && (
+        <p role="status" className="m-0 shrink-0 px-3 pb-2 text-xs text-danger">{erreurDictee}</p>
+      )}
     </section>
   )
 }

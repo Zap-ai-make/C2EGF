@@ -140,6 +140,9 @@ que si la console le prouve, et le consigner ici si c'est le cas.
   `camera=(self), microphone=(self)`. **À faire dans le lot photo/voix, pas ici** —
   ouvrir un droit matériel avant d'en avoir l'usage est une permission qu'on oublie
   d'avoir donnée.
+  *Mise à jour du 30 octobre 2026 :* la dictée de l'assistant (lot C) a ouvert
+  `microphone=(self)`, à notre origine seulement. La caméra reste fermée jusqu'à
+  ce qu'un écran s'en serve ; TC-211 fige les deux.
 - L'`enforce` sur Firestore et Functions. Chantier suivant.
 
 ---

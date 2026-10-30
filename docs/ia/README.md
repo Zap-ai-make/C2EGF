@@ -101,13 +101,24 @@ Code : `src/lib/ia/preparations.js` (pur), `src/components/assistant/` (panneau 
 Tests : TC-305, TC-307, TC-308, TC-309. Banc visuel :
 `preview.html?espace=assistant&carte=transaction|reglement|annulation|ravitaillement|retour`.
 
+## Lot C — la dictée
+
+Le bouton micro du panneau dicte la question **dans le champ**, avec la
+reconnaissance vocale du navigateur (`src/lib/ia/dictee.js`). Rien ne part au
+modèle avant « Envoyer » : la caissière relit ce qui a été compris, et un
+montant mal entendu ne devient pas une carte sans qu'elle l'ait vu. Aucun appel
+au modèle de plus. Le micro se coupe en fin de phrase, au second appui, à
+l'envoi, à la fermeture du panneau. Navigateur sans reconnaissance (Firefox) :
+pas de bouton. Tests : TC-310, TC-309 (AC-09 à AC-11), TC-211.
+
 ---
 
 ## Deux pièges à connaître avant d'écrire une ligne
 
-1. **`Permissions-Policy: camera=(), microphone=()`** est une liste vide : photo
-   et voix (Lot 8) sont impossibles tant qu'elle n'est pas ouverte.
-   `LOT-APPCHECK.md` §2.4 dit pourquoi ce n'est pas dans le lot App Check.
+1. **`Permissions-Policy`** : le micro est ouvert à notre origine seulement
+   (`microphone=(self)`, lot C) ; la caméra reste une liste vide (`camera=()`),
+   donc la photo est impossible tant qu'un lot ne l'ouvre pas.
+   `LOT-APPCHECK.md` §2.4.
 2. **`chiffreAffaires()` est hors de portée d'une boutique** — requête de groupe
    réservée au gérant. Un CA boutique se recalcule, avec un risque de divergence
    nommé. `QUESTIONS-DU-COMPTOIR.md` §5.

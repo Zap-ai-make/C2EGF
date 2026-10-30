@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
 /**
@@ -71,9 +71,17 @@ vi.mock('../../src/lib/ia/assistant.js', () => ({
 }))
 
 import Assistant from '../../src/components/Assistant.jsx'
+import { poserQuestion } from '../../src/lib/ia/assistant.js'
 
 // jsdom ne fait pas défiler : le panneau descend sur le dernier message.
 Element.prototype.scrollIntoView = vi.fn()
+
+// Le panneau arrive par `lazy`. Son premier import compile tout le graphe du
+// modèle ; sous la charge de la suite complète, il dépassait l'attente du
+// premier test. Chargé ici une fois, le `lazy` le trouve en cache.
+beforeAll(async () => {
+  await import('../../src/components/assistant/PanneauAssistant.jsx')
+}, 60_000)
 
 const DEPOT = { nom: 'preparer_transaction', arguments: { client: '4544102', type: 'Dépôt', montant: 50000, statut: 'Non Terminées' } }
 
@@ -203,5 +211,52 @@ describe('TC-309 — la carte à confirmer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Annuler la transaction' }))
 
     await waitFor(() => expect(transactionsValue.trashTransaction).toHaveBeenCalledWith('d-1'))
+  })
+})
+
+describe('TC-309 — la dictée', () => {
+  let moteur
+  class MoteurSimule {
+    constructor() {
+      moteur = this
+      this.start = vi.fn()
+      this.stop = vi.fn(() => this.onend?.())
+      this.abort = vi.fn()
+    }
+  }
+
+  beforeEach(() => {
+    window.webkitSpeechRecognition = MoteurSimule
+    vi.mocked(poserQuestion).mockClear()
+  })
+  afterEach(() => {
+    delete window.webkitSpeechRecognition
+  })
+
+  it('[AC-09] la voix remplit le champ, et rien ne part sans « Envoyer »', async () => {
+    await ouvrir()
+    fireEvent.click(screen.getByRole('button', { name: 'Dicter la question' }))
+    expect(screen.getByRole('button', { name: 'Arrêter la dictée' })).toHaveAttribute('aria-pressed', 'true')
+
+    act(() => moteur.onresult({ results: [[{ transcript: 'dépôt de 5000 pour Salif' }]] }))
+    expect(screen.getByLabelText('Votre question')).toHaveValue('dépôt de 5000 pour Salif')
+
+    act(() => moteur.onend())
+    expect(screen.getByRole('button', { name: 'Dicter la question' })).toBeInTheDocument()
+    expect(poserQuestion).not.toHaveBeenCalled()
+  })
+
+  it('[AC-10] fermer le panneau coupe le micro', async () => {
+    await ouvrir()
+    fireEvent.click(screen.getByRole('button', { name: 'Dicter la question' }))
+    fireEvent.click(screen.getByRole('button', { name: "Fermer l'assistant" }))
+
+    expect(moteur.abort).toHaveBeenCalled()
+  })
+
+  it('[AC-11] sans moteur dans le navigateur, pas de bouton micro', async () => {
+    delete window.webkitSpeechRecognition
+    await ouvrir()
+    expect(screen.queryByRole('button', { name: 'Dicter la question' })).not.toBeInTheDocument()
   })
 })
