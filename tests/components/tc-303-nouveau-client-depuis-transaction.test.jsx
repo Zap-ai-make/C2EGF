@@ -40,9 +40,13 @@ beforeEach(() => {
   }
 })
 
+// La recherche attend 300 ms avant de répondre ; sous la charge de la suite
+// complète, le premier rendu dépassait la seconde d'attente par défaut.
+const ATTENTE = { timeout: 3000 }
+
 const ouvrirNouveauClient = async (code) => {
   fireEvent.change(screen.getByPlaceholderText(/code agent/i), { target: { value: code } })
-  fireEvent.click(await screen.findByRole('button', { name: /Enregistrer ce client/ }))
+  fireEvent.click(await screen.findByRole('button', { name: /Enregistrer ce client/ }, ATTENTE))
   return screen.getByRole('dialog', { name: 'Enregistrer un client' })
 }
 
@@ -110,7 +114,7 @@ describe('TC-303 — le client inconnu s’enregistre depuis la transaction', ()
     render(<TransactionForm clients={[EXISTANT]} />)
     fireEvent.change(screen.getByPlaceholderText(/code agent/i), { target: { value: '87654321' } })
 
-    await screen.findByRole('button', { name: /Utiliser ce code sans client enregistré/ })
+    await screen.findByRole('button', { name: /Utiliser ce code sans client enregistré/ }, ATTENTE)
     expect(screen.queryByRole('button', { name: /Enregistrer ce client/ })).not.toBeInTheDocument()
   })
 })
