@@ -111,6 +111,9 @@ au modèle de plus. Le micro se coupe en fin de phrase, au second appui, à
 l'envoi, à la fermeture du panneau. Navigateur sans reconnaissance (Firefox) :
 pas de bouton. Tests : TC-310, TC-309 (AC-09 à AC-11), TC-211.
 
+**Lot D (images, fichiers) : abandonné** le 30 octobre 2026, à la demande du
+responsable. Rien n'a été écrit ; la caméra reste fermée (`camera=()`).
+
 ---
 
 ## Deux pièges à connaître avant d'écrire une ligne
