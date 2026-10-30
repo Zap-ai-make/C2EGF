@@ -193,3 +193,41 @@ describe('TC-123-D — arrière-plan inerte', () => {
     }
   })
 })
+
+/**
+ * Deux fenêtres empilées : le formulaire client s'ouvre AU-DESSUS du
+ * formulaire de transaction. Chaque fenêtre écoutait le clavier du document
+ * entier ; un Échap dans celle du dessus fermait aussi celle du dessous, et la
+ * transaction en cours de saisie partait avec.
+ */
+describe('TC-123-E — fenêtres empilées', () => {
+  function Pile({ surDessous, surDessus, dessusOuvert = true }) {
+    return (
+      <>
+        <Dialog open onClose={surDessous} title="Transaction"><button type="button">Montant</button></Dialog>
+        <Dialog open={dessusOuvert} onClose={surDessus} title="Nouveau client"><button type="button">Nom</button></Dialog>
+      </>
+    )
+  }
+
+  it('[DG-14] Échap ne ferme que la fenêtre du dessus', () => {
+    const surDessous = vi.fn()
+    const surDessus = vi.fn()
+    render(<Pile surDessous={surDessous} surDessus={surDessus} />)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(surDessus).toHaveBeenCalledTimes(1)
+    expect(surDessous).not.toHaveBeenCalled()
+  })
+
+  it('[DG-15] une fois celle du dessus fermée, Échap ferme celle du dessous', () => {
+    const surDessous = vi.fn()
+    const { rerender } = render(<Pile surDessous={surDessous} surDessus={vi.fn()} />)
+    rerender(<Pile surDessous={surDessous} surDessus={vi.fn()} dessusOuvert={false} />)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(surDessous).toHaveBeenCalledTimes(1)
+  })
+})

@@ -53,11 +53,21 @@ const CIBLES_FOCUSABLES = [
  *   rester : un panneau latéral écrit à côté les réimplémenterait, et en
  *   oublierait une partie.
  */
+/**
+ * Les fenêtres ouvertes, la plus récente en dernier.
+ *
+ * ⚠ SEULE CELLE DU DESSUS ÉCOUTE LE CLAVIER. Chaque fenêtre écoute le document
+ *   entier : empilées (le formulaire client au-dessus de la transaction), un
+ *   Échap les fermait toutes, et la transaction en cours de saisie partait avec.
+ */
+const pile = []
+
 function Dialog({ open, onClose, title, description, children, footer, testId, largeur = 'max-w-md', spacious = false, cote = false }) {
   const panneau = useRef(null)
   const corps = useRef(null)
   const focusPrecedent = useRef(null)
   const restoreBackground = useRef(null)
+  const jeton = useRef(Symbol('dialog'))
   const titleId = useId()
   const descriptionId = useId()
 
@@ -90,7 +100,10 @@ function Dialog({ open, onClose, title, description, children, footer, testId, l
 
   useEffect(() => {
     if (!open) return undefined
+    const moi = jeton.current
+    pile.push(moi)
     const surTouche = (e) => {
+      if (pile[pile.length - 1] !== moi) return
       if (e.key === 'Escape') {
         onClose?.()
         return
@@ -113,7 +126,11 @@ function Dialog({ open, onClose, title, description, children, footer, testId, l
       }
     }
     document.addEventListener('keydown', surTouche)
-    return () => document.removeEventListener('keydown', surTouche)
+    return () => {
+      document.removeEventListener('keydown', surTouche)
+      const place = pile.lastIndexOf(moi)
+      if (place !== -1) pile.splice(place, 1)
+    }
   }, [open, onClose, cibles])
 
   useEffect(() => {
