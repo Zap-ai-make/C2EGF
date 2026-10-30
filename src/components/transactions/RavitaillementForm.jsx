@@ -2,9 +2,8 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { Check } from 'lucide-react'
 import { useToast } from '../../hooks/useToast'
 import { runStoreTransactionCommand } from '../../services/storeTransactionCommandService'
-import { parseFcfaAmount } from '../../utils/fcfaAmount.js'
 import { formatCurrency } from '../../utils/formatCurrency'
-import { AJOUTER_UN_NOM } from '../../utils/ravitaillement.js'
+import { AJOUTER_UN_NOM, VASES, libelleVase, preparerRavitaillement } from '../../utils/ravitaillement.js'
 
 /**
  * Ravitaillement — le dealer réapprovisionne la boutique.
@@ -23,11 +22,6 @@ import { AJOUTER_UN_NOM } from '../../utils/ravitaillement.js'
  * qu'Orange, et un réseau choisi par le navigateur ne serait de toute façon
  * pas honoré (storeTransactionCommand.js, action `replenish`).
  */
-
-const VASES = [
-  { cle: 'stock', libelle: 'Stock' },
-  { cle: 'liquidite', libelle: 'Espèce' },
-]
 
 const NOTE_MAX = 280
 
@@ -59,13 +53,13 @@ function RavitaillementForm({ onComplete, onCancel, expediteurs = [] }) {
   // Le nom finalement envoyé : celui de la liste, ou celui qu'on vient de taper.
   const expediteurChoisi = expediteur === AJOUTER_UN_NOM ? nouveauNom.trim() : expediteur
 
-  const validation = useMemo(() => {
-    const valeur = parseFcfaAmount(montant)
-    if (valeur === null) return { ok: false, raison: 'Montant invalide (entier supérieur à 0).' }
-    return { ok: true, raison: '', valeur }
-  }, [montant])
+  // La commande que l'assistant prépare aussi : même fonction, même refus.
+  const preparation = useMemo(
+    () => preparerRavitaillement({ montant, vase, expediteur: expediteurChoisi, note }),
+    [montant, vase, expediteurChoisi, note],
+  )
 
-  const peutEnvoyer = validation.ok && Boolean(expediteurChoisi)
+  const peutEnvoyer = preparation.ok
 
   const envoyer = useCallback(async (event) => {
     event.preventDefault()
@@ -73,15 +67,8 @@ function RavitaillementForm({ onComplete, onCancel, expediteurs = [] }) {
     verrou.current = true
     setEnvoiEnCours(true)
     try {
-      await runStoreTransactionCommand({
-        action: 'replenish',
-        amount: validation.valeur,
-        balanceType: vase,
-        expediteur: expediteurChoisi,
-        note: note.trim() || undefined,
-      })
-      const nomVase = VASES.find((v) => v.cle === vase)?.libelle ?? vase
-      showToast(`Ravitaillement enregistré : ${formatCurrency(validation.valeur)} en ${nomVase.toLowerCase()}.`, 'success')
+      await runStoreTransactionCommand(preparation.commande)
+      showToast(`Ravitaillement enregistré : ${formatCurrency(preparation.valeur)} en ${libelleVase(vase).toLowerCase()}.`, 'success')
       onComplete?.()
     } catch (err) {
       showToast(err?.message || "Le ravitaillement n'a pas pu être enregistré.", 'error')
@@ -89,9 +76,12 @@ function RavitaillementForm({ onComplete, onCancel, expediteurs = [] }) {
       setEnvoiEnCours(false)
       verrou.current = false
     }
-  }, [peutEnvoyer, validation, vase, expediteurChoisi, note, showToast, onComplete])
+  }, [peutEnvoyer, preparation, vase, showToast, onComplete])
 
-  const montantInvalide = !validation.ok && montant !== ''
+  // Seul le montant parle sous le champ : un expéditeur manquant ne doit pas
+  // faire passer pour faux un montant juste. Il est contrôlé en premier, donc
+  // ce motif ne masque aucun autre.
+  const montantInvalide = montant !== '' && preparation.motif === 'montant'
 
   return (
     <form onSubmit={envoyer} className="space-y-5">
@@ -151,7 +141,7 @@ function RavitaillementForm({ onComplete, onCancel, expediteurs = [] }) {
         />
         {montantInvalide && (
           <p id="ravitaillement-montant-erreur" className="mt-1 text-sm text-danger">
-            {validation.raison}
+            {preparation.raison}
           </p>
         )}
       </div>
@@ -214,7 +204,7 @@ function RavitaillementForm({ onComplete, onCancel, expediteurs = [] }) {
           disabled={!peutEnvoyer || envoiEnCours}
           data-testid="valider-ravitaillement"
           className={`rounded px-5 py-2 text-sm font-semibold transition-colors ${
-            !validation.ok || envoiEnCours
+            preparation.motif === 'montant' || envoiEnCours
               ? 'cursor-not-allowed bg-gray-200 text-gray-500'
               : 'bg-brand-500 text-white hover:bg-brand-600'
           }`}

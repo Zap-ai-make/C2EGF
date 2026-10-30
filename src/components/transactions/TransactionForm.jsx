@@ -7,19 +7,19 @@ import { useToast } from '../../hooks/useToast'
 import { useTransactions } from '../../context/transactions.jsx'
 import { useSimpleNetworkData } from '../../hooks/useSimpleNetworkData'
 import Toast from '../Toast'
-import { NETWORK_OPTIONS, TRANSACTION_TYPES, NETWORK_CODES, MESSAGES } from '../../utils/constants.js'
-import { validateTransactionForm, validateTransactionAction } from '../../utils/helpers.js'
+import { NETWORK_OPTIONS, TRANSACTION_TYPES, MESSAGES } from '../../utils/constants.js'
 import logger from '../../utils/logger.js'
-import { parseFcfaAmount } from '../../utils/fcfaAmount.js'
 import { reconnaitreClient } from '../../utils/rechercheClients.js'
+import {
+  clientDeLaTransaction,
+  evaluerTransaction,
+  preparerTransaction,
+  estValidationDirecte,
+  reseauxDisponibles,
+  normaliserLibelle,
+} from '../../utils/preparationTransaction.js'
 import Dialog from '../ui/Dialog'
 import ClientForm from '../ClientForm'
-
-const normalizeLabel = (value) => String(value || '')
-  .trim()
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '')
-  .toLowerCase()
 
 function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAddClient = null }) {
   const { toasts, showToast, removeToast } = useToast()
@@ -77,26 +77,6 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
     }
   }, [selectedClient, network, showToast])
 
-  // Fonction pour vérifier si le client a des réseaux disponibles
-  const getClientAvailableNetworks = (client) => {
-    if (client?.isManual) return NETWORK_OPTIONS
-    if (!client) return []
-
-    return NETWORK_OPTIONS.filter(option => {
-      const networkKey = option.toLowerCase()
-      return client[networkKey] && client[networkKey].trim()
-    })
-  }
-
-  // Fonction pour vérifier si la combinaison client/réseau est valide
-  const isClientNetworkValid = (client, selectedNetwork) => {
-    if (client?.isManual) return Boolean(client.orange?.trim())
-    if (!client || !selectedNetwork) return false
-
-    const networkKey = selectedNetwork.toLowerCase()
-    return client[networkKey] && client[networkKey].trim()
-  }
-
   // ⚠ UN IDENTIFIANT TAPÉ EN ENTIER DÉSIGNE SA FICHE, même sans clic dans la
   //   liste. Avant, il partait sur un « Client Non enregistré » : code gardé,
   //   lien à la fiche perdu. Le code d'abord, le téléphone à défaut ; un
@@ -107,105 +87,26 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
   )
   const clientDesigne = selectedClient || reconnaissance?.client || null
 
-  // Validation complète du formulaire et des boutons d'action
-  const formValidation = useMemo(() => {
-    const manualCode = manualAgentCode.trim()
-    if (!clientDesigne && reconnaissance?.ambigus) {
-      const raison = `Plusieurs clients portent ce numéro (${reconnaissance.ambigus.length}) : choisissez le bon dans la liste.`
-      return {
-        isFormValid: false,
-        stockValidation: { isValid: true, message: '' },
-        networkValidation: { isValid: false, message: raison },
-        actionStates: {
-          canMarkAsNonTermine: false,
-          canValidate: false,
-          nonTermineeReason: raison,
-          validateReason: raison,
-        },
-      }
-    }
-    const transactionClient = clientDesigne || (manualCode ? {
-      id: `manual-${network}-${manualCode}`,
-      nom: 'Client',
-      prenom: 'Non enregistré',
-      // `orange` reste le COMPTE RÉSEAU — c'est lui que lit la validation
-      // réseau, et lui qui devient le code écrit sur la transaction. Les deux
-      // champs d'identité s'y ajoutent pour que l'écran nomme correctement ce
-      // qui vient d'être tapé, sans rien changer au chemin financier.
-      orange: manualCode,
-      ...repartirValeurAgent(manualCode),
-      isManual: true
-    } : null)
+  // Le client de la transaction : la fiche désignée, sinon le code tapé.
+  const transactionClient = useMemo(
+    () => clientDeLaTransaction({ client: clientDesigne, codeTape: manualAgentCode, reseau: network }),
+    [clientDesigne, manualAgentCode, network],
+  )
 
-    if (!transactionClient || !amount || !transactionType || !network) {
-      return {
-        isFormValid: false,
-        stockValidation: { isValid: true, message: '' },
-        networkValidation: { isValid: true, message: '' },
-        actionStates: {
-          canMarkAsNonTermine: false,
-          canValidate: false,
-          nonTermineeReason: 'Veuillez remplir tous les champs requis',
-          validateReason: 'Veuillez remplir tous les champs requis'
-        }
-      }
-    }
-
-    // Validation de la combinaison client/réseau
-    const isNetworkValid = isClientNetworkValid(transactionClient, network)
-    const availableNetworks = getClientAvailableNetworks(transactionClient)
-
-    const networkValidation = {
-      isValid: isNetworkValid,
-      message: isNetworkValid ? '' :
-        availableNetworks.length > 0
-          ? `Ce client n'a pas de code ${network}. Réseaux disponibles: ${availableNetworks.join(', ')}`
-          : `Ce client n'a aucun code réseau configuré. Veuillez d'abord configurer au moins un réseau.`
-    }
-
-    const stockValidation = validateAmount(network, amount, transactionType)
-    const basicFormValid = validateTransactionForm(transactionClient, amount, transactionType)
-    const amountValue = parseFcfaAmount(amount) || 0
-    const liquidityAvailable = getLiquidite()
-    const normalizedType = normalizeLabel(transactionType)
-    const isWithdrawal = normalizedType === 'retrait'
-    const directValidation = {
-      isValid: !isWithdrawal || amountValue <= liquidityAvailable,
-      reason: isWithdrawal && amountValue > liquidityAvailable
-        ? `Liquidité insuffisante. Disponible: ${liquidityAvailable.toLocaleString('fr-FR')} FCFA`
-        : ''
-    }
-
-    // Utiliser la nouvelle logique de validation
-    const hasStock = stockValidation.isValid && isNetworkValid
-    const context = { hasStock, amount: amountValue }
-
-    const nonTermineeValidation = validateTransactionAction(transactionType, 'nonTerminee', context)
-    const validateValidation = validateTransactionAction(transactionType, 'valider', context)
-
-    // Adapter les raisons en fonction des problèmes détectés
-    const adaptReason = (originalReason) => {
-      if (!isNetworkValid) {
-        return networkValidation.message
-      }
-      return originalReason
-    }
-
-    return {
-      isFormValid: basicFormValid && stockValidation.isValid && networkValidation.isValid,
-      stockValidation,
-      networkValidation,
-      actionStates: {
-        canMarkAsNonTermine: nonTermineeValidation.allowed && networkValidation.isValid,
-        canValidate: validateValidation.allowed && networkValidation.isValid && directValidation.isValid,
-        nonTermineeReason: adaptReason(nonTermineeValidation.reason || ''),
-        validateReason: adaptReason(directValidation.reason || validateValidation.reason || '')
-      }
-    }
-  }, [clientDesigne, reconnaissance, manualAgentCode, amount, transactionType, network, validateAmount, getLiquidite])
+  // Ce que les boutons permettent, et pourquoi pas. Les règles vivent dans
+  // preparationTransaction.js : l'assistant prépare avec les mêmes.
+  const formValidation = useMemo(() => evaluerTransaction({
+    client: transactionClient,
+    ambigus: reconnaissance?.ambigus,
+    montant: amount,
+    type: transactionType,
+    reseau: network,
+    validateAmount,
+    liquidite: getLiquidite(),
+  }), [transactionClient, reconnaissance, amount, transactionType, network, validateAmount, getLiquidite])
 
   const handleSubmit = useCallback(async (statut) => {
-    const isDirectValidation = normalizeLabel(statut) === 'validee'
+    const isDirectValidation = estValidationDirecte(statut)
     if (!formValidation.isFormValid || isSubmitting || (isDirectValidation && !formValidation.actionStates.canValidate)) {
       if (!formValidation.isFormValid) {
         const reason = formValidation.stockValidation.message ||
@@ -220,76 +121,23 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
 
     setIsSubmitting(true)
 
-    // Récupérer le code spécifique du client pour le réseau sélectionné
-    const manualCode = manualAgentCode.trim()
-    const transactionClient = clientDesigne || (manualCode ? {
-      id: `manual-${network}-${manualCode}`,
-      nom: 'Client',
-      prenom: 'Non enregistré',
-      // `orange` reste le COMPTE RÉSEAU — c'est lui que lit la validation
-      // réseau, et lui qui devient le code écrit sur la transaction. Les deux
-      // champs d'identité s'y ajoutent pour que l'écran nomme correctement ce
-      // qui vient d'être tapé, sans rien changer au chemin financier.
-      orange: manualCode,
-      ...repartirValeurAgent(manualCode),
-      isManual: true
-    } : null)
-
-    if (!transactionClient) {
-      showToast('Veuillez sélectionner un client ou saisir un numéro/code agent', 'error')
-      setIsSubmitting(false)
-      return
-    }
-
-    const networkKey = network.toLowerCase()
-    const clientCode = transactionClient[networkKey]?.trim() || NETWORK_CODES[network] || '000000'
-
-    // Vérifier que le client a bien un code pour ce réseau
-    if (!transactionClient[networkKey]?.trim()) {
-      showToast(`${transactionClient.nom} ${transactionClient.prenom} n'a pas de code ${network}`, 'error')
-      setIsSubmitting(false)
-      return
-    }
-
-    const amountValue = parseFcfaAmount(amount)
-    if (amountValue === null) {
-      showToast('Le montant doit être un entier strictement positif en FCFA', 'error')
-      setIsSubmitting(false)
-      return
-    }
-    const clientName = `${transactionClient.prenom || ''} ${transactionClient.nom || ''}`.trim()
-    const confirmationMessage = [
-      'Confirmer cette transaction ?',
-      '',
-      `Client: ${clientName}`,
-      `Nature: ${transactionType}`,
-      `Montant: ${amountValue.toLocaleString('fr-FR')} FCFA`,
-      `Réseau: ${network}`,
-      `Statut: ${statut}`
-    ].join('\n')
-
-    void confirmationMessage
-
-    const transactionData = {
+    const preparation = preparerTransaction({
       client: transactionClient,
-      clientId: transactionClient.id,
-      type: transactionType,
       reseau: network,
-      code: clientCode,
-      montant: amountValue,
-      statut: statut
+      montant: amount,
+      type: transactionType,
+      statut,
+    })
+    if (!preparation.ok) {
+      showToast(preparation.raison, 'error')
+      setIsSubmitting(false)
+      return
     }
 
     setPendingConfirmation({
-      transactionData,
+      transactionData: preparation.transactionData,
       isDirectValidation,
-      details: {
-        clientName,
-        type: transactionType,
-        amount: amountValue.toLocaleString('fr-FR'),
-        network,
-        statut
-      }
+      details: preparation.details,
     })
     setIsSubmitting(false)
   }, [
@@ -300,8 +148,7 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
     formValidation.actionStates.validateReason,
     formValidation.actionStates.nonTermineeReason,
     isSubmitting,
-    clientDesigne,
-    manualAgentCode,
+    transactionClient,
     network,
     amount,
     transactionType,
@@ -475,7 +322,7 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
           />
 
           {/* Indicateur de stock disponible avec alertes */}
-          {network && ['depot', 'credit'].includes(normalizeLabel(transactionType)) && (
+          {network && ['depot', 'credit'].includes(normaliserLibelle(transactionType)) && (
             <div className="mt-2 space-y-1">
               <div className="text-sm text-gray-600">
                 Stock disponible pour {network}: <span className="font-semibold">{getFormattedStock(network)} FCFA</span>
@@ -568,15 +415,15 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
               </div>
 
               {/* Suggestion de réseaux disponibles */}
-              {getClientAvailableNetworks(selectedClient).length > 0 && (
+              {reseauxDisponibles(selectedClient).length > 0 && (
                 <div className="flex items-start gap-2 text-sm text-brand-400">
                   <Lightbulb aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>Réseaux disponibles pour ce client : {getClientAvailableNetworks(selectedClient).join(', ')}</span>
+                  <span>Réseaux disponibles pour ce client : {reseauxDisponibles(selectedClient).join(', ')}</span>
                 </div>
               )}
 
               {/* Message d'aide si aucun réseau disponible */}
-              {selectedClient && getClientAvailableNetworks(selectedClient).length === 0 && (
+              {selectedClient && reseauxDisponibles(selectedClient).length === 0 && (
                 <div className="flex items-start gap-2 rounded border border-warn/30 bg-warn-soft p-2 text-sm text-warn">
                   <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>
@@ -603,7 +450,7 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
           <div className="flex flex-col gap-3 md:flex-row">
             {TRANSACTION_TYPES.map((type) => {
               const actif = transactionType === type.value
-              const nature = normalizeLabel(type.value)
+              const nature = normaliserLibelle(type.value)
               const teinte = !actif
                 ? 'border-line bg-surface hover:border-brand-200'
                 : nature === 'depot' ? 'border-inflow bg-inflow-soft'

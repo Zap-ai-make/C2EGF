@@ -3,7 +3,6 @@ import { useToast } from '../../hooks/useToast'
 import { useTransactions } from '../../context/transactions.jsx'
 import { useSimpleNetworkData } from '../../hooks/useSimpleNetworkData'
 import { runStoreTransactionCommand } from '../../services/storeTransactionCommandService'
-import { parseFcfaAmount } from '../../utils/fcfaAmount.js'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { NETWORK_OPTIONS } from '../../utils/constants'
 import Dialog from '../ui/Dialog.jsx'
@@ -12,6 +11,9 @@ import {
   ravitaillementsEnCours,
   grouperParExpediteur,
   expediteursConnus,
+  VASES,
+  libelleVase,
+  preparerRetour,
 } from '../../utils/ravitaillement.js'
 
 /**
@@ -39,13 +41,6 @@ import {
  * se pose en fermant, et qu'on ne peut pas reconstituer de tête en additionnant
  * cinq colonnes. Il informe ; il ne sert à solder personne.
  */
-
-const VASES = [
-  { cle: 'stock', libelle: 'Stock' },
-  { cle: 'liquidite', libelle: 'Espèce' },
-]
-
-const libelleVase = (cle) => VASES.find((v) => v.cle === cle)?.libelle ?? cle
 
 /**
  * Le réseau dont on lit les réserves. Le serveur, lui, résout `STORE_NETWORKS[0]`
@@ -95,10 +90,14 @@ function FormulaireRetour({ ravitaillement, onFait, onAnnuler }) {
     ? Number(getStock(RESEAU)) || 0
     : Number(getNetworkLiquidite(RESEAU)) || 0
 
-  const valeur = parseFcfaAmount(montant)
-  const tropGrand = valeur !== null && valeur > reste
-  const tropPeuEnReserve = valeur !== null && !tropGrand && valeur > disponible
-  const peutEnvoyer = valeur !== null && !tropGrand && !tropPeuEnReserve && !envoiEnCours
+  // La commande que l'assistant prépare aussi : même fonction, mêmes plafonds.
+  const preparation = useMemo(
+    () => preparerRetour({ ravitaillement, montant, vase, disponible }),
+    [ravitaillement, montant, vase, disponible],
+  )
+  const tropGrand = preparation.motif === 'reste'
+  const tropPeuEnReserve = preparation.motif === 'reserve'
+  const peutEnvoyer = preparation.ok && !envoiEnCours
 
   const envoyer = useCallback(async (event) => {
     event.preventDefault()
@@ -106,13 +105,8 @@ function FormulaireRetour({ ravitaillement, onFait, onAnnuler }) {
     verrou.current = true
     setEnvoiEnCours(true)
     try {
-      await runStoreTransactionCommand({
-        action: 'returnReplenishment',
-        replenishmentId: ravitaillement.id,
-        amount: valeur,
-        balanceType: vase,
-      })
-      showToast(`Retour enregistré : ${formatCurrency(valeur)} en ${libelleVase(vase).toLowerCase()}.`, 'success')
+      await runStoreTransactionCommand(preparation.commande)
+      showToast(`Retour enregistré : ${formatCurrency(preparation.valeur)} en ${libelleVase(vase).toLowerCase()}.`, 'success')
       onFait?.()
     } catch (err) {
       // Le serveur rédige des refus lisibles — « Stock insuffisant.
@@ -122,7 +116,7 @@ function FormulaireRetour({ ravitaillement, onFait, onAnnuler }) {
       setEnvoiEnCours(false)
       verrou.current = false
     }
-  }, [peutEnvoyer, ravitaillement.id, valeur, vase, showToast, onFait])
+  }, [peutEnvoyer, preparation, vase, showToast, onFait])
 
   return (
     <form onSubmit={envoyer} className="space-y-4" data-testid="formulaire-retour">

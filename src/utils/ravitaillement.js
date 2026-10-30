@@ -1,4 +1,6 @@
 import { activeProfile } from '../config/activeClientProfile.js'
+import { parseFcfaAmount } from './fcfaAmount.js'
+import { formatCurrency } from './formatCurrency.js'
 
 /**
  * Les livraisons du dealer, et ce qu'il reste à lui rendre.
@@ -16,6 +18,14 @@ export const EXPEDITEURS_PROFIL = Object.freeze([...(activeProfile.replenishment
 
 /** Le choix qui ouvre une saisie libre. Doit rester distinct de tout nom réel. */
 export const AJOUTER_UN_NOM = '__ajouter__'
+
+/** Les deux réserves qu'un ravitaillement remplit et qu'un retour vide. */
+export const VASES = Object.freeze([
+  { cle: 'stock', libelle: 'Stock' },
+  { cle: 'liquidite', libelle: 'Espèce' },
+])
+
+export const libelleVase = (cle) => VASES.find((v) => v.cle === cle)?.libelle ?? cle
 
 const plier = (nom) => String(nom ?? '')
   .normalize('NFD')
@@ -124,4 +134,75 @@ export function retoursDe(transactions = [], replenishmentId) {
       && transaction?.replenishmentId === replenishmentId
       && !transaction?.deletedAt)
     .sort((a, b) => instant(b) - instant(a))
+}
+
+const estUnVase = (cle) => VASES.some((v) => v.cle === cle)
+
+/**
+ * La livraison prête à partir au serveur, ou la raison du refus.
+ *
+ * Le formulaire et l'assistant envoient la même commande : celle-ci. Le
+ * serveur reste le garant (il résout l'expéditeur contre les noms connus et
+ * le réseau depuis le profil) ; ce contrôle évite seulement un aller-retour
+ * voué au refus.
+ *
+ * @returns {{ok: true, valeur: number, commande: object} | {ok: false, motif: string, raison: string}}
+ */
+export function preparerRavitaillement({ montant, vase, expediteur, note }) {
+  const valeur = parseFcfaAmount(montant)
+  if (valeur === null) return { ok: false, motif: 'montant', raison: 'Montant invalide (entier supérieur à 0).' }
+  if (!estUnVase(vase)) return { ok: false, motif: 'vase', raison: 'Réserve inconnue : Stock ou Espèce.' }
+  const nom = String(expediteur ?? '').trim()
+  if (!nom) return { ok: false, motif: 'expediteur', raison: 'Indiquez de qui vient le ravitaillement.' }
+
+  return {
+    ok: true,
+    valeur,
+    commande: {
+      action: 'replenish',
+      amount: valeur,
+      balanceType: vase,
+      expediteur: nom,
+      note: String(note ?? '').trim() || undefined,
+    },
+  }
+}
+
+/**
+ * Le retour prêt à partir, ou lequel des deux plafonds bloque.
+ *
+ * Le reste dû dit ce que la boutique DEVRAIT rendre ; le disponible, ce
+ * qu'elle PEUT rendre dans la réserve choisie. Le motif les distingue parce
+ * qu'ils se corrigent autrement : l'un en rendant moins, l'autre en rendant
+ * dans l'autre réserve.
+ *
+ * @param {object} p
+ * @param {object} p.ravitaillement  la livraison, avec `id` et `remainingAmount`
+ * @param {number} p.disponible      ce que contient la réserve choisie, sur le réseau débité
+ * @returns {{ok: true, valeur: number, commande: object} | {ok: false, motif: string, raison: string}}
+ */
+export function preparerRetour({ ravitaillement, montant, vase, disponible }) {
+  const reste = Number(ravitaillement?.remainingAmount) || 0
+  const valeur = parseFcfaAmount(montant)
+  if (valeur === null) return { ok: false, motif: 'montant', raison: 'Montant invalide (entier supérieur à 0).' }
+  if (!estUnVase(vase)) return { ok: false, motif: 'vase', raison: 'Réserve inconnue : Stock ou Espèce.' }
+  if (valeur > reste) return { ok: false, motif: 'reste', raison: `Supérieur au reste dû (${formatCurrency(reste)}).` }
+  if (valeur > disponible) {
+    return {
+      ok: false,
+      motif: 'reserve',
+      raison: `${libelleVase(vase)} insuffisant${vase === 'liquidite' ? 'e' : ''}. Disponible : ${formatCurrency(disponible)}.`,
+    }
+  }
+
+  return {
+    ok: true,
+    valeur,
+    commande: {
+      action: 'returnReplenishment',
+      replenishmentId: ravitaillement.id,
+      amount: valeur,
+      balanceType: vase,
+    },
+  }
 }
