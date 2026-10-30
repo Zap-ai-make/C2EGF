@@ -150,6 +150,39 @@ export function chercherClients(clients = [], terme = '', { maximum = null } = {
   return { resultats, total: trouves.length, reste: trouves.length - resultats.length }
 }
 
+/**
+ * La fiche que désigne un identifiant tapé EN ENTIER, sans la choisir dans la
+ * liste.
+ *
+ * Avant, un code complet tapé sans clic partait sur un « Client Non enregistré » :
+ * le code était gardé, le lien à la fiche perdu. La règle est celle de la
+ * boutique, déjà appliquée à la purge des doublons : LE CODE D'ABORD, LE NUMÉRO
+ * SEULEMENT À DÉFAUT. Un code ou un numéro agent (et le compte `orange`) ne
+ * désigne qu'un commerce ; un téléphone peut être partagé — vérifié en base,
+ * deux fiches réelles partagent le leur.
+ *
+ * @returns {{client: object} | {ambigus: object[]} | null}  `null` : rien de reconnu
+ */
+export function reconnaitreClient(clients = [], terme = '') {
+  const tape = String(terme ?? '').replace(/\s/g, '')
+  const chiffres = chiffresSeuls(tape)
+  // Uniquement un identifiant entier, fait de chiffres : un nom se choisit dans la liste.
+  if (!chiffres || chiffres.length !== tape.length || !Array.isArray(clients)) return null
+
+  const desigent = (valeurs) => valeurs.map(chiffresSeuls).includes(chiffres)
+  const fiches = clients.filter(Boolean)
+
+  for (const identifiants of [
+    (c) => [...valeursAgent(c), c.orange],
+    (c) => [c.numeroPersonnel],
+  ]) {
+    const trouvees = fiches.filter((c) => desigent(identifiants(c)))
+    if (trouvees.length === 1) return { client: trouvees[0] }
+    if (trouvees.length > 1) return { ambigus: trouvees }
+  }
+  return null
+}
+
 /** La même recherche, quand seule la liste complète intéresse (filtre de tableau). */
 export const filtrerClients = (clients, terme) => (
   plierTexte(terme) ? chercherClients(clients, terme).resultats : clients

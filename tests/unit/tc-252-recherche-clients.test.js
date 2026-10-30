@@ -5,6 +5,7 @@ import {
   plierTexte,
   chiffresSeuls,
   identifiantsDe,
+  reconnaitreClient,
 } from '../../src/utils/rechercheClients.js'
 
 /**
@@ -216,5 +217,44 @@ describe('TC-252 — le filtre de la liste des clients', () => {
     expect(filtrerClients(TOUS, 'OUEDRAOGO SALIF').map((c) => c.id)).toEqual(['c-1'])
     expect(filtrerClients(TOUS, '70 11 22 33').map((c) => c.id)).toEqual(['c-1'])
     expect(filtrerClients(TOUS, '7654321').map((c) => c.id)).toEqual(['c-4'])
+  })
+})
+
+/**
+ * Un identifiant tapé EN ENTIER, sans choisir dans la liste, désigne-t-il une
+ * fiche ? Avant, non : l'opération partait sur un « Client Non enregistré »,
+ * code gardé mais lien à la fiche perdu. La règle est celle de la boutique :
+ * le code d'abord, le numéro seulement à défaut — un code ou un numéro agent ne
+ * désigne qu'un commerce, un téléphone peut être partagé.
+ */
+describe('TC-252 — reconnaître la fiche d’un identifiant tapé en entier', () => {
+  const A = { id: 'a', nom: 'BANABA', prenom: 'Guafarou', codeAgent: '1234567', orange: '45441020', numeroPersonnel: '70112233' }
+  const B = { id: 'b', nom: 'ZIDA', prenom: 'Kassoum', codeAgent: '7654321', numeroPersonnel: '76000000' }
+  const C = { id: 'c', nom: 'KINDA', prenom: 'Adjara', codeAgent: '1111111', numeroPersonnel: '76000000' }
+  const D = { id: 'd', nom: 'SAWADOGO', prenom: 'Ali', codeAgent: '2222222', numeroPersonnel: '45441020' }
+  const FICHES = [A, B, C, D]
+
+  it('[RC-01] un code agent exact désigne sa fiche', () => {
+    expect(reconnaitreClient(FICHES, '7654321')).toEqual({ client: B })
+  })
+
+  it('[RC-02] un téléphone porté par une seule fiche la désigne', () => {
+    expect(reconnaitreClient(FICHES, '70112233')).toEqual({ client: A })
+  })
+
+  it('[RC-03] un téléphone partagé ne désigne personne : il faut choisir', () => {
+    expect(reconnaitreClient(FICHES, '76000000')).toEqual({ ambigus: [B, C] })
+  })
+
+  it('[RC-04] le code d’abord : un compte agent l’emporte sur le téléphone d’une autre fiche', () => {
+    expect(reconnaitreClient(FICHES, '45441020')).toEqual({ client: A })
+  })
+
+  it('[RC-05] la mise en forme du numéro ne compte pas', () => {
+    expect(reconnaitreClient(FICHES, '70 11 22 33')).toEqual({ client: A })
+  })
+
+  it.each(['BANABA', '4544', '', '1234567a'])('[RC-06] « %s » ne désigne aucune fiche', (terme) => {
+    expect(reconnaitreClient(FICHES, terme)).toBeNull()
   })
 })

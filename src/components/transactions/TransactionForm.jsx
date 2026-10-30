@@ -11,6 +11,7 @@ import { NETWORK_OPTIONS, TRANSACTION_TYPES, NETWORK_CODES, MESSAGES } from '../
 import { validateTransactionForm, validateTransactionAction } from '../../utils/helpers.js'
 import logger from '../../utils/logger.js'
 import { parseFcfaAmount } from '../../utils/fcfaAmount.js'
+import { reconnaitreClient } from '../../utils/rechercheClients.js'
 
 const normalizeLabel = (value) => String(value || '')
   .trim()
@@ -92,10 +93,34 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel }) {
     return client[networkKey] && client[networkKey].trim()
   }
 
+  // ⚠ UN IDENTIFIANT TAPÉ EN ENTIER DÉSIGNE SA FICHE, même sans clic dans la
+  //   liste. Avant, il partait sur un « Client Non enregistré » : code gardé,
+  //   lien à la fiche perdu. Le code d'abord, le téléphone à défaut ; un
+  //   téléphone partagé par deux fiches ne désigne personne, et il faut choisir.
+  const reconnaissance = useMemo(
+    () => (selectedClient ? null : reconnaitreClient(clients, manualAgentCode)),
+    [clients, selectedClient, manualAgentCode],
+  )
+  const clientDesigne = selectedClient || reconnaissance?.client || null
+
   // Validation complète du formulaire et des boutons d'action
   const formValidation = useMemo(() => {
     const manualCode = manualAgentCode.trim()
-    const transactionClient = selectedClient || (manualCode ? {
+    if (!clientDesigne && reconnaissance?.ambigus) {
+      const raison = `Plusieurs clients portent ce numéro (${reconnaissance.ambigus.length}) : choisissez le bon dans la liste.`
+      return {
+        isFormValid: false,
+        stockValidation: { isValid: true, message: '' },
+        networkValidation: { isValid: false, message: raison },
+        actionStates: {
+          canMarkAsNonTermine: false,
+          canValidate: false,
+          nonTermineeReason: raison,
+          validateReason: raison,
+        },
+      }
+    }
+    const transactionClient = clientDesigne || (manualCode ? {
       id: `manual-${network}-${manualCode}`,
       nom: 'Client',
       prenom: 'Non enregistré',
@@ -173,7 +198,7 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel }) {
         validateReason: adaptReason(directValidation.reason || validateValidation.reason || '')
       }
     }
-  }, [selectedClient, manualAgentCode, amount, transactionType, network, validateAmount, getLiquidite])
+  }, [clientDesigne, reconnaissance, manualAgentCode, amount, transactionType, network, validateAmount, getLiquidite])
 
   const handleSubmit = useCallback(async (statut) => {
     const isDirectValidation = normalizeLabel(statut) === 'validee'
@@ -193,7 +218,7 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel }) {
 
     // Récupérer le code spécifique du client pour le réseau sélectionné
     const manualCode = manualAgentCode.trim()
-    const transactionClient = selectedClient || (manualCode ? {
+    const transactionClient = clientDesigne || (manualCode ? {
       id: `manual-${network}-${manualCode}`,
       nom: 'Client',
       prenom: 'Non enregistré',
@@ -271,7 +296,7 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel }) {
     formValidation.actionStates.validateReason,
     formValidation.actionStates.nonTermineeReason,
     isSubmitting,
-    selectedClient,
+    clientDesigne,
     manualAgentCode,
     network,
     amount,
@@ -381,7 +406,7 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel }) {
         </div>
 
         {/* Affichage des informations du client sélectionné */}
-        <ClientInfoDisplay client={selectedClient || (manualAgentCode.trim() ? {
+        <ClientInfoDisplay client={clientDesigne || (manualAgentCode.trim() && !reconnaissance?.ambigus ? {
           nom: 'Client',
           prenom: 'Non enregistré',
           orange: manualAgentCode.trim(),

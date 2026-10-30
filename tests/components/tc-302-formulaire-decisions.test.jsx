@@ -103,20 +103,34 @@ describe('TC-302 — l’opération exacte qu’il envoie', () => {
     })
   })
 
-  // ⚠ COMPORTEMENT ACTUEL, FIGÉ TEL QUEL — pas une règle voulue. Taper le code
-  //   complet d'un client existant SANS le choisir dans la liste enregistre
-  //   l'opération sur un client « Non enregistré » : le code est gardé, le lien
-  //   à la fiche est perdu. Constat de l'audit du 30 octobre 2026, à trancher
-  //   à part ; ce test dira si une extraction le change par accident.
-  it('[TD-03b] code complet tapé sans choisir dans la liste : client « Non enregistré »', async () => {
+  // Avant le 30 octobre 2026, ce geste enregistrait l'opération sur un client
+  // « Non enregistré » : code gardé, lien à la fiche perdu. Corrigé à la demande
+  // du responsable — un identifiant tapé en entier désigne sa fiche.
+  it('[TD-03b] code complet tapé sans choisir dans la liste : la fiche est reconnue', async () => {
     render(<TransactionForm clients={[CLIENT]} />)
     saisir({ code: '45441020', montant: '5000', type: 'Dépôt' })
 
-    const envoye = await confirmer('Non Terminées')
+    expect(await confirmer('Non Terminées')).toEqual({
+      client: CLIENT,
+      clientId: 'c-1',
+      type: 'Dépôt',
+      reseau: 'Orange',
+      code: '45441020',
+      montant: 5000,
+      statut: 'Non Terminées',
+    })
+  })
 
-    expect(envoye.clientId).toBe('manual-Orange-45441020')
-    expect(envoye.code).toBe('45441020')
-    expect(envoye.client).toMatchObject({ nom: 'Client', prenom: 'Non enregistré', isManual: true })
+  it('[TD-05] un téléphone partagé par deux fiches : rien ne part, il faut choisir', () => {
+    const X = { id: 'x', nom: 'ZIDA', prenom: 'Kassoum', orange: '11111111', numeroPersonnel: '76000000' }
+    const Y = { id: 'y', nom: 'KINDA', prenom: 'Adjara', orange: '22222222', numeroPersonnel: '76000000' }
+    render(<TransactionForm clients={[X, Y]} />)
+    saisir({ code: '76000000', montant: '5000', type: 'Dépôt' })
+
+    const valider = screen.getByRole('button', { name: 'Valider' })
+    expect(valider).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Non Terminées' })).toBeDisabled()
+    expect(valider).toHaveAttribute('title', expect.stringContaining('choisissez'))
   })
 
   it('[TD-04] un retrait validé sur un code sans fiche : le client « Non enregistré »', async () => {
