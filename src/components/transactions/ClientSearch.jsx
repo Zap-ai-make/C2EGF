@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
+import { Plus } from 'lucide-react'
 import { libelleAgent } from '../../utils/agentFields.js'
 import { chercherClients } from '../../utils/rechercheClients.js'
 
@@ -8,10 +9,17 @@ import { chercherClients } from '../../utils/rechercheClients.js'
  */
 const RESULTATS_AFFICHES = 10
 
-function ClientSearch({ clients, onClientSelect, selectedClient, onManualCodeChange, resetToken = 0 }) {
+function ClientSearch({ clients, onClientSelect, selectedClient, onManualCodeChange, onEnregistrerNouveau = null, resetToken = 0 }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+
+  // Un client choisi DEPUIS L'EXTÉRIEUR (la fiche qu'on vient de créer) s'affiche
+  // comme un client choisi dans la liste : son nom dans le champ, pas le code
+  // qui avait été tapé.
+  useEffect(() => {
+    if (selectedClient) setSearchTerm(`${selectedClient.nom ?? ''} ${selectedClient.prenom ?? ''}`.trim())
+  }, [selectedClient])
 
   // Debouncing du terme de recherche
   useEffect(() => {
@@ -103,6 +111,24 @@ function ClientSearch({ clients, onClientSelect, selectedClient, onManualCodeCha
 
       {isDropdownOpen && debouncedSearchTerm.trim() && filteredClients.length === 0 && (
         <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg">
+          {/* Enregistrer la fiche d'abord : elle sert à toutes les opérations
+              suivantes, là où « sans client » ne garde qu'un code. Le geste se
+              fait au clic ET au clavier ; `mouseDown` ne sert qu'à garder le
+              focus dans le champ pendant que le menu reste ouvert. */}
+          {onEnregistrerNouveau && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setIsDropdownOpen(false)
+                onEnregistrerNouveau(debouncedSearchTerm.trim())
+              }}
+              className="flex w-full items-center gap-2 border-b border-gray-200 px-3 py-3 text-left text-sm font-semibold text-brand-600 hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+            >
+              <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
+              Enregistrer ce client
+            </button>
+          )}
           <button
             type="button"
             onMouseDown={(e) => {

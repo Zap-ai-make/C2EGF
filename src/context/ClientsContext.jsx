@@ -120,14 +120,15 @@ export function ClientsProvider({ children }) {
   const addClient = async (newClient) => {
     try {
       setError(null)
-      await firestoreService.addClient({
+      // La liste se met à jour par onSnapshot ; la fiche RENDUE sert à qui doit
+      // la reprendre tout de suite (la transaction qui vient de la créer).
+      return await firestoreService.addClient({
         ...newClient,
         registeredBy: user?.uid,
         registeredByEmail: user?.email,
         registeredStoreId: userProfile?.storeId,
         registeredStoreName: activeStore?.name || userProfile?.storeName
       })
-      // La mise à jour de l'état se fera automatiquement via onSnapshot
     } catch (error) {
       console.error('Client creation error:', error)
       setError(error.message)

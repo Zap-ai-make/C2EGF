@@ -12,6 +12,8 @@ import { validateTransactionForm, validateTransactionAction } from '../../utils/
 import logger from '../../utils/logger.js'
 import { parseFcfaAmount } from '../../utils/fcfaAmount.js'
 import { reconnaitreClient } from '../../utils/rechercheClients.js'
+import Dialog from '../ui/Dialog'
+import ClientForm from '../ClientForm'
 
 const normalizeLabel = (value) => String(value || '')
   .trim()
@@ -19,7 +21,7 @@ const normalizeLabel = (value) => String(value || '')
   .replace(/[\u0300-\u036f]/g, '')
   .toLowerCase()
 
-function TransactionForm({ clients, embedded = false, onComplete, onCancel }) {
+function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAddClient = null }) {
   const { toasts, showToast, removeToast } = useToast()
   const { addTransaction, editingTransaction, clearEditTransaction, updateTransaction, saveReopenedCorrection } = useTransactions()
   const { validateAmount, getStock, getLiquidite, getFormattedStock } = useSimpleNetworkData()
@@ -31,6 +33,8 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel }) {
   const [transactionType, setTransactionType] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [pendingConfirmation, setPendingConfirmation] = useState(null)
+  // Le code tapé pour lequel on enregistre une fiche, ou null : la fenêtre est fermée.
+  const [clientACreer, setClientACreer] = useState(null)
 
 
   // Remplir le formulaire si une transaction est en cours d'édition
@@ -361,6 +365,37 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel }) {
     setPendingConfirmation(null)
   }, [])
 
+  /**
+   * Enregistrer la fiche du client SANS quitter la transaction.
+   *
+   * La fiche part par le même chemin que l'onglet Clients (`onAddClient`, donc
+   * le même contrôle de doublon côté serveur), puis devient le client de la
+   * transaction. Un refus laisse la fenêtre ouverte : ClientForm affiche la
+   * raison, et rien n'est choisi à la place de la caissière.
+   */
+  const enregistrerNouveauClient = useCallback(async (donnees) => {
+    const cree = await onAddClient(donnees)
+    setClientACreer(null)
+    if (cree?.id) {
+      setSelectedClient(cree)
+      setManualAgentCode('')
+      showToast(`Client enregistré : ${[cree.prenom, cree.nom].filter(Boolean).join(' ')}`, 'success')
+    }
+  }, [onAddClient, showToast])
+
+  /** Le contrôle de doublon a trouvé la fiche : c'est elle, la cliente. */
+  const choisirFicheExistante = useCallback((fiche) => {
+    setClientACreer(null)
+    setSelectedClient(fiche)
+    setManualAgentCode('')
+  }, [])
+
+  /** Le code tapé pré-remplit le bon champ : sept chiffres → code, huit → numéro. */
+  const valeursDeDepart = useMemo(() => {
+    if (clientACreer === null) return null
+    return /\d/.test(clientACreer) ? repartirValeurAgent(clientACreer) : { nom: clientACreer }
+  }, [clientACreer])
+
   const handleCancel = useCallback(() => {
     clearEditTransaction()
     // Reset form
@@ -401,6 +436,7 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel }) {
             onClientSelect={setSelectedClient}
             selectedClient={selectedClient}
             onManualCodeChange={setManualAgentCode}
+            onEnregistrerNouveau={onAddClient ? setClientACreer : null}
             resetToken={clientSearchResetToken}
           />
         </div>
@@ -701,6 +737,27 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel }) {
             </div>
           </div>
         </div>
+      )}
+
+      {onAddClient && (
+        <Dialog
+          open={clientACreer !== null}
+          onClose={() => setClientACreer(null)}
+          title="Enregistrer un client"
+          description="Les champs marqués d'une étoile sont obligatoires"
+          largeur="max-w-6xl"
+          spacious
+          testId="nouveau-client-dialog"
+        >
+          {clientACreer !== null && (
+            <ClientForm
+              embedded
+              valeursDeDepart={valeursDeDepart}
+              onSubmit={enregistrerNouveauClient}
+              onOuvrirFiche={choisirFicheExistante}
+            />
+          )}
+        </Dialog>
       )}
 
       {/* Toasts */}

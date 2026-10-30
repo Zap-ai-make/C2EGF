@@ -26,10 +26,20 @@ const EMPTY_CLIENT_FORM = {
 
 const LEGACY_CLIENT_FORM_DRAFT_KEY = getStorageKey('client_form_draft')
 
-function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client', embedded = false, onOuvrirFiche = null }) {
+/**
+ * @param {object} [valeursDeDepart] — champs pré-remplis d'une CRÉATION (le code
+ *   tapé dans la transaction). À ne pas confondre avec `initialData`, qui fait
+ *   passer le formulaire en modification d'une fiche existante.
+ */
+function ClientForm({ onSubmit, initialData = null, title = 'Ajouter un client', embedded = false, onOuvrirFiche = null, valeursDeDepart = null }) {
   const { toasts, showToast, removeToast } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [formData, setFormData] = useState(EMPTY_CLIENT_FORM)
+  const [formData, setFormData] = useState(() => {
+    const depart = Object.fromEntries(
+      Object.entries(valeursDeDepart ?? {}).filter(([cle, valeur]) => cle in EMPTY_CLIENT_FORM && typeof valeur === 'string'),
+    )
+    return { ...EMPTY_CLIENT_FORM, ...depart }
+  })
 
   // ⚠ LES CONTEXTES SONT LUS SANS LEUR HOOK, DÉLIBÉRÉMENT. `useClients()` lève
   //   quand le fournisseur manque — ce qui est juste pour un écran qui ne peut

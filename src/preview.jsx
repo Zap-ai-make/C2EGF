@@ -30,6 +30,9 @@ import ClientsTable from './components/ClientsTable.jsx'
 import HistoriqueTable from './components/historique/HistoriqueTable.jsx'
 import { ArchiveDealer } from './components/historique/HistoriqueArchives.jsx'
 import TransactionTable from './components/transactions/TransactionTable.jsx'
+import TransactionForm from './components/transactions/TransactionForm.jsx'
+import Dialog from './components/ui/Dialog.jsx'
+import { NetworkConfigProvider } from './context/NetworkConfigContext.jsx'
 import StoreAdminDealerRequests from './pages/store/StoreAdminDealerRequests.jsx'
 import AuthPage from './components/auth/AuthPage.jsx'
 import DealerLayout from './layouts/DealerLayout.jsx'
@@ -358,6 +361,51 @@ function SoldesDoublure() {
   )
 }
 
+/**
+ * La saisie de transaction dans sa fenêtre, comme à l'onglet Transactions.
+ * `?espace=saisie`. Sert à REGARDER le formulaire client ouvert par-dessus
+ * (bouton « + » d'un code inconnu), à 1 440 et 390 px : un empilement de deux
+ * fenêtres est le genre de chose que jsdom ne voit pas.
+ *
+ * Sans `currentUser`, NetworkConfigProvider lit les soldes en local et
+ * n'appelle pas Firestore : le banc reste hors réseau.
+ */
+function PosteSaisie() {
+  return (
+    <MemoryRouter>
+      <ThemeProvider>
+        <AuthContext.Provider value={{ activeStore: { id: 'store-ouaga', name: 'C2EGF OUAGA' }, userProfile: { role: 'store_admin', storeId: 'store-ouaga', name: 'Gérant OUAGA' } }}>
+          <NetworkConfigProvider>
+            <ClientsContext.Provider value={{ clients: agents, loading: false }}>
+              <TransactionsContext.Provider
+                value={{
+                  addTransaction: async () => {},
+                  updateTransaction: async () => {},
+                  saveReopenedCorrection: async () => {},
+                  clearEditTransaction: () => {},
+                  editingTransaction: null,
+                }}
+              >
+                <div className="min-h-screen bg-canvas">
+                  <Dialog open onClose={() => {}} title="Enregistrer une transaction" largeur="max-w-xl" spacious testId="transaction-dialog">
+                    <TransactionForm
+                      clients={agents}
+                      embedded
+                      onAddClient={async (donnees) => ({ id: 'banc-neuf', ...donnees, orange: donnees.codeAgent || donnees.numeroAgent })}
+                      onComplete={() => {}}
+                      onCancel={() => {}}
+                    />
+                  </Dialog>
+                </div>
+              </TransactionsContext.Provider>
+            </ClientsContext.Provider>
+          </NetworkConfigProvider>
+        </AuthContext.Provider>
+      </ThemeProvider>
+    </MemoryRouter>
+  )
+}
+
 // ── Rendu ───────────────────────────────────────────────────────────────────
 
 function Preview() {
@@ -595,6 +643,6 @@ const espace = new URLSearchParams(globalThis.location?.search ?? '').get('espac
 
 createRoot(document.getElementById('preview')).render(
   <StrictMode>
-    {espace === 'dealer' ? <PosteDealer /> : <Preview />}
+    {espace === 'dealer' ? <PosteDealer /> : espace === 'saisie' ? <PosteSaisie /> : <Preview />}
   </StrictMode>,
 )

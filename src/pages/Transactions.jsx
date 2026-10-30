@@ -54,7 +54,7 @@ const LIBELLES = {
 }
 
 function Transactions() {
-  const { clients } = useClients()
+  const { clients, addClient } = useClients()
   const { userProfile } = useAuth()
   const {
     pendingTransactions = [],
@@ -269,6 +269,7 @@ function Transactions() {
           <TransactionForm
             clients={clients}
             embedded
+            onAddClient={addClient}
             onComplete={fermerFormulaire}
             onCancel={fermerFormulaire}
           />
