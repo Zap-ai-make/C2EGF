@@ -6,7 +6,7 @@
  * vérifierait le simulacre). Tout ce qui DÉCIDE vit dans les modules purs.
  */
 
-import { getAI, getGenerativeModel, GoogleAIBackend, VertexAIBackend } from 'firebase/ai'
+import { getAI, getGenerativeModel, GoogleAIBackend, ThinkingLevel, VertexAIBackend } from 'firebase/ai'
 import app from '../../config/firebase.js'
 import { activerAppCheck } from '../../config/appCheck.js'
 import { construirePrompt } from './prompt.js'
@@ -29,7 +29,40 @@ const SANS_PREPARATION = () => ({ erreur: true, message: "Je ne peux pas prépar
  *   Voir docs/ia/LOT-APPCHECK.md §4.
  */
 const BACKEND = import.meta.env.VITE_AI_BACKEND === 'vertexAI' ? 'vertexAI' : 'googleAI'
-const MODELE = import.meta.env.VITE_AI_MODEL || 'gemini-2.5-flash'
+
+/**
+ * ⚠ LE MODÈLE A UNE DATE DE FIN, ET ELLE TOMBE SANS PRÉVENIR L'ÉCRAN.
+ *   `gemini-2.5-flash`, premier choix de ce lot, a été réservé aux projets qui
+ *   l'employaient déjà, puis arrêté sur Vertex le 20 octobre 2026 : un projet
+ *   neuf recevait un 404, affiché « pas encore activé ». `gemini-3.5-flash` est
+ *   « Stable », garanti au moins jusqu'au 19 mai 2027 sur les deux backends
+ *   (firebase.google.com/docs/ai-logic/models, lu le 30 octobre 2026). Les
+ *   Flash plus récents (3.6 à 3.8) sont « à disponibilité courte » sur Vertex.
+ *   Avant mai 2027 : relire cette page, et changer ici ou par VITE_AI_MODEL.
+ */
+export const MODELE_PAR_DEFAUT = 'gemini-3.5-flash'
+const MODELE = import.meta.env.VITE_AI_MODEL || MODELE_PAR_DEFAUT
+
+/**
+ * Les réglages de génération d'un modèle.
+ *
+ * Gemini 3 et suivants :
+ *   - température LAISSÉE PAR DÉFAUT. Google la déconseille sous 1.0 : le
+ *     modèle peut boucler, et une boucle d'outils se paie à chaque tour ;
+ *   - réflexion BASSE. Par défaut elle est « high » : lente et facturée, pour
+ *     des questions de comptoir qui n'en demandent pas tant.
+ * Gemini 2.x ne connaît pas les niveaux de réflexion (l'appel échouerait) : il
+ * garde la température basse qu'il avait.
+ *
+ * @param {string} nom
+ */
+export function reglagesDuModele(nom) {
+  // Large : il borne le pire cas, il ne taille pas dans le texte. Les jetons
+  // de réflexion se comptent dans ce plafond.
+  const plafond = { maxOutputTokens: 4096 }
+  if (/^gemini-[12]\./.test(String(nom))) return { ...plafond, temperature: 0.2 }
+  return { ...plafond, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } }
+}
 
 /** Sans plafond de tours, un modèle qui boucle sur un outil en erreur
  *  consomme des jetons jusqu'à épuisement — et la facture est réelle. */
@@ -60,12 +93,7 @@ function obtenirModele(instructionSysteme) {
     model: MODELE,
     systemInstruction: instructionSysteme,
     tools: [{ functionDeclarations: DECLARATIONS }],
-    generationConfig: {
-      // Large : il borne le pire cas, il ne taille pas dans le texte. Les
-      // jetons de réflexion se comptent dans ce plafond.
-      maxOutputTokens: 4096,
-      temperature: 0.2,
-    },
+    generationConfig: reglagesDuModele(MODELE),
   })
 
   modeleMemorise = { instruction: instructionSysteme, modele }
@@ -78,7 +106,15 @@ function obtenirModele(instructionSysteme) {
  */
 export function traduireErreur(cause) {
   console.error('[assistant] échec du modèle', cause)
-  const texte = `${cause?.message ?? ''} ${cause?.code ?? ''}`.toLowerCase()
+  // Le SDK (AIError) porte le statut HTTP réel : plus sûr que le texte.
+  const statut = Number(cause?.customErrorData?.status) || null
+  // ⚠ LES ADRESSES SONT RETIRÉES AVANT DE LIRE. Le SDK écrit « Error fetching
+  //   from https://firebasevertexai.googleapis.com/… » dans CHAQUE échec HTTP :
+  //   chercher « firebasevertexai » dans le message brut classait toutes les
+  //   pannes — quota, attestation, modèle retiré — en « pas encore activé ».
+  const texte = `${cause?.message ?? ''} ${cause?.code ?? ''}`
+    .replace(/https?:\/\/\S+/g, ' ')
+    .toLowerCase()
 
   // ⚠ L'ORDRE DE CES TESTS EST LE SUJET, et il a déjà coûté un faux diagnostic.
   //   Une API non activée répond 403, exactement comme une attestation refusée.
@@ -87,7 +123,8 @@ export function traduireErreur(cause) {
   //   était une API jamais allumée. On cherche donc les causes NOMMÉES d'abord,
   //   et les codes nus en dernier.
   if (
-    texte.includes('api-not-enabled') || // le signal le plus net du SDK
+    cause?.code === 'api-not-enabled' || // le signal le plus net du SDK
+    texte.includes('api-not-enabled') ||
     texte.includes('to be enabled in your firebase project') ||
     texte.includes('service_disabled') ||
     texte.includes('has not been used in project') ||
@@ -110,11 +147,17 @@ export function traduireErreur(cause) {
     // Deux refus portent le même 429 : celui-ci ne se vide jamais tout seul.
     return "Le crédit de l'assistant est épuisé. Prévenez le responsable."
   }
-  if (texte.includes('429') || texte.includes('quota') || texte.includes('resource_exhausted')) {
+  if (statut === 429 || texte.includes('429') || texte.includes('quota') || texte.includes('resource_exhausted')) {
     // Pas « limite atteinte » : à cette seconde, la file était pleine.
     return 'Le service est occupé en ce moment. Réessayez dans quelques secondes.'
   }
-  if (texte.includes('404') || texte.includes('not found')) {
+  // Un modèle retiré ou inconnu répond 404 en le NOMMANT (« models/… is not
+  // found », « Publisher Model … was not found »). Ce n'est pas une activation
+  // à faire : c'est un modèle à changer, et seul le responsable le peut.
+  if ((statut === 404 || texte.includes('404')) && texte.includes('models/')) {
+    return "Le modèle de l'assistant n'est plus proposé. Prévenez le responsable : il faut en choisir un autre."
+  }
+  if (statut === 404 || texte.includes('404') || texte.includes('not found')) {
     return "L'assistant n'est pas encore activé sur cette installation."
   }
   // Codes nus en DERNIER : ils ne désignent aucune cause à eux seuls.
