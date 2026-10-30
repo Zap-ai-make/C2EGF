@@ -111,6 +111,22 @@ au modèle de plus. Le micro se coupe en fin de phrase, au second appui, à
 l'envoi, à la fermeture du panneau. Navigateur sans reconnaissance (Firefox) :
 pas de bouton. Tests : TC-310, TC-309 (AC-09 à AC-11), TC-211.
 
+## Le volet (30 octobre 2026)
+
+À la demande du responsable, l'assistant s'ouvre en volet sur toute la
+hauteur, à droite : « Assistant » et la boutique servie en tête, puis
+« Nouvelle conversation », « Historique des conversations » et « Fermer ».
+Vide, il salue et propose quatre questions toutes faites. Les réponses
+s'écrivent lettre par lettre (d'un coup si « mouvement réduit » est demandé),
+et les titres, listes et gras du modèle sont mis en forme.
+
+**L'historique reste sur l'appareil** (`src/lib/ia/conversations.js`), rangé
+par personne et par boutique : vingt conversations au plus, avec leur mémoire
+pour que le modèle reprenne le fil. Il ne contient que ce que l'écran a montré
+à cette personne ; aucune carte en attente n'y est gardée, une opération ne se
+confirme qu'en direct. « Effacer l'historique » le vide. Tests : TC-312,
+TC-313.
+
 **Lot D (images, fichiers) : abandonné** le 30 octobre 2026, à la demande du
 responsable. Rien n'a été écrit ; la caméra reste fermée (`camera=()`).
 

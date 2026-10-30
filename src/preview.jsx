@@ -50,6 +50,8 @@ import Commerciaux from './components/dashboard/Commerciaux.jsx'
 import LastClientsTable from './components/dashboard/LastClientsTable.jsx'
 import { CarteAConfirmer } from './components/assistant/CarteAConfirmer.jsx'
 import { preparerOperation } from './lib/ia/preparations.js'
+import PanneauAssistant from './components/assistant/PanneauAssistant.jsx'
+import { cleDesConversations, chargerConversations, rangerConversation } from './lib/ia/conversations.js'
 
 // ── Données plausibles ──────────────────────────────────────────────────────
 
@@ -409,12 +411,15 @@ function PosteSaisie() {
 }
 
 /**
- * La carte à confirmer de l'assistant, dans le cadre du panneau.
- * `?espace=assistant&carte=transaction|reglement|annulation|retour|ravitaillement`.
+ * L'assistant au banc. `?espace=assistant`.
  *
- * Le modèle n'est pas appelé : la carte sort de `preparerOperation`, avec les
- * règles réelles, sur les agents du banc. Le cadre reprend les classes du
- * panneau (Assistant.jsx) — c'est la carte qu'on regarde, à 1 440 et 390 px.
+ * Sans `carte` : le VRAI volet (PanneauAssistant), ouvert, avec une
+ * conversation d'exemple rangée dans l'historique. Le modèle n'est appelé que
+ * si on envoie une question — les captures ne le font pas.
+ *
+ * Avec `carte=transaction|reglement|annulation|ravitaillement|retour` : une
+ * carte à confirmer seule, sortie de `preparerOperation` avec les règles
+ * réelles, à la largeur du volet.
  */
 const DEMANDES_DU_BANC = {
   transaction: ['preparer_transaction', { client: agents[0].orange, type: 'Dépôt', montant: 50000, statut: 'Non Terminées' }],
@@ -424,8 +429,7 @@ const DEMANDES_DU_BANC = {
   retour: ['preparer_retour', { expediteur: 'Patron', montant: 100000, reserve: 'Espèce' }],
 }
 
-function PosteAssistant() {
-  const quelle = new URLSearchParams(globalThis.location?.search ?? '').get('carte') ?? 'transaction'
+function CarteDuBanc({ quelle }) {
   const [nom, args] = DEMANDES_DU_BANC[quelle] ?? DEMANDES_DU_BANC.transaction
   const { carte, reponse } = preparerOperation(nom, args, {
     clients: agents,
@@ -442,30 +446,71 @@ function PosteAssistant() {
     liquidite: 400000,
     disponible: () => 400000,
   })
-
   return (
-    <div className="min-h-screen bg-canvas">
-      <section
-        aria-label="Assistant"
-        className="fixed bottom-0 right-0 z-[60] flex h-[min(34rem,85vh)] w-full flex-col rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:bottom-5 sm:right-5 sm:w-[24rem] sm:rounded-2xl"
-      >
-        <header className="flex shrink-0 items-center justify-between gap-2 rounded-t-2xl bg-brand-600 px-4 py-3 text-white">
-          <span className="font-semibold">Assistant</span>
-        </header>
-        <div className="flex-1 overflow-y-auto px-4 py-3 text-sm text-slate-800">
-          <div className="my-2 ml-auto max-w-[85%] rounded-2xl bg-brand-50 px-3 py-2">
-            <p className="my-1">Prépare l&apos;opération pour {agents[0].prenom} {agents[0].nom}</p>
-          </div>
-          <div className="my-2 max-w-[92%]">
-            <p className="my-1">Je l&apos;ai préparée : vérifiez puis appuyez sur « Confirmer ».</p>
-          </div>
-          {carte
-            ? <CarteAConfirmer carte={carte} onConfirmer={() => {}} onEcarter={() => {}} />
-            : <p className="my-1 text-danger">{reponse.message}</p>}
-        </div>
+    <div className="min-h-screen bg-canvas p-6">
+      <section aria-label="Assistant" className="mx-auto max-w-[36rem] bg-white p-5 text-[15px]">
+        {carte
+          ? <CarteAConfirmer carte={carte} onConfirmer={() => {}} onEcarter={() => {}} />
+          : <p className="text-danger">{reponse.message}</p>}
       </section>
     </div>
   )
+}
+
+const CONVERSATION_DU_BANC = [
+  { role: 'moi', texte: 'Fais le point de la journée' },
+  {
+    role: 'ia',
+    texte:
+      'Voici le point du **30/10/2026**, de 7 h à maintenant.\n\n' +
+      '### Opérations terminées\n' +
+      '- **Dépôts :** 200 000 FCFA\n' +
+      '- **Retraits :** 200 000 FCFA\n\n' +
+      '### Ce qui reste dû\n' +
+      `1. ${agents[0].prenom} ${agents[0].nom} — 75 000 FCFA\n` +
+      `2. ${agents[1].prenom} ${agents[1].nom} — 20 000 FCFA\n\n` +
+      'Voulez-vous que je prépare un encaissement ?',
+  },
+  { role: 'moi', texte: `Oui, encaisse ${agents[0].prenom} en Orange Money` },
+  { role: 'ia', texte: 'Je l’ai préparé : vérifiez la carte, puis appuyez sur « Confirmer ».' },
+  { role: 'ia', texte: `Règlement enregistré : 75 000 FCFA en Orange Money pour ${agents[0].prenom} ${agents[0].nom}.`, succes: true },
+]
+
+/** Rangée une seule fois, une heure plus tôt : l'historique a de quoi montrer. */
+function rangerLaConversationDuBanc() {
+  const cle = cleDesConversations(undefined, 'store-ouaga')
+  if (chargerConversations(cle).length === 0) {
+    rangerConversation(cle, { id: 'banc-conversation', tours: CONVERSATION_DU_BANC }, Date.now() - 3_600_000)
+  }
+}
+
+function VoletDuBanc() {
+  rangerLaConversationDuBanc()
+
+  return (
+    <MemoryRouter>
+      <ThemeProvider>
+        <AuthContext.Provider value={{ activeStore: { id: 'store-ouaga', name: 'C2EGF OUAGA' }, userProfile: { role: 'store_admin', storeId: 'store-ouaga', name: 'Awa' } }}>
+          <NetworkConfigProvider>
+            <ClientsContext.Provider value={{ clients: agents, loading: false }}>
+              <TransactionsContext.Provider value={{ pendingTransactions: [], completedTransactions: [] }}>
+                <div className="min-h-screen bg-canvas p-8">
+                  <PageHeader title="Transactions" />
+                  <p className="text-ink-muted">L&apos;écran de la boutique, derrière le volet.</p>
+                </div>
+                <PanneauAssistant ouvert onFermer={() => {}} />
+              </TransactionsContext.Provider>
+            </ClientsContext.Provider>
+          </NetworkConfigProvider>
+        </AuthContext.Provider>
+      </ThemeProvider>
+    </MemoryRouter>
+  )
+}
+
+function PosteAssistant() {
+  const quelle = new URLSearchParams(globalThis.location?.search ?? '').get('carte')
+  return quelle ? <CarteDuBanc quelle={quelle} /> : <VoletDuBanc />
 }
 
 // ── Rendu ───────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
@@ -75,6 +75,17 @@ import { poserQuestion } from '../../src/lib/ia/assistant.js'
 
 // jsdom ne fait pas défiler : le panneau descend sur le dernier message.
 Element.prototype.scrollIntoView = vi.fn()
+
+// Ce fichier regarde les CARTES, pas l'écriture lettre par lettre (TC-312) :
+// en « mouvement réduit », la réponse s'affiche d'un coup. Sinon, sous la
+// charge de la suite complète, l'écriture ralentit et dépasse les attentes.
+const matchMediaInitial = window.matchMedia
+beforeAll(() => {
+  window.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} })
+})
+afterAll(() => {
+  window.matchMedia = matchMediaInitial
+})
 
 // Le panneau arrive par `lazy`. Son premier import compile tout le graphe du
 // modèle ; sous la charge de la suite complète, il dépassait l'attente du
