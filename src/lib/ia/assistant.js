@@ -12,9 +12,13 @@ import { activerAppCheck } from '../../config/appCheck.js'
 import { construirePrompt } from './prompt.js'
 import { DECLARATIONS, OUTILS_DE_GESTE, executerOutil } from './outils.js'
 import { OUTILS_DE_PREPARATION } from './preparations.js'
+import { OUTILS_DU_PANNEAU } from './caisse.js'
 
 /** Sans composant pour présenter la carte, rien ne se prépare. */
 const SANS_PREPARATION = () => ({ erreur: true, message: "Je ne peux pas préparer d'opération ici." })
+
+/** Sans panneau, pas de soldes à lire : ils vivent dans l'écran, pas en base. */
+const SANS_LECTURE = () => ({ erreur: true, message: "Je ne vois pas la caisse d'ici." })
 
 /**
  * ⚠ CHOIX DU BACKEND — défaut AGENT PLATFORM (l'ancien Vertex AI).
@@ -196,6 +200,8 @@ export function traduireErreur(cause) {
  *   opération à préparer : le composant pose la carte et rend la réponse due
  *   au modèle (« présentée », « à préciser » ou un refus). Rien n'est
  *   enregistré à ce stade.
+ * @param {(demande: object) => object} options.surLecture
+ *   lecture servie par le composant (la caisse) : les chiffres de l'écran.
  * @returns {Promise<{ok: true, texte: string, historique: Array}
  *                 | {ok: false, message: string}>}
  */
@@ -207,6 +213,7 @@ export async function poserQuestion({
   surOutil = () => {},
   surGeste = () => {},
   surPreparation = SANS_PREPARATION,
+  surLecture = SANS_LECTURE,
 }) {
   const instruction = construirePrompt({ ...contexte, date: new Date() })
 
@@ -263,6 +270,23 @@ export async function poserQuestion({
           })
           continue
         }
+        // La caisse se lit dans l'écran, là où la barre des soldes la lit.
+        if (OUTILS_DU_PANNEAU.includes(appel.name)) {
+          surOutil(nommerLecture(appel.name))
+          let donnees
+          try {
+            donnees = surLecture({ nom: appel.name, arguments: appel.args ?? {} })
+          } catch (cause) {
+            console.error('[assistant] lecture du panneau impossible', cause)
+          }
+          resultats.push({
+            functionResponse: {
+              name: appel.name,
+              response: donnees ?? { erreur: true, message: "Je n'ai pas pu lire la caisse." },
+            },
+          })
+          continue
+        }
         surOutil(nommerLecture(appel.name, appel.args))
         lectures.push(
           executerOutil(appel.name, appel.args ?? {}).then((donnees) => ({
@@ -296,6 +320,8 @@ export function nommerLecture(nomOutil, args = {}) {
       return "je regarde le mode d'emploi"
     case 'chercher_client':
       return 'je cherche le client'
+    case 'etat_de_la_caisse':
+      return 'je regarde la caisse'
     case 'creances_en_cours':
       return 'je regarde les créances'
     case 'operations_recentes':

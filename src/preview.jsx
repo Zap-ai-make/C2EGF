@@ -10,7 +10,7 @@
  * ne l'importe.
  */
 
-import { StrictMode } from 'react'
+import { StrictMode, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 
@@ -486,6 +486,8 @@ function rangerLaConversationDuBanc() {
 
 function VoletDuBanc() {
   rangerLaConversationDuBanc()
+  // Un vrai état ouvert/fermé : la sortie du volet se regarde ici.
+  const [ouvert, setOuvert] = useState(true)
 
   return (
     <MemoryRouter>
@@ -497,8 +499,13 @@ function VoletDuBanc() {
                 <div className="min-h-screen bg-canvas p-8">
                   <PageHeader title="Transactions" />
                   <p className="text-ink-muted">L&apos;écran de la boutique, derrière le volet.</p>
+                  {!ouvert && (
+                    <button type="button" onClick={() => setOuvert(true)} className="mt-4 rounded-md bg-brand-600 px-4 py-2 text-white">
+                      Rouvrir le volet
+                    </button>
+                  )}
                 </div>
-                <PanneauAssistant ouvert onFermer={() => {}} />
+                <PanneauAssistant ouvert={ouvert} onFermer={() => setOuvert(false)} />
               </TransactionsContext.Provider>
             </ClientsContext.Provider>
           </NetworkConfigProvider>

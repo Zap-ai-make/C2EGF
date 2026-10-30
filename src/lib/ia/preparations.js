@@ -17,6 +17,14 @@
  * PUR : l'état de la boutique arrive en paramètre (`etat`), lu par le composant
  * dans les mêmes contextes que les écrans. Aucun React, aucun Firebase.
  *
+ * ⚠ CE QUE LE SERVEUR REFUSERAIT, L'ASSISTANT LE REFUSE AVANT. Les écrans
+ *   laissent certains refus au serveur (la réserve d'un règlement, l'annulation
+ *   d'une ligne entamée) ; une carte, elle, se lit comme une promesse. Une
+ *   carte qui échoue après « Confirmer » est le pire des deux mondes : la
+ *   caissière a vérifié pour rien, et ne sait pas pourquoi. Ces refus-là se
+ *   jugent donc ici, sur les soldes de l'écran (`etat.soldes`), avec les
+ *   fonctions du serveur (reglement.js), et disent ce qui reste possible.
+ *
  * Trois réponses, jamais confondues :
  *   - `presentee`  : une carte est affichée, en attente de confirmation ;
  *   - `a_preciser` : il manque un choix (deux clients, deux opérations…) ;
@@ -40,7 +48,15 @@ import {
   preparerTransaction,
   reseauxDisponibles,
 } from '../../utils/preparationTransaction.js'
-import { actionDeReglement, montantProposeDuReglement, verifierMontantReglement } from '../../utils/reglement.js'
+import {
+  actionDeReglement,
+  MONTANT_MINIMUM_REGLEMENT,
+  montantProposeDuReglement,
+  reserveDuMoyen,
+  verifierAnnulation,
+  verifierMontantReglement,
+  verifierReserveDuReglement,
+} from '../../utils/reglement.js'
 import { libelleVase, preparerRavitaillement, preparerRetour } from '../../utils/ravitaillement.js'
 
 const CHOIX_MAX = 5
@@ -51,6 +67,13 @@ const RESERVES = Object.freeze(['Stock', 'Espèce'])
 const GESTE_LISIBLE = Object.freeze({
   encaisser: 'Encaisser',
   payerPar: 'Payer par',
+  rembourser: 'Rembourser',
+})
+
+/** Le geste dans une phrase : on « paie ce retrait », pas « payer par ce retrait ». */
+const VERBE_DU_GESTE = Object.freeze({
+  encaisser: 'Encaisser',
+  payerPar: 'Payer',
   rembourser: 'Rembourser',
 })
 
@@ -436,13 +459,23 @@ function preparerTransactionClient({ client: recherche, type, montant, statut } 
   })
   const raisonDuBouton = direct ? decision.actionStates.validateReason : decision.actionStates.nonTermineeReason
   if (!decision.isFormValid) {
+    // Un dépôt envoie du stock : sans stock, rien ne part, validé ou non.
+    const sansStock = decision.networkValidation.isValid && !decision.stockValidation.isValid
     return refuser(
-      decision.stockValidation.message || decision.networkValidation.message || raisonDuBouton ||
-        'Le montant doit être un entier strictement positif en FCFA',
+      sansStock
+        ? `${decision.stockValidation.message}. Le dépôt envoie ce stock au client : il faut d'abord en recevoir, par un ravitaillement.`
+        : decision.stockValidation.message || decision.networkValidation.message || raisonDuBouton ||
+          'Le montant doit être un entier strictement positif en FCFA',
     )
   }
   if (direct ? !decision.actionStates.canValidate : !decision.actionStates.canMarkAsNonTermine) {
-    return refuser(raisonDuBouton)
+    // Un retrait que la caisse ne peut pas payer tout de suite peut attendre.
+    const peutAttendre = direct && normaliserLibelle(nature) === 'retrait' && decision.actionStates.canMarkAsNonTermine
+    return refuser(
+      peutAttendre
+        ? `${raisonDuBouton}. Le retrait peut être enregistré « Non Terminées », puis payé quand la caisse le permettra.`
+        : raisonDuBouton,
+    )
   }
 
   const preparation = preparerTransaction({ client: fiche, reseau, montant: saisie, type: nature, statut: statutVoulu })
@@ -486,6 +519,11 @@ function preparerReglement({ client, type, moyen, montant, code_agent: codeAgent
   if (!verification.ok) return refuser(verification.raison)
   const valeur = verification.valeur
 
+  if (etat.soldes) {
+    const reserve = verifierReserveDuReglement({ transaction: ligne, action, moyen: moyenRetenu, montant: valeur, soldes: etat.soldes })
+    if (!reserve.ok) return refuser(expliquerLeManque({ ligne, action, moyen: moyenRetenu, montant: valeur, soldes: etat.soldes, raison: reserve.raison }))
+  }
+
   const code = String(codeAgent ?? '').trim() || undefined
   const reste = action === 'rembourser' ? null : montantProposeDuReglement(ligne) - valeur
   const titre = `${GESTE_LISIBLE[action]} — ${moyenRetenu}`
@@ -505,10 +543,37 @@ function preparerReglement({ client, type, moyen, montant, code_agent: codeAgent
   })
 }
 
+/**
+ * Le refus d'un règlement que la réserve ne couvre pas, et ce qui reste
+ * possible : un autre moyen qui passe, une partie de ce qu'il y a, ou attendre.
+ * Le modèle répète ce message ; c'est ce qui lui permet de proposer la suite
+ * au lieu d'un simple « non ».
+ */
+function expliquerLeManque({ ligne, action, moyen, montant, soldes, raison }) {
+  const nature = String(ligne.type).toLowerCase()
+  const phrases = [`${VERBE_DU_GESTE[action]} ce ${nature} en ${moyen} est impossible. ${raison}`]
+
+  const autres = PAYMENT_METHODS
+    .filter((m) => m !== moyen)
+    .filter((m) => verifierReserveDuReglement({ transaction: ligne, action, moyen: m, montant, soldes }).ok)
+    .map((m) => `${m} (${reserveDuMoyen(m, soldes).nom} : ${formatCurrency(reserveDuMoyen(m, soldes).disponible)})`)
+  if (autres.length) phrases.push(`C'est possible par ${autres.join(' ou par ')}.`)
+
+  const disponible = reserveDuMoyen(moyen, soldes).disponible
+  if (disponible >= MONTANT_MINIMUM_REGLEMENT) {
+    phrases.push(`Un règlement partiel de ${formatCurrency(disponible)} au plus est possible en ${moyen}.`)
+  }
+  phrases.push(`Sinon, le ${nature} reste dans les non terminées jusqu'à ce que la caisse le permette.`)
+  return phrases.join(' ')
+}
+
 function preparerAnnulation({ client, type, operation } = {}, etat) {
   const trouvee = trouverOperationEnAttente(etat.enAttente, { client, type, operation })
   if (!trouvee.ligne) return trouvee
   const ligne = trouvee.ligne
+
+  const annulable = verifierAnnulation({ transaction: ligne, soldes: etat.soldes })
+  if (!annulable.ok) return refuser(annulable.raison)
 
   return presenter({
     genre: 'annulation',
@@ -629,7 +694,10 @@ const PREPARATEURS = Object.freeze({
  * @param {string} nom      le nom de l'outil
  * @param {object} args     les arguments donnés par le modèle
  * @param {object} etat     ce que voient les écrans :
- *   { clients, enAttente, ravitaillements, expediteurs, validateAmount, liquidite, disponible(vase) }
+ *   { clients, enAttente, ravitaillements, expediteurs, validateAmount, liquidite, disponible(vase), soldes }
+ *   `soldes` : stock et liquidité PAR RÉSEAU, le document de soldes tel que
+ *   l'écran le tient. Absent, la réserve n'est pas jugée ici (le serveur reste
+ *   garant) — TC-309 vérifie que le panneau le fournit.
  * @returns {{carte?: object, reponse: object}}
  */
 export function preparerOperation(nom, args = {}, etat = {}) {

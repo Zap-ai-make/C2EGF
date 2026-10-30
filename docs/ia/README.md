@@ -97,6 +97,30 @@ enregistrement.
 **Hors du lot, volontairement** : « Vider les soldes », l'effacement de
 l'historique, « Modifier ». L'assistant les explique et propose l'écran.
 
+**Ce que le serveur refuserait, la carte ne le propose pas** (30 octobre 2026).
+Premier essai réel : « paie le retrait en cash », pas un franc en caisse, et la
+carte est venue quand même — le serveur a refusé après « Confirmer », sous un
+« la transaction a échoué » qui ne disait pas pourquoi. Les écrans laissent ces
+refus au serveur ; une carte, elle, se lit comme une promesse. Désormais :
+
+- la **réserve d'un règlement** se juge avant la carte, en rejouant la fonction
+  d'impact du serveur (`applySettlementImpact`, figée par TC-081) sur les
+  soldes de l'écran : payer un retrait en Cash demande des espèces (la somme
+  de tous les réseaux), en Orange Money du stock Orange ;
+- **annuler** une non terminée est refusé si elle a reçu une tranche (même
+  liste de champs que le serveur, comparée par TC-314) ou si c'est un retrait
+  dont le stock n'est plus là ;
+- un refus **dit l'issue** : un autre moyen qui passe, un règlement partiel, ou
+  attendre dans les non terminées ;
+- au clic sur « Confirmer », la demande est **rejugée** sur l'état de l'instant :
+  si la caisse a bougé entre-temps, la carte le dit et rien ne part.
+
+**Le modèle voit la caisse.** `etat_de_la_caisse` (`src/lib/ia/caisse.js`) lui
+donne le stock par réseau, les espèces, les non terminées et le total caisse —
+les chiffres exacts de la barre des soldes, servis par le panneau et non par la
+base. La consigne lui dit ce que chaque geste fait au stock et aux espèces.
+Tests : TC-308 (IP-33 à IP-39), TC-309 (AC-12 à AC-14), TC-314.
+
 Code : `src/lib/ia/preparations.js` (pur), `src/components/assistant/` (panneau et carte, chargés au premier clic).
 Tests : TC-305, TC-307, TC-308, TC-309. Banc visuel :
 `preview.html?espace=assistant&carte=transaction|reglement|annulation|ravitaillement|retour`.
@@ -118,7 +142,10 @@ hauteur, à droite : « Assistant » et la boutique servie en tête, puis
 « Nouvelle conversation », « Historique des conversations » et « Fermer ».
 Vide, il salue et propose quatre questions toutes faites. Les réponses
 s'écrivent lettre par lettre (d'un coup si « mouvement réduit » est demandé),
-et les titres, listes et gras du modèle sont mis en forme.
+et les titres, listes et gras du modèle sont mis en forme. Le volet **glisse**
+depuis la droite, à l'ouverture comme à la fermeture (300 ms) : fermé, il reste
+le temps de sortir, hors d'atteinte du clavier (`inert`), et le focus revient
+au bouton de l'assistant.
 
 **L'historique reste sur l'appareil** (`src/lib/ia/conversations.js`), rangé
 par personne et par boutique : vingt conversations au plus, avec leur mémoire

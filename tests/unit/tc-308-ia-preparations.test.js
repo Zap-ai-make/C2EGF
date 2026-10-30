@@ -8,6 +8,7 @@ import {
   trouverOperationEnAttente,
 } from '../../src/lib/ia/preparations.js'
 import { DECLARATIONS } from '../../src/lib/ia/outils.js'
+import { formatCurrency } from '../../src/utils/formatCurrency.js'
 
 /**
  * TC-308 — L'assistant PRÉPARE, la caissière confirme.
@@ -58,6 +59,7 @@ const etat = (over = {}) => ({
   validateAmount: () => ({ isValid: true, message: '' }),
   liquidite: 100000,
   disponible: (vase) => (vase === 'stock' ? 400000 : 150000),
+  soldes: { Orange: { stock: 400000, liquidite: 150000 } },
   ...over,
 })
 
@@ -144,7 +146,10 @@ describe('TC-308 — preparer_transaction', () => {
     }, etat({ validateAmount }))
 
     expect(carte).toBeUndefined()
-    expect(reponse).toEqual({ erreur: true, message: 'Stock insuffisant pour Orange. Disponible: 10 000 FCFA' })
+    // Le message de l'écran, puis ce qui le débloque : un dépôt envoie du stock.
+    expect(reponse.erreur).toBe(true)
+    expect(reponse.message).toMatch(/^Stock insuffisant pour Orange\. Disponible: 10 000 FCFA\. /)
+    expect(reponse.message).toMatch(/ravitaillement/)
     expect(validateAmount).toHaveBeenCalledWith('Orange', '50000', 'Dépôt')
   })
 
@@ -154,6 +159,8 @@ describe('TC-308 — preparer_transaction', () => {
     const enAttente = preparerOperation('preparer_transaction', { ...args, statut: 'Non Terminées' }, etat())
 
     expect(valide.reponse.message).toMatch(/^Liquidité insuffisante/)
+    // …et le refus dit l'issue, au lieu d'un simple non.
+    expect(valide.reponse.message).toMatch(/« Non Terminées », puis payé/)
     expect(enAttente.carte.titre).toBe('Retrait non terminé')
   })
 
@@ -241,12 +248,87 @@ describe('TC-308 — preparer_reglement', () => {
   })
 })
 
+// Premier essai réel (30 octobre 2026) : « paie le retrait de Salif en cash »,
+// pas un franc en caisse — et la carte est venue quand même. Le serveur a
+// refusé après « Confirmer ». La réserve se juge désormais AVANT la carte.
+describe('TC-308 — la réserve d’un règlement', () => {
+  const retrait = ligne({ type: 'Retrait', reseau: 'Orange' })
+
+  it('[IP-33] payer un retrait en Cash sans espèces : pas de carte, et l’issue est dite', () => {
+    const { carte, reponse } = preparerOperation('preparer_reglement', { client: 'Salif', moyen: 'Cash' }, etat({
+      enAttente: [retrait],
+      soldes: { Orange: { stock: 120000, liquidite: 0 } },
+    }))
+    expect(carte).toBeUndefined()
+    expect(reponse.erreur).toBe(true)
+    expect(reponse.message).toMatch(/^Payer ce retrait en Cash est impossible\. Pas assez d'espèces : il y a 0 FCFA, il en faut 50\s000 FCFA\./)
+    expect(reponse.message).toMatch(/possible par Orange Money \(stock Orange : 120\s000 FCFA\)/)
+    expect(reponse.message).not.toMatch(/partiel/)
+    expect(reponse.message).toMatch(/reste dans les non terminées/)
+  })
+
+  it('[IP-34] une caisse qui couvre une partie le propose', () => {
+    const { reponse } = preparerOperation('preparer_reglement', { client: 'Salif', moyen: 'Cash' }, etat({
+      enAttente: [retrait],
+      soldes: { Orange: { stock: 0, liquidite: 20000 } },
+    }))
+    expect(reponse.message).toMatch(/règlement partiel de 20\s000 FCFA au plus est possible en Cash/)
+    expect(reponse.message).not.toMatch(/possible par Orange Money/)
+  })
+
+  it('[IP-35] les espèces de TOUS les réseaux paient, comme au serveur', () => {
+    const { carte } = preparerOperation('preparer_reglement', { client: 'Salif', moyen: 'Cash' }, etat({
+      enAttente: [retrait],
+      soldes: { Orange: { stock: 0, liquidite: 30000 }, Moov: { stock: 0, liquidite: 20000 } },
+    }))
+    expect(carte.execution).toMatchObject({ action: 'payerPar', montant: 50000, moyen: 'Cash' })
+  })
+
+  it('[IP-36] en Orange Money, c’est le stock Orange qui paie', () => {
+    const { reponse } = preparerOperation('preparer_reglement', { client: 'Salif', moyen: 'Orange Money' }, etat({
+      enAttente: [retrait],
+      soldes: { Orange: { stock: 10000, liquidite: 900000 } },
+    }))
+    expect(reponse.message).toMatch(/Pas assez de stock Orange : il y a 10\s000 FCFA/)
+    expect(reponse.message).toMatch(/possible par Cash \(espèces : 900\s000 FCFA\)/)
+  })
+
+  it('[IP-37] encaisser un dépôt fait ENTRER l’argent : une caisse vide ne l’empêche pas', () => {
+    const { carte } = preparerOperation('preparer_reglement', { client: 'Salif', moyen: 'Cash' }, etat({
+      soldes: { Orange: { stock: 0, liquidite: 0 } },
+    }))
+    expect(carte.execution).toMatchObject({ action: 'encaisser', montant: 50000 })
+  })
+})
+
 describe('TC-308 — preparer_annulation', () => {
   it('[IP-22] la carte dit ce que fait l’annulation, et part à la corbeille', () => {
     const { carte } = preparerOperation('preparer_annulation', { client: '4544102' }, etat())
     expect(carte.danger).toBe(true)
     expect(carte.avertissement).toMatch(/corbeille/)
     expect(carte.execution).toEqual({ genre: 'corbeille', id: 'd-1' })
+  })
+
+  it('[IP-38] une ligne qui a reçu un règlement ne s’annule plus, et on dit comment la finir', () => {
+    const entamee = ligne({ type: 'Retrait', paidAmount: 20000, remainingAmount: 30000, settlementStatus: 'partial' })
+    const { carte, reponse } = preparerOperation('preparer_annulation', { client: 'Salif' }, etat({ enAttente: [entamee] }))
+    expect(carte).toBeUndefined()
+    expect(reponse.message).toMatch(/déjà reçu un règlement de 20\s000 FCFA : elle ne peut plus être annulée/)
+    expect(reponse.message).toMatch(/reste dû \(30\s000 FCFA\)/)
+  })
+
+  it('[IP-39] annuler un retrait reprend son stock : il doit y être encore', () => {
+    const retrait = ligne({ type: 'Retrait', reseau: 'Orange' })
+    const manque = preparerOperation('preparer_annulation', { client: 'Salif' }, etat({
+      enAttente: [retrait], soldes: { Orange: { stock: 5000, liquidite: 0 } },
+    }))
+    expect(manque.reponse.message).toBe(`L'annuler reprendrait ${formatCurrency(50000)} au stock Orange, qui n'en a que ${formatCurrency(5000)}.`)
+
+    // Un dépôt, lui, REND son stock : rien ne peut manquer.
+    const depot = preparerOperation('preparer_annulation', { client: 'Salif' }, etat({
+      enAttente: [ligne({ reseau: 'Orange' })], soldes: { Orange: { stock: 0, liquidite: 0 } },
+    }))
+    expect(depot.carte.execution).toEqual({ genre: 'corbeille', id: 'd-1' })
   })
 })
 

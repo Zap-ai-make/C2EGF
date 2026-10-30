@@ -42,6 +42,7 @@ import { FICHES, TITRES_GROUPES, groupesOrdonnes } from '../../content/aideFiche
 import { TYPES_DEALER } from '../../utils/helpers.js'
 import { CLES_DESTINATIONS } from './destinations.js'
 import { DECLARATIONS_DE_PREPARATION } from './preparations.js'
+import { DECLARATION_CAISSE } from './caisse.js'
 
 const EXTRAIT_MAX = 50
 // Un an et un jour : au-delà, la lecture coûte tout l'historique d'une boutique
@@ -220,9 +221,12 @@ export const DECLARATIONS = Object.freeze([
       'pas plusieurs autres outils pour reconstituer ce que celui-ci donne déjà. ' +
       'Les totaux ne portent que sur les opérations CLIENTS (dépôts, retraits). ' +
       'Ravitaillements, retours et clôtures arrivent à part dans `mouvements_dealer` : ' +
-      'présente-les dans leur propre rubrique, et ne les additionne JAMAIS aux totaux clients.',
+      'présente-les dans leur propre rubrique, et ne les additionne JAMAIS aux totaux clients. ' +
+      "Les soldes (stock, espèces, total caisse) n'y sont pas : demande-les EN MÊME TEMPS à etat_de_la_caisse.",
     parameters: { type: 'OBJECT', properties: { jours: PARAM_JOURS } },
   },
+  // Servi par le panneau, sur les soldes que montre la barre (caisse.js).
+  DECLARATION_CAISSE,
   {
     name: 'chercher_client',
     description:

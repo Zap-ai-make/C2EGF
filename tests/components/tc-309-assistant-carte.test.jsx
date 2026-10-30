@@ -37,6 +37,10 @@ const LIVRAISON = {
 let transactionsValue
 let appelsDuModele
 let reponsesAuModele
+// Ce que tiennent les cartes réseau ; réglable test par test.
+let reserves
+// La lecture de la caisse que le panneau confie au modèle.
+let lecteur
 
 vi.mock('../../src/context/AuthContext.jsx', () => ({
   useAuth: () => ({
@@ -51,9 +55,9 @@ vi.mock('../../src/context/transactions.jsx', () => ({ useTransactions: () => tr
 vi.mock('../../src/hooks/useNetworkCards.js', () => ({
   useNetworkCards: () => ({
     cardsData: {},
-    getStock: () => 500000,
-    getLiquidite: () => 500000,
-    getNetworkLiquidite: () => 500000,
+    getStock: () => reserves.stock,
+    getLiquidite: () => reserves.especes,
+    getNetworkLiquidite: () => reserves.especes,
     formatAmount: (n) => Number(n).toLocaleString('fr-FR'),
   }),
 }))
@@ -63,7 +67,8 @@ vi.mock('../../src/services/storeTransactionCommandService', () => ({ runStoreTr
 // Le modèle simulé : chaque question déroule les préparations qu'on lui a
 // confiées, et garde ce que le panneau lui a répondu.
 vi.mock('../../src/lib/ia/assistant.js', () => ({
-  poserQuestion: vi.fn(async ({ surPreparation, surTexte }) => {
+  poserQuestion: vi.fn(async ({ surPreparation, surLecture, surTexte }) => {
+    lecteur = surLecture
     for (const appel of appelsDuModele.shift() ?? []) reponsesAuModele.push(surPreparation(appel))
     surTexte('Je l’ai préparée : vérifiez puis confirmez.')
     return { ok: true, texte: '', historique: [] }
@@ -99,6 +104,7 @@ const DEPOT = { nom: 'preparer_transaction', arguments: { client: '4544102', typ
 beforeEach(() => {
   appelsDuModele = []
   reponsesAuModele = []
+  reserves = { stock: 500000, especes: 500000 }
   commande.mockReset().mockResolvedValue({ ok: true })
   transactionsValue = {
     pendingTransactions: [EN_ATTENTE],
@@ -119,9 +125,10 @@ const demander = async (question, ...appels) => {
 
 // Le panneau arrive par `lazy` au premier clic : on attend qu'il soit là.
 const ouvrir = async () => {
-  render(<MemoryRouter><Assistant /></MemoryRouter>)
+  const rendu = render(<MemoryRouter><Assistant /></MemoryRouter>)
   fireEvent.click(screen.getByRole('button', { name: "Ouvrir l'assistant" }))
   await screen.findByLabelText('Votre question', {}, { timeout: 3000 })
+  return rendu
 }
 
 describe('TC-309 — la carte à confirmer', () => {
@@ -222,6 +229,54 @@ describe('TC-309 — la carte à confirmer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Annuler la transaction' }))
 
     await waitFor(() => expect(transactionsValue.trashTransaction).toHaveBeenCalledWith('d-1'))
+  })
+})
+
+// Premier essai réel (30 octobre 2026) : le paiement en Cash d'un retrait, sans
+// un franc en caisse, a donné une carte — refusée par le serveur APRÈS
+// « Confirmer ». Le panneau juge désormais sur les soldes de ses cartes.
+describe('TC-309 — la caisse que voit l’assistant', () => {
+  const RETRAIT = { ...EN_ATTENTE, id: 'd-2', type: 'Retrait', reseau: 'Orange' }
+  const PAYER_EN_CASH = { nom: 'preparer_reglement', arguments: { client: 'Salif', type: 'Retrait', moyen: 'Cash' } }
+
+  it('[AC-12] sans espèces, payer un retrait en Cash ne donne pas de carte, et la raison part au modèle', async () => {
+    transactionsValue.pendingTransactions = [RETRAIT]
+    reserves = { stock: 500000, especes: 0 }
+    await ouvrir()
+    await demander('paie le retrait de Salif en cash', PAYER_EN_CASH)
+
+    expect(screen.queryByTestId('carte-operation')).not.toBeInTheDocument()
+    expect(reponsesAuModele[0]).toMatchObject({ erreur: true, message: expect.stringMatching(/Pas assez d'espèces/) })
+    expect(reponsesAuModele[0].message).toMatch(/possible par Orange Money/)
+  })
+
+  it('[AC-13] la caisse a bougé avant « Confirmer » : la carte le dit, et rien ne part', async () => {
+    transactionsValue.pendingTransactions = [RETRAIT]
+    const { rerender } = await ouvrir()
+    await demander('paie le retrait de Salif en cash', PAYER_EN_CASH)
+    expect(screen.getByTestId('carte-operation')).toBeInTheDocument()
+
+    // Les espèces sont sorties à l'autre poste entre la carte et le clic.
+    reserves = { stock: 500000, especes: 10000 }
+    rerender(<MemoryRouter><Assistant /></MemoryRouter>)
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmer' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Pas assez d'espèces/)
+    expect(transactionsValue.addPaymentTranche).not.toHaveBeenCalled()
+  })
+
+  it('[AC-14] le modèle lit la caisse de la barre des soldes', async () => {
+    reserves = { stock: 120000, especes: 30000 }
+    await ouvrir()
+    await demander('combien en caisse ?')
+
+    expect(lecteur({ nom: 'etat_de_la_caisse', arguments: {} })).toEqual({
+      stock: { Orange: 120000 },
+      especes: 30000,
+      depots_non_termines: { nombre: 1, montant: 50000 },
+      retraits_non_termines: { nombre: 0, montant: 0 },
+      total_caisse: 120000 + 30000 + 50000,
+    })
   })
 })
 

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowUp, History, Mic, Plus, Sparkles, Square, X } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useClients } from '../../hooks/useClients'
 import { useTransactions } from '../../context/transactions.jsx'
 import { useSimpleNetworkData } from '../../hooks/useSimpleNetworkData'
+import { useReducedMotion } from '../../hooks/useReducedMotion'
 import { runStoreTransactionCommand } from '../../services/storeTransactionCommandService'
 import { generateIdempotencyKey } from '../../services/settlementService.js'
 import { NETWORK_OPTIONS } from '../../utils/constants.js'
@@ -13,6 +14,7 @@ import { poserQuestion } from '../../lib/ia/assistant.js'
 import { analyserMarkdown, texteEnCoursDEcriture } from '../../lib/ia/markdown.js'
 import { lireGeste, GESTES } from '../../lib/ia/gestes.js'
 import { preparerOperation } from '../../lib/ia/preparations.js'
+import { lireLaCaisse, OUTILS_DU_PANNEAU } from '../../lib/ia/caisse.js'
 import { demarrerDictee, dicteeDisponible } from '../../lib/ia/dictee.js'
 import {
   chargerConversations,
@@ -54,6 +56,12 @@ import { useTexteProgressif } from './useTexteProgressif.js'
  * que le serveur débite (même règle que RavitaillementPanel).
  */
 const RESEAU = NETWORK_OPTIONS[0]
+
+/**
+ * Le volet glisse, il n'apparaît pas d'un coup. Assez lent pour qu'on voie
+ * d'où il vient et où il repart, assez court pour ne pas faire attendre.
+ */
+const GLISSEMENT_MS = 300
 
 /** Les questions toutes faites de l'accueil : ce qu'on demande le plus au comptoir. */
 export const SUGGESTIONS = Object.freeze([
@@ -230,10 +238,52 @@ function PanneauAssistant({ ouvert, onFermer }) {
   }, [ouvert, couperLeMicro])
   useEffect(() => couperLeMicro, [couperLeMicro])
 
-  // À l'ouverture, on peut taper tout de suite.
+  /**
+   * LE VOLET GLISSE, À L'ALLER COMME AU RETOUR.
+   *
+   * `present` : il est dans la page. `deploye` : il est à l'écran. Entre les
+   * deux, il glisse. Rendre `null` dès la fermeture le faisait disparaître
+   * d'un coup — « brusque », a dit la caissière ; il reste donc dans la page
+   * le temps de sortir, puis s'en va.
+   *
+   * ⚠ À l'ouverture, il faut que le navigateur ait VU le volet hors de l'écran
+   *   avant de l'y faire entrer : sinon les deux états tombent dans la même
+   *   image et rien ne glisse. La lecture de sa position l'y oblige.
+   *
+   * « Mouvement réduit » : ni glissement (`motion-reduce:`), ni attente.
+   */
+  const mouvementReduit = useReducedMotion()
+  const voletRef = useRef(null)
+  const [present, setPresent] = useState(ouvert)
+  const [deploye, setDeploye] = useState(false)
+
+  useLayoutEffect(() => {
+    if (ouvert) {
+      setPresent(true)
+      return
+    }
+    setDeploye(false)
+    if (mouvementReduit) setPresent(false)
+  }, [ouvert, mouvementReduit])
+
+  useLayoutEffect(() => {
+    if (!present || !ouvert || deploye) return
+    voletRef.current?.getBoundingClientRect()
+    setDeploye(true)
+  }, [present, ouvert, deploye])
+
   useEffect(() => {
-    if (ouvert) champRef.current?.focus()
-  }, [ouvert])
+    if (ouvert || !present || mouvementReduit) return undefined
+    const sortie = setTimeout(() => setPresent(false), GLISSEMENT_MS)
+    return () => clearTimeout(sortie)
+  }, [ouvert, present, mouvementReduit])
+
+  // À l'ouverture, on peut taper tout de suite — dès que le volet est rendu
+  // (`present`) : à la réouverture, il ne l'est qu'au rendu suivant.
+  // `preventScroll` : il entre par la droite, la page n'a pas à le suivre.
+  useEffect(() => {
+    if (ouvert && present) champRef.current?.focus({ preventScroll: true })
+  }, [ouvert, present])
 
   const basculerDictee = useCallback(() => {
     if (dicteeRef.current) {
@@ -267,7 +317,16 @@ function PanneauAssistant({ ouvert, onFermer }) {
     addRefundTranche,
     trashTransaction,
   } = useTransactions()
-  const { validateAmount, getLiquidite, getStock, getNetworkLiquidite } = useSimpleNetworkData()
+  const { networkData = {}, validateAmount, getLiquidite, getStock, getNetworkLiquidite } = useSimpleNetworkData()
+
+  // Les soldes PAR RÉSEAU, tels que le serveur les jugera : les réseaux du
+  // profil et ceux du document. ⚠ Sans la carte « Liquidite » que
+  // `networkData` ajoute : elle est déjà la somme des autres, et la recompter
+  // doublerait les espèces.
+  const soldes = Object.fromEntries(
+    [...new Set([...NETWORK_OPTIONS, ...Object.keys(networkData).filter((reseau) => reseau !== 'Liquidite')])]
+      .map((reseau) => [reseau, { stock: getStock(reseau), liquidite: getNetworkLiquidite(reseau) }]),
+  )
 
   // Ce que voient les écrans, au moment où le modèle demande une préparation.
   // Une référence plutôt qu'une dépendance : la question part avec l'état de
@@ -283,6 +342,7 @@ function PanneauAssistant({ ouvert, onFermer }) {
     validateAmount,
     liquidite: getLiquidite(),
     disponible: (vase) => (vase === 'stock' ? getStock(RESEAU) : getNetworkLiquidite(RESEAU)),
+    soldes,
   }
 
   /**
@@ -313,6 +373,23 @@ function PanneauAssistant({ ouvert, onFermer }) {
 
   const confirmerCarte = useCallback(async () => {
     if (!carte || verrouCarte.current) return
+
+    // La caisse a pu bouger entre la carte et le clic — un retrait payé à
+    // l'autre poste, des espèces sorties. On rejuge donc la MÊME demande sur
+    // l'état de l'instant : un refus se lit sur la carte, avec sa raison,
+    // au lieu de partir au serveur pour revenir en « la transaction a échoué ».
+    if (carte.demande) {
+      const encore = preparerOperation(carte.demande.nom, carte.demande.arguments, etatRef.current)
+      const inchangee = encore.carte && JSON.stringify(encore.carte.execution) === JSON.stringify(carte.execution)
+      if (!inchangee) {
+        const raison = encore.reponse?.erreur
+          ? encore.reponse.message
+          : "L'opération a changé depuis la préparation : redemandez-la pour la relire."
+        setCarte((c) => c && { ...c, envoi: false, erreur: raison })
+        return
+      }
+    }
+
     verrouCarte.current = true
     setCarte((c) => c && { ...c, envoi: true, erreur: '' })
     try {
@@ -403,10 +480,13 @@ function PanneauAssistant({ ouvert, onFermer }) {
         const { carte: preparee, reponse } = preparerOperation(nom, args, etatRef.current)
         if (preparee) {
           carteDuTour = preparee
-          setCarte({ ...preparee, cle: generateIdempotencyKey(), envoi: false, erreur: '' })
+          setCarte({ ...preparee, demande: { nom, arguments: args }, cle: generateIdempotencyKey(), envoi: false, erreur: '' })
         }
         return reponse
       },
+      surLecture: ({ nom }) => (OUTILS_DU_PANNEAU.includes(nom)
+        ? lireLaCaisse(etatRef.current)
+        : { erreur: true, message: `Je ne sais pas lire « ${nom} ».` }),
     })
 
     if (resultat.ok) historiqueRef.current = resultat.historique ?? []
@@ -459,20 +539,34 @@ function PanneauAssistant({ ouvert, onFermer }) {
   }, [cleRangement, nouvelleConversation])
 
   // Fermé, le panneau reste MONTÉ : la conversation, la carte en attente et
-  // l'historique du modèle survivent à la fermeture.
-  if (!ouvert) return null
+  // l'historique du modèle survivent à la fermeture. Seul son rendu s'en va,
+  // une fois sorti de l'écran.
+  if (!present) return null
 
   return (
     <>
       {/* Le fond s'assombrit : on est dans l'assistant. Un clic dehors le ferme. */}
-      <div aria-hidden="true" onClick={onFermer} className="fixed inset-0 z-[59] bg-slate-900/40" />
+      <div
+        aria-hidden="true"
+        onClick={onFermer}
+        className={`fixed inset-0 z-[59] bg-slate-900/40 transition-opacity duration-300 motion-reduce:transition-none ${
+          deploye ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+      />
 
+      {/* En sortie, il est encore là mais plus à soi : `inert` lui retire le
+          clavier et la lecture d'écran, pour qu'on ne tape pas dans un volet
+          qui s'en va. */}
       <section
+        ref={voletRef}
         aria-label="Assistant"
+        inert={!ouvert}
         onKeyDown={(event) => {
           if (event.key === 'Escape') onFermer()
         }}
-        className="fixed inset-y-0 right-0 z-[60] flex w-full flex-col bg-white shadow-2xl sm:w-[30rem] lg:w-[36rem]"
+        className={`fixed inset-y-0 right-0 z-[60] flex w-full flex-col bg-white shadow-2xl transition-transform duration-300 motion-reduce:transition-none sm:w-[30rem] lg:w-[36rem] ${
+          deploye ? 'translate-x-0 ease-out' : 'translate-x-full ease-in'
+        }`}
       >
         <header className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
           <div className="min-w-0">

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Bot } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
@@ -12,8 +12,9 @@ import { useAuth } from '../context/AuthContext'
  *   ici, il pesait sur le premier affichage de tous, pour un bouton que
  *   beaucoup n'ouvrent pas. Il arrive donc par `lazy`, au premier clic.
  *
- *   Une fois ouvert, il reste MONTÉ — il rend `null` quand on le ferme — pour
- *   que la conversation et une carte en attente survivent à la fermeture.
+ *   Une fois ouvert, il reste MONTÉ — il glisse hors de l'écran puis rend
+ *   `null` quand on le ferme — pour que la conversation et une carte en
+ *   attente survivent à la fermeture.
  */
 const PanneauAssistant = lazy(() => import('./assistant/PanneauAssistant.jsx'))
 
@@ -33,6 +34,13 @@ function Assistant() {
   const { userProfile, isStoreAdmin } = useAuth()
   const [ouvert, setOuvert] = useState(false)
   const [monte, setMonte] = useState(false)
+  const lanceurRef = useRef(null)
+
+  // À la fermeture, le clavier revient au bouton qui a ouvert : le volet qui
+  // sort ne le tient plus, et sans cela il tomberait au début de la page.
+  useEffect(() => {
+    if (monte && !ouvert) lanceurRef.current?.focus()
+  }, [monte, ouvert])
 
   // Espace boutique seulement. Le gérant et le dealer n'ont pas d'assistant.
   if (!isStoreAdmin && userProfile?.role !== 'member') return null
@@ -41,6 +49,7 @@ function Assistant() {
     <>
       {!ouvert && (
         <button
+          ref={lanceurRef}
           type="button"
           onClick={() => {
             setMonte(true)

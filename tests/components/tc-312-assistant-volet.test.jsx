@@ -178,4 +178,34 @@ describe('TC-312 — le volet', () => {
     expect(screen.queryByRole('region', { name: 'Assistant' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: "Ouvrir l'assistant" })).toBeInTheDocument()
   })
+
+  // « La sortie est brusque » (30 octobre 2026) : le volet disparaissait d'un
+  // coup. Il glisse désormais, et reste le temps de sortir — hors d'atteinte.
+  it('[VO-09] fermé, le volet glisse hors de l’écran avant de partir', async () => {
+    mouvementReduit(false)
+    await ouvrir()
+    fireEvent.click(screen.getByRole('button', { name: "Fermer l'assistant" }))
+
+    const volet = document.querySelector('section[aria-label="Assistant"]')
+    expect(volet).not.toBeNull()
+    expect(volet).toHaveAttribute('inert')
+    await waitFor(() => expect(document.querySelector('section[aria-label="Assistant"]')).toBeNull(), { timeout: 2000 })
+  })
+
+  it('[VO-10] fermé, le clavier revient au bouton qui l’a ouvert', async () => {
+    await ouvrir()
+    fireEvent.click(screen.getByRole('button', { name: "Fermer l'assistant" }))
+    expect(screen.getByRole('button', { name: "Ouvrir l'assistant" })).toHaveFocus()
+  })
+
+  it('[VO-11] rouvert, il reprend la conversation, prêt à taper', async () => {
+    await ouvrir()
+    await demander('salut')
+    fireEvent.click(screen.getByRole('button', { name: "Fermer l'assistant" }))
+    fireEvent.click(screen.getByRole('button', { name: "Ouvrir l'assistant" }))
+
+    expect(await screen.findByText(reponseDuModele)).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Assistant' })).not.toHaveAttribute('inert')
+    expect(screen.getByLabelText('Votre question')).toHaveFocus()
+  })
 })
