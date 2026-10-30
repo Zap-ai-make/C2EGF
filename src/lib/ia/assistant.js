@@ -6,7 +6,7 @@
  * vérifierait le simulacre). Tout ce qui DÉCIDE vit dans les modules purs.
  */
 
-import { getAI, getGenerativeModel, GoogleAIBackend, ThinkingLevel, VertexAIBackend } from 'firebase/ai'
+import { AgentPlatformBackend, getAI, getGenerativeModel, GoogleAIBackend, ThinkingLevel } from 'firebase/ai'
 import app from '../../config/firebase.js'
 import { activerAppCheck } from '../../config/appCheck.js'
 import { construirePrompt } from './prompt.js'
@@ -17,18 +17,28 @@ import { OUTILS_DE_PREPARATION } from './preparations.js'
 const SANS_PREPARATION = () => ({ erreur: true, message: "Je ne peux pas préparer d'opération ici." })
 
 /**
- * ⚠ CHOIX DU BACKEND — défaut `googleAI` parce que c'est le plus rapide à
- *   activer (une bascule dans la console Firebase) et que ce lot doit pouvoir
- *   être essayé tout de suite.
+ * ⚠ CHOIX DU BACKEND — défaut AGENT PLATFORM (l'ancien Vertex AI).
  *
- *   EN PRODUCTION, BASCULER SUR `vertexAI` (VITE_AI_BACKEND=vertexAI) : le
- *   backend « Gemini Developer » facture sur une cagnotte prépayée à recharger
- *   à la main, qui s'épuise SANS PRÉVENIR et rend alors
- *   « [429] Your prepayment credits are depleted ». Vertex est adossé au compte
- *   Google Cloud du projet, déjà en plan Blaze pour les Cloud Functions.
- *   Voir docs/ia/LOT-APPCHECK.md §4.
+ *   Le backend « Gemini Developer » (`googleAI`) facture, sur un projet Blaze,
+ *   par une cagnotte prépayée dans Google AI Studio. Vide, elle rend
+ *   « [429] Your prepayment credits are depleted » : c'est ce qu'a reçu le
+ *   premier essai réel, le 30 octobre 2026, alors que l'API était « activée ».
+ *   Agent Platform est facturé sur le compte Google Cloud du projet, comme les
+ *   Cloud Functions : rien à recharger. Voir docs/ia/LOT-APPCHECK.md §4.
+ *
+ *   `AgentPlatformBackend` et non `VertexAIBackend` : l'ancien vise
+ *   `us-central1` par défaut, région que Google n'emploie plus pour les
+ *   nouveaux Gemini ; le nouveau vise `global`. VITE_AI_LOCATION pour une autre
+ *   région, VITE_AI_BACKEND=googleAI pour revenir au backend Developer.
+ *
+ * @param {string|undefined} valeur  VITE_AI_BACKEND
  */
-const BACKEND = import.meta.env.VITE_AI_BACKEND === 'vertexAI' ? 'vertexAI' : 'googleAI'
+export function choisirBackend(valeur) {
+  return valeur === 'googleAI' ? 'googleAI' : 'agentPlatform'
+}
+
+const BACKEND = choisirBackend(import.meta.env.VITE_AI_BACKEND)
+const REGION = import.meta.env.VITE_AI_LOCATION || undefined
 
 /**
  * ⚠ LE MODÈLE A UNE DATE DE FIN, ET ELLE TOMBE SANS PRÉVENIR L'ÉCRAN.
@@ -86,7 +96,7 @@ function obtenirModele(instructionSysteme) {
   if (modeleMemorise?.instruction === instructionSysteme) return modeleMemorise.modele
 
   const ia = getAI(app, {
-    backend: BACKEND === 'vertexAI' ? new VertexAIBackend() : new GoogleAIBackend(),
+    backend: BACKEND === 'googleAI' ? new GoogleAIBackend() : new AgentPlatformBackend(REGION),
   })
 
   const modele = getGenerativeModel(ia, {

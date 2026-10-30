@@ -18,13 +18,13 @@ vi.mock('firebase/ai', () => ({
   getAI: vi.fn(),
   getGenerativeModel: vi.fn(),
   GoogleAIBackend: class {},
-  VertexAIBackend: class {},
+  AgentPlatformBackend: class {},
   ThinkingLevel: { MINIMAL: 'MINIMAL', LOW: 'LOW', MEDIUM: 'MEDIUM', HIGH: 'HIGH' },
 }))
 vi.mock('../../src/config/firebase.js', () => ({ default: {} }))
 vi.mock('../../src/config/appCheck.js', () => ({ activerAppCheck: () => ({ actif: true }) }))
 
-import { MODELE_PAR_DEFAUT, reglagesDuModele, traduireErreur } from '../../src/lib/ia/assistant.js'
+import { choisirBackend, MODELE_PAR_DEFAUT, reglagesDuModele, traduireErreur } from '../../src/lib/ia/assistant.js'
 
 /** Un échec HTTP tel que l'AIError du SDK le construit (index.esm.js, makeRequest). */
 const echecHttp = (status, message) => ({
@@ -55,6 +55,16 @@ describe('TC-311 — le modèle et ses réglages', () => {
 
   it('[MO-03] Gemini 2.x : pas de niveau de réflexion, qu’il refuserait', () => {
     expect(reglagesDuModele('gemini-2.5-flash')).toEqual({ maxOutputTokens: 4096, temperature: 0.2 })
+  })
+
+  // Premier essai réel : backend Developer « activé », et pourtant « prepayment
+  // credits are depleted ». Sans variable, c'est Agent Platform, facturé sur
+  // le compte Blaze ; le backend Developer ne vient que si on le demande.
+  it('[MO-04] sans réglage, Agent Platform ; Developer seulement sur demande', () => {
+    expect(choisirBackend(undefined)).toBe('agentPlatform')
+    expect(choisirBackend('vertexAI')).toBe('agentPlatform')
+    expect(choisirBackend('agentPlatform')).toBe('agentPlatform')
+    expect(choisirBackend('googleAI')).toBe('googleAI')
   })
 })
 
