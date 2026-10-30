@@ -11,6 +11,10 @@ import app from '../../config/firebase.js'
 import { activerAppCheck } from '../../config/appCheck.js'
 import { construirePrompt } from './prompt.js'
 import { DECLARATIONS, OUTILS_DE_GESTE, executerOutil } from './outils.js'
+import { OUTILS_DE_PREPARATION } from './preparations.js'
+
+/** Sans composant pour présenter la carte, rien ne se prépare. */
+const SANS_PREPARATION = () => ({ erreur: true, message: "Je ne peux pas préparer d'opération ici." })
 
 /**
  * ⚠ CHOIX DU BACKEND — défaut `googleAI` parce que c'est le plus rapide à
@@ -135,6 +139,10 @@ export function traduireErreur(cause) {
  * @param {(texte: string) => void} options.surTexte      appelé à chaque morceau
  * @param {(nom: string) => void}   options.surOutil      nom lisible de la lecture en cours
  * @param {(geste: object) => void} options.surGeste      geste d'écran demandé
+ * @param {(demande: object) => object} options.surPreparation
+ *   opération à préparer : le composant pose la carte et rend la réponse due
+ *   au modèle (« présentée », « à préciser » ou un refus). Rien n'est
+ *   enregistré à ce stade.
  * @returns {Promise<{ok: true, texte: string, historique: Array}
  *                 | {ok: false, message: string}>}
  */
@@ -145,6 +153,7 @@ export async function poserQuestion({
   surTexte = () => {},
   surOutil = () => {},
   surGeste = () => {},
+  surPreparation = SANS_PREPARATION,
 }) {
   const instruction = construirePrompt({ ...contexte, date: new Date() })
 
@@ -182,7 +191,26 @@ export async function poserQuestion({
           resultats.push({ functionResponse: { name: appel.name, response: { fait: true } } })
           continue
         }
-        surOutil(nommerLecture(appel.name))
+        // Une préparation ne lit pas la base non plus : le composant la juge sur
+        // ce que voient les écrans, et c'est SA réponse qui part au modèle —
+        // jamais un « fait », puisque rien n'est enregistré avant « Confirmer ».
+        if (OUTILS_DE_PREPARATION.includes(appel.name)) {
+          surOutil(nommerLecture(appel.name))
+          let reponse
+          try {
+            reponse = surPreparation({ nom: appel.name, arguments: appel.args ?? {} })
+          } catch (cause) {
+            console.error('[assistant] préparation impossible', cause)
+          }
+          resultats.push({
+            functionResponse: {
+              name: appel.name,
+              response: reponse ?? { erreur: true, message: "Je n'ai pas pu préparer cette opération." },
+            },
+          })
+          continue
+        }
+        surOutil(nommerLecture(appel.name, appel.args))
         lectures.push(
           executerOutil(appel.name, appel.args ?? {}).then((donnees) => ({
             functionResponse: { name: appel.name, response: donnees },
@@ -205,10 +233,14 @@ export async function poserQuestion({
  * Nomme la lecture en cours. Une attente nommée est une information : on juge
  * que l'assistant a compris la question avant même qu'il réponde.
  */
-export function nommerLecture(nomOutil) {
+export function nommerLecture(nomOutil, args = {}) {
+  if (OUTILS_DE_PREPARATION.includes(nomOutil)) return "je prépare l'opération"
   switch (nomOutil) {
     case 'bilan_du_jour':
-      return 'je fais le point de la journée'
+      // Le libellé suit la période : « de la journée » sur trois mois mentait.
+      return Number(args?.jours) > 1 ? 'je fais le point de la période' : 'je fais le point de la journée'
+    case 'mode_d_emploi':
+      return "je regarde le mode d'emploi"
     case 'chercher_client':
       return 'je cherche le client'
     case 'creances_en_cours':

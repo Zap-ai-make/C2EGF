@@ -69,6 +69,40 @@ chiffré, et il est négligeable.
 
 ---
 
+## Lot B — l'assistant prépare, la caissière confirme
+
+Décision du responsable (30 octobre 2026) : l'assistant peut faire les
+opérations du comptoir, et **la caissière voit et confirme** avant tout
+enregistrement.
+
+- **Le modèle n'écrit jamais.** Les outils `preparer_*` rendent une *carte* :
+  ce qui partira, dans les mots de l'écran. Seul le bouton « Confirmer » du
+  panneau l'exécute. Le modèle reçoit « présentée, rien n'est enregistré » ; le
+  message « … enregistré » est écrit par l'application, après l'appel réussi.
+- **Les règles sont celles des écrans.** Les cartes passent par
+  `utils/preparationTransaction.js`, `utils/reglement.js` et
+  `utils/ravitaillement.js`, que les formulaires emploient aussi : l'assistant ne
+  peut proposer ni ce que l'écran refuserait, ni refuser ce qu'il permettrait.
+- **Un doute est une question.** Deux clients, deux opérations en attente, deux
+  livraisons : l'outil rend un choix, et le modèle le pose.
+- **Une carte à la fois**, effacée à la question suivante.
+
+| Opération | Outil | Exécuté par |
+|---|---|---|
+| Dépôt, retrait (validé ou non terminé) | `preparer_transaction` | `addTransaction` |
+| « Encaisser », « Payer par » | `preparer_reglement` | `addPaymentTranche` (clé d'idempotence par carte) |
+| « Annuler » une non terminée | `preparer_annulation` | `trashTransaction` |
+| Ravitaillement, « Retour » | `preparer_ravitaillement`, `preparer_retour` | `runStoreTransactionCommand` |
+
+**Hors du lot, volontairement** : « Vider les soldes », l'effacement de
+l'historique, « Modifier ». L'assistant les explique et propose l'écran.
+
+Code : `src/lib/ia/preparations.js` (pur), `src/components/assistant/` (panneau et carte, chargés au premier clic).
+Tests : TC-305, TC-307, TC-308, TC-309. Banc visuel :
+`preview.html?espace=assistant&carte=transaction|reglement|annulation|ravitaillement|retour`.
+
+---
+
 ## Deux pièges à connaître avant d'écrire une ligne
 
 1. **`Permissions-Policy: camera=(), microphone=()`** est une liste vide : photo

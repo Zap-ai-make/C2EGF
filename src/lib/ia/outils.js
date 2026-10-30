@@ -40,6 +40,7 @@ import {
 } from '../../utils/businessDate.js'
 import { FICHES, TITRES_GROUPES, groupesOrdonnes } from '../../content/aideFiches.js'
 import { CLES_DESTINATIONS } from './destinations.js'
+import { DECLARATIONS_DE_PREPARATION } from './preparations.js'
 
 const EXTRAIT_MAX = 50
 // Un an et un jour : au-delà, la lecture coûte tout l'historique d'une boutique
@@ -258,6 +259,8 @@ export const DECLARATIONS = Object.freeze([
       },
     },
   },
+  // Les préparations : le composant les présente en carte, la caissière confirme.
+  ...DECLARATIONS_DE_PREPARATION,
   {
     name: 'proposer_l_ecran',
     description:

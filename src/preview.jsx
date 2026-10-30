@@ -48,6 +48,8 @@ import ReseauCards from './components/dashboard/ReseauCards.jsx'
 import FluxChart from './components/dashboard/FluxChart.jsx'
 import Commerciaux from './components/dashboard/Commerciaux.jsx'
 import LastClientsTable from './components/dashboard/LastClientsTable.jsx'
+import { CarteAConfirmer } from './components/assistant/CarteAConfirmer.jsx'
+import { preparerOperation } from './lib/ia/preparations.js'
 
 // ── Données plausibles ──────────────────────────────────────────────────────
 
@@ -406,6 +408,66 @@ function PosteSaisie() {
   )
 }
 
+/**
+ * La carte à confirmer de l'assistant, dans le cadre du panneau.
+ * `?espace=assistant&carte=transaction|reglement|annulation|retour|ravitaillement`.
+ *
+ * Le modèle n'est pas appelé : la carte sort de `preparerOperation`, avec les
+ * règles réelles, sur les agents du banc. Le cadre reprend les classes du
+ * panneau (Assistant.jsx) — c'est la carte qu'on regarde, à 1 440 et 390 px.
+ */
+const DEMANDES_DU_BANC = {
+  transaction: ['preparer_transaction', { client: agents[0].orange, type: 'Dépôt', montant: 50000, statut: 'Non Terminées' }],
+  reglement: ['preparer_reglement', { client: agents[0].orange, moyen: 'Orange Money', montant: 20000 }],
+  annulation: ['preparer_annulation', { client: agents[0].orange }],
+  ravitaillement: ['preparer_ravitaillement', { expediteur: 'Issa', montant: 500000, reserve: 'Stock' }],
+  retour: ['preparer_retour', { expediteur: 'Patron', montant: 100000, reserve: 'Espèce' }],
+}
+
+function PosteAssistant() {
+  const quelle = new URLSearchParams(globalThis.location?.search ?? '').get('carte') ?? 'transaction'
+  const [nom, args] = DEMANDES_DU_BANC[quelle] ?? DEMANDES_DU_BANC.transaction
+  const { carte, reponse } = preparerOperation(nom, args, {
+    clients: agents,
+    enAttente: [{
+      id: 'banc-d-1', type: 'Dépôt', client: agents[0], clientId: agents[0].id, code: agents[0].orange,
+      montant: 75000, remainingAmount: 75000, statut: 'Non Terminées', date: '30/10/2026 09:12',
+    }],
+    ravitaillements: [{
+      id: 'banc-r-1', type: 'Ravitaillement', expediteur: 'Patron', montant: 300000,
+      remainingAmount: 250000, balanceType: 'stock', date: '30/10/2026 07:45',
+    }],
+    expediteurs: ['Patron', 'Mme Sawadogo', 'Mohamed', 'DG', 'Maï', 'Yasmine'],
+    validateAmount: () => ({ isValid: true, message: '' }),
+    liquidite: 400000,
+    disponible: () => 400000,
+  })
+
+  return (
+    <div className="min-h-screen bg-canvas">
+      <section
+        aria-label="Assistant"
+        className="fixed bottom-0 right-0 z-[60] flex h-[min(34rem,85vh)] w-full flex-col rounded-t-2xl border border-slate-200 bg-white shadow-2xl sm:bottom-5 sm:right-5 sm:w-[24rem] sm:rounded-2xl"
+      >
+        <header className="flex shrink-0 items-center justify-between gap-2 rounded-t-2xl bg-brand-600 px-4 py-3 text-white">
+          <span className="font-semibold">Assistant</span>
+        </header>
+        <div className="flex-1 overflow-y-auto px-4 py-3 text-sm text-slate-800">
+          <div className="my-2 ml-auto max-w-[85%] rounded-2xl bg-brand-50 px-3 py-2">
+            <p className="my-1">Prépare l&apos;opération pour {agents[0].prenom} {agents[0].nom}</p>
+          </div>
+          <div className="my-2 max-w-[92%]">
+            <p className="my-1">Je l&apos;ai préparée : vérifiez puis appuyez sur « Confirmer ».</p>
+          </div>
+          {carte
+            ? <CarteAConfirmer carte={carte} onConfirmer={() => {}} onEcarter={() => {}} />
+            : <p className="my-1 text-danger">{reponse.message}</p>}
+        </div>
+      </section>
+    </div>
+  )
+}
+
 // ── Rendu ───────────────────────────────────────────────────────────────────
 
 function Preview() {
@@ -643,6 +705,9 @@ const espace = new URLSearchParams(globalThis.location?.search ?? '').get('espac
 
 createRoot(document.getElementById('preview')).render(
   <StrictMode>
-    {espace === 'dealer' ? <PosteDealer /> : espace === 'saisie' ? <PosteSaisie /> : <Preview />}
+    {espace === 'dealer' ? <PosteDealer />
+      : espace === 'saisie' ? <PosteSaisie />
+        : espace === 'assistant' ? <PosteAssistant />
+          : <Preview />}
   </StrictMode>,
 )
