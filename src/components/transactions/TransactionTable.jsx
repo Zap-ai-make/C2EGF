@@ -23,6 +23,7 @@ import { ClipboardCheck } from 'lucide-react'
 import OptimisticToast from '../ui/OptimisticToast.jsx'
 import logger from '../../utils/logger.js'
 import { generateIdempotencyKey } from '../../services/settlementService.js'
+import { montantProposeDuReglement, verifierMontantReglement } from '../../utils/reglement.js'
 import { prefereMouvementReduit } from '../../hooks/useReducedMotion.js'
 import { sommesEnAttente } from '../../utils/caisse.js'
 import { attenteDe } from '../../utils/attente.js'
@@ -242,7 +243,7 @@ const TransactionTable = memo(function TransactionTable() {
   const handleMethodChosen = useCallback((method) => {
     const transaction = pendingTransactions.find(t => t.id === activeDropdown)
     const defaultAmount = transaction
-      ? String(transaction.remainingAmount ?? transaction.montant)
+      ? String(montantProposeDuReglement(transaction))
       : ''
     setSelectedMethod(method)
     setSettlementAmount(defaultAmount)
@@ -251,35 +252,14 @@ const TransactionTable = memo(function TransactionTable() {
   }, [pendingTransactions, activeDropdown])
 
   const handleConfirmPayment = useCallback(async () => {
-    const amount = parseInt(settlementAmount, 10)
-    if (!amount || amount < 500) {
-      setAmountError('Montant invalide (minimum 500 FCFA, entier)')
+    // Les plafonds vivent dans reglement.js : l'assistant prépare avec les mêmes.
+    const transaction = pendingTransactions.find(t => t.id === activeDropdown)
+    const verification = verifierMontantReglement({ transaction, action: currentActionType, montant: settlementAmount })
+    if (!verification.ok) {
+      setAmountError(verification.raison)
       return
     }
-    const transaction = pendingTransactions.find(t => t.id === activeDropdown)
-
-    // Validation du maximum selon le type d'action
-    if (currentActionType !== 'rembourser') {
-      // Paiement : max = remainingAmount (ou montant pour ancien draft)
-      const maxPayment = transaction ? (transaction.remainingAmount ?? transaction.montant) : Infinity
-      if (amount > maxPayment) {
-        setAmountError(`Maximum : ${maxPayment.toLocaleString('fr-FR')} FCFA (reste dû)`)
-        return
-      }
-    } else {
-      // Remboursement : max = paidAmount - refundedAmount (net payé)
-      if (transaction && transaction.paidAmount != null) {
-        const netPaid = (transaction.paidAmount ?? 0) - (transaction.refundedAmount ?? 0)
-        if (amount > netPaid) {
-          setAmountError(`Maximum remboursable : ${netPaid.toLocaleString('fr-FR')} FCFA`)
-          return
-        }
-        if (netPaid <= 0) {
-          setAmountError('Aucun montant remboursable (net payé = 0)')
-          return
-        }
-      }
-    }
+    const amount = verification.valeur
 
     // Clé d'idempotence stable : générée une fois par (draftId, actionType,
     // method, amount, codeAgent) et réutilisée pour les retries de CETTE action.
