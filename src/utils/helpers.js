@@ -345,7 +345,7 @@ export const matchesDateFilter = (transaction, filter, todayOnly = false) => {
 }
 
 /** Les mouvements qui viennent du dealer, pas d'un client. */
-const TYPES_DEALER = ['Ravitaillement', 'Retour', 'Clôture']
+export const TYPES_DEALER = Object.freeze(['Ravitaillement', 'Retour', 'Clôture'])
 
 /**
  * Crée les données d'export pour Excel.

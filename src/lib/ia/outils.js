@@ -39,6 +39,7 @@ import {
   storedBusinessDateKey,
 } from '../../utils/businessDate.js'
 import { FICHES, TITRES_GROUPES, groupesOrdonnes } from '../../content/aideFiches.js'
+import { TYPES_DEALER } from '../../utils/helpers.js'
 import { CLES_DESTINATIONS } from './destinations.js'
 import { DECLARATIONS_DE_PREPARATION } from './preparations.js'
 
@@ -146,16 +147,38 @@ async function historiqueDeLaPeriode(periode) {
   return (Array.isArray(lignes) ? lignes : []).filter((l) => estDansLaPeriode(l, periode))
 }
 
-/** Totaux sur TOUT ce qui a été retenu, puis extrait borné. */
-function totaliser(lignes) {
-  const retenues = lignes.filter((l) => !estDefait(l))
+/**
+ * Totaux sur TOUT ce qui a été retenu, puis extrait borné.
+ *
+ * ⚠ RAVITAILLEMENT, RETOUR ET CLÔTURE NE SONT PAS DES OPÉRATIONS CLIENTS. Ils
+ *   font transiter l'argent du dealer par la boutique ; les additionner aux
+ *   dépôts et retraits a fait annoncer « Total encaissé : 15 400 000 FCFA »
+ *   pour 400 000 d'activité (premier essai réel, 30 octobre 2026). C'est
+ *   l'erreur que chiffreAffairesService.js avait déjà corrigée ; la même liste
+ *   (`TYPES_DEALER`) les sort ici des totaux, et ils sont rendus à part.
+ *   Demandés explicitement (`type`), ils redeviennent le sujet et se totalisent.
+ */
+function totaliser(lignes, { inclureDealer = false } = {}) {
+  const valides = lignes.filter((l) => !estDefait(l))
+  const retenues = inclureDealer ? valides : valides.filter((l) => !TYPES_DEALER.includes(l?.type))
   const total = retenues.reduce((somme, l) => somme + montantDe(l), 0)
   const parType = {}
   for (const ligne of retenues) {
     const type = ligne?.type ?? 'Autre'
     parType[type] = (parType[type] ?? 0) + montantDe(ligne)
   }
-  return { nombre: retenues.length, total, parType, retenues }
+  const mouvementsDealer = {}
+  if (!inclureDealer) {
+    for (const ligne of valides.filter((l) => TYPES_DEALER.includes(l?.type))) {
+      mouvementsDealer[ligne.type] = (mouvementsDealer[ligne.type] ?? 0) + montantDe(ligne)
+    }
+  }
+  return { nombre: retenues.length, total, parType, retenues, mouvementsDealer }
+}
+
+/** Les mouvements du dealer, dits à part — seulement s'il y en a. */
+function aPart(mouvementsDealer) {
+  return Object.keys(mouvementsDealer).length > 0 ? { mouvements_dealer: mouvementsDealer } : {}
 }
 
 function nomComplet(client) {
@@ -194,7 +217,10 @@ export const DECLARATIONS = Object.freeze([
       'créances en cours sont toutes comptées, quelle que soit la période. ' +
       "À EMPLOYER DÈS QU'ON DEMANDE « où on en est », « fais le point », « le bilan », " +
       "« la situation », « ça donne quoi aujourd'hui ». Rend tout d'un coup : ne lance " +
-      'pas plusieurs autres outils pour reconstituer ce que celui-ci donne déjà.',
+      'pas plusieurs autres outils pour reconstituer ce que celui-ci donne déjà. ' +
+      'Les totaux ne portent que sur les opérations CLIENTS (dépôts, retraits). ' +
+      'Ravitaillements, retours et clôtures arrivent à part dans `mouvements_dealer` : ' +
+      'présente-les dans leur propre rubrique, et ne les additionne JAMAIS aux totaux clients.',
     parameters: { type: 'OBJECT', properties: { jours: PARAM_JOURS } },
   },
   {
@@ -231,12 +257,14 @@ export const DECLARATIONS = Object.freeze([
       '`jours`, tout l\'historique ; avec, la durée nommée (« les dépôts de cette ' +
       'semaine » : jours = 7). Quand la réponse porte `periode`, annonce-la avec les ' +
       "chiffres. À employer pour « qu'est-ce qu'on a fait », « retrouve l'opération " +
-      'de X », « les retraits du mois ».',
+      'de X », « les retraits du mois », « les ravitaillements de la semaine ». Sans ' +
+      '`type`, les totaux ne comptent que les opérations clients, et les mouvements du ' +
+      'dealer arrivent à part dans `mouvements_dealer`.',
     parameters: {
       type: 'OBJECT',
       properties: {
         client: { type: 'STRING', description: "Nom ou code d'un client" },
-        type: { type: 'STRING', description: 'Dépôt ou Retrait' },
+        type: { type: 'STRING', description: 'Dépôt, Retrait, Ravitaillement ou Retour' },
         jours: PARAM_JOURS,
       },
     },
@@ -325,7 +353,7 @@ async function bilanDuJour({ jours } = {}) {
 
   if (historique.status === 'rejected') return traduirePanne(historique.reason, "l'historique")
 
-  const { nombre, total, parType } = totaliser(historique.value)
+  const { nombre, total, parType, mouvementsDealer } = totaliser(historique.value)
 
   const creances = brouillons.status === 'fulfilled' && Array.isArray(brouillons.value) ? brouillons.value : []
   const creancesRetenues = creances.filter((c) => !estDefait(c))
@@ -338,6 +366,7 @@ async function bilanDuJour({ jours } = {}) {
     operations_terminees: nombre,
     total_encaisse: total,
     par_type: parType,
+    ...aPart(mouvementsDealer),
     creances_en_cours: creancesRetenues.length,
     total_des_creances: totalCreances,
     clients_enregistres:
@@ -434,14 +463,15 @@ async function operationsRecentes({ client, type, jours } = {}) {
         .some((champ) => String(champ).toLowerCase().includes(aiguille)),
     )
   }
-  if (typeof type === 'string' && type.trim()) {
+  const filtreParType = typeof type === 'string' && type.trim() !== ''
+  if (filtreParType) {
     const voulu = type.trim().toLowerCase()
     lignes = lignes.filter((l) => String(l?.type ?? '').toLowerCase() === voulu)
   }
 
-  const { nombre, total, parType, retenues } = totaliser(lignes)
+  const { nombre, total, parType, retenues, mouvementsDealer } = totaliser(lignes, { inclureDealer: filtreParType })
   if (nombre === 0) {
-    return { ...cadre, nombre: 0, total: 0, operations: [], message: 'Aucune opération ne correspond.' }
+    return { ...cadre, nombre: 0, total: 0, operations: [], ...aPart(mouvementsDealer), message: 'Aucune opération ne correspond.' }
   }
 
   return {
@@ -449,6 +479,7 @@ async function operationsRecentes({ client, type, jours } = {}) {
     nombre,
     total,
     par_type: parType,
+    ...aPart(mouvementsDealer),
     tronque: retenues.length > EXTRAIT_MAX,
     operations: retenues.slice(0, EXTRAIT_MAX).map((l) =>
       nettoyer(l, ['clientNom', 'nom', 'codeAgent', 'type', 'montant', 'reseau', 'statut', 'date']),

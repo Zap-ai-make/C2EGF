@@ -250,6 +250,38 @@ describe('[OJ] bilan_du_jour : la journée, ou la période demandée', () => {
     expect(reponse.total_encaisse).toBe(30000)
   })
 
+  // Premier essai réel (30 octobre 2026) : « Total encaissé : 15 400 000 FCFA »
+  // pour 400 000 de dépôts et retraits — ravitaillement et retour additionnés.
+  // La règle est celle du chiffre d'affaires (chiffreAffairesService.js).
+  it('[OJ-06] ravitaillements, retours et clôtures restent hors des totaux clients, et sont dits à part', async () => {
+    base.collections['clients/boutique-a/history'].push(
+      { id: 'd1', type: 'Ravitaillement', expediteur: 'Patron', montant: 6000000, statut: 'Validée', date: '29/10/2026 08:00:00', createdAt: new Date('2026-10-29T08:00:00Z') },
+      { id: 'd2', type: 'Retour', expediteur: 'Patron', montant: 9000000, statut: 'Validée', date: '29/10/2026 09:00:00', createdAt: new Date('2026-10-29T09:00:00Z') },
+      { id: 'd3', type: 'Clôture', montant: 1800000, statut: 'Validée', date: '29/10/2026 10:00:00', createdAt: new Date('2026-10-29T10:00:00Z') },
+    )
+
+    const reponse = await executerOutil('bilan_du_jour')
+
+    expect(reponse.operations_terminees).toBe(2)
+    expect(reponse.total_encaisse).toBe(24000)
+    expect(reponse.par_type).toEqual({ Retrait: 20000, Dépôt: 4000 })
+    expect(reponse.mouvements_dealer).toEqual({ Ravitaillement: 6000000, Retour: 9000000, Clôture: 1800000 })
+  })
+
+  it('[OJ-07] l\'historique sans filtre suit la même règle ; filtré sur un ravitaillement, il le totalise', async () => {
+    base.collections['clients/boutique-a/history'].push(
+      { id: 'd1', type: 'Ravitaillement', expediteur: 'Patron', montant: 6000000, statut: 'Validée', date: '29/10/2026 08:00:00', createdAt: new Date('2026-10-29T08:00:00Z') },
+    )
+
+    const tout = await executerOutil('operations_recentes', { jours: 1 })
+    expect(tout.total).toBe(24000)
+    expect(tout.mouvements_dealer).toEqual({ Ravitaillement: 6000000 })
+
+    const ravitaillements = await executerOutil('operations_recentes', { jours: 1, type: 'Ravitaillement' })
+    expect(ravitaillements.total).toBe(6000000)
+    expect(ravitaillements.nombre).toBe(1)
+  })
+
   it('[OJ-05] « les 10 derniers jours » : aujourd\'hui compris, le 19 exclu', async () => {
     const reponse = await executerOutil('bilan_du_jour', { jours: 10 })
 
