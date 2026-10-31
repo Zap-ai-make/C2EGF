@@ -1,6 +1,7 @@
 import { TRANSACTION_STYLES, FILTER_CONFIG } from './constants.js'
 import { parseFcfaAmount } from './fcfaAmount.js'
 import { BUSINESS_TIME_ZONE } from './businessDate.js'
+import { detailDuReglement, statutDuReglement } from './detailReglement.js'
 
 /**
  * Extrait le nom complet du client
@@ -362,7 +363,9 @@ export const TYPES_DEALER = Object.freeze(['Ravitaillement', 'Retour', 'Clôture
 export const createExportData = (transactions) => {
   return transactions
     .filter((transaction) => !TYPES_DEALER.includes(transaction?.type))
-    .map((transaction, index) => ({
+    .map((transaction, index) => {
+    const detail = detailDuReglement(transaction)
+    return {
     'N°': index + 1,
     'Date & Heure': transaction.date || '',
     'Client': getClientName(transaction.client),
@@ -374,9 +377,17 @@ export const createExportData = (transactions) => {
     // et c'est précisément pour ça que la boutique note ce code.
     'Code agent destinataire': transaction.settlementAgentCode || '',
     'Montant (FCFA)': transaction.montant || 0,
-    'Statut': transaction.statut || 'Validée',
+    // Tous les moyens, comme à l'écran : le statut stocké ne porte que celui
+    // de la dernière tranche. L'import ne relit ni cette colonne ni la suivante.
+    'Statut': statutDuReglement(transaction.statut, detail) || 'Validée',
+    'Détail du règlement': detail
+      ? detail.tranches
+        .map((t) => `${t.montant} ${t.moyen}${t.codes.length ? ` → ${t.codes.join(' + ')}` : ''}`)
+        .join(' ; ')
+      : '',
     'Email utilisateur': transaction.userEmail || ''
-  }))
+    }
+  })
 }
 
 /**

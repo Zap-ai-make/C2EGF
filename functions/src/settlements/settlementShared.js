@@ -69,6 +69,27 @@ export function accumulerCodesAgent(prevSummary, agentCode) {
 }
 
 /**
+ * Les mêmes codes, rangés PAR RÉSEAU : celui qui a reçu chaque tranche.
+ *
+ * `agentCodes` dit où l'argent est parti, pas par quel moyen. Un retrait payé
+ * 50 000 en Orange Money sur un code, puis 50 000 en Cash, se lisait « Payé par
+ * Cash → 7777777 » : un code collé au mauvais moyen (31 octobre 2026). Le
+ * réseau est celui de `netByNetwork` — `Liquidite` pour le Cash —, pour que
+ * l'écran recolle chaque code à son montant sans relire les tranches.
+ *
+ * Absent tant qu'aucun code n'est noté, comme `agentCodes`.
+ */
+export function accumulerCodesParReseau(prevSummary, network, agentCode) {
+  const prev = prevSummary?.agentCodesByNetwork && typeof prevSummary.agentCodesByNetwork === 'object'
+    ? prevSummary.agentCodesByNetwork
+    : {}
+  if (!agentCode) return prev
+  const deja = Array.isArray(prev[network]) ? prev[network].filter(Boolean) : []
+  if (deja.includes(agentCode)) return prev
+  return { ...prev, [network]: [...deja, agentCode] }
+}
+
+/**
  * Ce que la ligne d'historique affiche comme destination.
  *
  * Un seul code reste un code — le cas de l'immense majorite des reglements, et

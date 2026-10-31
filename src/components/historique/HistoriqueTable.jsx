@@ -12,6 +12,7 @@ import { STORE_HISTORY_CONFIG } from '../../constants/storeWorkspace.js'
 import { TYPE_RAVITAILLEMENT, TYPE_RETOUR } from '../../utils/ravitaillement.js'
 import { regrouperParClientEtType } from '../../utils/regroupement.js'
 import { dureeDe, formaterHeure } from '../../utils/attente.js'
+import { detailDuReglement, statutDuReglement } from '../../utils/detailReglement.js'
 import { ChevronRight } from 'lucide-react'
 
 /**
@@ -285,6 +286,9 @@ function HistoriqueTable({ transactions = [], onReopen }) {
   const renderRow = (transaction, index, ref, enfant = false) => {
     const styles = getTransactionStyles(transaction.type)
     const duree = dureeDe(transaction)
+    // Réglée en plusieurs moyens : chaque montant avec le sien, et son code.
+    const detail = detailDuReglement(transaction)
+    const codesDansLeDetail = Boolean(detail?.tranches.some((t) => t.codes.length))
     return (
       <tr
         ref={ref}
@@ -320,7 +324,9 @@ function HistoriqueTable({ transactions = [], onReopen }) {
               plutôt qu'une colonne de plus : la question « où est parti
               l'argent » ne se pose que sur quelques lignes, et la réponse n'a
               de sens que collée au code du client. */}
-          {transaction.settlementAgentCode && (
+          {/* Rattachés à leur moyen dans le détail du statut, ils n'ont plus à
+              se répéter ici. */}
+          {transaction.settlementAgentCode && !codesDansLeDetail && (
             <span
               className="mt-0.5 block text-xs text-ink-muted"
               data-testid="code-agent-reglement"
@@ -335,7 +341,24 @@ function HistoriqueTable({ transactions = [], onReopen }) {
            transaction.amount ? `${transaction.amount} FCFA` : '-'}
         </td>
         <td className="whitespace-nowrap px-4 py-3 text-base">
-          <StatusBadge status={tonStatut(transaction.statut)} label={transaction.statut || 'Validée'} />
+          <StatusBadge
+            status={tonStatut(transaction.statut)}
+            label={statutDuReglement(transaction.statut, detail) || 'Validée'}
+          />
+          {/* Le serveur n'écrit dans le statut que le moyen de la DERNIÈRE
+              tranche : « Payé par Cash » pour 50 000 en Orange Money et
+              50 000 en Cash. Le détail dit ce qui est vraiment passé. */}
+          {detail && (
+            <ul className="m-0 mt-1 list-none space-y-0.5 p-0 text-xs text-ink-muted" data-testid="detail-reglement">
+              {detail.tranches.map((tranche) => (
+                <li key={tranche.moyen}>
+                  <span className="font-medium tabular-nums text-ink">{tranche.montant.toLocaleString('fr-FR')} FCFA</span>
+                  {' '}par {tranche.moyen}
+                  {tranche.codes.length > 0 && <span className="tabular-nums"> → {tranche.codes.join(' + ')}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
         </td>
         {/* Combien de temps le client a attendu. Vide sur une ligne validée
             d'un geste : elle n'est jamais passée par les non terminées, donc

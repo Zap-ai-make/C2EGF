@@ -37,13 +37,14 @@ import {
   readSettlementTransactionContext,
   cleanSettlementAgentCode,
   accumulerCodesAgent,
+  accumulerCodesParReseau,
 } from './settlementShared.js'
 import { STORE_PAYMENT_METHODS } from '../config/storeProfile.js'
 
 /**
  * Met à jour le settlementSummary du draft pour un remboursement.
  */
-function updateSummaryForRefund(prevSummary, network, amount, agentCodes) {
+function updateSummaryForRefund(prevSummary, network, amount, agentCodes, codesParReseau) {
   const prev = (prevSummary?.netByNetwork || {})[network] || { paid: 0, refunded: 0 }
   return {
     netByNetwork: {
@@ -54,6 +55,7 @@ function updateSummaryForRefund(prevSummary, network, amount, agentCodes) {
     // d'historique. Mais sa destination doit survivre jusqu'a la tranche qui la
     // construira — sinon le cumul la perdrait en chemin.
     ...(agentCodes.length ? { agentCodes } : {}),
+    ...(Object.keys(codesParReseau).length ? { agentCodesByNetwork: codesParReseau } : {}),
   }
 }
 
@@ -186,7 +188,8 @@ export async function addTransactionRefundHandler(request, { db, FieldValue, log
       // ── settlementSummary incrémental ─────────────────────────────────────
       const prevSummary = draft.settlementSummary ?? null
       const codesAgent  = accumulerCodesAgent(prevSummary, agentCode)
-      const newSummary  = updateSummaryForRefund(prevSummary, affectedNetwork, amount, codesAgent)
+      const codesParReseau = accumulerCodesParReseau(prevSummary, affectedNetwork, agentCode)
+      const newSummary  = updateSummaryForRefund(prevSummary, affectedNetwork, amount, codesAgent, codesParReseau)
 
       // ── Document settlement ───────────────────────────────────────────────
       t.set(settlementRef, {

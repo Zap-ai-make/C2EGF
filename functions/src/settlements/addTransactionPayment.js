@@ -39,6 +39,7 @@ import {
   readSettlementTransactionContext,
   cleanSettlementAgentCode,
   accumulerCodesAgent,
+  accumulerCodesParReseau,
   libelleCodesAgent,
 } from './settlementShared.js'
 import { STORE_PAYMENT_METHODS } from '../config/storeProfile.js'
@@ -55,7 +56,7 @@ function buildFinalStatus(type, paymentMethod) {
  * Met à jour le settlementSummary du draft pour ce réseau.
  * Le summary est maintenu incrémentalement pour permettre l'annulation exacte.
  */
-function updateSummaryForPayment(prevSummary, network, amount, agentCodes) {
+function updateSummaryForPayment(prevSummary, network, amount, agentCodes, codesParReseau) {
   const prev = (prevSummary?.netByNetwork || {})[network] || { paid: 0, refunded: 0 }
   return {
     netByNetwork: {
@@ -65,6 +66,7 @@ function updateSummaryForPayment(prevSummary, network, amount, agentCodes) {
     // Absente quand aucune tranche n'a note de destination : un reglement sans
     // code agent garde la forme de document qu'il avait avant ce champ.
     ...(agentCodes.length ? { agentCodes } : {}),
+    ...(Object.keys(codesParReseau).length ? { agentCodesByNetwork: codesParReseau } : {}),
   }
 }
 
@@ -191,7 +193,8 @@ export async function addTransactionPaymentHandler(request, { db, FieldValue, lo
       // ── settlementSummary incrémental ─────────────────────────────────────
       const prevSummary  = draft.settlementSummary ?? null
       const codesAgent   = accumulerCodesAgent(prevSummary, agentCode)
-      const newSummary   = updateSummaryForPayment(prevSummary, affectedNetwork, amount, codesAgent)
+      const codesParReseau = accumulerCodesParReseau(prevSummary, affectedNetwork, agentCode)
+      const newSummary   = updateSummaryForPayment(prevSummary, affectedNetwork, amount, codesAgent, codesParReseau)
 
       // ── Document settlement ───────────────────────────────────────────────
       const settlementData = {
