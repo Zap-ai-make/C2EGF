@@ -29,7 +29,22 @@
  * mêmes entrées → mêmes sorties/erreurs sur les deux implémentations. (TC-060-F ne teste que
  * cette version functions ; il ne garantit PAS la parité — c'est le rôle de TC-081.)
  * Toute modification de la logique financière doit être répercutée dans les DEUX fichiers.
+ *
+ * ⚠ UN REFUS DE SOLDE EST UN REFUS MÉTIER (`soldeInsuffisant`), PAS UNE PANNE.
+ *   Simples `Error`, ces refus devenaient « La transaction a échoué. Veuillez
+ *   réessayer. » dans les règlements et « Une erreur interne s'est produite. »
+ *   partout ailleurs (`wrapCallable` ne laisse passer que DealerRequestError) :
+ *   la caissière réessayait ce qui ne passerait jamais (30 octobre 2026,
+ *   TC-315). Le TEXTE reste celui du front — TC-081 compare les messages.
+ *   Seule dépendance du fichier : `../errors.js`, local et sans effet de bord.
  */
+
+import { DealerRequestError } from '../errors.js'
+
+/** La réserve ne couvre pas le geste : la demande est juste, c'est l'état qui l'interdit. */
+function soldeInsuffisant(message) {
+  return new DealerRequestError('INSUFFICIENT_STORE_BALANCE', message)
+}
 
 const DEFAULT_NETWORK_BALANCES = {
   Orange:   { stock: 0, liquidite: 0 },
@@ -80,7 +95,7 @@ function adjustBalanceValue(balances, network, field, delta) {
   if (delta < 0 && currentValue + delta < 0) {
     const label = field === 'stock' ? 'Stock' : 'Liquidite'
     const target = field === 'stock' ? ` pour ${network}` : ''
-    throw new Error(`${label} insuffisant${target}. Disponible: ${currentValue.toLocaleString('fr-FR')} FCFA`)
+    throw soldeInsuffisant(`${label} insuffisant${target}. Disponible: ${currentValue.toLocaleString('fr-FR')} FCFA`)
   }
 
   next[network] = { ...current, [field]: currentValue + delta }
@@ -114,7 +129,7 @@ function applyLiquidityDelta(balances, delta) {
     const totalLiquidity = Object.values(balances).reduce(
       (sum, d) => sum + (Number(d?.liquidite) || 0), 0
     )
-    throw new Error(`Liquidite insuffisante. Disponible: ${totalLiquidity.toLocaleString('fr-FR')} FCFA`)
+    throw soldeInsuffisant(`Liquidite insuffisante. Disponible: ${totalLiquidity.toLocaleString('fr-FR')} FCFA`)
   }
 
   return next
@@ -288,7 +303,7 @@ export function liquidityConsumptionSplit(balances, amount) {
 
   if (remaining > 0) {
     const total = Object.values(balances).reduce((sum, d) => sum + (Number(d?.liquidite) || 0), 0)
-    throw new Error(`Liquidite insuffisante. Disponible: ${total.toLocaleString('fr-FR')} FCFA`)
+    throw soldeInsuffisant(`Liquidite insuffisante. Disponible: ${total.toLocaleString('fr-FR')} FCFA`)
   }
 
   return split

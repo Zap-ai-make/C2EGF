@@ -115,6 +115,15 @@ refus au serveur ; une carte, elle, se lit comme une promesse. Désormais :
 - au clic sur « Confirmer », la demande est **rejugée** sur l'état de l'instant :
   si la caisse a bougé entre-temps, la carte le dit et rien ne part.
 
+Côté serveur, le même jour : un refus de solde (`financialUtils.js`) est
+désormais un refus métier `INSUFFICIENT_STORE_BALANCE` qui garde son message
+(« Liquidite insuffisante. Disponible: 0 FCFA »). Il arrivait à l'écran en « La
+transaction a échoué. Veuillez réessayer. » (règlements) ou « Une erreur
+interne s'est produite. » (toutes les autres commandes de la boutique) — pour
+l'assistant comme pour le tableau. TC-315. **À déployer** :
+`storeTransactionCommand`, `addTransactionPayment`, `addTransactionRefund`
+(commande dans `docs/deployer-les-functions.md`).
+
 **Le modèle voit la caisse.** `etat_de_la_caisse` (`src/lib/ia/caisse.js`) lui
 donne le stock par réseau, les espèces, les non terminées et le total caisse —
 les chiffres exacts de la barre des soldes, servis par le panneau et non par la

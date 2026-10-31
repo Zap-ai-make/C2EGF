@@ -245,13 +245,14 @@ describe('TC-082-B — PREUVE C1 : inversion de signe après mutation type Retra
     const { db } = makeDb({ draftData: draftSansC1, balanceData: balancesApres1 })
 
     // COMPORTEMENT CORRECT sans exploit : stock=20000 < tranche=30000 → rejeté (stock insuffisant)
-    // Le handler enveloppe l'erreur de stock dans TRANSACTION_FAILED.
+    // Refus MÉTIER, avec sa raison — et non plus TRANSACTION_FAILED, qui
+    // disait « réessayez » à la caissière (TC-315).
     await expect(
       addTransactionPaymentHandler(
         makeRequest({ draftId: DRAFT_ID, amount: 30000, paymentMethod: 'Orange Money', idempotencyKey: 't2-legit' }),
         { db, FieldValue }
       )
-    ).rejects.toMatchObject({ code: 'TRANSACTION_FAILED' })
+    ).rejects.toMatchObject({ code: 'INSUFFICIENT_STORE_BALANCE', message: expect.stringMatching(/^Stock insuffisant pour Orange/) })
   })
 })
 
