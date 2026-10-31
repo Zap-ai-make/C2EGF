@@ -509,6 +509,7 @@ const ECRAN_DES_RUBRIQUES = Object.freeze({
   reserves: 'transactions', // le ravitaillement se fait depuis l'onglet Transactions
   historique: 'historique',
   clients: 'clients',
+  assistant: 'transactions', // l'assistant est sur tous les écrans ; Transactions est celui de la journée
 })
 
 /** `{{Valider}}` → « Valider », `**gras**` → gras : la forme qu'on répète à voix haute. */

@@ -29,6 +29,15 @@
  *   fait douter la caissière d'elle-même au lieu de la débloquer. TC-225 relit
  *   ces libellés contre les composants ; il échouera si l'un d'eux est renommé
  *   sans que la fiche suive.
+ *
+ * MISE À JOUR DU 31 OCTOBRE 2026
+ * ──────────────────────────────
+ * Relues contre l'écran : « Supprimer » s'appelle « Annuler » depuis longtemps,
+ * « Vider les soldes » n'existe plus, et une dizaine de gestes n'avaient pas de
+ * fiche — le règlement partiel et le code agent, la modification d'une
+ * opération qui attend, le chrono, le regroupement par client, l'onglet
+ * Ravitaillement de l'historique, le règlement en deux moyens, l'historique
+ * d'un client, et l'assistant.
  */
 
 export const GROUPES = Object.freeze({
@@ -36,20 +45,23 @@ export const GROUPES = Object.freeze({
   HISTORIQUE: 'historique',
   RESERVES: 'reserves',
   CLIENTS: 'clients',
+  ASSISTANT: 'assistant',
 })
 
 /**
  * L'ordre de lecture par défaut, quand on n'est nulle part en particulier.
  *
  * Les réserves suivent la saisie parce qu'elles vivent sur le MÊME onglet : un
- * ravitaillement se fait depuis Transactions. Les clients ferment la marche —
- * on les consulte, on n'y échoue pas.
+ * ravitaillement se fait depuis Transactions. Les clients viennent ensuite —
+ * on les consulte, on n'y échoue pas. L'assistant ferme la marche : il est sur
+ * tous les écrans, et il sait lui-même lire ces fiches.
  */
 const ORDRE_GROUPES = Object.freeze([
   GROUPES.TRANSACTIONS,
   GROUPES.RESERVES,
   GROUPES.HISTORIQUE,
   GROUPES.CLIENTS,
+  GROUPES.ASSISTANT,
 ])
 
 /**
@@ -76,9 +88,10 @@ export function groupesOrdonnes(chemin = '') {
 
 export const TITRES_GROUPES = Object.freeze({
   [GROUPES.TRANSACTIONS]: { titre: 'Enregistrer une opération', ou: 'onglet Transactions' },
-  [GROUPES.HISTORIQUE]: { titre: 'Rattraper une erreur', ou: 'onglet Historique' },
+  [GROUPES.HISTORIQUE]: { titre: 'Relire et corriger', ou: 'onglet Historique' },
   [GROUPES.RESERVES]: { titre: 'Stock et espèces', ou: 'onglet Transactions' },
   [GROUPES.CLIENTS]: { titre: 'Les clients', ou: 'onglet Clients' },
+  [GROUPES.ASSISTANT]: { titre: 'L’assistant', ou: 'bouton rond, en bas à droite' },
 })
 
 export const FICHES = Object.freeze([
@@ -88,11 +101,15 @@ export const FICHES = Object.freeze([
     titre: "Le client te remet de l'argent — un dépôt",
     etapes: [
       'Onglet {{Transactions}}, bouton {{Enregistrer une transaction}}.',
-      "Dans la barre de recherche, tape le numéro ou le code agent. S'il n'est pas dans tes clients, clique {{Utiliser ce code sans client enregistré}}.",
+      "Dans la barre de recherche, tape le numéro ou le code agent. S'il n'est pas dans tes clients, {{Enregistrer ce client}} crée sa fiche ; {{Utiliser ce code sans client enregistré}} passe sans fiche.",
       'Choisis {{Dépôt}}.',
       'Tape la somme dans {{Montant (FCFA)}}.',
       'Deux boutons se présentent : {{Valider}} ou {{Non Terminées}}. Lis la fiche 3 avant de choisir.',
     ],
+    retenir: {
+      titre: 'Il faut du stock',
+      texte: "Un dépôt envoie du stock au client. S'il n'y en a pas assez, le logiciel refuse et dit combien il en reste : il faut d'abord un ravitaillement (fiche 10).",
+    },
   },
   {
     id: 2,
@@ -101,7 +118,7 @@ export const FICHES = Object.freeze([
     texte: 'Exactement les mêmes étapes que la fiche 1, en choisissant {{Retrait}}.',
     retenir: {
       titre: 'Si le bouton ne répond pas',
-      texte: "Pour un retrait, il faut assez d'espèces en caisse. Si {{Valider}} reste gris, pose le doigt dessus : le logiciel écrit pourquoi.",
+      texte: "Pour {{Valider}} un retrait, il faut assez d'espèces en caisse. Si le bouton reste gris, pose le doigt dessus : le logiciel écrit pourquoi. Tu peux toujours le mettre en {{Non Terminées}} et le payer plus tard.",
     },
   },
   {
@@ -125,25 +142,56 @@ export const FICHES = Object.freeze([
     etapes: [
       'Dans la liste {{Non Terminées}}, trouve la ligne.',
       'Pour un dépôt, clique {{Encaisser}}. Pour un retrait, {{Payer par}}.',
-      'Indique comment : {{Orange Money}} ou {{Cash}}.',
+      'Choisis {{Orange Money}} ou {{Cash}}.',
+      'Le montant proposé est **tout ce qui reste dû**. Pour ne régler qu’une partie, change-le : les boutons − et + avancent de 500 en 500.',
+      "Si l'argent part sur un compte agent, tape ce code dans {{Envoyé sur le code agent}}. Remis en main propre, laisse vide.",
+      'Clique {{Confirmer}}.',
     ],
-    texteFin: "La ligne quitte la liste et rejoint l'historique.",
+    texteFin: "Réglée en entier, la ligne rejoint l'historique. Réglée en partie, elle reste dans la liste avec ce qu'il reste à payer. Pour payer un retrait en {{Cash}}, il faut assez d'espèces : sinon le logiciel refuse et dit combien il y a.",
+    retenir: {
+      titre: 'Payer en deux moyens',
+      texte: "Une partie en {{Orange Money}}, le reste en {{Cash}} : refais simplement les étapes pour chaque partie. L'historique montre ensuite chaque montant avec son moyen et son code (fiche 18).",
+    },
   },
   {
     id: 5,
     groupe: GROUPES.TRANSACTIONS,
-    titre: 'Effacer une opération qui attend',
+    titre: 'Corriger une opération qui attend',
     etapes: [
-      'Sur la ligne, clique {{Supprimer}}.',
-      'Confirme.',
+      'Dans la liste {{Non Terminées}}, sur la ligne, clique {{Modifier}}.',
+      'Le formulaire s’ouvre avec l’opération : corrige le client, le type ou le montant.',
+      'Confirme comme à la saisie.',
     ],
     retenir: {
-      titre: 'Ce que ça fait',
-      texte: "Le stock engagé est rendu, et la ligne va dans la {{Corbeille}} de l'historique, où elle reste lisible. **Elle n'en revient pas** : pour la remettre, il faut la ressaisir.",
+      titre: 'Elle reste en attente',
+      texte: "Corrigée, l'opération reste dans les {{Non Terminées}}, à terminer comme d'habitude (fiche 4). Une opération dont une partie est **déjà réglée** ne se corrige plus : termine-la.",
     },
   },
   {
     id: 6,
+    groupe: GROUPES.TRANSACTIONS,
+    titre: 'Annuler une opération qui attend',
+    etapes: [
+      'Sur la ligne, clique {{Annuler}}.',
+      'Relis ce qui s’affiche, puis {{Annuler la transaction}}. {{Garder}} referme sans rien faire.',
+    ],
+    retenir: {
+      titre: 'Ce que ça fait',
+      texte: "Le stock engagé est rendu, et la ligne va dans la {{Corbeille}} de l'historique, où elle reste lisible. **Elle n'en revient pas** : pour la remettre, il faut la ressaisir. Une opération dont une partie est déjà réglée ne s'annule plus.",
+    },
+  },
+  {
+    id: 7,
+    groupe: GROUPES.TRANSACTIONS,
+    titre: 'Lire la liste des opérations qui attendent',
+    etapes: [
+      'Chaque ligne dit **depuis combien de temps** elle attend. Au-delà de 30 minutes, elle se colore : le client attend trop.',
+      'Plusieurs opérations du même client et du même type se replient sur une seule ligne, avec leur **total**. Le bouton « Voir les … » les déplie, {{Masquer}} les replie.',
+      "Une opération réglée en partie montre ce qu'il reste à payer.",
+    ],
+  },
+  {
+    id: 8,
     groupe: GROUPES.TRANSACTIONS,
     titre: 'Les deux cases au-dessus de la liste',
     etapes: [
@@ -153,7 +201,7 @@ export const FICHES = Object.freeze([
     ],
   },
   {
-    id: 7,
+    id: 9,
     groupe: GROUPES.TRANSACTIONS,
     titre: '{{Total caisse}}, en haut de l’écran',
     texte: "C'est le chiffre à comparer avec ce que tu as réellement en main le soir.",
@@ -165,7 +213,7 @@ export const FICHES = Object.freeze([
   },
 
   {
-    id: 8,
+    id: 10,
     groupe: GROUPES.RESERVES,
     titre: 'Le dealer t’a envoyé du stock ou des espèces',
     etapes: [
@@ -181,7 +229,7 @@ export const FICHES = Object.freeze([
     },
   },
   {
-    id: 9,
+    id: 11,
     groupe: GROUPES.RESERVES,
     titre: 'Rendre au dealer ce qu’il t’a envoyé',
     etapes: [
@@ -190,6 +238,7 @@ export const FICHES = Object.freeze([
       'Sur la livraison concernée, clique {{Retour}}.',
       'Tape le montant, puis choisis si tu rends en {{Stock}} ou en {{Espèce}}.',
     ],
+    texteFin: 'Il faut que la réserve choisie contienne le montant. Un retour fait par erreur s’annule depuis l’historique (fiche 17).',
     retenir: {
       titre: 'Tu peux rendre en plusieurs fois',
       texte: 'Chaque retour se retranche du reste dû. Quand il tombe à zéro, la livraison quitte la liste et le chiffre baisse. Tu peux aussi rendre en espèces ce que tu avais reçu en stock.',
@@ -197,7 +246,7 @@ export const FICHES = Object.freeze([
   },
 
   {
-    id: 10,
+    id: 12,
     groupe: GROUPES.HISTORIQUE,
     titre: "Corriger le montant d'une opération déjà validée",
     etapes: [
@@ -212,41 +261,72 @@ export const FICHES = Object.freeze([
     },
   },
   {
-    id: 11,
+    id: 13,
     groupe: GROUPES.HISTORIQUE,
     titre: 'Voir les corrections déjà faites sur une ligne',
     texte: 'Sur une ligne déjà corrigée, un bouton {{Modification}} apparaît — le chiffre à côté dit combien de fois.',
     texteFin: 'Il ouvre la liste de toutes les corrections : ancien montant, nouveau montant, la date, l’heure et qui l’a faite.',
   },
   {
-    id: 12,
+    id: 14,
     groupe: GROUPES.HISTORIQUE,
-    titre: "Effacer une opération de l'historique",
+    titre: "Annuler une opération de l'historique",
     etapes: [
-      'Sur la ligne, clique {{Supprimer}}, puis confirme.',
+      'Sur la ligne, clique {{Annuler}}.',
+      'Relis, puis {{Annuler la transaction}}.',
     ],
     retenir: {
       titre: 'Ce que ça fait',
-      texte: "Le montant est rendu aux soldes et la ligne part en {{Corbeille}}. Comme pour la fiche 5 : **elle n'en revient pas**.",
+      texte: "Le montant est rendu aux soldes et la ligne part en {{Corbeille}}. Comme pour la fiche 6 : **elle n'en revient pas**.",
     },
   },
   {
-    id: 13,
+    id: 15,
     groupe: GROUPES.HISTORIQUE,
-    titre: 'Retrouver une opération supprimée',
-    texte: "Onglet {{Historique}}, puis {{Corbeille}}. Tout ce qui a été supprimé s'y trouve — venu des non terminées comme de l'historique —, de la plus récente à la plus ancienne, avec qui l'a supprimée et quand.",
+    titre: 'Retrouver une opération annulée',
+    texte: "Onglet {{Historique}}, puis {{Corbeille}}. Tout ce qui a été annulé s'y trouve — venu des non terminées comme de l'historique —, de la plus récente à la plus ancienne, avec qui l'a fait et quand.",
     texteFin: 'On y **lit**. On n’y restaure pas : pour la remettre, ressaisis-la.',
   },
   {
-    id: 14,
+    id: 16,
     groupe: GROUPES.HISTORIQUE,
-    titre: 'Pourquoi {{Modifier}} ou {{Supprimer}} est parfois gris',
+    titre: 'Pourquoi {{Modifier}} ou {{Annuler}} est parfois gris',
     texte: "Pose le doigt sur le bouton gris : **la raison s'affiche**. Ce n'est pas une panne, c'est un refus expliqué.",
-    texteFin: "Le cas le plus courant : une opération payée en plusieurs fois, dont il reste une partie à régler. Celle-là se corrige par un remboursement, pas par une suppression.",
+    texteFin: "Le cas le plus courant : une opération payée en plusieurs fois, dont il reste une partie à régler. Celle-là se termine en réglant le reste, pas en l'annulant.",
+  },
+  {
+    id: 17,
+    groupe: GROUPES.HISTORIQUE,
+    titre: 'Les ravitaillements et les retours',
+    texte: "Onglet {{Historique}}, puis {{Ravitaillement}}. Ce que le dealer t'a envoyé et ce que tu lui as rendu, dans l'ordre : **+** ce qui est entré, **−** ce qui est sorti, avec la personne et la réserve. Ils ne se mélangent pas aux opérations des clients.",
+    etapes: [
+      'Un retour fait par erreur : sur sa ligne, clique {{Annuler}}.',
+      'Relis, puis {{Annuler le retour}}. Le montant revient dans la réserve, et la livraison **redevient due** d’autant.',
+    ],
+    texteFin: 'Un ravitaillement, lui, ne s’annule pas : il se solde en rendant (fiche 11). Les anciennes clôtures restent listées pour mémoire. Les demandes au dealer sont dessous.',
+  },
+  {
+    id: 18,
+    groupe: GROUPES.HISTORIQUE,
+    titre: 'Une opération réglée en plusieurs fois, ou par deux moyens',
+    texte: 'Le statut cite tous les moyens employés — par exemple « Payé par Orange Money et Cash ».',
+    texteFin: 'Juste en dessous, chaque montant avec son moyen : « 50 000 FCFA par Orange Money → 7777777 », puis « 50 000 FCFA par Cash ». La flèche donne le code agent sur lequel l’argent est parti. L’export de l’historique porte le même détail.',
+  },
+  {
+    id: 19,
+    groupe: GROUPES.HISTORIQUE,
+    titre: 'Retrouver une opération plus ancienne, et exporter',
+    etapes: [
+      'Onglet {{Historique}}, puis {{Transactions clients}}.',
+      'Choisis les dates, ou tape le nom ou le code du client dans la recherche.',
+      'La navigation par jour saute d’une journée à l’autre. Plus bas, {{Charger les transactions précédentes}} remonte le temps.',
+      'Les opérations d’un même client et d’un même type se replient sur une ligne avec leur total, comme dans la liste qui attend (fiche 7).',
+      '{{Exporter XLSM}} enregistre ce qui est affiché dans un fichier Excel.',
+    ],
   },
 
   {
-    id: 15,
+    id: 20,
     groupe: GROUPES.CLIENTS,
     titre: 'Ajouter un client, un par un ou par fichier',
     etapes: [
@@ -255,16 +335,69 @@ export const FICHES = Object.freeze([
       'Le fichier attend ces colonnes : {{Nom}}, {{Prénom}}, {{Numéro d\'identité}}, {{Numéro personnel}}, {{Code agent}}, {{Numéro agent}}.',
       'Un ancien fichier qui n’a qu’une colonne {{Numéro agent / Code agent}} reste accepté : 8 chiffres partent dans le numéro, 7 dans le code.',
     ],
+    texteFin: 'Un code agent ne sert qu’à **un seul** client, toutes boutiques confondues. S’il est déjà pris, le logiciel refuse et dit à quelle fiche il appartient.',
     retenir: {
       titre: 'Les clients importés sont à TA boutique',
       texte: 'Peu importe ce que contient le fichier : c’est la boutique connectée qui est inscrite sur chaque client importé. Tu ne peux pas verser par erreur tes clients chez une autre franchise.',
     },
   },
   {
-    id: 16,
+    id: 21,
     groupe: GROUPES.CLIENTS,
     titre: 'Retrouver un client',
     texte: 'La barre de recherche de l’onglet {{Clients}} cherche dans **tout** à la fois : le nom, le prénom, le numéro ou code agent, et le numéro personnel.',
     texteFin: 'Tape les quelques chiffres dont tu te souviens, la liste se réduit au fur et à mesure.',
+  },
+  {
+    id: 22,
+    groupe: GROUPES.CLIENTS,
+    titre: 'Tout ce qu’un client a fait',
+    texte: 'Sur la ligne du client, bouton {{Historique}}. Toutes ses opérations s’affichent, **dans toutes les boutiques**, avec le nombre par boutique.',
+    texteFin: 'Celles qui attendent encore sont en tête. On y lit seulement : pour agir sur une opération, va dans {{Transactions}} ou {{Historique}}.',
+  },
+
+  {
+    id: 23,
+    groupe: GROUPES.ASSISTANT,
+    titre: 'Poser une question à l’assistant',
+    etapes: [
+      'Clique le bouton rond, en bas à droite de l’écran. Le volet s’ouvre sur la droite.',
+      'Choisis une des questions proposées, ou écris la tienne : « fais le point de la journée », « qui me doit encore de l’argent ? », « combien j’ai en espèces ? », « comment encaisser un dépôt à distance ? ».',
+    ],
+    texteFin: 'Il lit les chiffres de **ta** boutique au moment où tu demandes, et les fiches de cette aide. Il ne voit pas les autres boutiques.',
+  },
+  {
+    id: 24,
+    groupe: GROUPES.ASSISTANT,
+    titre: 'Lui faire préparer une opération',
+    etapes: [
+      'Dis-lui ce qu’il faut faire : « dépôt à distance de 50 000 pour Salif », « paie le retrait de Salif en cash », « annule le dépôt de Awa ».',
+      'Une carte s’affiche sous sa réponse : client, montant, moyen. **Relis-la.**',
+      '{{Confirmer}} l’enregistre. {{Écarter}} la laisse tomber.',
+    ],
+    retenir: {
+      titre: 'Rien ne part sans toi',
+      texte: 'Tant que tu n’as pas cliqué {{Confirmer}}, rien n’est enregistré. Il vérifie la caisse avant de préparer : s’il manque des espèces ou du stock, il le dit et propose une autre façon de faire. Une opération à la fois.',
+    },
+  },
+  {
+    id: 25,
+    groupe: GROUPES.ASSISTANT,
+    titre: 'Dicter au lieu d’écrire',
+    etapes: [
+      'Clique le micro, à gauche de la zone de texte, et parle.',
+      'Ce que tu dis s’écrit dans la zone. **Relis**, corrige si besoin, puis envoie avec la flèche.',
+    ],
+    texteFin: 'Rien ne part tant que tu n’as pas envoyé. Pas de micro affiché ? Le navigateur ne sait pas dicter : prends Chrome ou Edge.',
+  },
+  {
+    id: 26,
+    groupe: GROUPES.ASSISTANT,
+    titre: 'Reprendre une ancienne conversation',
+    etapes: [
+      'En haut du volet, l’horloge ouvre tes conversations passées. Clique celle que tu veux : l’assistant reprend le fil.',
+      'Le **+** repart d’une conversation vide.',
+    ],
+    texteFin: 'Elles restent sur cet appareil, à ton nom et pour ta boutique : une autre caissière ne les voit pas.',
   },
 ])

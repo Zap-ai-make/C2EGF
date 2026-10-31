@@ -347,22 +347,24 @@ describe('[OJ] bilan_du_jour : la journée, ou la période demandée', () => {
  * Les attentes viennent de `src/content/aideFiches.js`, relevées à la main.
  */
 describe('[ME] mode_d_emploi : les fiches de l\'onglet Aide', () => {
-  it('[ME-01] sans sujet, le sommaire : quatre rubriques, dans l\'ordre de l\'aide', async () => {
+  it('[ME-01] sans sujet, le sommaire : cinq rubriques, dans l\'ordre de l\'aide', async () => {
     const reponse = await executerOutil('mode_d_emploi')
 
     expect(reponse.sommaire.map((r) => [r.rubrique, r.ecran, r.fiches.map((f) => f.numero)])).toEqual([
-      ['Enregistrer une opération', 'transactions', [1, 2, 3, 4, 5, 6, 7]],
-      ['Stock et espèces', 'transactions', [8, 9]],
-      ['Rattraper une erreur', 'historique', [10, 11, 12, 13, 14]],
-      ['Les clients', 'clients', [15, 16]],
+      ['Enregistrer une opération', 'transactions', [1, 2, 3, 4, 5, 6, 7, 8, 9]],
+      ['Stock et espèces', 'transactions', [10, 11]],
+      ['Relire et corriger', 'historique', [12, 13, 14, 15, 16, 17, 18, 19]],
+      ['Les clients', 'clients', [20, 21, 22]],
+      ['L’assistant', 'transactions', [23, 24, 25, 26]],
     ])
     expect(reponse.sommaire[0].fiches[2].titre).toBe('« Valider » ou « Non Terminées » : lequel choisir ?')
   })
 
-  it('[ME-02] « encaisser » rend les deux fiches qui en parlent, libellés lisibles', async () => {
+  it('[ME-02] « encaisser » rend les fiches qui en parlent, la plus utile d\'abord, libellés lisibles', async () => {
     const reponse = await executerOutil('mode_d_emploi', { sujet: 'encaisser' })
 
-    expect(reponse.fiches.map((f) => f.numero)).toEqual([4, 6])
+    // 4 : comment terminer ; 8 : la case « Dépôts » ; 23 : la question toute faite de l'assistant.
+    expect(reponse.fiches.map((f) => f.numero)).toEqual([4, 8, 23])
     expect(reponse.fiches[0].texte).toContain('« Encaisser »')
     expect(reponse.fiches[0].texte).toContain('« Payer par »')
     expect(reponse.fiches[0].texte).not.toMatch(/\{\{|\*\*/)
@@ -372,7 +374,7 @@ describe('[ME] mode_d_emploi : les fiches de l\'onglet Aide', () => {
   it('[ME-03] des mots entiers : « rendre » ne trouve pas « prendre »', async () => {
     const reponse = await executerOutil('mode_d_emploi', { sujet: 'rendre au dealer' })
 
-    expect(reponse.fiches[0].numero).toBe(9)
+    expect(reponse.fiches[0].numero).toBe(11)
     expect(reponse.fiches.map((f) => f.numero)).not.toContain(2)
   })
 
@@ -382,14 +384,14 @@ describe('[ME] mode_d_emploi : les fiches de l\'onglet Aide', () => {
     expect(reponse.erreur).toBeUndefined()
     expect(reponse.fiches).toEqual([])
     expect(reponse.message).toBeTruthy()
-    expect(reponse.sommaire).toHaveLength(4)
+    expect(reponse.sommaire).toHaveLength(5)
   })
 
   it('[ME-05] par numéro : la fiche entière, gras retiré', async () => {
-    const reponse = await executerOutil('mode_d_emploi', { numero: 9 })
+    const reponse = await executerOutil('mode_d_emploi', { numero: 11 })
 
     expect(reponse.fiches).toHaveLength(1)
-    expect(reponse.fiches[0].numero).toBe(9)
+    expect(reponse.fiches[0].numero).toBe(11)
     expect(reponse.fiches[0].texte).toContain('personne par personne')
     expect(reponse.fiches[0].texte).not.toMatch(/\{\{|\*\*/)
   })
@@ -398,7 +400,7 @@ describe('[ME] mode_d_emploi : les fiches de l\'onglet Aide', () => {
     const reponse = await executerOutil('mode_d_emploi', { numero: 99 })
 
     expect(reponse.fiches).toEqual([])
-    expect(reponse.sommaire).toHaveLength(4)
+    expect(reponse.sommaire).toHaveLength(5)
   })
 
   it('[ME-07] chaque rubrique mène à un écran que l\'assistant sait ouvrir', async () => {
