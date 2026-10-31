@@ -136,9 +136,15 @@ describe('TC-222 — trashHistory', () => {
     expect((await ligne(id)).statut).toBe('Validée')
   })
 
+  // « Vider les soldes » est retiré (TC-318) : plus rien n'écrit de clôture.
+  // Celles d'avant restent, et la corbeille doit toujours les refuser.
   it('[TC-222-05] refuse une clôture', async () => {
-    const { id } = await call({ action: 'closeDay' })
-    await expect(call({ action: 'trashHistory', historyId: id })).rejects.toThrow()
+    const ref = db.collection(`clients/${STORE}/history`).doc()
+    await ref.set({
+      type: 'Clôture', montant: 870_500, reseau: 'Orange', statut: 'Validée', storeId: STORE,
+      soldes: [{ network: 'Orange', stock: 500_000, liquidite: 370_500 }],
+    })
+    await expect(call({ action: 'trashHistory', historyId: ref.id })).rejects.toThrow()
   })
 
   it('[TC-222-06] refuse une trace de collaboration', async () => {

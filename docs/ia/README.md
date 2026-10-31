@@ -94,8 +94,9 @@ enregistrement.
 | « Annuler » une non terminée | `preparer_annulation` | `trashTransaction` |
 | Ravitaillement, « Retour » | `preparer_ravitaillement`, `preparer_retour` | `runStoreTransactionCommand` |
 
-**Hors du lot, volontairement** : « Vider les soldes », l'effacement de
-l'historique, « Modifier ». L'assistant les explique et propose l'écran.
+**Hors du lot, volontairement** : l'effacement de l'historique, « Modifier ».
+L'assistant les explique et propose l'écran. (« Vider les soldes » a été retiré
+du logiciel le 31 octobre 2026.)
 
 **Ce que le serveur refuserait, la carte ne le propose pas** (30 octobre 2026).
 Premier essai réel : « paie le retrait en cash », pas un franc en caisse, et la

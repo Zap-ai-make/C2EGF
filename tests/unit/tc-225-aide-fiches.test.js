@@ -39,7 +39,6 @@ const SOURCES_INTERFACE = [
   'src/components/network/NetworkCardsDrawer.jsx',
   'src/components/transactions/RavitaillementForm.jsx',
   'src/components/transactions/RavitaillementPanel.jsx',
-  'src/components/transactions/ViderSoldesForm.jsx',
   'src/components/ClientsTable.jsx',
   'src/utils/excelUtils.js',
   'src/pages/Clients.jsx',

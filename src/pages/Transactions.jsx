@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, PackagePlus, Eraser } from 'lucide-react'
+import { Plus, PackagePlus } from 'lucide-react'
 import { useClients } from '../hooks/useClients'
 import { useAuth } from '../context/AuthContext'
 import TransactionForm from '../components/transactions/TransactionForm'
 import RavitaillementPanel from '../components/transactions/RavitaillementPanel'
-import ViderSoldesForm from '../components/transactions/ViderSoldesForm'
 import TransactionTable from '../components/transactions/TransactionTable'
 import DealerTransferForm from '../components/transactions/DealerTransferForm'
 import CollaborationsPanel from '../components/transactions/CollaborationsPanel'
@@ -65,7 +64,6 @@ function Transactions() {
   const [params, setParams] = useSearchParams()
   const [formulaireOuvert, setFormulaireOuvert] = useState(false)
   const [ravitaillementOuvert, setRavitaillementOuvert] = useState(false)
-  const [viderOuvert, setViderOuvert] = useState(false)
   const storeId = userProfile?.storeId ?? null
   const compteurRecues = useIncomingCollaborationsCount(
     storeId,
@@ -76,14 +74,10 @@ function Transactions() {
   // qu'il redescend réellement à zéro : il n'y a pas de commission entre
   // franchises de la même entreprise, donc le reste dû d'une livraison atteint
   // zéro exactement. Un compteur qui ne redescend jamais n'est plus lu.
-  // La LISTE, pas seulement son compte : « Vider les soldes » en a besoin pour
-  // dire combien d'argent bloque le geste, et le badge se contente de sa
-  // longueur.
-  const ravitaillements = useMemo(
-    () => ravitaillementsEnCours(completedTransactions),
+  const ravitaillementsDus = useMemo(
+    () => ravitaillementsEnCours(completedTransactions).length,
     [completedTransactions],
   )
-  const ravitaillementsDus = ravitaillements.length
 
   const demande = params.get('tab')
   const mode = MODES.includes(demande) ? demande : MODES[0]
@@ -192,15 +186,10 @@ function Transactions() {
           )}
         </button>
 
-        <button
-          type="button"
-          onClick={() => setViderOuvert(true)}
-          data-testid="ouvrir-vider-soldes"
-          className="inline-flex items-center gap-2 rounded-lg border border-line bg-surface px-4 py-2 text-sm font-medium text-ink-muted transition-colors hover:border-danger hover:text-danger focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-        >
-          <Eraser className="h-4 w-4" aria-hidden="true" />
-          Vider les soldes
-        </button>
+        {/* « Vider les soldes » était ici : retiré le 31 octobre 2026, à la
+            demande du responsable, avec toute sa logique (closeDay,
+            cancelClosure). Les clôtures déjà faites restent lisibles dans
+            l'onglet Ravitaillement de l'historique. */}
       </div>
 
       {mode === 'client' && (
@@ -237,22 +226,6 @@ function Transactions() {
           onClose={() => setRavitaillementOuvert(false)}
         />
       </ErrorBoundary>
-
-      <Dialog
-        open={viderOuvert}
-        onClose={() => setViderOuvert(false)}
-        title="Vider les soldes"
-        description="La boutique repart de zéro."
-        testId="vider-soldes-dialog"
-      >
-        <ErrorBoundary>
-          <ViderSoldesForm
-            ravitaillements={ravitaillements}
-            onComplete={() => setViderOuvert(false)}
-            onCancel={() => setViderOuvert(false)}
-          />
-        </ErrorBoundary>
-      </Dialog>
 
       <Dialog
         open={formulaireOuvert}

@@ -195,19 +195,9 @@ export const FICHES = Object.freeze([
       texte: 'Chaque retour se retranche du reste dû. Quand il tombe à zéro, la livraison quitte la liste et le chiffre baisse. Tu peux aussi rendre en espèces ce que tu avais reçu en stock.',
     },
   },
-  {
-    id: 10,
-    groupe: GROUPES.RESERVES,
-    titre: '{{Vider les soldes}} — à ne faire qu’en connaissance de cause',
-    texte: 'Ce bouton ramène **stock et espèces à zéro** d’un seul geste. Le logiciel te montre d’abord le {{Total soldé}} : lis-le, c’est ta dernière relecture.',
-    retenir: {
-      titre: 'C’est sans retour',
-      texte: 'Les montants restent inscrits dans l’historique sous une ligne de clôture, mais **ils ne s’annulent pas depuis l’application**. En cas de doute, ne clique pas : appelle avant.',
-    },
-  },
 
   {
-    id: 11,
+    id: 10,
     groupe: GROUPES.HISTORIQUE,
     titre: "Corriger le montant d'une opération déjà validée",
     etapes: [
@@ -222,14 +212,14 @@ export const FICHES = Object.freeze([
     },
   },
   {
-    id: 12,
+    id: 11,
     groupe: GROUPES.HISTORIQUE,
     titre: 'Voir les corrections déjà faites sur une ligne',
     texte: 'Sur une ligne déjà corrigée, un bouton {{Modification}} apparaît — le chiffre à côté dit combien de fois.',
     texteFin: 'Il ouvre la liste de toutes les corrections : ancien montant, nouveau montant, la date, l’heure et qui l’a faite.',
   },
   {
-    id: 13,
+    id: 12,
     groupe: GROUPES.HISTORIQUE,
     titre: "Effacer une opération de l'historique",
     etapes: [
@@ -241,14 +231,14 @@ export const FICHES = Object.freeze([
     },
   },
   {
-    id: 14,
+    id: 13,
     groupe: GROUPES.HISTORIQUE,
     titre: 'Retrouver une opération supprimée',
     texte: "Onglet {{Historique}}, puis {{Corbeille}}. Tout ce qui a été supprimé s'y trouve — venu des non terminées comme de l'historique —, de la plus récente à la plus ancienne, avec qui l'a supprimée et quand.",
     texteFin: 'On y **lit**. On n’y restaure pas : pour la remettre, ressaisis-la.',
   },
   {
-    id: 15,
+    id: 14,
     groupe: GROUPES.HISTORIQUE,
     titre: 'Pourquoi {{Modifier}} ou {{Supprimer}} est parfois gris',
     texte: "Pose le doigt sur le bouton gris : **la raison s'affiche**. Ce n'est pas une panne, c'est un refus expliqué.",
@@ -256,7 +246,7 @@ export const FICHES = Object.freeze([
   },
 
   {
-    id: 16,
+    id: 15,
     groupe: GROUPES.CLIENTS,
     titre: 'Ajouter un client, un par un ou par fichier',
     etapes: [
@@ -271,7 +261,7 @@ export const FICHES = Object.freeze([
     },
   },
   {
-    id: 17,
+    id: 16,
     groupe: GROUPES.CLIENTS,
     titre: 'Retrouver un client',
     texte: 'La barre de recherche de l’onglet {{Clients}} cherche dans **tout** à la fois : le nom, le prénom, le numéro ou code agent, et le numéro personnel.',

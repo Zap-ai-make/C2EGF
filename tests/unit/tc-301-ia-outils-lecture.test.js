@@ -352,9 +352,9 @@ describe('[ME] mode_d_emploi : les fiches de l\'onglet Aide', () => {
 
     expect(reponse.sommaire.map((r) => [r.rubrique, r.ecran, r.fiches.map((f) => f.numero)])).toEqual([
       ['Enregistrer une opération', 'transactions', [1, 2, 3, 4, 5, 6, 7]],
-      ['Stock et espèces', 'transactions', [8, 9, 10]],
-      ['Rattraper une erreur', 'historique', [11, 12, 13, 14, 15]],
-      ['Les clients', 'clients', [16, 17]],
+      ['Stock et espèces', 'transactions', [8, 9]],
+      ['Rattraper une erreur', 'historique', [10, 11, 12, 13, 14]],
+      ['Les clients', 'clients', [15, 16]],
     ])
     expect(reponse.sommaire[0].fiches[2].titre).toBe('« Valider » ou « Non Terminées » : lequel choisir ?')
   })
@@ -386,11 +386,11 @@ describe('[ME] mode_d_emploi : les fiches de l\'onglet Aide', () => {
   })
 
   it('[ME-05] par numéro : la fiche entière, gras retiré', async () => {
-    const reponse = await executerOutil('mode_d_emploi', { numero: 10 })
+    const reponse = await executerOutil('mode_d_emploi', { numero: 9 })
 
     expect(reponse.fiches).toHaveLength(1)
-    expect(reponse.fiches[0].numero).toBe(10)
-    expect(reponse.fiches[0].texte).toContain('stock et espèces à zéro')
+    expect(reponse.fiches[0].numero).toBe(9)
+    expect(reponse.fiches[0].texte).toContain('personne par personne')
     expect(reponse.fiches[0].texte).not.toMatch(/\{\{|\*\*/)
   })
 

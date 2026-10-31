@@ -13,11 +13,11 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
  *      et son heure valait minuit pour tout le monde.
  *   2. Une liste met chaque ligne sur son propre rythme ; ces lignes-là
  *      s'empilent par dizaines et se lisent en colonnes.
- *   3. Une clôture lancée par erreur met les soldes à zéro et n'avait AUCUN
- *      recours : les deux commandes génériques la refusent, à bon droit.
+ *   3. Une clôture lancée par erreur n'avait aucun recours. « Vider les
+ *      soldes » est retiré depuis (31 octobre 2026, TC-218, TC-318) : les
+ *      clôtures d'avant se lisent ici, sans action.
  */
 
-const cancelClosure = vi.fn()
 const trashTransaction = vi.fn()
 let mouvements = []
 
@@ -34,7 +34,7 @@ vi.mock('../../src/services/collaborationService', () => ({
   subscribeMyCredits: () => () => {},
 }))
 vi.mock('../../src/context/transactions.jsx', () => ({
-  useTransactions: () => ({ completedTransactions: mouvements, cancelClosure, trashTransaction }),
+  useTransactions: () => ({ completedTransactions: mouvements, trashTransaction }),
 }))
 
 import { renderHook } from '@testing-library/react'
@@ -85,7 +85,6 @@ const poser = () => render(<ArchiveDealer currentUser={{ uid: 'u1' }} userProfil
 const tableau = () => screen.getByRole('table', { name: 'Mouvements de la boutique' })
 
 beforeEach(() => {
-  cancelClosure.mockReset().mockResolvedValue(true)
   trashTransaction.mockReset().mockResolvedValue(true)
   mouvements = []
 })
@@ -153,97 +152,14 @@ describe('TC-245 — un tableau, pas une liste', () => {
   })
 })
 
-describe('TC-245 — le bouton d’annulation d’une clôture', () => {
-  it('[TC-245-7] remplace le badge sur une clôture du jour', () => {
-    mouvements = [cloture()]
+describe('TC-245 — une ancienne clôture', () => {
+  it('[TC-245-7] se lit avec son statut, et n’offre plus aucun bouton', () => {
+    mouvements = [cloture(), cloture({ id: 'clo-2', statut: 'Annulée' })]
     poser()
 
-    expect(screen.getByTestId('annuler-cloture-clo-1')).toHaveTextContent('Annuler')
-    expect(within(tableau()).queryByText('Validée')).not.toBeInTheDocument()
-  })
-
-  /**
-   * ⚠ LE BOUTON NE S'AFFICHE QUE LÀ OÙ LE SERVEUR DIRA OUI.
-   *   Les conditions sont celles de `cancelClosure`, dans le même ordre. Un
-   *   bouton qui s'affiche là où le serveur refusera ne donne pas un choix au
-   *   gérant, il lui donne une erreur.
-   */
-  it('[TC-245-8] disparaît sur une clôture d’un autre jour', () => {
-    mouvements = [cloture({ createdAt: horodatage('2026-09-01T08:30:00Z') })]
-    poser()
-
-    expect(screen.queryByTestId('annuler-cloture-clo-1')).not.toBeInTheDocument()
     expect(within(tableau()).getByText('Validée')).toBeInTheDocument()
-  })
-
-  it('[TC-245-9] disparaît sur une clôture déjà annulée', () => {
-    mouvements = [cloture({ statut: 'Annulée' })]
-    poser()
-
-    expect(screen.queryByTestId('annuler-cloture-clo-1')).not.toBeInTheDocument()
     expect(within(tableau()).getByText('Annulée')).toBeInTheDocument()
-  })
-
-  it('[TC-245-10] disparaît sur une clôture sans détail par réseau', () => {
-    mouvements = [cloture({ soldes: undefined })]
-    poser()
-
-    expect(screen.queryByTestId('annuler-cloture-clo-1')).not.toBeInTheDocument()
-  })
-
-  /** Un ravitaillement se défait en rendant, pas en s'annulant. */
-  it('[TC-245-11] n’apparaît jamais sur un ravitaillement', () => {
-    mouvements = [ravitaillement()]
-    poser()
-
-    expect(screen.queryByTestId('annuler-cloture-rav-1')).not.toBeInTheDocument()
-  })
-})
-
-describe('TC-245 — la confirmation', () => {
-  it('[TC-245-12] dit ce qui reviendra, réseau par réseau', () => {
-    mouvements = [cloture()]
-    poser()
-    fireEvent.click(screen.getByTestId('annuler-cloture-clo-1'))
-
-    const dialogue = screen.getByTestId('confirmer-annulation-cloture')
-    expect(fr(dialogue.textContent)).toContain('Orange')
-    expect(fr(dialogue.textContent)).toContain('600 000')
-    expect(fr(dialogue.textContent)).toContain('400 000')
-  })
-
-  it('[TC-245-13] n’annule rien tant qu’on n’a pas confirmé', () => {
-    mouvements = [cloture()]
-    poser()
-    fireEvent.click(screen.getByTestId('annuler-cloture-clo-1'))
-    fireEvent.click(screen.getByRole('button', { name: 'Garder la clôture' }))
-
-    expect(cancelClosure).not.toHaveBeenCalled()
-  })
-
-  it('[TC-245-14] la confirmation envoie la commande', async () => {
-    mouvements = [cloture()]
-    poser()
-    fireEvent.click(screen.getByTestId('annuler-cloture-clo-1'))
-    fireEvent.click(screen.getByTestId('confirmer-annuler-cloture'))
-
-    await waitFor(() => expect(cancelClosure).toHaveBeenCalledWith('clo-1'))
-  })
-
-  /**
-   * Le dialogue reste ouvert sur un refus : disparaître sans rien dire
-   * laisserait croire que l'annulation a eu lieu, et le gérant repartirait
-   * avec des soldes qu'il croit restaurés.
-   */
-  it('[TC-245-15] un refus du serveur se lit, et le dialogue reste', async () => {
-    cancelClosure.mockRejectedValue(new Error('Seule une clôture du jour s’annule.'))
-    mouvements = [cloture()]
-    poser()
-    fireEvent.click(screen.getByTestId('annuler-cloture-clo-1'))
-    fireEvent.click(screen.getByTestId('confirmer-annuler-cloture'))
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('Seule une clôture du jour')
-    expect(screen.getByTestId('confirmer-annulation-cloture')).toBeInTheDocument()
+    expect(within(tableau()).queryByRole('button')).not.toBeInTheDocument()
   })
 })
 
@@ -291,7 +207,6 @@ describe('TC-245 — les retours, dans l’onglet Ravitaillement', () => {
 
     fireEvent.click(screen.getByTestId('confirmer-annuler-retour'))
     await waitFor(() => expect(trashTransaction).toHaveBeenCalledWith('ret-1'))
-    expect(cancelClosure).not.toHaveBeenCalled()
   })
 
   it('[TC-245-19] un retour annulé est dans la corbeille, pas ici', () => {

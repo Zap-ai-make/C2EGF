@@ -191,11 +191,12 @@ for (let jourEcoule = 0; jourEcoule < 30; jourEcoule++) {
 /**
  * Les mouvements de la boutique, pour l'onglet Ravitaillement.
  *
- * Trois états de clôture, parce que ce sont les trois rendus possibles de la
- * dernière colonne et qu'ils ne se voient qu'ensemble : celle du jour porte un
- * bouton, celle d'hier un badge « Validée », celle qu'on a défaite un badge
- * « Annulée ». Une colonne qui alterne bouton et pastille est exactement le
- * genre d'alignement que jsdom ne peut pas juger.
+ * Les rendus possibles de la dernière colonne, côte à côte : un retour porte
+ * son bouton « Annuler », un ravitaillement et une ancienne clôture un badge
+ * « Validée », une clôture défaite un badge « Annulée ». Une colonne qui
+ * alterne bouton et pastille est exactement le genre d'alignement que jsdom ne
+ * peut pas juger. (« Vider les soldes » est retiré : ses clôtures restent
+ * lisibles, sans action.)
  */
 const mouvementsBoutique = (() => {
   const ceMatin = new Date()
@@ -205,8 +206,8 @@ const mouvementsBoutique = (() => {
 
   return [
     {
-      id: 'clo-jour', type: 'Clôture', montant: 1_002_000, statut: 'Validée',
-      soldes: [{ network: 'Orange', stock: 600_066, liquidite: 401_934 }],
+      id: 'ret-1', type: 'Retour', montant: 1_500_000, statut: 'Validée',
+      expediteur: 'Mme Sawadogo', balanceType: 'liquidite', replenishmentId: 'rav-1',
       createdAt: instant(ceMatin), date: ceMatin.toLocaleDateString('fr-FR'),
     },
     {
@@ -624,12 +625,12 @@ function Preview() {
           {/* L'onglet Ravitaillement : ce que la boutique s'est appliqué à
               elle-même. Il était une LISTE ; c'est désormais un tableau, parce
               que ces lignes se lisent en colonnes — combien est entré, combien
-              est sorti. La dernière colonne alterne bouton et pastille selon
-              que la clôture est encore défaisable. */}
+              est sorti. La dernière colonne alterne bouton et pastille : seul
+              un retour se défait d'ici. */}
           <PageHeader title="Ravitaillement — mouvements de la boutique" />
           <div className="overflow-hidden rounded-xl border border-line bg-surface" data-testid="apercu-mouvements">
             <TransactionsContext.Provider
-              value={{ completedTransactions: mouvementsBoutique, cancelClosure: () => Promise.resolve(true) }}
+              value={{ completedTransactions: mouvementsBoutique, trashTransaction: () => Promise.resolve(true) }}
             >
               <ArchiveDealer currentUser={{ uid: 'banc' }} userProfile={{ storeId: 'store-ouaga' }} />
             </TransactionsContext.Provider>

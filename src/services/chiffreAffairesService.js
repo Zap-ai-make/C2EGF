@@ -65,8 +65,10 @@ import { getBusinessDayBounds } from '../utils/businessDate.js'
  *   raisonnement était un non-sequitur** : il suppose que
  *   `refuserSiIntouchable` est le SEUL écrivain de ces statuts, jamais
  *   vérifié. Il ne l'est pas :
- *   - `cancelClosure` (`:513-538`) exige `type === 'Clôture'`, écrit
- *     `statut: 'Annulée'`, et N'APPELLE JAMAIS `refuserSiIntouchable` ;
+ *   - `cancelClosure` exigeait `type === 'Clôture'`, écrivait
+ *     `statut: 'Annulée'`, et N'APPELAIT JAMAIS `refuserSiIntouchable`.
+ *     Retiré le 31 octobre 2026 avec « Vider les soldes » — mais les
+ *     clôtures qu'il a annulées restent dans les données, et le piège avec ;
  *   - `trashReplenishmentReturn` (`:803-829`) exige `type === 'Retour'`,
  *     écrit `statut: 'Supprimée'`, même contournement.
  *   Une clôture annulée entrait donc dans `total`, PUIS se faisait soustraire

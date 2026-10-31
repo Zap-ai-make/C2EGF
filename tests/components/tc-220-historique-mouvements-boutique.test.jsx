@@ -82,7 +82,8 @@ describe('TC-220 — les mouvements de la boutique', () => {
     const liste = screen.getByLabelText('Mouvements de la boutique')
     expect(within(liste).getByText('Ravitaillement')).toBeInTheDocument()
     expect(within(liste).getByText('Clôture')).toBeInTheDocument()
-    expect(within(liste).getByText('100 000 FCFA')).toBeInTheDocument()
+    // Le signe dit le sens : un ravitaillement ENTRE (TC-245-16).
+    expect(within(liste).getByText('+ 100 000 FCFA')).toBeInTheDocument()
     expect(within(liste).getByText('1 002 000 FCFA')).toBeInTheDocument()
   })
 

@@ -23,7 +23,6 @@ import { useTransactions } from '../../context/transactions.jsx'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { formatFirestoreDate } from '../../utils/formatFirestoreDate'
 import { formatTransactionDateTime } from '../../utils/helpers'
-import { isSameBusinessDay } from '../../utils/businessDate'
 import { FIRESTORE_CONFIG } from '../../constants/firestoreConstants'
 import Dialog from '../ui/Dialog.jsx'
 import StatusBadge from '../ui/StatusBadge'
@@ -48,11 +47,12 @@ import StatusBadge from '../ui/StatusBadge'
  * L'EXCEPTION, ET CE QUI LA DISTINGUE
  * ───────────────────────────────────
  * Les mouvements que la boutique s'est appliqués à elle-même ne sont la
- * décision de personne d'autre. Une clôture lancée par erreur met les soldes à
- * zéro : elle doit se défaire LÀ OÙ ON LA LIT, sinon il n'existe aucun endroit
- * pour la défaire. L'action reste donc bornée à ce seul tableau, et à la
- * journée en cours — au-delà, le serveur refuse (storeTransactionCommand.js,
- * action `cancelClosure`), et le bouton ne s'affiche même pas.
+ * décision de personne d'autre. Un retour rendu par erreur se défait LÀ OÙ ON
+ * LE LIT : la réserve est recréditée et la livraison redevient due
+ * (`trashReplenishmentReturn`). Un ravitaillement, lui, se défait en rendant.
+ *
+ * Les clôtures (« Vider les soldes », retiré le 31 octobre 2026) restent
+ * listées pour ce qu'elles ont été : lisibles, sans action.
  *
  * CE QUE CE LOT NE FAIT PAS, ET POURQUOI JE LE DIS
  * ───────────────────────────────────────────────
@@ -203,25 +203,6 @@ export function ArchiveDettes({ storeId }) {
   )
 }
 
-/** Ce qu'une clôture a balayé revient aux soldes — tant qu'on est le même jour. */
-const CLOTURE = 'Clôture'
-
-/**
- * Une clôture est-elle encore annulable ?
- *
- * Les trois conditions sont celles du serveur, dans le même ordre : c'est
- * délibéré. Un bouton qui s'affiche là où `cancelClosure` refusera ne donne pas
- * le choix au gérant, il lui donne une erreur — et le serveur reste l'autorité,
- * ceci n'étant que la politesse de ne pas proposer l'impossible.
- */
-const clotureAnnulable = (mouvement, maintenant = new Date()) =>
-  mouvement?.type === CLOTURE
-  && mouvement.statut !== FIRESTORE_CONFIG.STATUS.CANCELLED
-  && !estSupprimee(mouvement)
-  && Array.isArray(mouvement.soldes) && mouvement.soldes.length > 0
-  && Boolean(mouvement.createdAt)
-  && isSameBusinessDay(mouvement.createdAt?.toDate ? mouvement.createdAt.toDate() : mouvement.createdAt, maintenant)
-
 /** Un retour se défait d'ici : la réserve est recréditée, la livraison redevient due. */
 const retourAnnulable = (mouvement) => mouvement?.type === TYPE_RETOUR && !estSupprimee(mouvement)
 
@@ -293,7 +274,7 @@ function MouvementsBoutique({ mouvements, onAnnuler }) {
         </thead>
         <tbody>
           {mouvements.map((m) => {
-            const annulable = clotureAnnulable(m) || retourAnnulable(m)
+            const annulable = retourAnnulable(m)
             return (
               <tr key={m.id} className="border-b border-line/60" data-testid={`mouvement-${m.id}`}>
                 <td className="whitespace-nowrap px-4 py-3 text-sm tabular-nums text-ink">
@@ -304,14 +285,14 @@ function MouvementsBoutique({ mouvements, onAnnuler }) {
                   {detailDuMouvement(m)}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold tabular-nums text-ink">
-                  {signe(m.type)}{formatCurrency(m.montant)}
+                  {`${signe(m.type)}${formatCurrency(m.montant)}`}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-right">
                   {annulable ? (
                     <button
                       type="button"
                       onClick={() => onAnnuler(m)}
-                      data-testid={m.type === TYPE_RETOUR ? `annuler-retour-${m.id}` : `annuler-cloture-${m.id}`}
+                      data-testid={`annuler-retour-${m.id}`}
                       className="rounded border border-danger/40 px-3 py-1 text-xs font-semibold text-danger transition-colors hover:bg-danger-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
                     >
                       Annuler
@@ -338,7 +319,7 @@ export function ArchiveDealer({ currentUser, userProfile }) {
   const [aAnnuler, setAAnnuler] = useState(null)
   const [enCours, setEnCours] = useState(false)
   const [echec, setEchec] = useState(null)
-  const { completedTransactions = [], cancelClosure, trashTransaction } = useTransactions()
+  const { completedTransactions = [], trashTransaction } = useTransactions()
 
   // Les mouvements que la boutique s'est appliqués à elle-même : ravitaillements
   // reçus, retours rendus, clôtures de journée. Ils viennent du registre
@@ -347,7 +328,6 @@ export function ArchiveDealer({ currentUser, userProfile }) {
   // parti », pas « quel service l'a écrit ». Un retour annulé est dans la
   // corbeille : le garder ici le ferait relire comme rendu.
   const mouvements = completedTransactions.filter((t) => STORE_MOVEMENT_TYPES.includes(t.type) && !estSupprimee(t))
-  const estRetour = aAnnuler?.type === TYPE_RETOUR
 
   useEffect(() => {
     setLignes(null)
@@ -370,8 +350,7 @@ export function ArchiveDealer({ currentUser, userProfile }) {
     try {
       // Un retour part sur sa propre commande (trashReplenishmentReturn) : le
       // contexte la choisit sur le type, comme depuis le tableau des clients.
-      if (aAnnuler.type === TYPE_RETOUR) await trashTransaction(aAnnuler.id)
-      else await cancelClosure(aAnnuler.id)
+      await trashTransaction(aAnnuler.id)
       setAAnnuler(null)
     } catch (error) {
       // Le dialogue reste ouvert : il porte le message, et le gérant voit que
@@ -414,14 +393,14 @@ export function ArchiveDealer({ currentUser, userProfile }) {
         ))}
       </Coquille>
 
-      {/* Annuler une clôture rend les soldes qu'elle avait balayés : la
-          confirmation dit CE QU'ELLE FAIT, chiffres compris, plutôt qu'un
-          « Êtes-vous sûr ? » qui n'informe personne. */}
+      {/* Annuler un retour recrédite la réserve ET rend la livraison due : la
+          confirmation dit CE QU'ELLE FAIT, plutôt qu'un « Êtes-vous sûr ? »
+          qui n'informe personne. */}
       <Dialog
         open={Boolean(aAnnuler)}
         onClose={() => { setAAnnuler(null); setEchec(null) }}
-        title={estRetour ? 'Annuler ce retour ?' : 'Annuler cette clôture ?'}
-        testId={estRetour ? 'confirmer-annulation-retour' : 'confirmer-annulation-cloture'}
+        title="Annuler ce retour ?"
+        testId="confirmer-annulation-retour"
         footer={(
           <div className="flex justify-end gap-3">
             <button
@@ -429,21 +408,21 @@ export function ArchiveDealer({ currentUser, userProfile }) {
               onClick={() => { setAAnnuler(null); setEchec(null) }}
               className="rounded border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             >
-              {estRetour ? 'Garder le retour' : 'Garder la clôture'}
+              Garder le retour
             </button>
             <button
               type="button"
               onClick={confirmerAnnulation}
               disabled={enCours}
-              data-testid={estRetour ? 'confirmer-annuler-retour' : 'confirmer-annuler-cloture'}
+              data-testid="confirmer-annuler-retour"
               className="rounded bg-danger px-4 py-2 text-sm font-semibold text-white transition-colors hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:cursor-wait disabled:opacity-60"
             >
-              {enCours ? 'Annulation…' : estRetour ? 'Annuler le retour' : 'Annuler la clôture'}
+              {enCours ? 'Annulation…' : 'Annuler le retour'}
             </button>
           </div>
         )}
       >
-        {aAnnuler && estRetour && (
+        {aAnnuler && (
           // La moitié qu'on oublie si on ne la dit pas : la livraison REDEVIENT due.
           <div className="space-y-3 text-sm text-ink">
             <p className="m-0">
@@ -455,29 +434,6 @@ export function ArchiveDealer({ currentUser, userProfile }) {
               Le montant reviendra dans la réserve {libelleReserve(aAnnuler.balanceType) || 'concernée'},
               et la livraison de {aAnnuler.expediteur || 'cet expéditeur'} redeviendra due d’autant.
             </p>
-            {echec && <p className="m-0 text-danger" role="alert">{echec}</p>}
-          </div>
-        )}
-        {aAnnuler && !estRetour && (
-          <div className="space-y-3 text-sm text-ink">
-            <p className="m-0">
-              Les réserves balayées reviendront aux soldes :
-              {' '}
-              <span className="font-semibold tabular-nums">{formatCurrency(aAnnuler.montant)}</span>
-              {' '}au total.
-            </p>
-            {Array.isArray(aAnnuler.soldes) && (
-              <ul className="m-0 list-none space-y-1 rounded border border-line bg-surface-2 p-3">
-                {aAnnuler.soldes.map((solde) => (
-                  <li key={solde.network} className="flex justify-between gap-4">
-                    <span>{solde.network}</span>
-                    <span className="tabular-nums text-ink-muted">
-                      stock {formatCurrency(solde.stock)} · espèce {formatCurrency(solde.liquidite)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
             {echec && <p className="m-0 text-danger" role="alert">{echec}</p>}
           </div>
         )}

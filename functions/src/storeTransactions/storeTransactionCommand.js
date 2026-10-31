@@ -11,7 +11,6 @@ import {
   reverseHistoryTransactionImpact,
   liquidityConsumptionSplit,
   applyReplenishmentReturnImpact,
-  reverseClosureImpact,
 } from '../settlements/financialUtils.js'
 import {
   STORE_NETWORKS,
@@ -30,6 +29,9 @@ const SETTLEMENT_FIELDS = [
 const PENDING = ['Non Terminées', 'Non Terminees']
 const VALIDATED = ['Validée', 'Validee']
 const REPLENISHMENT_TYPE = 'Ravitaillement'
+// Plus aucune commande n'écrit de clôture (« Vider les soldes », retiré le 31
+// octobre 2026) : le type reste pour les lignes DÉJÀ écrites, qu'aucune
+// commande générique ne doit défaire (UNCANCELLABLE_TYPES).
 const CLOSURE_TYPE = 'Clôture'
 // Ni l'un ni l'autre n'est un mouvement client : `reverseHistoryTransactionImpact`
 // ne sait pas les défaire, et `cancelHistory` les refuse pour cette raison.
@@ -173,21 +175,6 @@ function cleanTransaction(input) {
 }
 function dateFr() {
   return new Intl.DateTimeFormat('fr-FR', { timeZone: STORE_TIME_ZONE }).format(new Date())
-}
-
-/**
- * La journee de la boutique a laquelle appartient un instant, en « AAAA-MM-JJ ».
- *
- * Le fuseau vient du profil, jamais de la machine qui execute la fonction : un
- * conteneur en UTC rangerait les lignes de 23 h 30 dans le lendemain, et la
- * cloture de ce soir deviendrait « celle d'hier » une demi-heure apres avoir
- * ete ecrite. Le format ISO de `fr-CA` se compare tel quel, sans arithmetique
- * de fuseau a reecrire.
- */
-function journeeDe(instant) {
-  const date = instant?.toDate ? instant.toDate() : (instant instanceof Date ? instant : new Date(instant))
-  if (Number.isNaN(date.getTime())) return null
-  return new Intl.DateTimeFormat('fr-CA', { timeZone: STORE_TIME_ZONE }).format(date)
 }
 
 async function readActor(t, db, uid) {
@@ -409,136 +396,6 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
       t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: draftId, historyId: historyRef.id, uid, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
       return { validated: true, historyId: historyRef.id }
-    }
-
-    // Clôture : la boutique repart de zéro. On écrit d'abord ce qu'on solde,
-    // on remet à zéro ensuite — l'inverse ferait disparaître les montants des
-    // livres. Rien n'est lu dans la charge utile : le serveur solde ce qu'il
-    // voit, et un montant soufflé par le navigateur n'a aucun effet.
-    if (action === 'closeDay') {
-      // ⚠ UNE LIVRAISON NON RENDUE INTERDIT DE VIDER. Un ravitaillement AJOUTE
-      //   aux soldes, un retour les PONCTIONNE : l'argent dû au dealer est donc
-      //   assis dans les soldes. Les vider détruit les fonds enregistrés qui
-      //   serviraient au retour, pendant que la dette survit sur la ligne de
-      //   ravitaillement. La boutique se retrouverait devant une dette sans
-      //   rien d'inscrit pour l'honorer.
-      //
-      // ⚠ CE REFUS PASSE AVANT « déjà à zéro » : il nomme un problème que le
-      //   gérant peut corriger, là où l'autre constate un geste sans effet.
-      //
-      // ⚠ LE RESTE DÛ SE FILTRE EN MÉMOIRE, PAS DANS LA REQUÊTE. Un
-      //   `where('remainingAmount','>',0)` exigerait un index composite de plus,
-      //   et surtout il ÉCARTERAIT les lignes qui ne portent pas le champ —
-      //   Firestore exclut d'un filtre les documents sans le champ filtré. Les
-      //   livraisons d'avant S8 n'en ont pas ; les rater ici serait sans
-      //   conséquence (elles comptent pour soldées), mais le même piège a déjà
-      //   coûté une correction sur l'historique client.
-      const livraisons = await t.get(
-        db.collection(`clients/${storeId}/history`).where('type', '==', REPLENISHMENT_TYPE),
-      )
-      // Le reste dû ABSENT vaut « soldée » : ce qui en a été rendu avant S8 ne
-      // fut jamais enregistré, et l'inconnaissable ne doit pas bloquer la
-      // boutique pour toujours. Même règle que `estRavitaillementEnCours`
-      // (src/utils/ravitaillement.js), qu'on ne peut pas importer d'ici.
-      const dues = livraisons.docs
-        .map(d => d.data())
-        .filter(r => !r.deletedAt && Number.isFinite(Number(r.remainingAmount)) && Number(r.remainingAmount) > 0)
-
-      if (dues.length > 0) {
-        const reste = dues.reduce((somme, r) => somme + Number(r.remainingAmount), 0)
-        const pluriel = dues.length > 1 ? 's' : ''
-        fail(
-          'STORE_CLOSURE_BLOCKED',
-          `${dues.length} ravitaillement${pluriel} non retourné${pluriel} — ${reste.toLocaleString('fr-FR')} FCFA. `
-          + 'Vider les soldes effacerait les fonds qui servent à les rendre.',
-        )
-      }
-
-      const soldes = STORE_NETWORKS.map(network => ({
-        network,
-        stock: Number(balances[network]?.stock) || 0,
-        liquidite: Number(balances[network]?.liquidite) || 0,
-      }))
-      const total = soldes.reduce((somme, s) => somme + s.stock + s.liquidite, 0)
-      if (total <= 0) fail('STORE_TRANSACTION_INVALID', 'Les soldes sont déjà à zéro.')
-
-      const nextBalances = normalizeNetworkBalances({})
-      const principal = soldes[0]
-      const ref = db.collection(`clients/${storeId}/history`).doc()
-      const data = {
-        type: CLOSURE_TYPE,
-        montant: total,
-        reseau: principal.network,
-        stockSolde: principal.stock,
-        liquiditeSoldee: principal.liquidite,
-        soldes,
-        statut: 'Validée',
-        storeId,
-        storeName: store.name || profile.storeName || '',
-        operatorId: uid,
-        operatorName: profile.name || '',
-        operatorEmail: profile.email || '',
-        date: dateFr(),
-        createdAt: now,
-        updatedAt: now,
-        validatedAt: now,
-      }
-      t.set(ref, data)
-      t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
-      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: ref.id, uid, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
-      return { id: ref.id, ...data }
-    }
-
-    // Defaire une cloture : chaque reserve balayee revient d'ou elle venait.
-    //
-    // POURQUOI UNE ACTION A PART, ET PAS `cancelHistory`
-    // ─────────────────────────────────────────────────
-    // L'inversion generique ne sait defaire qu'un depot ou un retrait : elle lit
-    // un type, un reseau et un montant. Une cloture n'a pas un reseau mais TOUS,
-    // et pas un montant mais deux par reseau. `cancelHistory` la refuse
-    // d'ailleurs explicitement, et continue de la refuser — ce qui vaut mieux
-    // qu'un refus silencieux de rendre quoi que ce soit.
-    //
-    // CE QUE LE SERVEUR REFUSE, ET POURQUOI CHAQUE REFUS EXISTE
-    // ─────────────────────────────────────────────────────
-    //   • Une cloture d'un autre jour. Son montant reviendrait s'ajouter aux
-    //     soldes d'aujourd'hui : l'arithmetique serait juste — c'est bien
-    //     l'inverse de son effet — mais le gerant lirait un stock qui ne
-    //     correspond a aucune journee. Annuler une cloture repare un geste de la
-    //     journee en cours ; au-dela, c'est une ecriture de correction.
-    //   • Une cloture sans `soldes`. Son inverse est INCONNAISSABLE : le detail
-    //     par reseau ne fut jamais ecrit, et le total ne suffit pas a le
-    //     reconstituer des que la boutique opere plus d'un reseau.
-    //   • Une cloture deja defaite. Rendre deux fois creerait de l'argent.
-    if (action === 'cancelClosure') {
-      const historyId = cleanId(payload.historyId, 'historyId')
-      const ref = db.doc(`clients/${storeId}/history/${historyId}`)
-      const snap = await t.get(ref)
-      if (!snap.exists) fail('STORE_TRANSACTION_NOT_FOUND', 'Clôture introuvable.')
-      const cloture = snap.data()
-      if (cloture.type !== CLOSURE_TYPE) fail('STORE_TRANSACTION_INVALID', 'Cette ligne n’est pas une clôture.')
-      if ([DELETED_STATUS, CANCELLED_STATUS].includes(cloture.statut)) fail('STORE_TRANSACTION_INVALID', 'Cette clôture a déjà été annulée.')
-
-      const jourCloture = journeeDe(cloture.createdAt)
-      if (!jourCloture || jourCloture !== journeeDe(new Date())) {
-        fail('STORE_TRANSACTION_INVALID', 'Seule une clôture du jour s’annule. Celle-ci appartient à une journée close.')
-      }
-      if (!Array.isArray(cloture.soldes) || cloture.soldes.length === 0) {
-        fail('STORE_TRANSACTION_INVALID', 'Cette clôture est antérieure au détail par réseau : ce qu’elle a balayé est inconnaissable.')
-      }
-
-      const nextBalances = reverseClosureImpact(balances, cloture.soldes)
-
-      t.update(ref, {
-        statut: CANCELLED_STATUS,
-        cancelledAt: now,
-        cancelledBy: uid,
-        cancelledByName: profile.name || '',
-        updatedAt: now,
-      })
-      t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
-      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, historyId, uid, soldes: cloture.soldes, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
-      return { cancelled: true }
     }
 
     if (action === 'cancelHistory') {

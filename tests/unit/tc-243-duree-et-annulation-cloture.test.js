@@ -1,17 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import { dureeDe, instantDArrivee, formaterHeure } from '../../src/utils/attente.js'
-import { reverseClosureImpact } from '../../functions/src/settlements/financialUtils.js'
 
 /**
- * TC-243 — Le chronomètre arrêté, et l'inverse d'une clôture.
+ * TC-243 — Le chronomètre arrêté.
  *
- * DEUX SUJETS, UN SEUL FICHIER
- * ────────────────────────────
- * Ils viennent du même lot et partagent sa question : que vaut une opération
- * UNE FOIS FAITE ? La durée répond « combien de temps elle a pris » ; l'inverse
- * d'une clôture répond « ce qu'il faut rendre pour qu'elle n'ait pas eu lieu ».
- * Les deux sont purs, et c'est ce qui permet de les éprouver sans horloge
- * truquée ni émulateur.
+ * Que vaut une opération UNE FOIS FAITE ? La durée répond « combien de temps
+ * elle a pris ». Elle est pure, et c'est ce qui permet de l'éprouver sans
+ * horloge truquée ni émulateur.
+ *
+ * Ce fichier portait aussi l'inverse d'une clôture (TC-243-10 à 16) : retiré le
+ * 31 octobre 2026 avec « Vider les soldes » et `reverseClosureImpact` (TC-318).
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -96,75 +94,5 @@ describe('TC-243 — l’heure affichée', () => {
 
   it('[TC-243-9] une valeur illisible ne casse pas la cellule', () => {
     expect(formaterHeure(Number.NaN)).toBe('-')
-  })
-})
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 2. L'inverse d'une clôture
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe('TC-243 — défaire une clôture rend ce qu’elle a pris', () => {
-  const soldes = [
-    { network: 'Orange', stock: 500_000, liquidite: 300_000 },
-    { network: 'Moov', stock: 200_000, liquidite: 0 },
-  ]
-
-  it('[TC-243-10] chaque réserve revient sur son réseau', () => {
-    const apres = reverseClosureImpact({
-      Orange: { stock: 0, liquidite: 0 },
-      Moov: { stock: 0, liquidite: 0 },
-    }, soldes)
-
-    expect(apres.Orange).toEqual({ stock: 500_000, liquidite: 300_000 })
-    expect(apres.Moov).toEqual({ stock: 200_000, liquidite: 0 })
-  })
-
-  /**
-   * ⚠ ON AJOUTE, ON NE RESTAURE PAS UN ÉTAT.
-   *   La boutique continue de travailler après une clôture. Écraser les soldes
-   *   courants avec ceux d'avant effacerait tout ce qui s'est passé depuis —
-   *   ici, un ravitaillement de 1 000 000 reçu après la clôture.
-   */
-  it('[TC-243-11] ce qui est arrivé depuis n’est pas effacé', () => {
-    const apres = reverseClosureImpact({
-      Orange: { stock: 1_000_000, liquidite: 50_000 },
-    }, [{ network: 'Orange', stock: 500_000, liquidite: 300_000 }])
-
-    expect(apres.Orange).toEqual({ stock: 1_500_000, liquidite: 350_000 })
-  })
-
-  it('[TC-243-12] un réseau absent des soldes courants repart de zéro', () => {
-    const apres = reverseClosureImpact({}, [{ network: 'Orange', stock: 7_000, liquidite: 0 }])
-
-    expect(apres.Orange).toMatchObject({ stock: 7_000 })
-  })
-
-  it('[TC-243-13] les soldes d’entrée ne sont pas modifiés', () => {
-    const avant = { Orange: { stock: 10, liquidite: 20 } }
-    reverseClosureImpact(avant, [{ network: 'Orange', stock: 5, liquidite: 5 }])
-
-    expect(avant).toEqual({ Orange: { stock: 10, liquidite: 20 } })
-  })
-})
-
-describe('TC-243 — ce que l’inverse refuse', () => {
-  /**
-   * ⚠ SON INVERSE EST INCONNAISSABLE, ET C'EST POURQUOI ON REFUSE.
-   *   Une clôture d'avant l'enregistrement du détail par réseau ne porte que son
-   *   total. Le répartir au jugé rendrait un chiffre plausible et faux dès que
-   *   la boutique opère plus d'un réseau — et personne ne le verrait.
-   */
-  it('[TC-243-14] une clôture sans détail par réseau', () => {
-    expect(() => reverseClosureImpact({}, undefined)).toThrow(/inconnaissable/i)
-    expect(() => reverseClosureImpact({}, [])).toThrow(/inconnaissable/i)
-  })
-
-  it('[TC-243-15] un solde sans réseau', () => {
-    expect(() => reverseClosureImpact({}, [{ stock: 10, liquidite: 0 }])).toThrow(/sans reseau/i)
-  })
-
-  it('[TC-243-16] un solde négatif', () => {
-    expect(() => reverseClosureImpact({}, [{ network: 'Orange', stock: -1, liquidite: 0 }]))
-      .toThrow(/negatif/i)
   })
 })
