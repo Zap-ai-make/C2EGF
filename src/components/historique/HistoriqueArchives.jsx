@@ -18,6 +18,7 @@ import {
   DEALER_REQUEST_TYPE_LABELS,
 } from '../../constants/dealerConstants'
 import { STORE_MOVEMENT_TYPES, estSupprimee } from '../../utils/constants'
+import { TYPE_RAVITAILLEMENT, TYPE_RETOUR } from '../../utils/ravitaillement.js'
 import { useTransactions } from '../../context/transactions.jsx'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { formatFirestoreDate } from '../../utils/formatFirestoreDate'
@@ -221,6 +222,26 @@ const clotureAnnulable = (mouvement, maintenant = new Date()) =>
   && Boolean(mouvement.createdAt)
   && isSameBusinessDay(mouvement.createdAt?.toDate ? mouvement.createdAt.toDate() : mouvement.createdAt, maintenant)
 
+/** Un retour se défait d'ici : la réserve est recréditée, la livraison redevient due. */
+const retourAnnulable = (mouvement) => mouvement?.type === TYPE_RETOUR && !estSupprimee(mouvement)
+
+/** La réserve touchée, dite comme le formulaire la dit. */
+const libelleReserve = (cle) => (cle === 'liquidite' ? 'espèce' : cle === 'stock' ? 'stock' : '')
+
+/**
+ * Le sens du mouvement, porté par le signe : un ravitaillement remplit une
+ * réserve, un retour la vide. Côte à côte dans un même tableau, deux montants
+ * nus se liraient pareil.
+ */
+const signe = (type) => (type === TYPE_RAVITAILLEMENT ? '+ ' : type === TYPE_RETOUR ? '− ' : '')
+
+/** Qui, et quelle réserve : « Patron · espèce ». */
+function detailDuMouvement(m) {
+  const reserve = m.type === TYPE_RAVITAILLEMENT || m.type === TYPE_RETOUR ? libelleReserve(m.balanceType) : ''
+  const qui = m.expediteur || m.note || ''
+  return [qui, reserve].filter(Boolean).join(' · ') || '—'
+}
+
 /**
  * Les mouvements de la boutique, en TABLEAU.
  *
@@ -244,7 +265,7 @@ function MouvementsBoutique({ mouvements, onAnnuler }) {
   if (mouvements.length === 0) {
     return (
       <div className="px-4 py-10 text-center">
-        <p className="text-base font-medium text-ink">Aucun ravitaillement ni clôture</p>
+        <p className="text-base font-medium text-ink">Aucun ravitaillement ni retour</p>
         <p className="mt-1 text-sm text-ink-muted">Rien n’est encore passé par ici.</p>
       </div>
     )
@@ -272,7 +293,7 @@ function MouvementsBoutique({ mouvements, onAnnuler }) {
         </thead>
         <tbody>
           {mouvements.map((m) => {
-            const annulable = clotureAnnulable(m)
+            const annulable = clotureAnnulable(m) || retourAnnulable(m)
             return (
               <tr key={m.id} className="border-b border-line/60" data-testid={`mouvement-${m.id}`}>
                 <td className="whitespace-nowrap px-4 py-3 text-sm tabular-nums text-ink">
@@ -280,17 +301,17 @@ function MouvementsBoutique({ mouvements, onAnnuler }) {
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-ink">{m.type}</td>
                 <td className="px-4 py-3 text-sm text-ink-muted">
-                  {m.expediteur || m.note || '—'}
+                  {detailDuMouvement(m)}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-semibold tabular-nums text-ink">
-                  {formatCurrency(m.montant)}
+                  {signe(m.type)}{formatCurrency(m.montant)}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-right">
                   {annulable ? (
                     <button
                       type="button"
                       onClick={() => onAnnuler(m)}
-                      data-testid={`annuler-cloture-${m.id}`}
+                      data-testid={m.type === TYPE_RETOUR ? `annuler-retour-${m.id}` : `annuler-cloture-${m.id}`}
                       className="rounded border border-danger/40 px-3 py-1 text-xs font-semibold text-danger transition-colors hover:bg-danger-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
                     >
                       Annuler
@@ -317,14 +338,16 @@ export function ArchiveDealer({ currentUser, userProfile }) {
   const [aAnnuler, setAAnnuler] = useState(null)
   const [enCours, setEnCours] = useState(false)
   const [echec, setEchec] = useState(null)
-  const { completedTransactions = [], cancelClosure } = useTransactions()
+  const { completedTransactions = [], cancelClosure, trashTransaction } = useTransactions()
 
   // Les mouvements que la boutique s'est appliqués à elle-même : ravitaillements
-  // reçus, clôtures de journée. Ils viennent du registre `history`, pas du
-  // circuit dealer — deux sources, un même onglet, parce que le gérant qui vient
-  // ici cherche « d'où vient mon stock et où il est parti », pas « quel service
-  // l'a écrit ».
-  const mouvements = completedTransactions.filter((t) => STORE_MOVEMENT_TYPES.includes(t.type))
+  // reçus, retours rendus, clôtures de journée. Ils viennent du registre
+  // `history`, pas du circuit dealer — deux sources, un même onglet, parce que
+  // le gérant qui vient ici cherche « d'où vient mon stock et où il est
+  // parti », pas « quel service l'a écrit ». Un retour annulé est dans la
+  // corbeille : le garder ici le ferait relire comme rendu.
+  const mouvements = completedTransactions.filter((t) => STORE_MOVEMENT_TYPES.includes(t.type) && !estSupprimee(t))
+  const estRetour = aAnnuler?.type === TYPE_RETOUR
 
   useEffect(() => {
     setLignes(null)
@@ -345,7 +368,10 @@ export function ArchiveDealer({ currentUser, userProfile }) {
     setEnCours(true)
     setEchec(null)
     try {
-      await cancelClosure(aAnnuler.id)
+      // Un retour part sur sa propre commande (trashReplenishmentReturn) : le
+      // contexte la choisit sur le type, comme depuis le tableau des clients.
+      if (aAnnuler.type === TYPE_RETOUR) await trashTransaction(aAnnuler.id)
+      else await cancelClosure(aAnnuler.id)
       setAAnnuler(null)
     } catch (error) {
       // Le dialogue reste ouvert : il porte le message, et le gérant voit que
@@ -394,8 +420,8 @@ export function ArchiveDealer({ currentUser, userProfile }) {
       <Dialog
         open={Boolean(aAnnuler)}
         onClose={() => { setAAnnuler(null); setEchec(null) }}
-        title="Annuler cette clôture ?"
-        testId="confirmer-annulation-cloture"
+        title={estRetour ? 'Annuler ce retour ?' : 'Annuler cette clôture ?'}
+        testId={estRetour ? 'confirmer-annulation-retour' : 'confirmer-annulation-cloture'}
         footer={(
           <div className="flex justify-end gap-3">
             <button
@@ -403,21 +429,36 @@ export function ArchiveDealer({ currentUser, userProfile }) {
               onClick={() => { setAAnnuler(null); setEchec(null) }}
               className="rounded border border-line bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             >
-              Garder la clôture
+              {estRetour ? 'Garder le retour' : 'Garder la clôture'}
             </button>
             <button
               type="button"
               onClick={confirmerAnnulation}
               disabled={enCours}
-              data-testid="confirmer-annuler-cloture"
+              data-testid={estRetour ? 'confirmer-annuler-retour' : 'confirmer-annuler-cloture'}
               className="rounded bg-danger px-4 py-2 text-sm font-semibold text-white transition-colors hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:cursor-wait disabled:opacity-60"
             >
-              {enCours ? 'Annulation…' : 'Annuler la clôture'}
+              {enCours ? 'Annulation…' : estRetour ? 'Annuler le retour' : 'Annuler la clôture'}
             </button>
           </div>
         )}
       >
-        {aAnnuler && (
+        {aAnnuler && estRetour && (
+          // La moitié qu'on oublie si on ne la dit pas : la livraison REDEVIENT due.
+          <div className="space-y-3 text-sm text-ink">
+            <p className="m-0">
+              <span className="font-medium">{aAnnuler.expediteur || 'Sans expéditeur'}</span>
+              {' · '}
+              <span className="font-semibold tabular-nums">{formatCurrency(aAnnuler.montant)}</span>
+            </p>
+            <p className="m-0 text-ink-muted">
+              Le montant reviendra dans la réserve {libelleReserve(aAnnuler.balanceType) || 'concernée'},
+              et la livraison de {aAnnuler.expediteur || 'cet expéditeur'} redeviendra due d’autant.
+            </p>
+            {echec && <p className="m-0 text-danger" role="alert">{echec}</p>}
+          </div>
+        )}
+        {aAnnuler && !estRetour && (
           <div className="space-y-3 text-sm text-ink">
             <p className="m-0">
               Les réserves balayées reviendront aux soldes :

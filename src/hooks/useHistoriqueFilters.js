@@ -25,8 +25,8 @@ export const useHistoriqueFilters = () => {
   // Transactions filtrées avec useMemo pour optimiser les performances
   const filteredTransactions = useMemo(() => {
     return completedTransactions.filter(transaction => {
-      // Ravitaillements et clôtures sont des mouvements de la boutique, pas des
-      // transactions d'agents : ils ont leur onglet. Les laisser ici les
+      // Ravitaillements, retours et clôtures sont des mouvements de la boutique,
+      // pas des transactions d'agents : ils ont leur onglet. Les laisser ici les
       // affichait sous « Client inconnu », code vide, au milieu des dépôts.
       if (STORE_MOVEMENT_TYPES.includes(transaction.type)) return false
       // Une ligne supprimée a rendu son montant aux soldes : la laisser ici la
@@ -45,7 +45,8 @@ export const useHistoriqueFilters = () => {
    * Ni le filtre de date ni la recherche ne s'y appliquent — on y vient pour
    * retrouver ce qu'on vient de perdre, pas pour explorer une période. Les
    * mouvements de boutique n'y sont pas écartés : un ravitaillement ne peut pas
-   * être supprimé, donc il ne peut pas s'y trouver.
+   * être supprimé, donc il ne peut pas s'y trouver ; un retour annulé, lui, y
+   * a sa place comme toute ligne défaite.
    */
   const corbeille = useMemo(
     () => completedTransactions

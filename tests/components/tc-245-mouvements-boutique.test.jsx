@@ -18,6 +18,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
  */
 
 const cancelClosure = vi.fn()
+const trashTransaction = vi.fn()
 let mouvements = []
 
 vi.mock('../../src/services/storeAdminDealerService', () => ({
@@ -33,10 +34,12 @@ vi.mock('../../src/services/collaborationService', () => ({
   subscribeMyCredits: () => () => {},
 }))
 vi.mock('../../src/context/transactions.jsx', () => ({
-  useTransactions: () => ({ completedTransactions: mouvements, cancelClosure }),
+  useTransactions: () => ({ completedTransactions: mouvements, cancelClosure, trashTransaction }),
 }))
 
+import { renderHook } from '@testing-library/react'
 import { ArchiveDealer } from '../../src/components/historique/HistoriqueArchives'
+import { useHistoriqueFilters } from '../../src/hooks/useHistoriqueFilters.js'
 
 /** Le formatage FR sépare les milliers d'une espace fine insécable (U+202F). */
 const fr = (texte) => texte.replace(/\s/g, ' ')
@@ -83,6 +86,7 @@ const tableau = () => screen.getByRole('table', { name: 'Mouvements de la boutiq
 
 beforeEach(() => {
   cancelClosure.mockReset().mockResolvedValue(true)
+  trashTransaction.mockReset().mockResolvedValue(true)
   mouvements = []
 })
 
@@ -144,7 +148,7 @@ describe('TC-245 — un tableau, pas une liste', () => {
   it('[TC-245-6] sans mouvement, le tableau laisse place à un message', () => {
     poser()
 
-    expect(screen.getByText('Aucun ravitaillement ni clôture')).toBeInTheDocument()
+    expect(screen.getByText('Aucun ravitaillement ni retour')).toBeInTheDocument()
     expect(screen.queryByRole('table', { name: 'Mouvements de la boutique' })).not.toBeInTheDocument()
   })
 })
@@ -240,5 +244,60 @@ describe('TC-245 — la confirmation', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Seule une clôture du jour')
     expect(screen.getByTestId('confirmer-annulation-cloture')).toBeInTheDocument()
+  })
+})
+
+// « Les retours polluent l'historique des clients » (31 octobre 2026) : ils
+// n'ont pas de client, et se lisent sous leur livraison, dans cet onglet.
+describe('TC-245 — les retours, dans l’onglet Ravitaillement', () => {
+  const retour = (over = {}) => ({
+    id: 'ret-1',
+    type: 'Retour',
+    montant: 420_000,
+    statut: 'Validée',
+    expediteur: 'Patron',
+    balanceType: 'liquidite',
+    replenishmentId: 'rav-1',
+    createdAt: horodatage(ceMatin()),
+    ...over,
+  })
+
+  it('[TC-245-16] un retour est une ligne du tableau : qui, quelle réserve, et ce qui sort', () => {
+    mouvements = [ravitaillement({ balanceType: 'stock' }), retour()]
+    poser()
+
+    const ligneRetour = within(tableau()).getByTestId('mouvement-ret-1')
+    expect(ligneRetour.textContent).toContain('Retour')
+    expect(ligneRetour.textContent).toContain('Patron · espèce')
+    expect(fr(ligneRetour.textContent)).toContain('− 420 000 FCFA')
+    expect(fr(within(tableau()).getByTestId('mouvement-rav-1').textContent)).toContain('+ 5 000 000 FCFA')
+  })
+
+  it('[TC-245-17] il n’est plus dans l’onglet des clients', () => {
+    mouvements = [retour(), { id: 'dep-1', type: 'Dépôt', montant: 10_000, statut: 'Validée', date: '31/10/2026 09:00' }]
+    const { result } = renderHook(() => useHistoriqueFilters())
+
+    expect(result.current.filteredTransactions.map((t) => t.id)).toEqual(['dep-1'])
+  })
+
+  it('[TC-245-18] il s’annule d’ici, et la confirmation dit que la livraison redevient due', async () => {
+    mouvements = [retour()]
+    poser()
+    fireEvent.click(screen.getByTestId('annuler-retour-ret-1'))
+
+    const dialogue = screen.getByTestId('confirmer-annulation-retour')
+    expect(dialogue.textContent).toContain('redeviendra due')
+    expect(trashTransaction).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByTestId('confirmer-annuler-retour'))
+    await waitFor(() => expect(trashTransaction).toHaveBeenCalledWith('ret-1'))
+    expect(cancelClosure).not.toHaveBeenCalled()
+  })
+
+  it('[TC-245-19] un retour annulé est dans la corbeille, pas ici', () => {
+    mouvements = [retour({ statut: 'Supprimée', deletedAt: new Date() })]
+    poser()
+
+    expect(screen.getByText('Aucun ravitaillement ni retour')).toBeInTheDocument()
   })
 })

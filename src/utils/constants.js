@@ -30,8 +30,12 @@ export const TRANSACTION_TYPES = activeProfile.transactions.types.map(
  * D'où cette liste : un seul endroit décide ce qui relève du registre de la
  * boutique, et les deux écrans (onglet clients, onglet Ravitaillement) s'y
  * réfèrent au lieu de recopier chacun ses noms de types.
+ *
+ * Le RETOUR y est entré le 31 octobre 2026 : rendu au dealer, il n'a pas plus
+ * de client qu'un ravitaillement, et « polluait l'historique des clients » —
+ * il se lit désormais sous sa livraison, dans l'onglet Ravitaillement.
  */
-export const STORE_MOVEMENT_TYPES = ['Ravitaillement', 'Clôture']
+export const STORE_MOVEMENT_TYPES = ['Ravitaillement', 'Retour', 'Clôture']
 
 /**
  * Une ligne à la corbeille.
