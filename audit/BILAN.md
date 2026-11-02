@@ -598,7 +598,7 @@ Méthode d'`ADOPTION.md`, en trois passes : sécurité (`SECURITY.md` §13), cin
 - **BUG-08, requalifié en mineur le 2 novembre.** La première rédaction disait qu'une somme due au dealer pouvait disparaître de l'écran : c'est faux, une écoute dédiée le couvre depuis `30501f7`. Reste que l'onglet Ravitaillement et la Corbeille ne montrent que les lignes chargées, sans le dire.
 - **BUG-09.** Plusieurs refus du serveur arrivent encore en « Une erreur interne s'est produite. », alors que l'historique est conçu pour afficher leur raison. Corrigé le 2 novembre (lot B1).
 - **UI-03.** Le champ « Montant » de la saisie, la recherche client et deux filtres n'ont pas de nom accessible.
-- **SEC-12.** Aucune décision écrite ne dit quelles données personnelles partent au modèle.
+- **SEC-12.** Aucune décision écrite ne dit quelles données personnelles partent au modèle. Décision écrite le 2 novembre (lot C), avec SEC-13 corrigé.
 
 Rien de critique.
 
@@ -692,26 +692,32 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
 
 ### SEC-12 — Aucune décision écrite sur les données personnelles qui partent au modèle
 
-**IMPORTANT (gouvernance) · effort S · décision du responsable.**
+**IMPORTANT (gouvernance) · effort S · décision du responsable · DÉCIDÉ le 2 novembre 2026 (lot C) : [docs/ia/DONNEES-ENVOYEES.md](../docs/ia/DONNEES-ENVOYEES.md).**
 
-- La feuille de route de l'assistant l'exige (`feuillederoute_assistant_ia.md`, ligne 495) : « Ajoutez une décision écrite sur ce qui part au modèle. » `docs/ia/` n'en contient pas.
-- **Ce qui part aujourd'hui vers Google** (AI Logic, backend Agent Platform) : la question et les résultats des outils de lecture. Concrètement :
+- La feuille de route de l'assistant l'exige (`feuillederoute_assistant_ia.md`, ligne 495) : « Ajoutez une décision écrite sur ce qui part au modèle. » `docs/ia/` n'en contenait pas.
+- **Ce qui part vers Google** (AI Logic, backend Agent Platform) : le prompt (nom de la caissière, boutique), la question, et les résultats des outils de lecture. Concrètement :
   - `chercher_client` renvoie le nom, le code et le numéro agent, et le **numéro personnel** de chaque fiche trouvée ([outils.js:409](../src/lib/ia/outils.js#L409)) ;
-  - le bilan transmet les montants et les noms des clients ;
-  - la dictée passe par le moteur de reconnaissance du navigateur, qui, dans Chrome, transcrit sur les serveurs de Google.
-- **Correction :**
-  - une page dans `docs/ia/` qui dit ce qui part, vers qui, pourquoi, et ce qui ne part pas ;
-  - décider si `numeroPersonnel` doit sortir de `chercher_client` quand la recherche ne l'a pas demandé.
-
-  Pas de changement de code avant cette décision.
+  - les créances, les opérations récentes et les cartes préparées transmettent les noms et codes des clients, avec les montants ;
+  - la dictée passe par le moteur de reconnaissance du navigateur ; le modèle ne reçoit que le texte, à « Envoyer ».
+- **⚠ Erreur de ce constat, corrigée.** La première rédaction disait que « le bilan transmet les montants et les noms des clients ». C'est faux : `bilan_du_jour` ne rend que des nombres et des totaux. Les noms partent par les trois outils cités ci-dessus.
+- **Plus large qu'écrit, vu en ouvrant le lot.** `chercher_client` lit `globalClients` en entier, les fiches de **toutes les boutiques**, et rend aussi la boutique d'origine. C'est le cas que `docs/ia/QUESTIONS-DU-COMPTOIR.md` §2 demandait de trancher avant le lot 2 (« bloquant ») ; la case n'avait jamais été cochée, et le code avait livré le statu quo.
+- **Décisions du responsable, 2 novembre 2026 :**
+  - le numéro personnel continue de partir, comme la fiche le montre ;
+  - la fiche d'un client d'une autre boutique part comme l'écran la montre : issue (c) du §2, la consigne « aucune information de A vers B » admet l'exception de la fiche client ;
+  - SEC-13 : le navigateur ne garde plus que le texte (ci-dessous).
+- **Livré.** La page `docs/ia/DONNEES-ENVOYEES.md` : vers qui, ce qui part outil par outil, ce qui ne part pas, et ce que Google en fait d'après sa documentation (pas d'entraînement ; cache de 24 h par défaut ; journalisation anti-abus jusqu'à 90 jours sur détection, sauf contrat cadre). Le §2 du dossier est coché, le README porte l'exception. TC-301 [OL-06] fige le choix : une fiche de Pissy lue depuis Gounghin arrive entière, numéro personnel compris. Aucun code de l'assistant ne change pour SEC-12.
 
 ### SEC-13 — Les conversations de l'assistant restent en clair dans le navigateur après la déconnexion
 
-**MINEUR · effort S · arbitrage.**
+**MINEUR → IMPORTANT, requalifié le 2 novembre 2026 · effort S · CORRIGÉ le même jour (lot C) · commit `7f3b82f`.**
 
 - [conversations.js](../src/lib/ia/conversations.js) range vingt conversations par personne et par boutique dans `localStorage`, en clair : noms, montants, réponses. La déconnexion ([AuthContext.jsx:212](../src/context/AuthContext.jsx#L212)) ne les efface pas.
 - C'est voulu : c'est ce qui permet de « reprendre une conversation » (fiche 26). Et la clé porte l'uid, donc une autre caissière ne les voit pas dans l'interface. Mais quiconque ouvre les outils du navigateur sur ce poste peut les lire.
-- **Correction possible** : les effacer à la déconnexion, ou garder le choix actuel en l'écrivant dans la décision de SEC-12.
+- **Plus grave qu'écrit, vu en ouvrant le lot.** La mémoire rangée avec chaque conversation était l'historique brut du SDK (`getHistory()`), **résultats d'outils compris** : jusqu'à cinquante fiches par recherche, numéros personnels et boutiques d'origine inclus. Le commentaire du module et `docs/ia/README.md` affirmaient le contraire : « ce que l'écran a montré, et rien de plus ».
+- **Décision du responsable : garder le texte, pas les données brutes.** Les conversations se reprennent toujours ; la déconnexion ne les efface pas.
+- **Correction.** `memoireSansDonnees` ne range que les questions et les réponses écrites : ni appel ni résultat d'outil, ni réflexion du modèle. Elle rend une mémoire que le SDK accepte à la reprise : elle commence par une question, et deux contenus du même rôle ne s'y suivent pas. Un rangement d'avant est purgé à sa relecture. Pendant la conversation, rien ne change.
+- **Une alerte retirée.** L'ouverture du lot a d'abord fait craindre que la coupe à 40 contenus fasse commencer la mémoire reprise par une réponse, et casse la reprise. Le contrôle du SDK passe pourtant : il range les résultats d'outils sous le rôle « user ». Un résultat d'outil orphelin en tête de mémoire restait possible, mais un refus du serveur n'a pas été vérifié. La nouvelle mémoire supprime le cas, sans qu'il soit compté comme défaut.
+- **Tests.** TC-323 était rouge avant la correction (7 sur 7) ; il est vert après. [MR-02] à [MR-04] passent la mémoire rangée au constructeur même de `ChatSession`, qui la refuserait. TC-313 [HI-02] et TC-312 [VO-06], [VO-07] rangeaient des mémoires impossibles (sans contenu, ou commençant par le modèle) : ils emploient désormais un échange réel.
 
 ### QUA-08 — Dépendances en retard, sans avis bloquant
 
@@ -791,7 +797,7 @@ Le panneau arrive par `lazy` ([Assistant.jsx:19](../src/components/Assistant.jsx
 | B1 | BUG-09 : refus typés, texte inchangé | ✅ Terminé le 2 novembre (`b44c1ac`) : TC-319 rouge puis vert, TC-081 inchangé, suites unitaires et Functions ; trois functions à redéployer |
 | B2 | UI-03 : libellés reliés, 13 champs | ✅ Terminé le 2 novembre (`817f19a`) : TC-320 rouge puis vert, garde sur toutes les sources |
 | B3 | BUG-08, requalifié mineur : l'onglet Ravitaillement et la Corbeille chargent leurs lignes plus anciennes | ✅ Terminé le 2 novembre (`829fc54`), correction minimale choisie par le responsable : TC-321 et TC-322, banc `?espace=historique` |
-| C — décision | SEC-12, et SEC-13 avec elle | Décision écrite dans `docs/ia/` ; code seulement si elle le demande |
+| C — décision | SEC-12, et SEC-13 avec elle | ✅ Décidé le 2 novembre : `docs/ia/DONNEES-ENVOYEES.md`. Numéro personnel et fiches des autres boutiques inchangés, figés par TC-301 [OL-06] ; navigateur : le texte seul (`7f3b82f`), TC-323 rouge puis vert |
 | Backlog — mineurs | QUA-09, DOC-03, QUA-08 (un paquet à la fois), UI-02, PERF-04 (mesure d'abord), QUA-07 suite | Au fil de l'eau, chacun dans son propre commit |
 | A — humain, en dernier | SEC-11 : clé reCAPTCHA Enterprise et domaines, App Check appliqué à AI Logic dans la console, `VITE_FIREBASE_APPCHECK_KEY` dans Vercel, redéploiement du site | Une question posée à l'assistant en production reçoit sa réponse |
 

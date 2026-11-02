@@ -15,10 +15,14 @@ est générique ; les documents ci-dessous l'instancient pour C2EGF.
 >
 > **Chaque boutique avec ses données. Aucune information de la boutique A ne
 > parvient à la boutique B.**
+>
+> Une exception, décidée le 2 novembre 2026 : **la fiche client**, commune à
+> toutes les boutiques, part au modèle comme l'onglet Clients la montre.
 
 Cette seconde phrase a une conséquence qu'il faut lire avant tout le reste :
 c'est la seule exigence du lot que **les règles Firestore ne savent pas tenir**.
-Voir `QUESTIONS-DU-COMPTOIR.md` §2.
+Voir `QUESTIONS-DU-COMPTOIR.md` §2, et `DONNEES-ENVOYEES.md` pour ce qui part
+au modèle.
 
 ---
 
@@ -29,6 +33,7 @@ Voir `QUESTIONS-DU-COMPTOIR.md` §2.
 | `QUESTIONS-DU-COMPTOIR.md` | Le catalogue d'outils, le **trou de cloisonnement** (§2), et les notions voisines que le modèle confondra |
 | `LOT-APPCHECK.md` | La condition d'entrée n° 1. Arbitre un **conflit** avec `docs/audit/consolidated/APP_CHECK_RECOMMANDATION.md`. Porte la CSP exacte |
 | `COUT-LECTURES.md` | Le coût réel. La taxe des règles est négligeable ; le poste dominant est en **jetons**, et il se multiplie par 84 boutiques |
+| `DONNEES-ENVOYEES.md` | Ce qui part au modèle, vers qui, ce qui ne part pas, ce que le navigateur garde. Les trois décisions du 2 novembre 2026 |
 
 ---
 
@@ -40,7 +45,8 @@ Rien de sérieux ne commence avant qu'elles soient tranchées.
    vérification de boutique). C'est délibéré — c'est ce qui a permis de sortir des
    175 grappes de doublons purgées le 2026-10-12 — et ça contredit la consigne
    d'isolation telle qu'énoncée. Trois issues et une recommandation :
-   `QUESTIONS-DU-COMPTOIR.md` §2.
+   `QUESTIONS-DU-COMPTOIR.md` §2. **Tranché le 2 novembre 2026 : statu quo**
+   (`DONNEES-ENVOYEES.md`, décision 2).
 2. **Les dettes internes nomment forcément l'autre boutique.** Les mettre dans le
    catalogue d'outils, ou pas ? Recommandation : pas au premier lot.
    `QUESTIONS-DU-COMPTOIR.md` §4.
@@ -163,6 +169,12 @@ pour que le modèle reprenne le fil. Il ne contient que ce que l'écran a montr�
 à cette personne ; aucune carte en attente n'y est gardée, une opération ne se
 confirme qu'en direct. « Effacer l'historique » le vide. Tests : TC-312,
 TC-313.
+
+Jusqu'au 2 novembre 2026, la mémoire rangée contenait aussi les résultats bruts
+des outils, contrairement au paragraphe ci-dessus (audit SEC-13). Depuis, elle
+ne garde que les questions et les réponses écrites (`memoireSansDonnees`,
+TC-323), et un ancien rangement est purgé à sa relecture.
+`DONNEES-ENVOYEES.md`, décision 3.
 
 **Lot D (images, fichiers) : abandonné** le 30 octobre 2026, à la demande du
 responsable. Rien n'a été écrit ; la caméra reste fermée (`camera=()`).

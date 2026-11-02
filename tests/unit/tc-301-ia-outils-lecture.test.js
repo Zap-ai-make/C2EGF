@@ -180,6 +180,26 @@ describe('[OL] outils de lecture, sur le vrai firestoreService', () => {
     expect(reponse.total).toBe(3000)
     expect(reponse.operations[0].clientNom).toBe('ZIDA Kassoum')
   })
+
+  // ⚠ DÉCISION DU RESPONSABLE, 2 novembre 2026 (audit SEC-12, lot C ;
+  //   docs/ia/DONNEES-ENVOYEES.md). Ce test fige un choix, pas un oubli : le
+  //   faire échouer, c'est revenir sur la décision, et la page doit suivre.
+  it('[OL-06] chercher_client rend la fiche d’une autre boutique comme l’écran, numéro personnel compris', async () => {
+    base.collections.globalClients = [
+      { ...CLIENTS[1], numeroAgent: '70112233', numeroPersonnel: '76965827' },
+    ]
+
+    const reponse = await executerOutil('chercher_client', { recherche: 'kinda' })
+
+    // Boutique active : Gounghin. La fiche a été enregistrée par Pissy.
+    expect(reponse.clients).toEqual([{
+      nom: 'Adjara KINDA',
+      codeAgent: '7654321',
+      numeroAgent: '70112233',
+      numeroPersonnel: '76965827',
+      registeredStoreName: 'Pissy',
+    }])
+  })
 })
 
 /**

@@ -87,6 +87,13 @@ doublons purgées le 2026-10-12.**
 Donc : votre règle « aucune information de A vers B » et la conception du produit
 se heurtent **sur cette collection, et sur elle seule**. Il faut trancher.
 
+> **Tranché le 2 novembre 2026 par le responsable : (c), statu quo.** Le lot 2
+> avait livré `chercher_client` sur ce comportement sans que la case soit
+> cochée ; l'audit du 31 octobre l'a relevé (SEC-12). La consigne admet
+> l'exception de la fiche client, et le choix est figé par TC-301 [OL-06].
+> Détail et retour arrière : `DONNEES-ENVOYEES.md`, décision 2. Les trois
+> obligations ci-dessous visaient un filtre ; avec (c), il n'y en a pas.
+
 ### Les trois issues
 
 | | Ce que l'assistant fait | Prix |
@@ -216,7 +223,7 @@ produit a délibérément écarté.
 
 ## 7. Ce qu'il reste à faire sur ce document
 
-- [ ] **Trancher le §2** — c'est bloquant pour le Lot 2.
+- [x] **Trancher le §2** — tranché le 2 novembre 2026 : (c), statu quo.
 - [ ] **Trancher le §4** — dettes internes dans le catalogue, oui ou non.
 - [ ] Confronter les huit questions à **trois boutiques**. Garder leurs mots :
       celles ci-dessus sont formulées en vocabulaire de produit, les vraies ne le
