@@ -73,7 +73,7 @@ export const SUGGESTIONS = Object.freeze([
 
 function Fragments({ fragments }) {
   return fragments.map((f, i) =>
-    f.gras ? <strong key={i} className="font-semibold text-slate-900">{f.texte}</strong> : <span key={i}>{f.texte}</span>,
+    f.gras ? <strong key={i} className="font-semibold text-gray-900">{f.texte}</strong> : <span key={i}>{f.texte}</span>,
   )
 }
 
@@ -81,7 +81,7 @@ function Texte({ contenu }) {
   return analyserMarkdown(contenu).map((bloc, index) => {
     if (bloc.type === 'titre') {
       return (
-        <p key={index} className="mb-1 mt-4 text-[15px] font-semibold text-slate-900 first:mt-0">
+        <p key={index} className="mb-1 mt-4 text-[15px] font-semibold text-gray-900 first:mt-0">
           <Fragments fragments={bloc.fragments} />
         </p>
       )
@@ -89,7 +89,7 @@ function Texte({ contenu }) {
     if (bloc.type === 'liste') {
       const Liste = bloc.ordonnee ? 'ol' : 'ul'
       return (
-        <Liste key={index} className={`my-2 space-y-1 pl-5 ${bloc.ordonnee ? 'list-decimal' : 'list-disc'} marker:text-slate-400`}>
+        <Liste key={index} className={`my-2 space-y-1 pl-5 ${bloc.ordonnee ? 'list-decimal' : 'list-disc'} marker:text-gray-400`}>
           {bloc.elements.map((fragments, rang) => (
             <li key={rang} className="pl-1">
               <Fragments fragments={fragments} />
@@ -114,7 +114,7 @@ function ReponseIA({ texte, vivante, surAvance }) {
       <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-50 text-brand-600" aria-hidden="true">
         <Sparkles className="h-4 w-4" />
       </span>
-      <div className="min-w-0 flex-1 text-[15px] leading-relaxed text-slate-700">
+      <div className="min-w-0 flex-1 text-[15px] leading-relaxed text-gray-700">
         <Texte contenu={fini ? visible : texteEnCoursDEcriture(visible)} />
       </div>
     </div>
@@ -124,8 +124,8 @@ function ReponseIA({ texte, vivante, surAvance }) {
 function Accueil({ nom, onChoisir, desactive }) {
   return (
     <div className="flex h-full flex-col justify-center pb-8">
-      <p className="m-0 text-2xl font-semibold text-slate-900">Bonjour{nom ? ` ${nom}` : ''}.</p>
-      <p className="m-0 mt-1 text-sm text-slate-500">
+      <p className="m-0 text-2xl font-semibold text-gray-900">Bonjour{nom ? ` ${nom}` : ''}.</p>
+      <p className="m-0 mt-1 text-sm text-gray-500">
         Posez une question, ou demandez-moi de préparer une opération : vous la confirmerez.
       </p>
       <div className="mt-6 flex flex-wrap gap-2">
@@ -135,7 +135,7 @@ function Accueil({ nom, onChoisir, desactive }) {
             type="button"
             onClick={() => onChoisir(suggestion)}
             disabled={desactive}
-            className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-left text-sm text-slate-800 transition-colors hover:border-brand-200 hover:bg-brand-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+            className="rounded-full border border-gray-200 bg-gray-50 px-4 py-2 text-left text-sm text-gray-800 transition-colors hover:border-brand-200 hover:bg-brand-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
             {suggestion}
           </button>
@@ -148,11 +148,11 @@ function Accueil({ nom, onChoisir, desactive }) {
 function ListeDesConversations({ conversations, courante, onOuvrir, onEffacer }) {
   const [confirmer, setConfirmer] = useState(false)
   if (conversations.length === 0) {
-    return <p className="m-0 mt-2 text-sm text-slate-500">Aucune conversation pour l&apos;instant.</p>
+    return <p className="m-0 mt-2 text-sm text-gray-500">Aucune conversation pour l&apos;instant.</p>
   }
   return (
     <div>
-      <p className="m-0 mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Conversations</p>
+      <p className="m-0 mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Conversations</p>
       <ul className="m-0 list-none space-y-1 p-0">
         {conversations.map((conversation) => (
           <li key={conversation.id}>
@@ -161,28 +161,28 @@ function ListeDesConversations({ conversations, courante, onOuvrir, onEffacer })
               onClick={() => onOuvrir(conversation)}
               aria-current={conversation.id === courante ? 'true' : undefined}
               className={`w-full rounded-lg px-3 py-2.5 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${
-                conversation.id === courante ? 'bg-brand-50' : 'hover:bg-slate-50'
+                conversation.id === courante ? 'bg-brand-50' : 'hover:bg-gray-50'
               }`}
             >
-              <span className="block truncate text-sm font-medium text-slate-900">{conversation.titre}</span>
-              <span className="block text-xs text-slate-500">{dateLisible(conversation.misAJour)}</span>
+              <span className="block truncate text-sm font-medium text-gray-900">{conversation.titre}</span>
+              <span className="block text-xs text-gray-500">{dateLisible(conversation.misAJour)}</span>
             </button>
           </li>
         ))}
       </ul>
-      <div className="mt-4 border-t border-slate-200 pt-3">
+      <div className="mt-4 border-t border-gray-200 pt-3">
         {confirmer ? (
           <span className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-slate-600">Tout effacer sur cet appareil ?</span>
+            <span className="text-gray-600">Tout effacer sur cet appareil ?</span>
             <button type="button" onClick={onEffacer} className="rounded-md bg-danger px-3 py-1 font-medium text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
               Effacer
             </button>
-            <button type="button" onClick={() => setConfirmer(false)} className="rounded-md border border-slate-300 px-3 py-1 text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
+            <button type="button" onClick={() => setConfirmer(false)} className="rounded-md border border-gray-300 px-3 py-1 text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
               Garder
             </button>
           </span>
         ) : (
-          <button type="button" onClick={() => setConfirmer(true)} className="text-sm text-slate-500 underline-offset-2 hover:text-danger hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
+          <button type="button" onClick={() => setConfirmer(true)} className="text-sm text-gray-500 underline-offset-2 hover:text-danger hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400">
             Effacer l&apos;historique
           </button>
         )}
@@ -192,7 +192,7 @@ function ListeDesConversations({ conversations, courante, onOuvrir, onEffacer })
 }
 
 const BOUTON_TETE =
-  'flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400'
+  'flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400'
 
 function PanneauAssistant({ ouvert, onFermer }) {
   const { currentUser, userProfile, activeStore } = useAuth()
@@ -549,7 +549,7 @@ function PanneauAssistant({ ouvert, onFermer }) {
       <div
         aria-hidden="true"
         onClick={onFermer}
-        className={`fixed inset-0 z-[59] bg-slate-900/40 transition-opacity duration-300 motion-reduce:transition-none ${
+        className={`fixed inset-0 z-[59] bg-gray-900/40 transition-opacity duration-300 motion-reduce:transition-none ${
           deploye ? 'opacity-100' : 'pointer-events-none opacity-0'
         }`}
       />
@@ -568,13 +568,13 @@ function PanneauAssistant({ ouvert, onFermer }) {
           deploye ? 'translate-x-0 ease-out' : 'translate-x-full ease-in'
         }`}
       >
-        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-gray-200 px-5 py-4">
           <div className="min-w-0">
-            <p className="m-0 flex items-center gap-2 text-lg font-semibold text-slate-900">
+            <p className="m-0 flex items-center gap-2 text-lg font-semibold text-gray-900">
               <Sparkles className="h-5 w-5 text-brand-600" aria-hidden="true" />
               Assistant
             </p>
-            {boutique && <p className="m-0 mt-0.5 truncate text-sm text-slate-500">{boutique}</p>}
+            {boutique && <p className="m-0 mt-0.5 truncate text-sm text-gray-500">{boutique}</p>}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <button type="button" onClick={nouvelleConversation} disabled={enCours} aria-label="Nouvelle conversation" title="Nouvelle conversation" className={BOUTON_TETE}>
@@ -587,7 +587,7 @@ function PanneauAssistant({ ouvert, onFermer }) {
               aria-label="Historique des conversations"
               aria-pressed={vue === 'historique'}
               title="Historique des conversations"
-              className={`${BOUTON_TETE} ${vue === 'historique' ? 'bg-slate-100 text-slate-900' : ''}`}
+              className={`${BOUTON_TETE} ${vue === 'historique' ? 'bg-gray-100 text-gray-900' : ''}`}
             >
               <History className="h-5 w-5" aria-hidden="true" />
             </button>
@@ -613,7 +613,7 @@ function PanneauAssistant({ ouvert, onFermer }) {
                 if (tour.role === 'moi') {
                   return (
                     <div key={index} className="flex justify-end">
-                      <p className="m-0 max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-slate-100 px-4 py-2.5 text-[15px] text-slate-900">
+                      <p className="m-0 max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-gray-100 px-4 py-2.5 text-[15px] text-gray-900">
                         {tour.texte}
                       </p>
                     </div>
@@ -621,7 +621,7 @@ function PanneauAssistant({ ouvert, onFermer }) {
                 }
                 if (tour.panne) {
                   return (
-                    <p key={index} className="m-0 rounded-xl bg-amber-50 px-4 py-3 text-[15px] text-amber-900">{tour.texte}</p>
+                    <p key={index} className="m-0 rounded-xl bg-warn-soft px-4 py-3 text-[15px] text-warn">{tour.texte}</p>
                   )
                 }
                 if (tour.succes) {
@@ -645,7 +645,7 @@ function PanneauAssistant({ ouvert, onFermer }) {
               })}
 
               {attente && (
-                <p aria-live="polite" className="m-0 flex items-center gap-3 text-sm text-slate-500">
+                <p aria-live="polite" className="m-0 flex items-center gap-3 text-sm text-gray-500">
                   <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-50 text-brand-600" aria-hidden="true">
                     <Sparkles className="h-4 w-4 motion-safe:animate-pulse" />
                   </span>
@@ -682,7 +682,7 @@ function PanneauAssistant({ ouvert, onFermer }) {
           }}
           className="shrink-0 px-4 pb-4 pt-2"
         >
-          <div className="flex items-center gap-1 rounded-2xl border border-slate-300 bg-white py-1.5 pl-2 pr-1.5 shadow-sm focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500">
+          <div className="flex items-center gap-1 rounded-2xl border border-gray-300 bg-white py-1.5 pl-2 pr-1.5 shadow-sm focus-within:border-brand-500 focus-within:ring-1 focus-within:ring-brand-500">
             {dicteePossible && (
               <button
                 type="button"
@@ -691,7 +691,7 @@ function PanneauAssistant({ ouvert, onFermer }) {
                 aria-label={ecoute ? 'Arrêter la dictée' : 'Dicter la question'}
                 aria-pressed={ecoute}
                 className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:opacity-40 ${
-                  ecoute ? 'motion-safe:animate-pulse bg-danger text-white' : 'text-slate-600 hover:bg-slate-100'
+                  ecoute ? 'motion-safe:animate-pulse bg-danger text-white' : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
                 {ecoute ? <Square className="h-4 w-4" aria-hidden="true" /> : <Mic className="h-5 w-5" aria-hidden="true" />}
@@ -708,13 +708,13 @@ function PanneauAssistant({ ouvert, onFermer }) {
               disabled={enCours}
               placeholder={ecoute ? 'Je vous écoute…' : 'Posez votre question…'}
               autoComplete="off"
-              className="min-w-0 flex-1 border-0 bg-transparent px-2 py-2 text-[15px] text-slate-900 placeholder:text-slate-400 focus:outline-none disabled:text-slate-400"
+              className="min-w-0 flex-1 border-0 bg-transparent px-2 py-2 text-[15px] text-gray-900 placeholder:text-gray-400 focus:outline-none disabled:text-gray-400"
             />
             <button
               type="submit"
               disabled={enCours || question.trim() === ''}
               aria-label="Envoyer"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white transition-colors hover:bg-brand-600 disabled:bg-slate-200 disabled:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white transition-colors hover:bg-brand-600 disabled:bg-gray-200 disabled:text-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             >
               <ArrowUp className="h-5 w-5" aria-hidden="true" />
             </button>

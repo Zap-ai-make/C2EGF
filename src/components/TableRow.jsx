@@ -10,7 +10,7 @@ const TableRow = memo(({ client, index, onEdit, onHistorique, nomFige = false })
   return (
     <tr className={fondLigne}>
       <td className="px-4 py-3 text-base">
-        <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+        <span className="inline-flex rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
           {client.registeredStoreName || 'Ancienne base'}
         </span>
       </td>

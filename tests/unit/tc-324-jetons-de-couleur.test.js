@@ -13,9 +13,13 @@
  * le 8 octobre, jamais défini : lignes de groupe, en-têtes et encarts restaient
  * transparents. Le jeton est désormais défini dans `index.css`.
  *
- * La garde lit les sources, à la manière de TC-320 [CN-01] :
+ * Deux gardes, qui lisent les sources à la manière de TC-320 [CN-01] :
  *   - [JC-01] toute couleur d'une famille C2EGF (brand, ink, warn…) est
- *     définie dans `index.css`.
+ *     définie dans `index.css` ;
+ *   - [JC-02] la rampe neutre est `gray`, retintée par `index.css` vers le
+ *     bleu de marque. `slate` la contourne et garde le gris de Tailwind : le
+ *     panneau de l'assistant en employait 46, le tableau des clients 2
+ *     (audit UI-02).
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs'
@@ -50,5 +54,12 @@ describe('TC-324 — jetons de couleur', () => {
       [...texte.matchAll(motif)].filter(([, jeton]) => !jetons.has(jeton)).map(([classe]) => `${chemin} : ${classe}`))
 
     expect(absentes).toEqual([])
+  })
+
+  it('[JC-02] aucun `slate` : la rampe neutre de C2EGF est `gray`', () => {
+    const motif = new RegExp(String.raw`\b${PROPRIETE}-slate-\d+`, 'g')
+    const trouvees = fichiers.flatMap(({ chemin, texte }) => [...texte.matchAll(motif)].map(([classe]) => `${chemin} : ${classe}`))
+
+    expect(trouvees).toEqual([])
   })
 })
