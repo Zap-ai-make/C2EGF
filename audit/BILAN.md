@@ -641,7 +641,7 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
 
 ### BUG-08 — L'onglet Ravitaillement et la Corbeille ne montrent que les lignes chargées
 
-**REQUALIFIÉ le 2 novembre 2026 : IMPORTANT → MINEUR · effort S à M.**
+**REQUALIFIÉ le 2 novembre 2026 : IMPORTANT → MINEUR · effort S à M · CORRIGÉ le même jour (lot B3, correction minimale) · commit `829fc54`.**
 
 - **⚠ Erreur de ce constat.** La première rédaction affirmait que les livraisons encore dues disparaissaient de l'écran au-delà de cent opérations (badge, formulaire de retour, assistant). **C'est faux, et c'était déjà corrigé.** Le contexte écoute les livraisons ouvertes sans limite (`subscribeToOpenReplenishments`, `replenishmentStatus == 'open'`, [transactions.jsx:254](../src/context/transactions.jsx#L254)) et les fusionne dans `completedTransactions` ([transactions.jsx:117](../src/context/transactions.jsx#L117)). C'est le correctif `30501f7`, protégé par TC-241 [1] : « Une dette de ravitaillement sortie de la page de 100 lignes disparaissait ». L'audit avait lu la taille de la fenêtre sans lire les sources qui s'y ajoutent ; l'erreur a été vue en ouvrant le lot B3, avant d'écrire une ligne.
 - **Ce qui reste vrai.** `completedTransactions` est une fenêtre : les **100** dernières lignes ([historyService.js:45](../src/services/historyService.js#L45)), plus la journée, plus les livraisons ouvertes, plus les pages chargées à la main. Deux onglets en dérivent une liste sans dire qu'elle est partielle :
@@ -652,6 +652,12 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
 - **Deux corrections possibles, à choisir :**
   - **minimale, sans index** : le même bouton de chargement dans les deux onglets, avec la date jusqu'où la liste remonte. Chaque clic lit cent lignes de tout type, et peut n'ajouter aucun mouvement ;
   - **propre, avec index** : une requête paginée par onglet, `type in […]` trié par `createdAt`, et `statut == 'Supprimée'` trié par `deletedAt`. Il faut deux index composites, à déployer par un humain **avant** le site.
+- **Correction retenue par le responsable : la minimale.** Les deux onglets portent le bouton de chargement de l'onglet clients, et une phrase qui dit jusqu'où la liste remonte :
+  - Ravitaillement : « Mouvements depuis le JJ/MM/AAAA. Les livraisons encore dues sont toutes affichées, même plus anciennes. » ;
+  - Corbeille : « Lignes saisies depuis le JJ/MM/AAAA. ».
+
+  La date vient du contexte (`historyDepuis`) : le jour de saisie de la plus ancienne ligne chargée, lu sur `createdAt`, le champ qui ordonne les pages (`jourDeSaisie`). Elle recule à chaque clic, ce qui montre que le clic a servi même s'il n'ajoute aucun mouvement. Tout chargé : ni phrase ni bouton. L'onglet clients n'a pas bougé (TC-116). Aucun index, rien à déployer côté Firebase.
+- **Tests.** TC-321 (page) était rouge avant la correction, 7 sur 8 ; il est vert après. TC-322 (contexte) échoue sans la modification du contexte et passe avec. Le banc a un nouvel espace, `?espace=historique`, capturé en 1 440 et 390 px : pas de débordement, pas de champ anonyme.
 
 ### BUG-09 — Des refus du serveur arrivent encore en « erreur interne »
 
@@ -784,7 +790,7 @@ Le panneau arrive par `lazy` ([Assistant.jsx:19](../src/components/Assistant.jsx
 |---|---|---|
 | B1 | BUG-09 : refus typés, texte inchangé | ✅ Terminé le 2 novembre (`b44c1ac`) : TC-319 rouge puis vert, TC-081 inchangé, suites unitaires et Functions ; trois functions à redéployer |
 | B2 | UI-03 : libellés reliés, 13 champs | ✅ Terminé le 2 novembre (`817f19a`) : TC-320 rouge puis vert, garde sur toutes les sources |
-| B3 | BUG-08, requalifié mineur : l'onglet Ravitaillement et la Corbeille chargent leurs lignes plus anciennes | En attente du choix du responsable entre la correction minimale (sans index) et la correction propre (deux index) |
+| B3 | BUG-08, requalifié mineur : l'onglet Ravitaillement et la Corbeille chargent leurs lignes plus anciennes | ✅ Terminé le 2 novembre (`829fc54`), correction minimale choisie par le responsable : TC-321 et TC-322, banc `?espace=historique` |
 | C — décision | SEC-12, et SEC-13 avec elle | Décision écrite dans `docs/ia/` ; code seulement si elle le demande |
 | Backlog — mineurs | QUA-09, DOC-03, QUA-08 (un paquet à la fois), UI-02, PERF-04 (mesure d'abord), QUA-07 suite | Au fil de l'eau, chacun dans son propre commit |
 | A — humain, en dernier | SEC-11 : clé reCAPTCHA Enterprise et domaines, App Check appliqué à AI Logic dans la console, `VITE_FIREBASE_APPCHECK_KEY` dans Vercel, redéploiement du site | Une question posée à l'assistant en production reçoit sa réponse |
