@@ -143,7 +143,7 @@ function Transactions() {
             {cle === 'client' && transactionsEnAttente.length > 0 && (
               <span
                 className={`inline-flex min-w-[1.2rem] items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-bold leading-none ${
-                  mode === cle ? 'bg-white/20 text-white' : 'bg-brand-100 text-brand-700'
+                  mode === cle ? 'bg-white/20 text-white' : 'bg-brand-100 text-brand-600'
                 }`}
                 aria-label={`${transactionsEnAttente.length} transaction${transactionsEnAttente.length > 1 ? 's' : ''} non terminée${transactionsEnAttente.length > 1 ? 's' : ''}`}
               >
@@ -177,7 +177,7 @@ function Transactions() {
           Ravitaillement
           {ravitaillementsDus > 0 && (
             <span
-              className="inline-flex min-w-[1.2rem] items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-bold leading-none bg-brand-100 text-brand-700"
+              className="inline-flex min-w-[1.2rem] items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-bold leading-none bg-brand-100 text-brand-600"
               aria-label={`${ravitaillementsDus} ravitaillement${ravitaillementsDus > 1 ? 's' : ''} à rendre`}
               data-testid="badge-ravitaillement"
             >

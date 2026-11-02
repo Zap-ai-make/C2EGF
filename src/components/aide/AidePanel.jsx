@@ -85,7 +85,7 @@ function Fiche({ fiche, ouverte, onBascule }) {
           data-testid={`aide-fiche-${fiche.id}`}
           className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400"
         >
-          <span className="mt-0.5 shrink-0 rounded bg-brand-50 px-1.5 py-0.5 font-mono text-xs font-bold tabular-nums text-brand-700">
+          <span className="mt-0.5 shrink-0 rounded bg-brand-50 px-1.5 py-0.5 font-mono text-xs font-bold tabular-nums text-brand-600">
             {fiche.id}
           </span>
           <span className="flex-1 text-sm font-semibold text-ink">

@@ -160,7 +160,7 @@ function FormulaireRetour({ ravitaillement, onFait, onAnnuler }) {
             <label
               key={v.cle}
               className={`flex-1 cursor-pointer rounded border-2 px-3 py-2 text-center text-sm font-medium transition-colors ${
-                vase === v.cle ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-line text-ink'
+                vase === v.cle ? 'border-brand-500 bg-brand-50 text-brand-600' : 'border-line text-ink'
               }`}
             >
               <input
@@ -279,10 +279,10 @@ function RavitaillementPanel({ open, onClose }) {
               className="flex flex-wrap items-baseline justify-between gap-3 rounded-lg border border-brand-200 bg-brand-50 px-4 py-3"
               data-testid="total-ravitaillements"
             >
-              <span className="text-sm font-semibold text-brand-700">
+              <span className="text-sm font-semibold text-brand-600">
                 {enCours.length} livraison{enCours.length > 1 ? 's' : ''} à rendre
               </span>
-              <span className="font-mono text-base font-bold tabular-nums text-brand-700">
+              <span className="font-mono text-base font-bold tabular-nums text-brand-600">
                 {formatCurrency(totalDu)}
               </span>
             </div>

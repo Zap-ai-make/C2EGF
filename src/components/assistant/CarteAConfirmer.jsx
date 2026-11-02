@@ -12,7 +12,7 @@ export function CarteAConfirmer({ carte, onConfirmer, onEcarter }) {
       role="group"
       aria-label={`À confirmer : ${carte.titre}`}
       data-testid="carte-operation"
-      className={`my-2 rounded-xl border-2 bg-white px-3 py-3 ${carte.danger ? 'border-danger/40' : 'border-brand-300'}`}
+      className={`my-2 rounded-xl border-2 bg-white px-3 py-3 ${carte.danger ? 'border-danger/40' : 'border-brand-200'}`}
     >
       <p className="m-0 text-xs font-semibold uppercase tracking-wide text-slate-500">À confirmer</p>
       <p className="m-0 mt-0.5 font-semibold text-slate-900">{carte.titre}</p>
@@ -46,7 +46,7 @@ export function CarteAConfirmer({ carte, onConfirmer, onEcarter }) {
           onClick={onConfirmer}
           disabled={carte.envoi}
           className={`rounded-lg px-3 py-1.5 font-semibold text-white disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-brand-400 ${
-            carte.danger ? 'bg-danger hover:opacity-90' : 'bg-brand-600 hover:bg-brand-700'
+            carte.danger ? 'bg-danger hover:opacity-90' : 'bg-brand-500 hover:bg-brand-600'
           }`}
         >
           {carte.envoi ? 'Enregistrement…' : carte.genre === 'annulation' ? 'Annuler la transaction' : 'Confirmer'}

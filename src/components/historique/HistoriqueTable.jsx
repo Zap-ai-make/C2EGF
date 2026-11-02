@@ -298,7 +298,7 @@ function HistoriqueTable({ transactions = [], onReopen }) {
         }`}
         data-testid={enfant ? 'ligne-de-groupe' : undefined}
       >
-        <td className={`whitespace-nowrap px-4 py-3 text-base ${enfant ? 'border-l-4 border-l-brand-300 pl-6' : ''}`}>
+        <td className={`whitespace-nowrap px-4 py-3 text-base ${enfant ? 'border-l-4 border-l-brand-200 pl-6' : ''}`}>
           {formatTransactionDateTime(transaction)}
         </td>
         <td className="whitespace-nowrap px-4 py-3 text-base">
@@ -423,7 +423,7 @@ function HistoriqueTable({ transactions = [], onReopen }) {
             type="button"
             onClick={() => setJournalOuvert(transaction)}
             data-testid="ouvrir-modifications"
-            className="rounded border border-brand-300 bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 transition-colors hover:bg-brand-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+            className="rounded border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-600 transition-colors hover:bg-brand-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
             Modification
             <span className="ml-1 tabular-nums">({transaction.modifications.length})</span>

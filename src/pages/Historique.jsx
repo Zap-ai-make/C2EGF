@@ -93,7 +93,7 @@ function ChargerPrecedents({ charger, enCours, phrase, depuis, enChargement, onC
         onClick={onCharger}
         disabled={enChargement}
         aria-label={enChargement ? enCours : charger}
-        className="rounded-lg border border-brand-300 px-4 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:cursor-wait disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+        className="rounded-lg border border-brand-200 px-4 py-2 text-sm font-medium text-brand-600 hover:bg-brand-50 disabled:cursor-wait disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
       >
         {enChargement ? 'Chargement…' : charger}
       </button>
@@ -211,7 +211,7 @@ function Historique() {
                   aria-label={historyLoadingMore
                     ? 'Chargement des transactions précédentes'
                     : 'Charger les transactions précédentes'}
-                  className="rounded-lg border border-brand-300 px-4 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:cursor-wait disabled:opacity-60"
+                  className="rounded-lg border border-brand-200 px-4 py-2 text-sm font-medium text-brand-600 hover:bg-brand-50 disabled:cursor-wait disabled:opacity-60"
                 >
                   {historyLoadingMore ? 'Chargement…' : 'Charger les transactions précédentes'}
                 </button>

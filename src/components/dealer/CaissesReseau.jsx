@@ -166,7 +166,7 @@ function Cellule({ montant, echelle, teinte, label }) {
  * préparer trois ravitaillements les ouvre côte à côte.
  */
 const LIEN_ACTION =
-  'rounded px-1.5 py-0.5 text-xs font-medium text-brand-600 underline decoration-brand-300 underline-offset-2 transition-colors hover:bg-brand-50 hover:decoration-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400'
+  'rounded px-1.5 py-0.5 text-xs font-medium text-brand-600 underline decoration-brand-200 underline-offset-2 transition-colors hover:bg-brand-50 hover:decoration-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400'
 
 function Actions({ caisse }) {
   // Le nom accessible porte SA ligne. Quatre-vingt-quatre liens nommés

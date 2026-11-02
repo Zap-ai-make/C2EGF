@@ -509,7 +509,7 @@ const TransactionTable = memo(function TransactionTable() {
                       data-testid={enfant ? 'ligne-de-groupe' : undefined}
                     >
                       <td className={`relative px-4 pb-3 pt-7 text-base ${
-                        enfant ? 'border-l-4 border-l-brand-300 pl-6' : ''
+                        enfant ? 'border-l-4 border-l-brand-200 pl-6' : ''
                       }`}>
                         {/* LE COMPTEUR EST UNE PASTILLE, PAS UNE COLONNE.
                             Il ne décrit pas la transaction — il décrit ce qui

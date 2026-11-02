@@ -135,7 +135,7 @@ function Accueil({ nom, onChoisir, desactive }) {
             type="button"
             onClick={() => onChoisir(suggestion)}
             disabled={desactive}
-            className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-left text-sm text-slate-800 transition-colors hover:border-brand-300 hover:bg-brand-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+            className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-left text-sm text-slate-800 transition-colors hover:border-brand-200 hover:bg-brand-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
           >
             {suggestion}
           </button>
@@ -660,7 +660,7 @@ function PanneauAssistant({ ouvert, onFermer }) {
                     navigate(proposition.chemin)
                     setProposition(null)
                   }}
-                  className="ml-10 rounded-full border border-brand-300 px-4 py-1.5 text-sm text-brand-700 hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                  className="ml-10 rounded-full border border-brand-200 px-4 py-1.5 text-sm text-brand-600 hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
                 >
                   Voir {proposition.libelle}
                 </button>
@@ -714,7 +714,7 @@ function PanneauAssistant({ ouvert, onFermer }) {
               type="submit"
               disabled={enCours || question.trim() === ''}
               aria-label="Envoyer"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-white transition-colors hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-white transition-colors hover:bg-brand-600 disabled:bg-slate-200 disabled:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
             >
               <ArrowUp className="h-5 w-5" aria-hidden="true" />
             </button>

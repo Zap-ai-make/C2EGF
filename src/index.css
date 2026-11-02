@@ -47,6 +47,12 @@
   /* ── Structure ─────────────────────────────────────────────────────────── */
   --color-canvas:    #f2f5fa;
   --color-surface:   #ffffff;
+  /* Seconde surface, DANS une carte blanche : ligne de groupe, en-tête de
+     section, encart de code, état vide. Employée depuis le 8 octobre 2026
+     sans être définie : Tailwind ne produisait rien, le fond restait
+     transparent (TC-324). Plus clair que canvas, qui est aussi le survol
+     des lignes de groupe (brand-50) : le survol reste visible. */
+  --color-surface-2: #f7f9fc;
   --color-line:      #c3d0e4;
   --color-ink:       #0f1d2e;
   --color-ink-muted: #51637a;
