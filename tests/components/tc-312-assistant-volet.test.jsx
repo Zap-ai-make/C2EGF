@@ -36,9 +36,17 @@ vi.mock('../../src/hooks/useNetworkCards.js', () => ({
   }),
 }))
 vi.mock('../../src/lib/ia/assistant.js', () => ({
-  poserQuestion: vi.fn(async ({ surTexte }) => {
+  // La mémoire telle que la rend getHistory() : la question, puis la réponse.
+  poserQuestion: vi.fn(async ({ question, surTexte }) => {
     surTexte(reponseDuModele)
-    return { ok: true, texte: reponseDuModele, historique: [{ role: 'model', parts: [{ text: reponseDuModele }] }] }
+    return {
+      ok: true,
+      texte: reponseDuModele,
+      historique: [
+        { role: 'user', parts: [{ text: question }] },
+        { role: 'model', parts: [{ text: reponseDuModele }] },
+      ],
+    }
   }),
 }))
 
@@ -155,7 +163,10 @@ describe('TC-312 — le volet', () => {
     await waitFor(() => expect(chargerConversations(cleDesConversations('u-1', 'b-1'))).toHaveLength(1))
     const [rangee] = chargerConversations(cleDesConversations('u-1', 'b-1'))
     expect(rangee.titre).toBe('salut')
-    expect(rangee.historique).toEqual([{ role: 'model', parts: [{ text: reponseDuModele }] }])
+    expect(rangee.historique).toEqual([
+      { role: 'user', parts: [{ text: 'salut' }] },
+      { role: 'model', parts: [{ text: reponseDuModele }] },
+    ])
   })
 
   it('[VO-07] une conversation rouverte rend sa mémoire au modèle', async () => {
@@ -168,7 +179,10 @@ describe('TC-312 — le volet', () => {
     vi.mocked(poserQuestion).mockClear()
     await demander('et ensuite ?')
     expect(poserQuestion).toHaveBeenCalledWith(expect.objectContaining({
-      historique: [{ role: 'model', parts: [{ text: reponseDuModele }] }],
+      historique: [
+        { role: 'user', parts: [{ text: 'salut' }] },
+        { role: 'model', parts: [{ text: reponseDuModele }] },
+      ],
     }))
   })
 

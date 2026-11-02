@@ -68,11 +68,16 @@ describe('TC-313 — l’historique des conversations', () => {
 
   it('[HI-02] se range et se relit, la plus récente en tête, sans ce qui ne sert qu’à l’écran', () => {
     rangerConversation(CLE, { id: 'a', tours: tours('premier') }, 1000)
-    rangerConversation(CLE, { id: 'b', tours: tours('second'), historique: [{ role: 'user' }] }, 2000)
+    // La mémoire du modèle se range avec, réduite à ses textes (TC-323).
+    const memoire = [
+      { role: 'user', parts: [{ text: 'second' }] },
+      { role: 'model', parts: [{ text: 'Voici le bilan.' }] },
+    ]
+    rangerConversation(CLE, { id: 'b', tours: tours('second'), historique: memoire }, 2000)
 
     const liste = chargerConversations(CLE)
     expect(liste.map((c) => c.id)).toEqual(['b', 'a'])
-    expect(liste[0]).toMatchObject({ titre: 'second', misAJour: 2000, historique: [{ role: 'user' }] })
+    expect(liste[0]).toMatchObject({ titre: 'second', misAJour: 2000, historique: memoire })
     expect(liste[0].tours[1]).toEqual({ role: 'ia', texte: 'Voici le bilan.' })
   })
 

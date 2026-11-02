@@ -8,6 +8,14 @@
  *   que l'écran a déjà montré à cette personne — noms, montants — et rien de
  *   plus : ni carte en attente (elle ne se confirme qu'en direct), ni jeton.
  *
+ * ⚠ LA MÉMOIRE DU MODÈLE SE RANGE SANS CE QUE LES OUTILS ONT LU. L'historique
+ *   du SDK porte les appels d'outils et leurs résultats bruts : jusqu'à
+ *   cinquante fiches par recherche, numéros personnels compris. Il se rangeait
+ *   tel quel, en clair, à côté d'un commentaire qui promettait le contraire.
+ *   Décision du responsable, 2 novembre 2026 (audit SEC-13) : seuls les textes
+ *   échangés se rangent (`memoireSansDonnees`). Pendant la conversation, rien
+ *   ne change ; rouverte, elle a perdu ses données, et le modèle reconsulte.
+ *
  * ⚠ BORNÉ. localStorage tient quelques Mo pour toute l'application : vingt
  *   conversations au plus, et la mémoire rendue au modèle coupée à ses
  *   derniers échanges. Plein quand même, on jette la plus ancienne et on
@@ -54,17 +62,62 @@ function stockage() {
   }
 }
 
-/** Les conversations rangées, de la plus récente à la plus ancienne. */
+/** Les textes d'un contenu du SDK : ni appel, ni résultat d'outil, ni réflexion. */
+const textesDe = (contenu) => (Array.isArray(contenu?.parts) ? contenu.parts : [])
+  .filter((part) => typeof part?.text === 'string' && part.text.trim() && !part.thought)
+  .map((part) => ({ text: part.text }))
+
+/**
+ * La mémoire à ranger : les questions et les réponses écrites, rien de ce que
+ * les outils ont lu.
+ *
+ * ⚠ LE SDK LA CONTRÔLE À LA REPRISE (`startChat`) : elle commence par une
+ *   question, et deux contenus du même rôle ne se suivent jamais. Une fois les
+ *   outils retirés, les morceaux d'une même réponse se rejoignent, et une
+ *   question restée sans réponse écrite (un geste seul) rejoint la suivante
+ *   ou tombe si elle est la dernière.
+ */
+export function memoireSansDonnees(historique) {
+  const memoire = []
+  for (const contenu of Array.isArray(historique) ? historique : []) {
+    if (contenu?.role !== 'user' && contenu?.role !== 'model') continue
+    const textes = textesDe(contenu)
+    if (textes.length === 0) continue
+    const precedent = memoire[memoire.length - 1]
+    if (precedent?.role === contenu.role) precedent.parts.push(...textes)
+    else memoire.push({ role: contenu.role, parts: textes })
+  }
+  let debut = Math.max(0, memoire.length - MEMOIRE_MAX)
+  while (debut < memoire.length && memoire[debut].role !== 'user') debut += 1
+  const gardee = memoire.slice(debut)
+  if (gardee[gardee.length - 1]?.role === 'user') gardee.pop()
+  return gardee
+}
+
+/**
+ * Les conversations rangées, de la plus récente à la plus ancienne.
+ *
+ * Un rangement d'avant le 2 novembre 2026 porte encore les données brutes des
+ * outils : relu, il est purgé et réécrit une fois.
+ */
 export function chargerConversations(cle) {
+  let liste
   try {
     const brut = stockage()?.getItem(cle)
-    const liste = brut ? JSON.parse(brut) : []
-    return Array.isArray(liste)
-      ? liste.filter((c) => c && typeof c.id === 'string' && Array.isArray(c.tours))
-      : []
+    liste = brut ? JSON.parse(brut) : []
   } catch {
     return []
   }
+  if (!Array.isArray(liste)) return []
+  const lues = liste.filter((c) => c && typeof c.id === 'string' && Array.isArray(c.tours))
+  let purgee = false
+  const propres = lues.map((conversation) => {
+    const memoire = memoireSansDonnees(conversation.historique)
+    if (JSON.stringify(memoire) === JSON.stringify(conversation.historique ?? [])) return conversation
+    purgee = true
+    return { ...conversation, historique: memoire }
+  })
+  return purgee ? ecrire(cle, propres) : propres
 }
 
 function ecrire(cle, liste) {
@@ -105,7 +158,7 @@ export function rangerConversation(cle, { id, tours = [], historique = [] }, mai
     titre: titreDe(toursRanges),
     misAJour: maintenant,
     tours: toursRanges,
-    historique: Array.isArray(historique) ? historique.slice(-MEMOIRE_MAX) : [],
+    historique: memoireSansDonnees(historique),
   }
   return ecrire(cle, [conversation, ...autres].slice(0, CONVERSATIONS_MAX))
 }
