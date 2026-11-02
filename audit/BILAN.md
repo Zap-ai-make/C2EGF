@@ -732,7 +732,14 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
   - **Vérifié :** `check:audit`, Functions 444 sur 444, bout-en-bout 40 sur 40.
   - **Une affirmation de ce constat non reproduite :** l'émulateur n'a signalé de version périmée ni avec la 7.2.5 ni avec la 7.4.0 sur ce poste.
   - **À savoir :** toute function redéployée part désormais avec ce SDK, y compris les trois du lot B1.
-- **Restent, un par un :** React 19.3, `recharts`, `tailwindcss`, `lucide-react` (mineures) ; puis les majeures `firebase` 13, `firebase-admin` 14, `vite` 8, `vitest` 5, `eslint` 10, chacune après lecture de ses notes.
+- **2 novembre 2026 : `react` et `react-dom` 19.1.1 → 19.3.1 (`df58af8`), ensemble puisqu'ils exigent la même version.** Trois paquets bougent : eux et `scheduler`. Les correctifs 19.1.x et 19.2.1 à 19.2.9 ne touchent que les Server Components, absents ici. Dans 19.2.0 et 19.3.0, ce qui pouvait nous concerner a été vérifié dans le code :
+  - le format de `useId` (deux-points → trait bas) n'est lu nulle part ;
+  - aucune transition ni valeur différée ;
+  - les champs numériques sont contrôlés ;
+  - aucune action de formulaire.
+
+  **Vérifié :** audit, lint, unitaires, composants, build. Au banc, en `StrictMode` et en développement, 11 écrans à deux largeurs : aucune erreur ni aucun avertissement console. **Prix :** le bundle principal gagne 36,6 kB (1 280,21 kB, gzip 348,13).
+- **Restent, un par un :** `recharts`, `tailwindcss` (avec `@tailwindcss/vite`), `lucide-react` (mineures) ; puis les majeures `firebase` 13, `firebase-admin` 14, `vite` 8, `vitest` 5, `eslint` 10, chacune après lecture de ses notes.
 
 ### QUA-09 — Les suites émulateur échouent sous charge pour une raison d'environnement
 
