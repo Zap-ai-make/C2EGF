@@ -727,32 +727,63 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
 - **Majeures en attente** : `firebase` 12.19 → 13.1, `firebase-admin` 13.10 → 14.5 (racine et `functions/`), `vite` 7 → 8, `vitest` 4 → 5, `eslint` 9 → 10.
 - **Mineures en attente** : `firebase-functions` 7.2.5 → 7.4.0 (l'émulateur le signale à chaque démarrage), React 19.1 → 19.3, `recharts`, `tailwindcss`, `lucide-react`.
 - **Correction** : un paquet à la fois, avec les suites complètes à chaque fois. Commencer par `firebase-functions` ; les majeures Firebase après lecture de leurs notes de version.
+- **2 novembre 2026 : `firebase-functions` 7.2.5 → 7.4.0 (`e3384b3`), seul.** Les notes de version de 7.3.0 à 7.4.0 ne touchent rien que ce code emploie : ni `timeoutSeconds`, ni CORS, ni déclencheur Auth, ni `logger/compat`.
+  - **Ce qu'elles taisent :** depuis 7.3.2 (« update dependencies to close CVEs »), le SDK dépend d'**Express 5** et non plus 4. Les 54 versions qui bougent dans le lockfile en viennent toutes. Le code n'importe pas Express et n'a aucune `onRequest` ; seule la couche HTTP interne des callables change, celle qu'appelle `test:functions:e2e`.
+  - **Vérifié :** `check:audit`, Functions 444 sur 444, bout-en-bout 40 sur 40.
+  - **Une affirmation de ce constat non reproduite :** l'émulateur n'a signalé de version périmée ni avec la 7.2.5 ni avec la 7.4.0 sur ce poste.
+  - **À savoir :** toute function redéployée part désormais avec ce SDK, y compris les trois du lot B1.
+- **Restent, un par un :** React 19.3, `recharts`, `tailwindcss`, `lucide-react` (mineures) ; puis les majeures `firebase` 13, `firebase-admin` 14, `vite` 8, `vitest` 5, `eslint` 10, chacune après lecture de ses notes.
 
 ### QUA-09 — Les suites émulateur échouent sous charge pour une raison d'environnement
 
-**MINEUR · effort S.**
+**MINEUR · effort S · CORRIGÉ le 2 novembre 2026 · commit `2a39878`.**
 
 - **`test:functions:e2e` : 40 échecs sur 40** au premier passage. L'émulateur n'a chargé aucune fonction (« Cannot determine backend specification. Timeout after 10000 »), mais `emulators:exec` a quand même lancé les tests : tous ont reçu `functions/not-found`. C'est le piège des dix secondes de `docs/deployer-les-functions.md`, côté tests.
 - **Suite Firestore.** Trois fichiers ont échoué, uniquement par dépassement de délai (initialisation à 10 s, tests à 5 s, un verrou de transaction expiré). Le premier fichier d'un émulateur froid ne charge pas ses règles en 10 s sur cette machine.
 - **Correction** : fixer `FUNCTIONS_DISCOVERY_TIMEOUT` pour `test:functions:e2e`, et élargir `hookTimeout` dans `vitest.firestore.config.js`. Aucun changement de règle ni de test.
+- **Fait.** `test:functions:e2e` passe par `scripts/firebaseEmulateurs.mjs`, qui pose la variable à 120 s sauf si la personne en a donné une. La bibliothèque standard suffit : pas de `cross-env`. Sous Windows, `firebase` est un `.cmd`, donc la commande passe par le shell, et le script remet les guillemets autour de la commande vitest. Délais : 120 s pour la mise en place, 60 s par test, ceux qui avaient fait passer les suites relancées à la main.
+- **Vérifié** : bout-en-bout 40 sur 40, Firestore 435 sur 435, du premier coup sur le même poste.
 
 ### PERF-04 — L'historique d'un agent compte boutique par boutique
 
-**MINEUR · effort S.**
+**MINEUR · effort S · MESURÉ le 2 novembre 2026 : quelques dollars par mois, correction non proposée.**
 
 - À chaque ouverture d'un historique, [listClientHistory.js:183](../functions/src/clients/listClientHistory.js#L183) relit toute la collection `stores`, puis lance une agrégation par boutique ([ligne 224](../functions/src/clients/listClientHistory.js#L224)). La flotte visée compte 84 boutiques (`docs/ia/COUT-LECTURES.md`, banc dealer), soit environ 86 requêtes par ouverture.
 - **Correction** : mesurer d'abord. Si le coût compte, borner le décompte aux boutiques présentes dans la page lue, ou ne le faire qu'à la demande.
+- **Mesuré le 2 novembre 2026, par le code, pas en production.** Avec 84 boutiques :
+  - **première page, environ 222 lectures facturées** : le profil (1), la page (51 au plus), les non terminées de l'agent, `stores` (84), deux comptes globaux, et un compte par boutique (84, une lecture au moins chacun). La boutique pèse 168 lectures, les trois quarts ;
+  - **page suivante, environ 137 lectures** : le profil, le repère, la page, et `stores` relue (84), qui sert aux noms des lignes.
+
+  Avec l'hypothèse de `docs/ia/COUT-LECTURES.md` (84 boutiques × 20 ouvertures par jour × 30 jours), cela fait environ 11 millions de lectures par mois. C'est l'ordre de grandeur que ce document chiffre à **quelques dollars**. La latence des 84 comptes, lancés en parallèle, ne se mesure qu'en production.
+- **Décision proposée : ne pas corriger.** Le coût ne compte pas, et les deux corrections changent ce que l'écran affiche : soit des comptes par boutique limités à la page lue, soit un clic de plus. À rouvrir si une ouverture paraît lente au comptoir, ou si la facture de lectures dit autre chose.
 
 ### UI-02 — Le panneau de l'assistant sort des jetons de couleur
 
-**MINEUR · effort S.**
+**MINEUR · effort S · CORRIGÉ le 2 novembre 2026 · commit `8a2c4c8`.**
 
 - `PanneauAssistant.jsx` et `CarteAConfirmer.jsx` emploient 50 classes de palette brute (`slate-*`, `amber-*`) pour 26 jetons C2EGF. `HistoriqueTable.jsx` et `HistoriqueArchives.jsx` n'en ont qu'une à eux deux.
 - C'est le même chantier que la « cohérence visuelle » de [REPRISE-APRES-URGENCE.md](REPRISE-APRES-URGENCE.md), étendu au panneau. À faire avec une capture avant/après.
+- **Correction.** `slate-N` devient `gray-N`, au même niveau : `index.css` retinte la rampe `gray` vers le bleu de marque sans qu'aucun niveau perde en contraste, et `slate` la contournait. Cela fait 46 classes dans le panneau et 2 dans `TableRow.jsx`, le dernier `slate` de `src`. L'avertissement et l'erreur passent d'`amber` à `warn-soft` / `warn` : 5,38:1, au-dessus de l'AA.
+- **Vérifié.** TC-324 [JC-02] était rouge avant, vert après. Captures à 1 440 et 390 px : rendu quasi identique. La carte de ravitaillement du banc porte un avertissement, qui reste lisible.
+
+### UI-04 — Trente classes de couleur nommaient des jetons absents du thème
+
+**Trouvé le 2 novembre 2026 en traitant UI-02 · MINEUR · CORRIGÉ le même jour · commit `3160060`.**
+
+- **Le mécanisme.** Tailwind v4 ne produit aucune règle pour une couleur que le thème ne définit pas, sans erreur ni avertissement. Seul le CSS construit le montre.
+- **`brand-300` et `brand-700`, 22 fois dans 10 fichiers.** La rampe de marque n'a que 50, 100, 200, 400, 500 et 600. Mesuré au banc avant correction :
+  - la carte « À confirmer » de l'assistant était cerclée de **noir**, la bordure prenant la couleur du texte ;
+  - les boutons « Charger les … précédents » de l'Historique étaient en texte noir sur bordure noire ;
+  - le soulignement du lien « Stock » du dealer était de la couleur du texte ;
+  - le survol des boutons pleins de l'assistant ne faisait rien.
+
+  Remplacées selon le rôle écrit de chaque nuance : 300 → 200 (filets, bordures), 700 → 600 (assombri). Les trois boutons pleins de l'assistant passent à la convention de `BTN_PRIMARY` : `brand-500`, survol `brand-600`.
+- **`surface-2`, 8 fois dans 5 fichiers depuis le 8 octobre (`03c8ee9`), jamais défini.** Les lignes de groupe, les en-têtes de section, les encarts de l'aide et un état vide restaient transparents. Le jeton est défini dans `index.css` à #f7f9fc : plus clair que `canvas`, qui sert aussi au survol des lignes de groupe, si bien que le survol reste visible.
+- **Garde.** TC-324 [JC-01] lit les sources : toute couleur d'une famille C2EGF doit être définie dans `index.css`. Rouge avant (30 classes), vert après. Captures avant/après à 1 440 et 390 px : aucun débordement, aucune erreur console.
 
 ### DOC-03 — Configuration de l'assistant absente de `.env.example`, état du Lot 0 périmé
 
-**MINEUR · effort S.**
+**MINEUR · effort S · CORRIGÉ le 2 novembre 2026 · commit `211d3f1`.** Les cinq variables sont dans `.env.example`, en commentaire et sans valeur, chacune avec ce qui se passe quand elle manque. Le tableau du Lot 0 dit l'état réel : le code d'App Check et la CSP sont en place, mais il reste à appliquer App Check dans la console et à mettre la clé dans Vercel (SEC-11). La facturation et l'API du modèle sont faites depuis le 30 octobre. Le README ne prête plus à TC-211 que ce qu'il vérifie : `script-src` et `frame-src`.
 
 - Le code lit cinq variables que `.env.example` ne cite pas : `VITE_FIREBASE_APPCHECK_KEY`, `VITE_APPCHECK_DEBUG_TOKEN`, `VITE_AI_BACKEND`, `VITE_AI_LOCATION`, `VITE_AI_MODEL`. Sans la première, l'assistant se tait (SEC-11).
 - `docs/ia/README.md` (lignes 59 à 61) marque encore App Check et la CSP « ❌ », alors que les deux sont dans le code et dans `vercel.json`.
@@ -762,6 +793,7 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
 - `getRoleAccent` et `BTN_PRIMARY` (`workspaceTheme.js`) : conservés le 29 octobre comme jetons de design.
 - `NETWORK_CODES` (`src/utils/constants.js`) : un reste de l'import du produit. Son seul consommateur, `getNetworkCode`, a été retiré par `1ef0a5d`.
 - À retirer au fil de l'eau, selon la règle d'`AGENTS.md`.
+- **2 novembre 2026 : `NETWORK_CODES` retiré (`bed97f5`).** Son dernier lecteur était le repli du code client dans le formulaire, sorti par `5237d66`. Ce repli ne servait pas : la ligne suivante refusait l'opération quand le client n'avait pas de code pour le réseau. Le bundle n'a pas bougé (1 243,61 kB), car la constante était déjà éliminée à la construction. `getRoleAccent` et `BTN_PRIMARY` restent, pour la raison donnée le 29 octobre.
 
 ### QUA-05 (suite) — Deux gros modules de plus
 
@@ -798,7 +830,7 @@ Le panneau arrive par `lazy` ([Assistant.jsx:19](../src/components/Assistant.jsx
 | B2 | UI-03 : libellés reliés, 13 champs | ✅ Terminé le 2 novembre (`817f19a`) : TC-320 rouge puis vert, garde sur toutes les sources |
 | B3 | BUG-08, requalifié mineur : l'onglet Ravitaillement et la Corbeille chargent leurs lignes plus anciennes | ✅ Terminé le 2 novembre (`829fc54`), correction minimale choisie par le responsable : TC-321 et TC-322, banc `?espace=historique` |
 | C — décision | SEC-12, et SEC-13 avec elle | ✅ Décidé le 2 novembre : `docs/ia/DONNEES-ENVOYEES.md`. Numéro personnel et fiches des autres boutiques inchangés, figés par TC-301 [OL-06] ; navigateur : le texte seul (`7f3b82f`), TC-323 rouge puis vert |
-| Backlog — mineurs | QUA-09, DOC-03, QUA-08 (un paquet à la fois), UI-02, PERF-04 (mesure d'abord), QUA-07 suite | Au fil de l'eau, chacun dans son propre commit |
+| Backlog — mineurs | QUA-09, DOC-03, QUA-08 (un paquet à la fois), UI-02, PERF-04 (mesure d'abord), QUA-07 suite | ✅ Traité le 2 novembre, un commit par point : QUA-09 `2a39878`, DOC-03 `211d3f1`, QUA-07 `bed97f5`, QUA-08 premier paquet `e3384b3`, UI-04 (trouvé en chemin) `3160060`, UI-02 `8a2c4c8`. PERF-04 mesuré, correction non proposée. Restent les autres paquets de QUA-08, un par un |
 | A — humain, en dernier | SEC-11 : clé reCAPTCHA Enterprise et domaines, App Check appliqué à AI Logic dans la console, `VITE_FIREBASE_APPCHECK_KEY` dans Vercel, redéploiement du site | Une question posée à l'assistant en production reçoit sa réponse |
 
 Une correction métier et un nettoyage ne partagent pas un lot. B1 et B3 touchent tous deux le serveur : leurs déploiements restent une décision humaine.
