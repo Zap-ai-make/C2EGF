@@ -16,5 +16,8 @@ export default defineConfig({
     // appel / sous charge. Marge pour un déroulé déterministe, sans masquer un
     // vrai blocage (le test échouerait toujours au-delà de 60s).
     testTimeout: 60000,
+    // Même raison pour la mise en place (création des comptes, connexion) :
+    // audit QUA-09, un échec sur un délai de hook, passé avec ce délai.
+    hookTimeout: 120000,
   },
 })

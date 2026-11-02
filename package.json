@@ -35,7 +35,7 @@
     "test:integration": "firebase emulators:exec --only auth,firestore --project demo-akayis-test \"npx vitest run --config vitest.integration.config.js\"",
     "test:commands": "vitest run --config vitest.config.js tests/unit/tc-034-dealer-request-commands.test.js",
     "test:functions": "firebase emulators:exec --only firestore --project demo-akayis-test \"npx vitest run --config vitest.functions.config.js\"",
-    "test:functions:e2e": "firebase emulators:exec --only auth,firestore,functions --project demo-akayis-test \"npx vitest run --config vitest.functions-e2e.config.js\"",
+    "test:functions:e2e": "node scripts/firebaseEmulateurs.mjs emulators:exec --only auth,firestore,functions --project demo-akayis-test \"npx vitest run --config vitest.functions-e2e.config.js\"",
     "v2:user:create": "node scripts/createTechnicalUser.mjs",
     "v2:user:verify": "node scripts/verifyTechnicalUser.mjs",
     "v2:user:delete": "node scripts/deleteTechnicalUser.mjs",
