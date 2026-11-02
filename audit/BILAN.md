@@ -681,12 +681,16 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
 
 ### UI-03 — Le montant de la saisie et trois filtres n'ont pas de nom accessible
 
-**IMPORTANT (non-négociable de `DESIGN.md`) · effort S.** Relevé par le banc, aux deux largeurs. Même nature qu'UI-01, corrigé en septembre pour le formulaire client.
+**IMPORTANT (non-négociable de `DESIGN.md`) · effort S · CORRIGÉ le 2 novembre 2026 (lot B2) · commit `817f19a`.** Relevé par le banc, aux deux largeurs. Même nature qu'UI-01, corrigé en septembre pour le formulaire client.
 
 - « Montant (FCFA) : » ([TransactionForm.jsx:301](../src/components/transactions/TransactionForm.jsx#L301)) est un libellé visible mais non relié : ni `htmlFor` ni `id`. Le libellé « Réseau : », masqué chez C2EGF (un seul réseau), a le même défaut.
 - La recherche client de la saisie ([ClientSearch.jsx:76](../src/components/transactions/ClientSearch.jsx#L76)), ainsi que la recherche et le filtre de mois de la liste des clients ([ClientsTable.jsx:86](../src/components/ClientsTable.jsx#L86)), n'ont qu'un placeholder.
 - « Éléments par page » ([Pagination.jsx:53](../src/components/Pagination.jsx#L53)) n'est pas relié à sa liste.
-- **Correction** : relier chaque libellé (`htmlFor`/`id`) ou poser un `aria-label`. Un test de composant par champ, avec `getByLabelText`, rouge avant la correction.
+- **Portée élargie au moment de corriger.** Le banc ne monte ni l'Historique ni le panneau de règlement. Un relevé de toutes les sources (`src/**/*.jsx`) a trouvé **13 champs** sans nom accessible dans 10 fichiers, dont six de plus que le banc :
+  - au comptoir : la recherche client et les dates « Du » / « Au » de l'Historique, le montant d'une tranche de règlement (un `<p>`, pas un `<label>`), et ses boutons « − » / « + » ;
+  - hors comptoir : la saisie en ligne d'un solde (`NetworkCard`), le montant d'un transfert dealer et le motif de rejet d'une clôture.
+- **Correction.** Libellé visible relié par `useId` (`htmlFor`/`id`), ou `aria-label` quand l'écran n'a jamais eu de libellé visible ; « Retirer 500 FCFA » et « Ajouter 500 FCFA » sur les boutons de la tranche. Aucun changement visuel : le libellé de la tranche reste du même style, en bloc.
+- **Test.** TC-320 était rouge avant la correction (6 sur 6). [CN-01] lit toutes les sources, comme TC-225 : un champ anonyme ajouté demain le fait échouer. [CN-02] à [CN-06] montent les composants et retrouvent chaque champ par son libellé (`getByLabelText`), seule preuve que le lien existe vraiment.
 
 ### SEC-12 — Aucune décision écrite sur les données personnelles qui partent au modèle
 
@@ -786,13 +790,13 @@ Le panneau arrive par `lazy` ([Assistant.jsx:19](../src/components/Assistant.jsx
 
 | Lot | Contenu | Critère de sortie |
 |---|---|---|
-| A — avant le 2 novembre, humain | SEC-11 : clé reCAPTCHA Enterprise et domaines, App Check appliqué à AI Logic dans la console, `VITE_FIREBASE_APPCHECK_KEY` dans Vercel, redéploiement du site | Une question posée à l'assistant en production reçoit sa réponse |
 | B1 | BUG-09 : refus typés, texte inchangé | ✅ Terminé le 2 novembre (`b44c1ac`) : TC-319 rouge puis vert, TC-081 inchangé, suites unitaires et Functions ; trois functions à redéployer |
-| B2 | UI-03 : libellés reliés | Tests `getByLabelText` rouges puis verts ; banc sans champ anonyme aux deux largeurs |
+| B2 | UI-03 : libellés reliés, 13 champs | ✅ Terminé le 2 novembre (`817f19a`) : TC-320 rouge puis vert, garde sur toutes les sources |
 | B3 | BUG-08 : écoute des livraisons ouvertes, liste paginée de l'onglet Ravitaillement, Corbeille | Caractérisation d'abord ; une livraison due au-delà de la centième ligne reste visible partout ; index décrit pour un déploiement humain |
 | C — décision | SEC-12, et SEC-13 avec elle | Décision écrite dans `docs/ia/` ; code seulement si elle le demande |
 | Backlog — mineurs | QUA-09, DOC-03, QUA-08 (un paquet à la fois), UI-02, PERF-04 (mesure d'abord), QUA-07 suite | Au fil de l'eau, chacun dans son propre commit |
+| A — humain, en dernier | SEC-11 : clé reCAPTCHA Enterprise et domaines, App Check appliqué à AI Logic dans la console, `VITE_FIREBASE_APPCHECK_KEY` dans Vercel, redéploiement du site | Une question posée à l'assistant en production reçoit sa réponse |
 
 Une correction métier et un nettoyage ne partagent pas un lot. B1 et B3 touchent tous deux le serveur : leurs déploiements restent une décision humaine.
 
-**Point d'arrêt ADOPTION.md : bilan présenté, rien n'est corrigé avant validation du périmètre des lots.** Le lot A est le seul daté, et il ne dépend d'aucun code.
+**Point d'arrêt ADOPTION.md : périmètre validé par le responsable le 2 novembre 2026, B1 puis B2.** Même jour, il a placé le lot A (App Check) en dernière priorité. Son échéance tombait ce même jour : tant qu'il n'est pas fait, l'assistant peut être coupé par Firebase. La caisse, elle, n'en dépend pas.
