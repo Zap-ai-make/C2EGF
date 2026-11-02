@@ -592,10 +592,10 @@ Méthode d'`ADOPTION.md`, en trois passes : sécurité (`SECURITY.md` §13), cin
 - **Hygiène.** Aucun HTML brut, aucun secret dans les fichiers suivis ni dans l'historique Git, aucun avis de dépendance haut ou critique non traité.
 - **Poids.** Le bundle principal a perdu 77 kB depuis que le panneau de l'assistant arrive à la demande.
 
-**Cinq constats importants, dont un daté.**
+**Quatre constats importants, dont un daté** (cinq à la première rédaction, BUG-08 requalifié depuis).
 
 - **SEC-11, action humaine.** App Check doit être appliqué (« enforce ») sur AI Logic avant le **2 novembre**. Sinon, Firebase désactive le service et l'assistant se tait.
-- **BUG-08.** Les livraisons encore dues, l'onglet Ravitaillement et la Corbeille ne lisent que les cent dernières lignes chargées : une somme due au dealer peut disparaître de l'écran.
+- **BUG-08, requalifié en mineur le 2 novembre.** La première rédaction disait qu'une somme due au dealer pouvait disparaître de l'écran : c'est faux, une écoute dédiée le couvre depuis `30501f7`. Reste que l'onglet Ravitaillement et la Corbeille ne montrent que les lignes chargées, sans le dire.
 - **BUG-09.** Plusieurs refus du serveur arrivent encore en « Une erreur interne s'est produite. », alors que l'historique est conçu pour afficher leur raison. Corrigé le 2 novembre (lot B1).
 - **UI-03.** Le champ « Montant » de la saisie, la recherche client et deux filtres n'ont pas de nom accessible.
 - **SEC-12.** Aucune décision écrite ne dit quelles données personnelles partent au modèle.
@@ -639,27 +639,19 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
   - un build déployé qui contient cette variable.
 - **Correction** : vérifier ces quatre points avant le 2 novembre, puis poser une question à l'assistant en production. Effort S.
 
-### BUG-08 — Livraisons dues, onglet Ravitaillement et Corbeille ne lisent que les lignes chargées
+### BUG-08 — L'onglet Ravitaillement et la Corbeille ne montrent que les lignes chargées
 
-**IMPORTANT · effort M.**
+**REQUALIFIÉ le 2 novembre 2026 : IMPORTANT → MINEUR · effort S à M.**
 
-- **Localisation.** `completedTransactions` ([transactions.jsx:194](../src/context/transactions.jsx#L194)) est une fenêtre : la première page de l'historique, soit les **100** dernières lignes par `createdAt` ([historyService.js:45](../src/services/historyService.js#L45)), plus l'écoute de la journée, plus les pages chargées à la main.
-- Plusieurs écrans en dérivent une information qui n'est vraie que sur toute la collection :
-  - **les livraisons encore dues** : le badge de Transactions ([Transactions.jsx:77](../src/pages/Transactions.jsx#L77)), la liste du retour ([RavitaillementPanel.jsx:219](../src/components/transactions/RavitaillementPanel.jsx#L219)) et l'état que lit l'assistant ([PanneauAssistant.jsx:334](../src/components/assistant/PanneauAssistant.jsx#L334)) ;
-  - **l'onglet Ravitaillement de l'historique** ([HistoriqueArchives.jsx:330](../src/components/historique/HistoriqueArchives.jsx#L330)) ;
-  - **la Corbeille** ([useHistoriqueFilters.js:51](../src/hooks/useHistoriqueFilters.js#L51)).
-- **Effet.** Prenons une boutique qui a saisi plus de cent opérations depuis une livraison encore due. Elle ne la voit plus :
-  - le badge redescend ;
-  - le formulaire de retour ne la propose plus ;
-  - l'assistant répond « Aucun ravitaillement n'est à rendre. ».
+- **⚠ Erreur de ce constat.** La première rédaction affirmait que les livraisons encore dues disparaissaient de l'écran au-delà de cent opérations (badge, formulaire de retour, assistant). **C'est faux, et c'était déjà corrigé.** Le contexte écoute les livraisons ouvertes sans limite (`subscribeToOpenReplenishments`, `replenishmentStatus == 'open'`, [transactions.jsx:254](../src/context/transactions.jsx#L254)) et les fusionne dans `completedTransactions` ([transactions.jsx:117](../src/context/transactions.jsx#L117)). C'est le correctif `30501f7`, protégé par TC-241 [1] : « Une dette de ravitaillement sortie de la page de 100 lignes disparaissait ». L'audit avait lu la taille de la fenêtre sans lire les sources qui s'y ajoutent ; l'erreur a été vue en ouvrant le lot B3, avant d'écrire une ligne.
+- **Ce qui reste vrai.** `completedTransactions` est une fenêtre : les **100** dernières lignes ([historyService.js:45](../src/services/historyService.js#L45)), plus la journée, plus les livraisons ouvertes, plus les pages chargées à la main. Deux onglets en dérivent une liste sans dire qu'elle est partielle :
+  - **l'onglet Ravitaillement** ([HistoriqueArchives.jsx:330](../src/components/historique/HistoriqueArchives.jsx#L330)) montre toutes les livraisons dues, mais pas les livraisons soldées, retours et clôtures plus anciens que la fenêtre ;
+  - **la Corbeille** ([useHistoriqueFilters.js:51](../src/hooks/useHistoriqueFilters.js#L51)) ne montre pas une ligne supprimée dont la saisie est plus ancienne que la fenêtre.
 
-  Le serveur, lui, garde le bon reste dû sur la ligne. Le bouton « Charger les transactions précédentes » n'existe que dans l'onglet Transactions clients ([Historique.jsx:167](../src/pages/Historique.jsx#L167)), et rien ne signale, dans l'onglet Ravitaillement, qu'il manque des lignes.
-- **Origine.** Pour les livraisons, le défaut date du suivi des retours (S8). Le lot du 31 octobre l'a étendu aux retours en les déplaçant dans l'onglet Ravitaillement.
-- **Correction :**
-  - une écoute dédiée des livraisons ouvertes (`type == 'Ravitaillement'`, `replenishmentStatus == 'open'`), indépendante de la fenêtre ;
-  - une liste paginée propre à l'onglet Ravitaillement : prévoir un index composite `type` + `createdAt`, dont le déploiement est humain.
-
-  Test de caractérisation d'abord : une livraison due au-delà de la centième ligne doit rester visible.
+  Le bouton « Charger les transactions précédentes » n'existe que dans l'onglet Transactions clients ([Historique.jsx:167](../src/pages/Historique.jsx#L167)). Conséquence concrète : un retour de la semaine dernière, saisi par erreur, ne se retrouve pas dans l'onglet Ravitaillement pour être annulé, sauf à charger d'abord des pages depuis l'onglet clients. Le lot du 31 octobre, en y déplaçant les retours, a rendu le cas plus fréquent.
+- **Deux corrections possibles, à choisir :**
+  - **minimale, sans index** : le même bouton de chargement dans les deux onglets, avec la date jusqu'où la liste remonte. Chaque clic lit cent lignes de tout type, et peut n'ajouter aucun mouvement ;
+  - **propre, avec index** : une requête paginée par onglet, `type in […]` trié par `createdAt`, et `statut == 'Supprimée'` trié par `deletedAt`. Il faut deux index composites, à déployer par un humain **avant** le site.
 
 ### BUG-09 — Des refus du serveur arrivent encore en « erreur interne »
 
@@ -792,7 +784,7 @@ Le panneau arrive par `lazy` ([Assistant.jsx:19](../src/components/Assistant.jsx
 |---|---|---|
 | B1 | BUG-09 : refus typés, texte inchangé | ✅ Terminé le 2 novembre (`b44c1ac`) : TC-319 rouge puis vert, TC-081 inchangé, suites unitaires et Functions ; trois functions à redéployer |
 | B2 | UI-03 : libellés reliés, 13 champs | ✅ Terminé le 2 novembre (`817f19a`) : TC-320 rouge puis vert, garde sur toutes les sources |
-| B3 | BUG-08 : écoute des livraisons ouvertes, liste paginée de l'onglet Ravitaillement, Corbeille | Caractérisation d'abord ; une livraison due au-delà de la centième ligne reste visible partout ; index décrit pour un déploiement humain |
+| B3 | BUG-08, requalifié mineur : l'onglet Ravitaillement et la Corbeille chargent leurs lignes plus anciennes | En attente du choix du responsable entre la correction minimale (sans index) et la correction propre (deux index) |
 | C — décision | SEC-12, et SEC-13 avec elle | Décision écrite dans `docs/ia/` ; code seulement si elle le demande |
 | Backlog — mineurs | QUA-09, DOC-03, QUA-08 (un paquet à la fois), UI-02, PERF-04 (mesure d'abord), QUA-07 suite | Au fil de l'eau, chacun dans son propre commit |
 | A — humain, en dernier | SEC-11 : clé reCAPTCHA Enterprise et domaines, App Check appliqué à AI Logic dans la console, `VITE_FIREBASE_APPCHECK_KEY` dans Vercel, redéploiement du site | Une question posée à l'assistant en production reçoit sa réponse |
