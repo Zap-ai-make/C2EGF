@@ -60,11 +60,11 @@ Rien de sérieux ne commence avant qu'elles soient tranchées.
 | Règles = le mur, refus par défaut, testées | ✅ 26 blocs `match`, 20 fichiers de tests — **sauf `globalClients`** |
 | Rôle non auto-attribuable | ✅ en document, mais verrouillé — voir ci-dessous |
 | Plan Blaze | ✅ |
-| Facturation IA sur le compte Google Cloud | ⬜ à choisir — **pas** la cagnotte prépayée |
-| API du modèle activée | ⬜ |
-| App Check | ❌ `LOT-APPCHECK.md` |
-| CSP, les quatre directives | ❌ `LOT-APPCHECK.md` §2.3 |
-| Jeton de débogage App Check | ⬜ |
+| Facturation IA sur le compte Google Cloud | ✅ Agent Platform, choisi le 30 octobre 2026 après le `429` de la cagnotte prépayée (`src/lib/ia/assistant.js`) |
+| API du modèle activée | ✅ l'assistant a répondu en réel le 30 octobre 2026 (Lot B ci-dessous) |
+| App Check | ✅ dans le code (`src/config/appCheck.js`) — ⬜ **appliqué dans la console, clé dans Vercel** : action humaine, `audit/BILAN.md` SEC-11 |
+| CSP, les quatre directives | ✅ `vercel.json`, valeur du §2.3 de `LOT-APPCHECK.md` ; TC-211 vérifie `script-src` et `frame-src` |
+| Jeton de débogage App Check | ⬜ sur chaque poste de développement, dans `.env.development.local` (`.env.example`) |
 
 **Sur le rôle.** La feuille de route exige un *custom claim* et interdit un rôle
 en document. C2EGF lit le rôle dans `users/{uid}` — mais `update` est borné à

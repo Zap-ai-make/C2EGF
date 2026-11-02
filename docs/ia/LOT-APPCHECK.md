@@ -83,10 +83,12 @@ Vite, il n'y a pas de rendu serveur.
 
 ### 2.3 CSP — les quatre directives
 
-Aucune des quatre n'autorise reCAPTCHA aujourd'hui dans `vercel.json`.
-`frame-src` est **absente**, donc retombe sur `default-src 'self'`.
+À l'écriture de ce lot, aucune des quatre n'autorisait reCAPTCHA dans
+`vercel.json`, et `frame-src` était **absente**, donc retombait sur
+`default-src 'self'`. **Posée depuis** : `vercel.json` porte la valeur
+ci-dessous (vérifié le 2 novembre 2026, audit DOC-03).
 
-Valeur à poser :
+La valeur :
 
 ```
 default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none';
