@@ -573,3 +573,226 @@ Conservé volontairement :
 | R3 | Retrait du bloc d'exports déstructurés de `firestore.js` | ✅ Terminé le 29 octobre (`c5887c1`) ; aucun import restant, le test de `tc-018` qui figeait le bloc est retiré, `quality:check` vert |
 | R4 | QUA-07 : `adminService.js`, `closureService` et déclarations mortes, par petits commits | ✅ Terminé le 29 octobre (six commits, `75c3344` à `e97070b`) ; règle d'`AGENTS.md` appliquée, faux positif `adminApp.mjs` écarté, `quality:check` vert |
 | Backlog | QUA-04 suite, PERF-03 (mesure d'abord), DOC-02 | DOC-02 corrigé (`1ed4488`) ; `initiales` factorisée (`dc9f008`) ; PERF-03 mesuré, chargement à la demande après App Check. Le reste de QUA-04 attend un besoin testable : services de transfert dealer, scripts qui écrivent en production |
+
+## 10. Audit complet — 31 octobre 2026
+
+Branche `feat/espace-patron`, HEAD `2165ccb`, arbre de travail conservé : aucun fichier suivi modifié. Les fichiers non suivis sont `METHODE-REFONTE-DESIGN.md`, `vercel-env.ps1` (sans aucune valeur : il lit `.env.vercel`, qui est ignoré) et des pièces de travail sous `audit/`.
+
+Depuis l'audit de reprise (`f6d3be6`), 45 commits, dont seize de remédiation le 29 octobre. Les autres portent l'assistant (préparation d'opérations, dictée, volet, lecture de la caisse), le comptoir (client inconnu enregistré sans quitter la saisie, code agent reconnu en entier) et l'historique (retours, règlements en plusieurs moyens, retrait de « Vider les soldes »). 64 fichiers touchés dans `src`, `functions/src`, `config`, `scripts`, `firestore.rules` et `vercel.json` : 3 999 lignes ajoutées, 1 625 retirées.
+
+Méthode d'`ADOPTION.md`, en trois passes : sécurité (`SECURITY.md` §13), cinq piliers (`ARCHITECTURE.md` §9), interface (`DESIGN.md` §14). Les frontières de confiance ont été lues en entier, en priorité le code ajouté depuis le 29 octobre ; le reste a été couvert par recherches transversales. Ce n'est ni une lecture ligne par ligne de tout le dépôt ni un pentest de production. Aucun déploiement, accès distant, écriture en production ni script administrateur. Les émulateurs ont tourné sur des projets `demo-*`, et le banc visuel avec le trafic externe bloqué.
+
+### Synthèse
+
+**Le socle tient.**
+
+- **Commandes financières.** Celles relues pour cet audit (`storeTransactionCommand`, les règlements, `listClientHistory`) relisent le profil et la boutique dans leur transaction, valident chaque entrée et écrivent leur audit.
+- **Règles.** Elles n'ont pas bougé depuis le 29 octobre, et leurs six reproductions restent fermées.
+- **Assistant.** Il n'écrit rien sans le clic de la caissière. La commande qu'il envoie est construite par le même code que le formulaire, puis rejugée sur l'état de l'instant.
+- **Hygiène.** Aucun HTML brut, aucun secret dans les fichiers suivis ni dans l'historique Git, aucun avis de dépendance haut ou critique non traité.
+- **Poids.** Le bundle principal a perdu 77 kB depuis que le panneau de l'assistant arrive à la demande.
+
+**Cinq constats importants, dont un daté.**
+
+- **SEC-11, action humaine.** App Check doit être appliqué (« enforce ») sur AI Logic avant le **2 novembre**. Sinon, Firebase désactive le service et l'assistant se tait.
+- **BUG-08.** Les livraisons encore dues, l'onglet Ravitaillement et la Corbeille ne lisent que les cent dernières lignes chargées : une somme due au dealer peut disparaître de l'écran.
+- **BUG-09.** Plusieurs refus du serveur arrivent encore en « Une erreur interne s'est produite. », alors que l'historique est conçu pour afficher leur raison. Corrigé le 2 novembre (lot B1).
+- **UI-03.** Le champ « Montant » de la saisie, la recherche client et deux filtres n'ont pas de nom accessible.
+- **SEC-12.** Aucune décision écrite ne dit quelles données personnelles partent au modèle.
+
+Rien de critique.
+
+### Vérifications exécutées
+
+| Contrôle | Résultat |
+|---|---|
+| `npm run quality:check` | **Réussi** (code 0). Il enchaîne les sept contrôles des lignes suivantes |
+| `check:generated` · `check:secrets` · `lint` | Les trois artefacts correspondent au profil · aucune signature dans les fichiers suivis · réussi |
+| `check:audit` | Aucun avis haut ou critique non traité. Une exception active, documentée et datée : GHSA-m9gg-hp2v-232j (`@grpc/grpc-js`, défaut de serveur gRPC, absent du bundle navigateur) |
+| `test:unit` | **120 fichiers, 3 143 tests réussis** |
+| `test:components` | **53 fichiers, 685 tests réussis** |
+| `npm run build` | Bundle principal **1 242,92 kB, gzip 337,86** (1 320,03 / 354,99 le 29 octobre) ; `PanneauAssistant` 135,40 kB, chargé au premier clic ; `Dashboard` 340,78 kB ; xlsx 499,86 kB |
+| Intégration, `demo-akayis-test` | **2 fichiers, 42 tests réussis** |
+| Functions, `demo-akayis-test` | **19 fichiers, 444 tests réussis** |
+| Règles Firestore, `demo-akayis-test` | Première passe : 17 fichiers sur 20 réussis (252 tests), 7 dépassements de délai, 176 tests sautés après un délai d'initialisation dépassé. Relancés seuls, les trois fichiers butent encore sur l'initialisation à 10 s. Relancés ensemble avec des délais élargis en ligne de commande (`--hookTimeout=120000 --testTimeout=60000`) : **233 sur 233**. Les 435 tests passent ; aucune assertion fausse |
+| Functions bout-en-bout, `demo-akayis-test` | Première passe : **0 sur 40**, aucune fonction chargée (QUA-09). Avec `FUNCTIONS_DISCOVERY_TIMEOUT=120` : 39 sur 40, le dernier sur un délai de hook ; `tc-045` relancé avec délais élargis : **13 sur 13** |
+| `node audit/reproduce-rules.mjs` | **6 scénarios fermés** (SEC-01 à SEC-05) |
+| `node audit/scan-secrets.mjs` | **1 822 blobs texte Git examinés, aucune signature** |
+| `node audit/inventory.mjs` | 640 fichiers suivis, 318 fichiers source, 55 096 lignes ; **41 fenêtres identiques, inchangé**. Hors du graphe de `main.jsx`, seulement les modules connus (`ProtectedRoute`, banc et doublures) |
+| `jscpd` (8 lignes, 70 jetons) | **20 clones, 325 lignes, 0,52 %** (23 et 0,65 % le 29 octobre). Tous déjà au backlog, sauf un clone interne de 9 lignes dans `outils.js` |
+| `knip`, mêmes entrées que le 29 octobre | Aucun fichier mort nouveau. 46 exports signalés : 43 servent dans leur fichier ou ailleurs (le mot `export` y est superflu) ; 3 ne servent nulle part, voir QUA-07 (suite) |
+| Banc visuel (`audit/captures-31-10.mjs`) | Boutique, saisie, assistant et dealer en **1 440 et 390 px** : aucun débordement horizontal, aucune erreur console, aucun bouton ni image sans nom ; **7 champs sans nom accessible** (UI-03) |
+| `npm outdated` | Voir QUA-08 |
+
+Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre. Les dépassements de délai des suites émulateur viennent de là : relancés avec des délais plus larges, les mêmes tests passent sans changer une ligne. QUA-09 propose de fixer ces délais dans la configuration.
+
+### SEC-11 — App Check doit être appliqué sur AI Logic avant le 2 novembre 2026
+
+**IMPORTANT · URGENT (J-2) · action humaine, hors de portée d'un agent.** C'était le « point de vigilance hors constat » du 29 octobre ; il est vérifié.
+
+- **L'échéance.** La documentation Firebase d'AI Logic l'annonce : à partir du **2 novembre 2026**, AI Logic n'est plus utilisable si App Check n'est pas appliqué (« enforce »). Les projets configurés avant juillet 2026 doivent l'activer eux-mêmes dans la console. Sinon, le service répond `403 PERMISSION_DENIED` : « Firebase AI Logic has been deactivated in this project ».
+- **Le code est prêt** (`8341dae`, `d0e7c0a`). [appCheck.js](../src/config/appCheck.js) s'active à la première question, avec reCAPTCHA Enterprise. Sans `VITE_FIREBASE_APPCHECK_KEY` dans le build, il ne s'active pas et l'assistant se tait ; la caisse continue de fonctionner, comme le veut `docs/ia/LOT-APPCHECK.md`.
+- **Ce qui est hors de portée d'un agent :**
+  - la clé reCAPTCHA Enterprise et ses domaines ;
+  - l'application d'App Check pour AI Logic dans la console ;
+  - la variable dans Vercel, en production et en preview ;
+  - un build déployé qui contient cette variable.
+- **Correction** : vérifier ces quatre points avant le 2 novembre, puis poser une question à l'assistant en production. Effort S.
+
+### BUG-08 — Livraisons dues, onglet Ravitaillement et Corbeille ne lisent que les lignes chargées
+
+**IMPORTANT · effort M.**
+
+- **Localisation.** `completedTransactions` ([transactions.jsx:194](../src/context/transactions.jsx#L194)) est une fenêtre : la première page de l'historique, soit les **100** dernières lignes par `createdAt` ([historyService.js:45](../src/services/historyService.js#L45)), plus l'écoute de la journée, plus les pages chargées à la main.
+- Plusieurs écrans en dérivent une information qui n'est vraie que sur toute la collection :
+  - **les livraisons encore dues** : le badge de Transactions ([Transactions.jsx:77](../src/pages/Transactions.jsx#L77)), la liste du retour ([RavitaillementPanel.jsx:219](../src/components/transactions/RavitaillementPanel.jsx#L219)) et l'état que lit l'assistant ([PanneauAssistant.jsx:334](../src/components/assistant/PanneauAssistant.jsx#L334)) ;
+  - **l'onglet Ravitaillement de l'historique** ([HistoriqueArchives.jsx:330](../src/components/historique/HistoriqueArchives.jsx#L330)) ;
+  - **la Corbeille** ([useHistoriqueFilters.js:51](../src/hooks/useHistoriqueFilters.js#L51)).
+- **Effet.** Prenons une boutique qui a saisi plus de cent opérations depuis une livraison encore due. Elle ne la voit plus :
+  - le badge redescend ;
+  - le formulaire de retour ne la propose plus ;
+  - l'assistant répond « Aucun ravitaillement n'est à rendre. ».
+
+  Le serveur, lui, garde le bon reste dû sur la ligne. Le bouton « Charger les transactions précédentes » n'existe que dans l'onglet Transactions clients ([Historique.jsx:167](../src/pages/Historique.jsx#L167)), et rien ne signale, dans l'onglet Ravitaillement, qu'il manque des lignes.
+- **Origine.** Pour les livraisons, le défaut date du suivi des retours (S8). Le lot du 31 octobre l'a étendu aux retours en les déplaçant dans l'onglet Ravitaillement.
+- **Correction :**
+  - une écoute dédiée des livraisons ouvertes (`type == 'Ravitaillement'`, `replenishmentStatus == 'open'`), indépendante de la fenêtre ;
+  - une liste paginée propre à l'onglet Ravitaillement : prévoir un index composite `type` + `createdAt`, dont le déploiement est humain.
+
+  Test de caractérisation d'abord : une livraison due au-delà de la centième ligne doit rester visible.
+
+### BUG-09 — Des refus du serveur arrivent encore en « erreur interne »
+
+**IMPORTANT · effort S · CORRIGÉ le 2 novembre 2026 (lot B1) · commit `b44c1ac`.** Même famille que le correctif `9e21312`, qui n'a traité que les soldes insuffisants.
+
+- **Localisation.** Avant correction, [financialUtils.js](../functions/src/settlements/financialUtils.js) levait encore dix `Error` simples. [callable.js:34](../functions/src/callable.js#L34) ne laisse passer que `DealerRequestError` : tout le reste devient « Une erreur interne s'est produite. », et `storeTransactionCommand` ne les reformule pas.
+- **Effet.** Une caissière qui annule une ligne que le serveur ne sait pas défaire lit une panne au lieu de la raison. Le tableau de l'historique est pourtant écrit pour afficher le refus « mot pour mot » ([HistoriqueTable.jsx:118](../src/components/historique/HistoriqueTable.jsx#L118)).
+- **Portée exacte, établie au moment de corriger.** Sur les dix `Error`, quatre sont des refus qu'une ligne réelle peut atteindre :
+  - un retrait validé d'un geste, écrit avant la répartition de liquidité ;
+  - une ligne d'historique incomplète, par exemple un montant enregistré en texte ;
+  - une ligne défaite sous une ancienne graphie (« Annulee »), que le garde exact de `refuserSiIntouchable` ne reconnaît pas ;
+  - un crédit validé d'un geste, seulement pour les profils qui ouvrent le crédit (pas C2EGF).
+
+  Les six autres (vase, montant, type inconnu) sont des contrôles défensifs que la commande valide déjà en amont : ils restent des pannes, comme TC-315 [RS-06] l'a décidé.
+- **Erreur de ce constat, corrigée.** La première rédaction disait que « deux postes qui annulent la même ligne » liraient une panne. C'est faux : le bouton « Annuler » passe par `trashHistory`, dont `refuserSiIntouchable` refuse déjà une ligne défaite avec un `STORE_TRANSACTION_INVALID` lisible. Seule `cancelHistory` arrivait sans ce garde, et l'interface ne l'appelle plus (`deleteFromHistory` n'a aucun appelant). La reproduction appelait le calcul directement, sans passer par la commande.
+- **Correction.** `refusMetier()` lève ces quatre refus en `DealerRequestError` `STORE_TRANSACTION_INVALID`, le mot de `refuserSiIntouchable`, sans changer leur texte. Le clone du front n'a pas à bouger : TC-081 compare les messages, qui sont inchangés.
+- **Test.** TC-319 était rouge avant la correction (6 échecs sur 7 : quatre refus mal typés, et le parcours `trashHistory` → `wrapCallable` qui rendait `internal`). Il est vert après : `invalid-argument`, la raison mot pour mot, rien d'écrit. [RA-02] vérifie que les contrôles défensifs restent des pannes.
+- **À redéployer :** `storeTransactionCommand`, `addTransactionPayment` et `addTransactionRefund`, qui partagent ce module.
+
+### UI-03 — Le montant de la saisie et trois filtres n'ont pas de nom accessible
+
+**IMPORTANT (non-négociable de `DESIGN.md`) · effort S.** Relevé par le banc, aux deux largeurs. Même nature qu'UI-01, corrigé en septembre pour le formulaire client.
+
+- « Montant (FCFA) : » ([TransactionForm.jsx:301](../src/components/transactions/TransactionForm.jsx#L301)) est un libellé visible mais non relié : ni `htmlFor` ni `id`. Le libellé « Réseau : », masqué chez C2EGF (un seul réseau), a le même défaut.
+- La recherche client de la saisie ([ClientSearch.jsx:76](../src/components/transactions/ClientSearch.jsx#L76)), ainsi que la recherche et le filtre de mois de la liste des clients ([ClientsTable.jsx:86](../src/components/ClientsTable.jsx#L86)), n'ont qu'un placeholder.
+- « Éléments par page » ([Pagination.jsx:53](../src/components/Pagination.jsx#L53)) n'est pas relié à sa liste.
+- **Correction** : relier chaque libellé (`htmlFor`/`id`) ou poser un `aria-label`. Un test de composant par champ, avec `getByLabelText`, rouge avant la correction.
+
+### SEC-12 — Aucune décision écrite sur les données personnelles qui partent au modèle
+
+**IMPORTANT (gouvernance) · effort S · décision du responsable.**
+
+- La feuille de route de l'assistant l'exige (`feuillederoute_assistant_ia.md`, ligne 495) : « Ajoutez une décision écrite sur ce qui part au modèle. » `docs/ia/` n'en contient pas.
+- **Ce qui part aujourd'hui vers Google** (AI Logic, backend Agent Platform) : la question et les résultats des outils de lecture. Concrètement :
+  - `chercher_client` renvoie le nom, le code et le numéro agent, et le **numéro personnel** de chaque fiche trouvée ([outils.js:409](../src/lib/ia/outils.js#L409)) ;
+  - le bilan transmet les montants et les noms des clients ;
+  - la dictée passe par le moteur de reconnaissance du navigateur, qui, dans Chrome, transcrit sur les serveurs de Google.
+- **Correction :**
+  - une page dans `docs/ia/` qui dit ce qui part, vers qui, pourquoi, et ce qui ne part pas ;
+  - décider si `numeroPersonnel` doit sortir de `chercher_client` quand la recherche ne l'a pas demandé.
+
+  Pas de changement de code avant cette décision.
+
+### SEC-13 — Les conversations de l'assistant restent en clair dans le navigateur après la déconnexion
+
+**MINEUR · effort S · arbitrage.**
+
+- [conversations.js](../src/lib/ia/conversations.js) range vingt conversations par personne et par boutique dans `localStorage`, en clair : noms, montants, réponses. La déconnexion ([AuthContext.jsx:212](../src/context/AuthContext.jsx#L212)) ne les efface pas.
+- C'est voulu : c'est ce qui permet de « reprendre une conversation » (fiche 26). Et la clé porte l'uid, donc une autre caissière ne les voit pas dans l'interface. Mais quiconque ouvre les outils du navigateur sur ce poste peut les lire.
+- **Correction possible** : les effacer à la déconnexion, ou garder le choix actuel en l'écrivant dans la décision de SEC-12.
+
+### QUA-08 — Dépendances en retard, sans avis bloquant
+
+**MINEUR · effort S par paquet.**
+
+- `check:audit` passe, et l'exception `@grpc/grpc-js` a sa condition de retrait.
+- **Majeures en attente** : `firebase` 12.19 → 13.1, `firebase-admin` 13.10 → 14.5 (racine et `functions/`), `vite` 7 → 8, `vitest` 4 → 5, `eslint` 9 → 10.
+- **Mineures en attente** : `firebase-functions` 7.2.5 → 7.4.0 (l'émulateur le signale à chaque démarrage), React 19.1 → 19.3, `recharts`, `tailwindcss`, `lucide-react`.
+- **Correction** : un paquet à la fois, avec les suites complètes à chaque fois. Commencer par `firebase-functions` ; les majeures Firebase après lecture de leurs notes de version.
+
+### QUA-09 — Les suites émulateur échouent sous charge pour une raison d'environnement
+
+**MINEUR · effort S.**
+
+- **`test:functions:e2e` : 40 échecs sur 40** au premier passage. L'émulateur n'a chargé aucune fonction (« Cannot determine backend specification. Timeout after 10000 »), mais `emulators:exec` a quand même lancé les tests : tous ont reçu `functions/not-found`. C'est le piège des dix secondes de `docs/deployer-les-functions.md`, côté tests.
+- **Suite Firestore.** Trois fichiers ont échoué, uniquement par dépassement de délai (initialisation à 10 s, tests à 5 s, un verrou de transaction expiré). Le premier fichier d'un émulateur froid ne charge pas ses règles en 10 s sur cette machine.
+- **Correction** : fixer `FUNCTIONS_DISCOVERY_TIMEOUT` pour `test:functions:e2e`, et élargir `hookTimeout` dans `vitest.firestore.config.js`. Aucun changement de règle ni de test.
+
+### PERF-04 — L'historique d'un agent compte boutique par boutique
+
+**MINEUR · effort S.**
+
+- À chaque ouverture d'un historique, [listClientHistory.js:183](../functions/src/clients/listClientHistory.js#L183) relit toute la collection `stores`, puis lance une agrégation par boutique ([ligne 224](../functions/src/clients/listClientHistory.js#L224)). La flotte visée compte 84 boutiques (`docs/ia/COUT-LECTURES.md`, banc dealer), soit environ 86 requêtes par ouverture.
+- **Correction** : mesurer d'abord. Si le coût compte, borner le décompte aux boutiques présentes dans la page lue, ou ne le faire qu'à la demande.
+
+### UI-02 — Le panneau de l'assistant sort des jetons de couleur
+
+**MINEUR · effort S.**
+
+- `PanneauAssistant.jsx` et `CarteAConfirmer.jsx` emploient 50 classes de palette brute (`slate-*`, `amber-*`) pour 26 jetons C2EGF. `HistoriqueTable.jsx` et `HistoriqueArchives.jsx` n'en ont qu'une à eux deux.
+- C'est le même chantier que la « cohérence visuelle » de [REPRISE-APRES-URGENCE.md](REPRISE-APRES-URGENCE.md), étendu au panneau. À faire avec une capture avant/après.
+
+### DOC-03 — Configuration de l'assistant absente de `.env.example`, état du Lot 0 périmé
+
+**MINEUR · effort S.**
+
+- Le code lit cinq variables que `.env.example` ne cite pas : `VITE_FIREBASE_APPCHECK_KEY`, `VITE_APPCHECK_DEBUG_TOKEN`, `VITE_AI_BACKEND`, `VITE_AI_LOCATION`, `VITE_AI_MODEL`. Sans la première, l'assistant se tait (SEC-11).
+- `docs/ia/README.md` (lignes 59 à 61) marque encore App Check et la CSP « ❌ », alors que les deux sont dans le code et dans `vercel.json`.
+
+### QUA-07 (suite) — Trois exports sans usage
+
+- `getRoleAccent` et `BTN_PRIMARY` (`workspaceTheme.js`) : conservés le 29 octobre comme jetons de design.
+- `NETWORK_CODES` (`src/utils/constants.js`) : un reste de l'import du produit. Son seul consommateur, `getNetworkCode`, a été retiré par `1ef0a5d`.
+- À retirer au fil de l'eau, selon la règle d'`AGENTS.md`.
+
+### QUA-05 (suite) — Deux gros modules de plus
+
+- `PanneauAssistant.jsx` (731 lignes) et `preparations.js` (712) rejoignent `firestore.js` (1 247), `TransactionTable.jsx` (849) et `CollaborationsPanel.jsx` (656).
+- Chacun porte une seule responsabilité, avec beaucoup de commentaires. Pas de lot tant qu'aucun besoin testable ne le justifie.
+
+### PERF-03 — Fermé
+
+Le panneau arrive par `lazy` ([Assistant.jsx:19](../src/components/Assistant.jsx#L19)). Le bundle principal passe de 1 320,03 à 1 242,92 kB, et le panneau (135,40 kB) ne se charge qu'au premier clic.
+
+### Vérifié et sain
+
+- **L'assistant ne peut rien écrire seul.** Il prépare une carte. Au clic, `confirmerCarte` rejoue la même demande sur l'état de l'instant et refuse si l'exécution a changé. Les commandes de ravitaillement et de retour sont construites par `preparerRavitaillement` et `preparerRetour`, le code même du formulaire. Le serveur revalide tout.
+- **Aucun HTML brut dans la chaîne de l'assistant.** `markdown.js` découpe le texte, sans `dangerouslySetInnerHTML`.
+- **Le jeton de débogage d'App Check** n'est lu que sous `import.meta.env.DEV`.
+- **La CSP de `vercel.json`** couvre Firebase, les Functions, AI Logic (`*.googleapis.com`) et reCAPTCHA. Le micro n'est autorisé que pour l'origine du site.
+- **Les codes agent des règlements** passent par `cleanSettlementAgentCode`. **Les curseurs de `listClientHistory`** sont bornés à `clients/*/history/*`. Seul `operatorName` sort vers une autre boutique, jamais l'e-mail.
+- **Un code tapé en entier ne désigne une fiche que si elle est la seule.** Sinon, le formulaire demande de choisir.
+- **Les écarts relevés et écartés :**
+  - le « Total caisse » de l'en-tête diffère volontairement du fonds de roulement : il inclut les opérations en attente (`totalCaisse`) ;
+  - `globalClients` reste lisible par toute boutique, une décision documentée (`docs/ia/README.md`) ;
+  - « dépôt à distance » est le mot du comptoir pour un dépôt non terminé.
+- **Toujours ouvert, validation humaine** (inchangé, [REPRISE-APRES-URGENCE.md](REPRISE-APRES-URGENCE.md)) :
+  - `enforceAppCheck: false` et l'absence de limite par acteur sur les 26 callables ;
+  - durée et révocation des sessions ;
+  - sauvegardes, PITR et preuve de restauration ;
+  - IAM, alertes, en-têtes réellement servis.
+
+### Plan de remédiation proposé
+
+| Lot | Contenu | Critère de sortie |
+|---|---|---|
+| A — avant le 2 novembre, humain | SEC-11 : clé reCAPTCHA Enterprise et domaines, App Check appliqué à AI Logic dans la console, `VITE_FIREBASE_APPCHECK_KEY` dans Vercel, redéploiement du site | Une question posée à l'assistant en production reçoit sa réponse |
+| B1 | BUG-09 : refus typés, texte inchangé | ✅ Terminé le 2 novembre (`b44c1ac`) : TC-319 rouge puis vert, TC-081 inchangé, suites unitaires et Functions ; trois functions à redéployer |
+| B2 | UI-03 : libellés reliés | Tests `getByLabelText` rouges puis verts ; banc sans champ anonyme aux deux largeurs |
+| B3 | BUG-08 : écoute des livraisons ouvertes, liste paginée de l'onglet Ravitaillement, Corbeille | Caractérisation d'abord ; une livraison due au-delà de la centième ligne reste visible partout ; index décrit pour un déploiement humain |
+| C — décision | SEC-12, et SEC-13 avec elle | Décision écrite dans `docs/ia/` ; code seulement si elle le demande |
+| Backlog — mineurs | QUA-09, DOC-03, QUA-08 (un paquet à la fois), UI-02, PERF-04 (mesure d'abord), QUA-07 suite | Au fil de l'eau, chacun dans son propre commit |
+
+Une correction métier et un nettoyage ne partagent pas un lot. B1 et B3 touchent tous deux le serveur : leurs déploiements restent une décision humaine.
+
+**Point d'arrêt ADOPTION.md : bilan présenté, rien n'est corrigé avant validation du périmètre des lots.** Le lot A est le seul daté, et il ne dépend d'aucun code.
