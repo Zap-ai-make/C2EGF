@@ -46,6 +46,18 @@ function soldeInsuffisant(message) {
   return new DealerRequestError('INSUFFICIENT_STORE_BALANCE', message)
 }
 
+/**
+ * La LIGNE interdit le geste : un retrait d'avant la répartition, un historique
+ * incomplet, une ligne déjà défaite. Le même mot que `refuserSiIntouchable`
+ * (STORE_TRANSACTION_INVALID), pour que le tableau de l'historique lise la
+ * raison au lieu d'une panne (BUG-09 de l'audit du 31 octobre 2026, TC-319). Les contrôles que la
+ * commande valide déjà en amont (vase, montant, type) restent des `Error` :
+ * les voir ici signale un défaut de code — TC-315 [RS-06].
+ */
+function refusMetier(message) {
+  return new DealerRequestError('STORE_TRANSACTION_INVALID', message)
+}
+
 const DEFAULT_NETWORK_BALANCES = {
   Orange:   { stock: 0, liquidite: 0 },
   Moov:     { stock: 0, liquidite: 0 },
@@ -185,7 +197,7 @@ export function applyInitialTransactionImpact(balances, transaction) {
     if (isRetrait(transaction.type)) return adjustBalanceValue(balances, transaction.reseau, 'stock', amount)
   }
   if (validated) {
-    if (isCredit(transaction.type)) throw new Error('Les crédits doivent être remboursés via une méthode de paiement.')
+    if (isCredit(transaction.type)) throw refusMetier('Les crédits doivent être remboursés via une méthode de paiement.')
     if (isDepot(transaction.type)) return applyLiquidityDelta(adjustBalanceValue(balances, transaction.reseau, 'stock', -amount), amount)
     if (isRetrait(transaction.type)) return adjustBalanceValue(applyLiquidityDelta(balances, -amount), transaction.reseau, 'stock', amount)
   }
@@ -209,9 +221,9 @@ export function reverseInitialTransactionImpact(balances, transaction) {
 const DEJA_DEFAIT = ['annulee', 'supprimee']
 
 export function reverseHistoryTransactionImpact(balances, history) {
-  if (DEJA_DEFAIT.includes(normalizeType(history.statut))) throw new Error('Cette transaction est déjà annulée.')
+  if (DEJA_DEFAIT.includes(normalizeType(history.statut))) throw refusMetier('Cette transaction est déjà annulée.')
   const { type, reseau, montant } = history
-  if (!type || !reseau || !Number.isSafeInteger(montant) || montant <= 0) throw new Error('Historique financier incomplet.')
+  if (!type || !reseau || !Number.isSafeInteger(montant) || montant <= 0) throw refusMetier('Historique financier incomplet.')
   let next = { ...balances }
   const summary = history.settlementSummary?.netByNetwork
   if (summary && Object.keys(summary).length) {
@@ -293,7 +305,7 @@ function reverseDirectValidation(balances, type, reseau, montant, split) {
   if (isDepot(type)) return applyLiquidityDelta(adjustBalanceValue(balances, reseau, 'stock', montant), -montant)
   if (isRetrait(type)) {
     if (!split || typeof split !== 'object' || !Object.keys(split).length) {
-      throw new Error("L'annulation automatique de ce retrait historique n'est pas sûre.")
+      throw refusMetier("L'annulation automatique de ce retrait historique n'est pas sûre.")
     }
     let next = adjustBalanceValue(balances, reseau, 'stock', -montant)
     for (const [network, amount] of Object.entries(split)) {
