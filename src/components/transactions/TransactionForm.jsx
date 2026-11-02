@@ -1,5 +1,5 @@
 import { repartirValeurAgent } from '../../utils/agentFields.js'
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useId } from 'react'
 import { Lightbulb, AlertTriangle } from 'lucide-react'
 import ClientSearch from './ClientSearch'
 import ClientInfoDisplay from './ClientInfoDisplay'
@@ -30,6 +30,10 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
   const [clientSearchResetToken, setClientSearchResetToken] = useState(0)
   const [amount, setAmount] = useState('')
   const [network, setNetwork] = useState('Orange')
+  // Les libellés visibles RELIÉS à leur champ : sans ce lien, un lecteur
+  // d'écran annonçait « zone d'édition, nombre » sur le montant (UI-03, TC-320).
+  const idMontant = useId()
+  const idReseau = useId()
   const [transactionType, setTransactionType] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [pendingConfirmation, setPendingConfirmation] = useState(null)
@@ -298,10 +302,11 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
 
         {/* Montant */}
         <div>
-          <label className="block text-lg font-semibold text-gray-700 mb-1">
+          <label htmlFor={idMontant} className="block text-lg font-semibold text-gray-700 mb-1">
             Montant (FCFA) :
           </label>
           <input
+            id={idMontant}
             type="number"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
@@ -376,10 +381,11 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
         <div>
           {NETWORK_OPTIONS.length > 1 && (
           <>
-          <label className="block text-lg font-semibold text-gray-700 mb-1">
+          <label htmlFor={idReseau} className="block text-lg font-semibold text-gray-700 mb-1">
             Réseau :
           </label>
           <select
+            id={idReseau}
             value={network}
             onChange={(e) => setNetwork(e.target.value)}
             className={`w-full px-3 py-2 border-2 rounded focus:outline-none bg-white transition-colors ${

@@ -32,6 +32,7 @@ function ClientSearch({ onSearch, onSearchChange }) {
       <div className="flex-1">
         <input
           type="text"
+          aria-label="Rechercher un client"
           placeholder="Rechercher par nom, prénom ou code réseau..."
           value={searchTerm}
           onChange={handleInputChange}

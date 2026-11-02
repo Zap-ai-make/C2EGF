@@ -165,6 +165,7 @@ function NetworkCard({ network, stockAmount, liquiditeAmount }) {
           <div className="flex items-center justify-end gap-2">
             <input
               type="number"
+              aria-label={`Nouveau montant ${config.name} (FCFA)`}
               value={editValue}
               onChange={handleInputChange}
               onKeyDown={handleInputKeyDown}

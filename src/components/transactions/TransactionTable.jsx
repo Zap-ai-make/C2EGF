@@ -9,7 +9,7 @@
  * à l'écran n'apportait rien à qui veut seulement défaire sa ligne.
  */
 
-import { useState, useRef, useEffect, useMemo, memo, useCallback } from 'react'
+import { useState, useRef, useEffect, useMemo, memo, useCallback, useId } from 'react'
 import { createPortal } from 'react-dom'
 import { useTransactions } from '../../context/transactions.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
@@ -36,6 +36,8 @@ const TransactionTable = memo(function TransactionTable() {
   // La ligne que le gérant s'apprête à supprimer, le temps qu'il confirme.
   const [aSupprimer, setASupprimer] = useState(null)
   const [suppressionEnCours, setSuppressionEnCours] = useState(false)
+  // Le montant d'une tranche, relié à son libellé (UI-03, TC-320).
+  const idMontantTranche = useId()
 
   // Déduplicateur pour éviter les erreurs de clés React
   const uniquePendingTransactions = useMemo(() => {
@@ -698,10 +700,13 @@ const TransactionTable = memo(function TransactionTable() {
               })()}
 
               <div className="px-4 py-3">
-                <p className="text-xs text-gray-500 mb-2">Montant (FCFA)</p>
+                <label htmlFor={idMontantTranche} className="mb-2 block text-xs text-gray-500">Montant (FCFA)</label>
 
                 <div className="flex items-center gap-1">
+                  {/* « − » et « + » seuls s'annoncent « moins » et « plus » :
+                      le nom dit de combien le montant bouge. */}
                   <button
+                    aria-label="Retirer 500 FCFA"
                     onClick={() => {
                       const current = parseInt(settlementAmount, 10) || 0
                       const next = Math.max(500, current - 500)
@@ -714,6 +719,7 @@ const TransactionTable = memo(function TransactionTable() {
                   </button>
 
                   <input
+                    id={idMontantTranche}
                     type="number"
                     min="500"
                     step="500"
@@ -726,6 +732,7 @@ const TransactionTable = memo(function TransactionTable() {
                   />
 
                   <button
+                    aria-label="Ajouter 500 FCFA"
                     onClick={() => {
                       const current = parseInt(settlementAmount, 10) || 0
                       setSettlementAmount(String(current + 500))

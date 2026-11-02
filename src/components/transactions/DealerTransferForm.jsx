@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, useId } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../hooks/useToast'
 import { useSimpleNetworkData } from '../../hooks/useSimpleNetworkData'
@@ -39,6 +39,8 @@ function DealerTransferForm() {
   const [network, setNetwork] = useState(DEALER_NETWORKS[0]) // réseau ciblé (multi-réseaux)
   const [amount, setAmount] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  // Le montant relié à son libellé (UI-03, TC-320).
+  const idMontant = useId()
   const [pending, setPending] = useState(null) // confirmation modal
   const [transfers, setTransfers] = useState([])
   const submittingRef = useRef(false) // verrou synchrone anti-double-clic (débit)
@@ -152,8 +154,9 @@ function DealerTransferForm() {
 
         {/* Montant */}
         <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">Montant (FCFA)</label>
+          <label htmlFor={idMontant} className="block text-sm font-semibold text-gray-700 mb-1">Montant (FCFA)</label>
           <input
+            id={idMontant}
             type="number"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}

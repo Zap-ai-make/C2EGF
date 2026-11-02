@@ -85,12 +85,14 @@ function ClientsTable({ clients, onEdit, onImportClients, onAddClient, emptyActi
       <div className="flex flex-wrap gap-4 mb-6">
         <input
           type="text"
+          aria-label="Rechercher un client"
           placeholder="Rechercher nom, prénom, numéro/code agent, numéro personnel..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="min-w-64 flex-1 rounded border border-line px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         />
         <select
+          aria-label="Mois d’ajout"
           value={selectedMonth}
           onChange={(e) => setSelectedMonth(e.target.value)}
           className="rounded border border-line px-3 py-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"

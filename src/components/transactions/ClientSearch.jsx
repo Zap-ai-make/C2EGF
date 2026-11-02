@@ -73,8 +73,12 @@ function ClientSearch({ clients, onClientSelect, selectedClient, onManualCodeCha
 
   return (
     <div className="relative">
+      {/* Pas de libellé visible : le formulaire n'en a jamais eu, et le
+          placeholder dit ce qu'on peut taper. Le nom accessible dit à quoi
+          sert le champ (UI-03, TC-320). */}
       <input
         type="text"
+        aria-label="Rechercher un client"
         placeholder="Nom, prénom, code agent, numéro agent ou numéro personnel…"
         value={searchTerm}
         onChange={handleInputChange}

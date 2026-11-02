@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { PAGINATION } from '../constants'
 
 function Pagination({ 
@@ -10,8 +11,12 @@ function Pagination({
   onPageChange, 
   onPageSizeChange, 
   hasNextPage, 
-  hasPrevPage 
+  hasPrevPage
 }) {
+  // Appelé avant le `return null` des listes d'une seule page : un hook ne se
+  // saute pas.
+  const idTaillePage = useId()
+
   const getVisiblePages = () => {
     const delta = 2
     const range = []
@@ -50,8 +55,9 @@ function Pagination({
         </p>
         
         <div className="flex items-center gap-2">
-          <label className="text-sm text-ink-muted">Éléments par page:</label>
+          <label htmlFor={idTaillePage} className="text-sm text-ink-muted">Éléments par page:</label>
           <select
+            id={idTaillePage}
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
             className="rounded border border-line px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"

@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useState, useId } from 'react'
 
 function DateFilter({ onDateChange, onResetToToday }) {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  // « Du » et « Au » reliés à leur champ (UI-03, TC-320).
+  const idDu = useId()
+  const idAu = useId()
 
   const handleDateFromChange = (e) => {
     setDateFrom(e.target.value)
@@ -35,10 +38,11 @@ function DateFilter({ onDateChange, onResetToToday }) {
     <div className="space-y-4">
       {/* Date Du */}
       <div>
-        <label className="block text-lg font-semibold text-gray-700 mb-1">
+        <label htmlFor={idDu} className="block text-lg font-semibold text-gray-700 mb-1">
           Du :
         </label>
         <input
+          id={idDu}
           type="date"
           value={dateFrom}
           onChange={handleDateFromChange}
@@ -48,10 +52,11 @@ function DateFilter({ onDateChange, onResetToToday }) {
 
       {/* Date Au */}
       <div>
-        <label className="block text-lg font-semibold text-gray-700 mb-1">
+        <label htmlFor={idAu} className="block text-lg font-semibold text-gray-700 mb-1">
           Au :
         </label>
         <input
+          id={idAu}
           type="date"
           value={dateTo}
           onChange={handleDateToChange}

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useId } from 'react'
 import { getFunctions, httpsCallable } from 'firebase/functions'
 import { useAuth } from '../../context/AuthContext.jsx'
 import PageHeader from '../../components/ui/PageHeader'
@@ -36,6 +36,7 @@ const STATUS_LABELS = {
 // ──────────────────────────────────────────────────────────────────────────────
 
 function RejectModal({ closureId, onSuccess, onClose }) {
+  const idMotif = useId()
   const [reason, setReason]         = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [err, setErr]               = useState(null)
@@ -62,8 +63,9 @@ function RejectModal({ closureId, onSuccess, onClose }) {
         <h2 className="text-base font-semibold text-gray-900 mb-4">Rejeter la clôture</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Motif de rejet</label>
+            <label htmlFor={idMotif} className="block text-sm font-medium text-gray-700 mb-1">Motif de rejet</label>
             <textarea
+              id={idMotif}
               rows={3}
               value={reason}
               onChange={e => setReason(e.target.value)}
