@@ -1,14 +1,5 @@
 import { activeProfile } from '../config/activeClientProfile.js'
 
-// Constantes réseau et codes associés (référentiel produit, indépendant du profil)
-export const NETWORK_CODES = {
-  'Orange': '000001',
-  'Moov': '000626',
-  'Telecel': '000002',
-  'Coris': '000003',
-  'Sank': '000004'
-}
-
 // Options réseau visibles pour CE client — dérivées du profil client actif
 // (networks.enabled). Ex. TAOFIC → ['Orange'] ; pilote → les 5 réseaux.
 export const NETWORK_OPTIONS = [...activeProfile.networks.enabled]
