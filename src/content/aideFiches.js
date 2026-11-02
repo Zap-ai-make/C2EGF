@@ -284,8 +284,8 @@ export const FICHES = Object.freeze([
     id: 15,
     groupe: GROUPES.HISTORIQUE,
     titre: 'Retrouver une opération annulée',
-    texte: "Onglet {{Historique}}, puis {{Corbeille}}. Tout ce qui a été annulé s'y trouve — venu des non terminées comme de l'historique —, de la plus récente à la plus ancienne, avec qui l'a fait et quand.",
-    texteFin: 'On y **lit**. On n’y restaure pas : pour la remettre, ressaisis-la.',
+    texte: "Onglet {{Historique}}, puis {{Corbeille}}. Ce qui a été annulé s'y trouve — venu des non terminées comme de l'historique —, de la plus récente à la plus ancienne, avec qui l'a fait et quand.",
+    texteFin: 'Une opération saisie il y a longtemps ? En bas, la phrase dit jusqu’où la liste remonte, et {{Charger les lignes précédentes}} remonte plus loin. On y **lit**. On n’y restaure pas : pour la remettre, ressaisis-la.',
   },
   {
     id: 16,
@@ -303,7 +303,7 @@ export const FICHES = Object.freeze([
       'Un retour fait par erreur : sur sa ligne, clique {{Annuler}}.',
       'Relis, puis {{Annuler le retour}}. Le montant revient dans la réserve, et la livraison **redevient due** d’autant.',
     ],
-    texteFin: 'Un ravitaillement, lui, ne s’annule pas : il se solde en rendant (fiche 11). Les anciennes clôtures restent listées pour mémoire. Les demandes au dealer sont dessous.',
+    texteFin: 'Un ravitaillement, lui, ne s’annule pas : il se solde en rendant (fiche 11). Les livraisons encore dues sont toujours toutes là ; pour un mouvement plus ancien, {{Charger les mouvements précédents}}, en bas. Les anciennes clôtures restent listées pour mémoire. Les demandes au dealer sont dessous.',
   },
   {
     id: 18,

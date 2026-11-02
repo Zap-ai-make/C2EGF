@@ -8,6 +8,7 @@ import { AuthContext } from './AuthContext'
 import {
   businessDateKey,
   getBusinessDayBounds,
+  jourDeSaisie,
   millisecondsUntilNextBusinessDay,
 } from '../utils/businessDate.js'
 import { TYPE_RETOUR } from '../utils/ravitaillement.js'
@@ -99,6 +100,10 @@ export const TransactionsProvider = ({ children }) => {
   const [completedTransactions, setCompletedTransactions] = useState([])
   const [historyHasMore, setHistoryHasMore] = useState(false)
   const [historyLoadingMore, setHistoryLoadingMore] = useState(false)
+  // Le jour de saisie de la plus ancienne ligne chargée, tant qu'il en reste à
+  // charger. Les onglets Ravitaillement et Corbeille lisent la fenêtre : ils
+  // disent ainsi jusqu'où ils remontent (TC-321).
+  const [historyDepuis, setHistoryDepuis] = useState(null)
   const [editingTransaction, setEditingTransaction] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -133,6 +138,7 @@ export const TransactionsProvider = ({ children }) => {
     archiveHistoryRef.current = []
     historyCursorRef.current = null
     setHistoryLoadingMore(false)
+    setHistoryDepuis(null)
 
     // Ne pas initialiser si l'auth est encore en cours de chargement
     if (authLoading) {
@@ -196,6 +202,7 @@ export const TransactionsProvider = ({ children }) => {
         archiveHistoryRef.current = firstPage.transactions
         historyCursorRef.current = firstPage.lastDoc
         setHistoryHasMore(firstPage.hasMore)
+        setHistoryDepuis(firstPage.hasMore ? jourDeSaisie(firstPage.transactions.at(-1)) : null)
         publishHistory()
 
         // Écouter l'historique récent en temps réel.
@@ -302,6 +309,7 @@ export const TransactionsProvider = ({ children }) => {
       archiveHistoryRef.current = mergeHistoryPages(archiveHistoryRef.current, page.transactions)
       historyCursorRef.current = page.lastDoc
       setHistoryHasMore(page.hasMore)
+      setHistoryDepuis(page.hasMore ? jourDeSaisie(page.transactions.at(-1)) : null)
       publishHistory()
       return true
     } catch (loadError) {
@@ -555,6 +563,7 @@ export const TransactionsProvider = ({ children }) => {
     completedTransactions,
     historyHasMore,
     historyLoadingMore,
+    historyDepuis,
     loadMoreHistory,
     editingTransaction,
     loading,

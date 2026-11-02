@@ -63,12 +63,50 @@ const ONGLETS = [
   { cle: 'corbeille', libelle: 'Corbeille' },
 ]
 
+/**
+ * Ce que disent les onglets tirés de la FENÊTRE de l'historique — cent lignes,
+ * plus celles qu'on charge — quand il en reste à charger (BUG-08, TC-321).
+ *
+ * La phrase compte autant que le bouton : un clic lit cent lignes de tout type
+ * et peut n'ajouter aucun mouvement. C'est la date qui recule qui dit que le
+ * clic a servi. L'onglet clients garde son bouton à lui, sans phrase (TC-116).
+ */
+const CHARGEMENT_PAR_ONGLET = {
+  dealer: {
+    charger: 'Charger les mouvements précédents',
+    enCours: 'Chargement des mouvements précédents',
+    phrase: (jour) => `Mouvements depuis le ${jour}. Les livraisons encore dues sont toutes affichées, même plus anciennes.`,
+  },
+  corbeille: {
+    charger: 'Charger les lignes précédentes',
+    enCours: 'Chargement des lignes précédentes',
+    phrase: (jour) => `Lignes saisies depuis le ${jour}.`,
+  },
+}
+
+function ChargerPrecedents({ charger, enCours, phrase, depuis, enChargement, onCharger }) {
+  return (
+    <div className="mt-4 flex flex-col items-center gap-2 text-center">
+      {depuis && <p className="text-sm text-ink-muted">{phrase(depuis)}</p>}
+      <button
+        type="button"
+        onClick={onCharger}
+        disabled={enChargement}
+        aria-label={enChargement ? enCours : charger}
+        className="rounded-lg border border-brand-300 px-4 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 disabled:cursor-wait disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+      >
+        {enChargement ? 'Chargement…' : charger}
+      </button>
+    </div>
+  )
+}
+
 function Historique() {
   const { currentUser, userProfile } = useAuth()
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const storeId = userProfile?.storeId ?? null
-  const { historyHasMore, historyLoadingMore, loadMoreHistory, reopenTransaction } = useTransactions()
+  const { historyHasMore, historyLoadingMore, historyDepuis, loadMoreHistory, reopenTransaction } = useTransactions()
 
   const demande = params.get('onglet')
   const onglet = ONGLETS.some((o) => o.cle === demande) ? demande : ONGLETS[0].cle
@@ -197,6 +235,15 @@ function Historique() {
           {onglet === 'dettes' && <ArchiveDettes storeId={storeId} />}
           {onglet === 'corbeille' && <CorbeilleTable transactions={corbeille} />}
         </div>
+      )}
+
+      {CHARGEMENT_PAR_ONGLET[onglet] && historyHasMore && (
+        <ChargerPrecedents
+          {...CHARGEMENT_PAR_ONGLET[onglet]}
+          depuis={historyDepuis}
+          enChargement={historyLoadingMore}
+          onCharger={loadMoreHistory}
+        />
       )}
     </div>
   )

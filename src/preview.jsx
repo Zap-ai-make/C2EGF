@@ -29,6 +29,7 @@ import PageHeader from './components/ui/PageHeader.jsx'
 import ClientsTable from './components/ClientsTable.jsx'
 import HistoriqueTable from './components/historique/HistoriqueTable.jsx'
 import { ArchiveDealer } from './components/historique/HistoriqueArchives.jsx'
+import Historique from './pages/Historique.jsx'
 import TransactionTable from './components/transactions/TransactionTable.jsx'
 import TransactionForm from './components/transactions/TransactionForm.jsx'
 import Dialog from './components/ui/Dialog.jsx'
@@ -754,6 +755,39 @@ function PosteDealer() {
   )
 }
 
+/**
+ * La page Historique, ouverte sur un onglet tiré de la fenêtre, quand il reste
+ * des lignes plus anciennes à charger. `?espace=historique&onglet=corbeille`
+ * pour la Corbeille. Sert à REGARDER la phrase « depuis le … » et son bouton
+ * (TC-321) à 1 440 et 390 px : ils vivent dans la page, pas dans l'onglet.
+ */
+function PosteHistorique() {
+  const onglet = new URLSearchParams(globalThis.location?.search ?? '').get('onglet') ?? 'dealer'
+  return (
+    <MemoryRouter initialEntries={[`/historique?onglet=${onglet}`]}>
+      <ThemeProvider>
+        <AuthContext.Provider value={{ activeStore: { id: 'store-ouaga', name: 'C2EGF OUAGA' }, currentUser: { uid: 'banc-essai' }, userProfile: { role: 'store_admin', storeId: 'store-ouaga', name: 'Awa' } }}>
+          <TransactionsContext.Provider
+            value={{
+              completedTransactions: mouvementsBoutique,
+              pendingTransactions: [],
+              trashTransaction: () => Promise.resolve(true),
+              historyHasMore: true,
+              historyLoadingMore: false,
+              historyDepuis: '25/10/2026',
+              loadMoreHistory: () => {},
+            }}
+          >
+            <main className="mx-auto max-w-6xl p-4 md:p-8">
+              <Historique />
+            </main>
+          </TransactionsContext.Provider>
+        </AuthContext.Provider>
+      </ThemeProvider>
+    </MemoryRouter>
+  )
+}
+
 const espace = new URLSearchParams(globalThis.location?.search ?? '').get('espace')
 
 createRoot(document.getElementById('preview')).render(
@@ -761,6 +795,7 @@ createRoot(document.getElementById('preview')).render(
     {espace === 'dealer' ? <PosteDealer />
       : espace === 'saisie' ? <PosteSaisie />
         : espace === 'assistant' ? <PosteAssistant />
-          : <Preview />}
+          : espace === 'historique' ? <PosteHistorique />
+            : <Preview />}
   </StrictMode>,
 )
