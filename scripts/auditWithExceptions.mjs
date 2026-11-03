@@ -17,8 +17,7 @@
  *   - une exception DEVENUE INUTILE fait échouer aussi (c'est l'anti-pourriture :
  *     une exception qu'on oublie de retirer est une porte qu'on oublie de fermer).
  *
- * ⚠ Deux pièges rencontrés en écrivant ce script, et corrigés — ne pas les
- *   réintroduire :
+ * ⚠ Trois pièges rencontrés, et corrigés — ne pas les réintroduire :
  *   1. La sévérité d'un AVIS et celle de son PAQUET diffèrent. `@grpc/grpc-js`
  *      remonte en `high` à cause d'un seul de ses deux avis ; l'autre est `low`.
  *      On recense donc TOUS les avis vus, quelle que soit leur sévérité, et on
@@ -27,13 +26,19 @@
  *   2. Une exception vaut pour UN répertoire. Les mêmes avis sont corrigés dans
  *      `functions/` et subsistent à la racine : sans `repertoires`, l'audit de
  *      `functions/` les déclarait périmés.
+ *   3. Un seul audit ne suffit pas à déclarer une exception périmée : une
+ *      réponse a manqué l'avis, deux fois, juste après un `npm install`.
+ *      L'audit est relancé une fois avant de conclure (3 novembre 2026).
+ *
+ * La lecture du rapport vit dans `scripts/lib/analyseAudit.mjs`, testée par
+ * TC-325 ; ce script ne garde que l'appel à `npm audit` et l'affichage.
  *
  * Usage : node scripts/auditWithExceptions.mjs [répertoire]
  */
 
 import { spawnSync } from 'node:child_process'
 
-const SEUIL_BLOQUANT = ['high', 'critical']
+import { confirmerAudit, lireRapport } from './lib/analyseAudit.mjs'
 
 /**
  * Chaque entrée doit porter : l'avis, le paquet, les répertoires concernés, la
@@ -61,53 +66,36 @@ const EXCEPTIONS = [
 const repertoire = process.argv[2] || '.'
 const exceptionsDuRepertoire = EXCEPTIONS.filter((e) => e.repertoires.includes(repertoire))
 
-const execution = spawnSync(
-  'npm',
-  ['audit', '--omit=dev', '--json', '--prefix', repertoire],
-  { encoding: 'utf8', shell: process.platform === 'win32' },
-)
-
-if (!execution.stdout) {
-  console.error(`Audit impossible dans « ${repertoire} » : ${execution.stderr || 'aucune sortie.'}`)
-  process.exit(1)
-}
-
-let rapport
-try {
-  rapport = JSON.parse(execution.stdout)
-} catch {
-  console.error(`Sortie d'audit illisible dans « ${repertoire} ».`)
-  process.exit(1)
-}
-
-// ⚠ Piège 1 : on recense TOUS les avis, puis on ne bloque que sur le seuil.
-const identifiantsVus = new Set()
-const bloquants = []
-
-for (const [paquet, details] of Object.entries(rapport.vulnerabilities ?? {})) {
-  for (const via of details.via ?? []) {
-    if (typeof via !== 'object') continue
-
-    const avis = (via.url ?? '').split('/').pop()
-    if (avis) identifiantsVus.add(avis)
-
-    if (!SEUIL_BLOQUANT.includes(via.severity)) continue
-    if (exceptionsDuRepertoire.some((e) => e.avis === avis)) continue
-    bloquants.push(`${paquet} — ${via.severity} — ${avis} — ${via.title}`)
+/** Un rapport lisible, ou l'arrêt du script avec la raison. */
+function auditer() {
+  const execution = spawnSync(
+    'npm',
+    ['audit', '--omit=dev', '--json', '--prefix', repertoire],
+    { encoding: 'utf8', shell: process.platform === 'win32' },
+  )
+  const lu = lireRapport(execution.stdout)
+  if (lu.erreur) {
+    console.error(`Audit impossible dans « ${repertoire} » : ${lu.erreur}.${execution.stderr ? `\n${execution.stderr.trim()}` : ''}`)
+    process.exit(1)
   }
-}
-
-for (const e of exceptionsDuRepertoire.filter((x) => identifiantsVus.has(x.avis))) {
-  console.log(`· exception active : ${e.avis} (${e.paquet}), depuis le ${e.depuis}`)
+  return lu.rapport
 }
 
 // ⚠ Piège 2 : seules les exceptions DE CE RÉPERTOIRE peuvent y être périmées.
-const perimees = exceptionsDuRepertoire.filter((e) => !identifiantsVus.has(e.avis))
+const { actives, perimees, bloquants, recus } = confirmerAudit(auditer, exceptionsDuRepertoire)
+
+for (const e of actives) {
+  console.log(`· exception active : ${e.avis} (${e.paquet}), depuis le ${e.depuis}`)
+}
+
 if (perimees.length > 0) {
   console.error(
-    `\nExceptions d'audit devenues inutiles dans « ${repertoire} » — à RETIRER de ` +
-      'scripts/auditWithExceptions.mjs :\n' +
-      perimees.map((e) => `  ${e.avis} (${e.paquet}) — ${e.retirer}`).join('\n'),
+    `\nExceptions d'audit absentes de deux audits de suite dans « ${repertoire} » ` +
+      `(${recus} avis reçus au dernier) — à RETIRER de scripts/auditWithExceptions.mjs :\n` +
+      perimees.map((e) => `  ${e.avis} (${e.paquet}) — ${e.retirer}`).join('\n') +
+      (recus === 0
+        ? "\n\n⚠ Le dernier audit n'a rendu AUCUN avis : relancer `npm audit` à la main avant de retirer quoi que ce soit."
+        : ''),
   )
   process.exit(1)
 }
