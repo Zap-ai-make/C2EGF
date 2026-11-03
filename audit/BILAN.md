@@ -777,7 +777,20 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
   - **Vu en chemin :**
     - deux cas de TC-266 ont dépassé leur seconde une fois, sous la charge de toute la batterie. Relancés, ils passent, à 249 et 327 ms. À surveiller ;
     - `check:audit` a d'abord échoué faute de réseau (`ENOTFOUND registry.npmjs.org`). Le script corrigé l'a dit « rapport incomplet », et non plus « exception périmée ». C'est vraisemblablement la cause des deux faux signaux de la veille.
-- **Restent :** `firebase-admin` 14 (racine et `functions/`), `vite` 8, `vitest` 5, `eslint` 10.
+- **3 novembre 2026 : `firebase-admin` 13.10.0 → 14.5.0, à la racine et dans `functions/` (`bd4fd3d`).** La 14.5.0 a six semaines. Les notes ont été lues de 14.0.0 à 14.5.0, avec celles des majeures que la 14 entraîne : `@google-cloud/firestore` 7 → 9, `google-auth-library` 10 → 11, `gaxios` 8 et `gcp-metadata` 9.
+  - **Leur seule rupture commune : Node 22 minimum.** Les Cloud Functions y sont déjà ; le prérequis du README passe de 20 à 22.
+  - **Ce que la 14 retire n'est pas employé ici :**
+    - l'espace de noms historique : toutes les importations passent par `firebase-admin/app`, `/auth` et `/firestore` ;
+    - Instance ID ;
+    - les anciens types de messagerie.
+  - **La refonte des erreurs garde `auth/user-not-found`**, que six endroits des scripts comparent. C'est lu dans le code de la 14.5.0, qui fait lui-même cette comparaison.
+  - **Vérifié :** toutes les suites, émulateurs compris, et le point d'entrée des functions, qui charge ses 26 exports. Le bundle navigateur est inchangé, aux mêmes empreintes : à la racine, `firebase-admin` ne sert qu'aux tests et aux scripts.
+  - **Vu en chemin :**
+    - **La 14 cherche le serveur de métadonnées de Google Cloud avant sa première opération, et attend son échec.** Comptez environ 3 s par processus, avec un `MetadataLookupWarning`. C'est mesuré contre la 13.10.0, sur le même émulateur : la 13 n'attend pas. Les trois suites qui emploient le SDK admin coupent cette détection par `METADATA_SERVER_DETECTION=none` (`c2bab8c`). Functions passe de 278 à 206 s, l'intégration de 185 à 122 s. En production, ce serveur existe et répond.
+    - **Les scripts d'administration lancés à la main paieront ces 3 s.** Ceux qui chargent une clé par `cert()` afficheront en plus un avertissement de `google-auth-library` sur `fromJSON`, que la 14.5.0 appelle sans le neutraliser. Une sonde l'a confirmé. Sans conséquence.
+    - **`functions/` compte 6 avis « moderate » après, contre 8 avant.** Avant, ils venaient tous d'un seul avis, sur `uuid`. Après, ils viennent de deux avis, sur `glob` et `minimatch`, par la chaîne `firestore-api` → `google-gax` 5 → `rimraf`. Firestore 9.4.0 fixe `firestore-api` en 0.2.x, et la correction est dans la 0.7. Aucun ne bloque `check:audit`.
+  - **À savoir :** le prochain déploiement des functions part avec ce SDK.
+- **Restent :** `vite` 8, `vitest` 5, `eslint` 10.
 
 ### QUA-09 — Les suites émulateur échouent sous charge pour une raison d'environnement
 
