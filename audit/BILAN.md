@@ -717,7 +717,7 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
 - **Décision du responsable : garder le texte, pas les données brutes.** Les conversations se reprennent toujours ; la déconnexion ne les efface pas.
 - **Correction.** `memoireSansDonnees` ne range que les questions et les réponses écrites : ni appel ni résultat d'outil, ni réflexion du modèle. Elle rend une mémoire que le SDK accepte à la reprise : elle commence par une question, et deux contenus du même rôle ne s'y suivent pas. Un rangement d'avant est purgé à sa relecture. Pendant la conversation, rien ne change.
 - **Une alerte retirée.** L'ouverture du lot a d'abord fait craindre que la coupe à 40 contenus fasse commencer la mémoire reprise par une réponse, et casse la reprise. Le contrôle du SDK passe pourtant : il range les résultats d'outils sous le rôle « user ». Un résultat d'outil orphelin en tête de mémoire restait possible, mais un refus du serveur n'a pas été vérifié. La nouvelle mémoire supprime le cas, sans qu'il soit compté comme défaut.
-- **Tests.** TC-323 était rouge avant la correction (7 sur 7) ; il est vert après. [MR-02] à [MR-04] passent la mémoire rangée au constructeur même de `ChatSession`, qui la refuserait. TC-313 [HI-02] et TC-312 [VO-06], [VO-07] rangeaient des mémoires impossibles (sans contenu, ou commençant par le modèle) : ils emploient désormais un échange réel.
+- **Tests.** TC-323 était rouge avant la correction (7 sur 7) ; il est vert après. [MR-02] à [MR-04] passent la mémoire rangée au constructeur même de `ChatSession`, qui la refuserait. Depuis `firebase` 13 (3 novembre 2026), qui n'exporte plus cette classe, ils passent par `startChat`, qui fait le même contrôle. [MR-08] prouve que ce contrôle refuse encore une mémoire mal formée. TC-313 [HI-02] et TC-312 [VO-06], [VO-07] rangeaient des mémoires impossibles (sans contenu, ou commençant par le modèle) : ils emploient désormais un échange réel.
 
 ### QUA-08 — Dépendances en retard, sans avis bloquant
 
@@ -766,7 +766,18 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
     - une exception absente des deux audits est annoncée avec le nombre d'avis reçus. S'il est nul, le script ajoute qu'il faut vérifier `npm audit` à la main.
 
     TC-325 était rouge, puis vert. De bout en bout, une copie du script avec une fausse exception audite deux fois, puis la déclare périmée.
-- **Les mineures sont faites.** Restent les majeures : `firebase` 13, `firebase-admin` 14, `vite` 8, `vitest` 5, `eslint` 10, chacune après lecture de ses notes.
+- **Les mineures sont faites.** Restent les majeures, chacune après lecture de ses notes.
+- **3 novembre 2026 : `firebase` 12.19.0 → 13.1.0, avec `@firebase/rules-unit-testing` 6.0.0 (`b2734f4`).** Les deux montent ensemble : la 5.x exige `firebase` 12, la 6.0.0 exige la 13. La 13.1.0 est épinglée, la 13.2.0 étant parue la veille.
+  - **Seul AI Logic rompt.**
+    - `ChatSession` n'est plus une classe exportée. Le code ne l'employait pas, mais TC-323 si : il passe désormais par `startChat`.
+    - Les parts d'un message sont maintenant typées. Le SDK déduit le type de la forme, ce qui a été lu dans son code, et [MR-09] range un historique typé à l'identique.
+    - `VertexAIBackend` disparaît, mais nous employons `AgentPlatformBackend`.
+  - **Vérifié :** toutes les suites, émulateurs compris : intégration, règles avec le nouveau `rules-unit-testing`, Functions et bout-en-bout. Au banc, au pixel près : identique.
+  - **Prix :** +28,7 kB au total (+8,6 kB compressés), presque tout dans le bundle principal, qui porte Firestore.
+  - **Vu en chemin :**
+    - deux cas de TC-266 ont dépassé leur seconde une fois, sous la charge de toute la batterie. Relancés, ils passent, à 249 et 327 ms. À surveiller ;
+    - `check:audit` a d'abord échoué faute de réseau (`ENOTFOUND registry.npmjs.org`). Le script corrigé l'a dit « rapport incomplet », et non plus « exception périmée ». C'est vraisemblablement la cause des deux faux signaux de la veille.
+- **Restent :** `firebase-admin` 14 (racine et `functions/`), `vite` 8, `vitest` 5, `eslint` 10.
 
 ### QUA-09 — Les suites émulateur échouent sous charge pour une raison d'environnement
 
