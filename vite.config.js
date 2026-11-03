@@ -49,6 +49,19 @@ export default defineConfig(({ mode }) => {
   const description = `Application CRM pour la gestion des clients et transactions de ${branding.appName}`
 
   return {
+  build: {
+    // La cible JS par défaut de Vite 7, figée. Vite 8 la relève (Chrome 111,
+    // Firefox 114, Safari 16.4) : la suivre pourrait cesser de servir des
+    // navigateurs encore servis, sans que personne l'ait décidé. La relever
+    // est un choix à part.
+    target: ['chrome107', 'edge107', 'firefox104', 'safari16'],
+    // Le CSS a sa propre cible, plus large : scripts/compatCss.mjs, après le
+    // build. Vite 8 minifie le CSS avec Lightning CSS, qui convertirait déjà
+    // les couleurs pour la cible JS ; compatCss ne trouverait plus d'oklch à
+    // traduire et perdrait ses replis display-p3. Vite minifie, compatCss
+    // convertit, comme sous Vite 7.
+    cssTarget: 'esnext',
+  },
   plugins: [
     react(),
     tailwindcss(),
