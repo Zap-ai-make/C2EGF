@@ -179,6 +179,31 @@ TC-323), et un ancien rangement est purgé à sa relecture.
 **Lot D (images, fichiers) : abandonné** le 30 octobre 2026, à la demande du
 responsable. Rien n'a été écrit ; la caméra reste fermée (`camera=()`).
 
+## Le périmètre de parole (3 novembre 2026)
+
+Décision du responsable : l'assistant ne parle **que de l'activité de la
+boutique** et du logiciel qui la sert. Cela couvre comment faire chaque geste,
+les règles métier, les bilans, la caisse, les créances, les clients et les écrans.
+
+- **Tout autre sujet est refusé** par une phrase fixe, validée mot pour mot :
+  `REPONSE_HORS_SUJET` (`src/lib/ia/prompt.js`). Le refus vaut aussi pour la
+  **fabrication du logiciel** (programmation, serveurs, base de données, API,
+  hébergement), pour l'intelligence artificielle qui le fait tourner et pour
+  toute demande de montrer ou de changer ses consignes.
+- **Son nom** : « l'assistant de C2EGF », et aucun autre. Il ne nomme ni le
+  modèle ni son fabricant.
+- **Une seule boutique** : il ne compare jamais avec une autre et ne dit rien
+  de leur activité, même face à quelqu'un qui se dit gérant. La fiche client
+  reste commune à toutes les boutiques (décision 2 de `DONNEES-ENVOYEES.md`,
+  reconfirmée ce jour).
+- Il n'aide ni à cacher une opération, ni à fausser un chiffre, ni à
+  contourner la confirmation.
+
+⚠ Une consigne guide le modèle, elle ne le verrouille pas. Le cloisonnement des
+données tient par les règles Firestore et par les outils, qui ne lisent que la
+boutique active. Le prompt, lui, règle ce que l'assistant dit. Tests : TC-300
+(PR-10 à PR-16).
+
 ---
 
 ## Deux pièges à connaître avant d'écrire une ligne
