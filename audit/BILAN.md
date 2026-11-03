@@ -790,7 +790,20 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
     - **Les scripts d'administration lancés à la main paieront ces 3 s.** Ceux qui chargent une clé par `cert()` afficheront en plus un avertissement de `google-auth-library` sur `fromJSON`, que la 14.5.0 appelle sans le neutraliser. Une sonde l'a confirmé. Sans conséquence.
     - **`functions/` compte 6 avis « moderate » après, contre 8 avant.** Avant, ils venaient tous d'un seul avis, sur `uuid`. Après, ils viennent de deux avis, sur `glob` et `minimatch`, par la chaîne `firestore-api` → `google-gax` 5 → `rimraf`. Firestore 9.4.0 fixe `firestore-api` en 0.2.x, et la correction est dans la 0.7. Aucun ne bloque `check:audit`.
   - **À savoir :** le prochain déploiement des functions part avec ce SDK.
-- **Restent :** `vite` 8, `vitest` 5, `eslint` 10.
+- **3 novembre 2026 : `vite` 7.1.5 → 8.3.5, en trois commits.** Deux plugins refusaient la 8 ; ils sont d'abord montés seuls, sur `vite` 7, qu'ils acceptent encore.
+  - **`@vitejs/plugin-react-swc` 4.0.1 → 4.3.3 (`b6cb4f0`).** Aucune rupture dans les notes. Il entraîne `@swc/core` 1.13.5 → 1.16.21, et le build reste identique au fichier près.
+  - **`vite-plugin-pwa` 1.0.3 → 1.3.0 (`2bdf3e9`).** La 2.0.0, majeure d'un mois, est écartée. Il entraîne Workbox 7.3 → 7.4, et le Rollup de `vite` 7 passe à 4.67. Le service worker garde ses 62 entrées de précache et ses 5 routes. Dans le JS, seuls changent l'ordre des exports entre morceaux et deux simplifications équivalentes.
+  - **`vite` 8.3.5 (`e8ea8da`).** Rolldown et Oxc remplacent Rollup et esbuild. La configuration n'emploie aucune des options retirées, et aucun import par défaut ne vise un paquet CommonJS.
+  - **Deux cibles figées dans `vite.config.js` :**
+    - la cible JS de Vite 7, que Vite 8 relève à Chrome 111 et Safari 16.4. Aujourd'hui, le JS produit est le même avec l'une ou l'autre ; la relever reste une décision ;
+    - `cssTarget: 'esnext'`. Vite 8 minifie le CSS avec Lightning CSS, qui convertissait déjà les couleurs, et `compatCss` perdait ses replis `display-p3`. Désormais, Vite minifie et `compatCss` convertit, comme avant.
+  - **CSS final comparé règle par règle :** 12 règles sont écrites autrement, avec des valeurs égales (`calc`, `7.0%`, arrêts de dégradé explicites, préfixes répétés).
+  - **Le découpage change.** `index.html` chargeait un fichier JS de 1 310 kB ; il en charge 9, dont 7 morceaux partagés et préchargés. Le premier chargement passe de 356 à 343 kB gzip, tout le JS de 780 à 753 kB gzip. Le précache reprend les 62 entrées d'avant, plus les 7 morceaux.
+  - **Vérifié :** toutes les suites, émulateurs compris, et un aller-retour Excel par le morceau `xlsx` construit. Au banc, en développement et sur un build de production du banc : identique au pixel hors horloge, console vide. Ce banc de production est nouveau, et sa méthode a été validée sur `vite` 7 : même rendu que le développement.
+  - **Vu en chemin :**
+    - au tout premier démarrage du serveur de développement après la mise à jour, deux écrans du banc sont restés blancs : React signale `createRoot()` appelé deux fois sur la même page. Je ne l'ai pas reproduit en deux reprises, dont une avec le cache des dépendances vidé. Cela ne touche que le développement : recharger la page suffit ;
+    - dans les tests, le plugin SWC recommande `@vitejs/plugin-react`, plus rapide sous Vite 8 puisque nous n'employons aucun plugin SWC. Ce serait un changement à part.
+- **Restent :** `vitest` 5, `eslint` 10.
 
 ### QUA-09 — Les suites émulateur échouent sous charge pour une raison d'environnement
 
