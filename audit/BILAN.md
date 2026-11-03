@@ -721,7 +721,7 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
 
 ### QUA-08 — Dépendances en retard, sans avis bloquant
 
-**MINEUR · effort S par paquet.**
+**MINEUR · CORRIGÉ du 2 au 3 novembre 2026 · un paquet par commit, toutes les suites à chaque fois.**
 
 - `check:audit` passe, et l'exception `@grpc/grpc-js` a sa condition de retrait.
 - **Majeures en attente** : `firebase` 12.19 → 13.1, `firebase-admin` 13.10 → 14.5 (racine et `functions/`), `vite` 7 → 8, `vitest` 4 → 5, `eslint` 9 → 10.
@@ -810,7 +810,33 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
     - faux minuteurs et `Temporal`, `toThrow('')`, `test.sequential`, points d'entrée retirés, motifs `-t`.
   - **`clearMocks` vaut désormais `true`** : l'historique des appels est effacé avant chaque test. Ce défaut est gardé : tous les tests passent, donc aucun ne comptait sur des appels faits avant lui.
   - **Vérifié :** toutes les suites, émulateurs compris. Les durées sont comparables à celles de Vitest 4.
-- **Reste :** `eslint` 10.
+- **3 novembre 2026 : `eslint` 9.35 → 10.13.0, en deux commits.** La 10.14.0 a quatre jours.
+  - **`eslint-plugin-react-hooks` 5.2.0 → 7.1.1 (`5a9a38f`), d'abord, sur ESLint 9.**
+    - Depuis la 7, ses préréglages activent les règles du React Compiler : `recommended-latest` passe de 2 règles à 17. Le préréglage est donc remplacé par nos deux règles, écrites en clair, et la configuration résolue reste identique.
+    - Mesuré sans l'adopter : les règles du compilateur signaleraient 48 erreurs dans 33 fichiers, dont 37 pour `set-state-in-effect`. Les adopter est une décision.
+  - **`eslint` 10.13.0 et `@eslint/js` 10.0.1 (`f4fbdba`).**
+    - `eslint-plugin-react` est retiré. Aucune de ses versions n'accepte ESLint 10, et il ne servait qu'à `react/jsx-uses-vars`. ESLint 10 suit lui-même les références JSX. Le témoin le montre : sous ESLint 9 sans la règle, 537 faux « inutilisé » ; sous ESLint 10 sans le plugin, aucun.
+    - `no-unassigned-vars` et `preserve-caught-error` entrent dans `eslint:recommended` sans rien signaler.
+    - `no-useless-assignment` y entre aussi, et relève six valeurs initiales défensives jamais lues dans les scripts des comptes techniques. Elle est désactivée : l'adopter, c'est retoucher ces scripts.
+    - Lint : 566 fichiers, aucun message.
+  - **À savoir :** ESLint 10 exige Node 20.19 ou 22.13 au moins, y compris dans l'éditeur. Si le lint de l'éditeur cesse de fonctionner, il faut regarder la version de Node que celui-ci emploie.
+- **Toutes les majeures sont faites.** La batterie complète passe sur l'état final (`f4fbdba`) :
+
+  | Contrôle | Résultat |
+  |---|---|
+  | Tests unitaires | 3 180 sur 3 180 |
+  | Tests de composants | 701 sur 701 |
+  | Intégration | 42 sur 42 |
+  | Règles Firestore | 435 sur 435 |
+  | Functions | 444 sur 444 |
+  | Functions de bout en bout | 40 sur 40 |
+
+  `check:generated`, `check:secrets`, `check:audit`, le lint et le build passent aussi.
+
+  Trois suites possibles, chacune un choix :
+  - adopter les règles du React Compiler, avec 48 signalements à traiter ;
+  - activer `no-useless-assignment`, en retouchant six lignes de scripts ;
+  - passer de `@vitejs/plugin-react-swc` à `@vitejs/plugin-react`, que recommande Vite 8.
 
 ### QUA-09 — Les suites émulateur échouent sous charge pour une raison d'environnement
 
@@ -908,7 +934,7 @@ Le panneau arrive par `lazy` ([Assistant.jsx:19](../src/components/Assistant.jsx
 | B2 | UI-03 : libellés reliés, 13 champs | ✅ Terminé le 2 novembre (`817f19a`) : TC-320 rouge puis vert, garde sur toutes les sources |
 | B3 | BUG-08, requalifié mineur : l'onglet Ravitaillement et la Corbeille chargent leurs lignes plus anciennes | ✅ Terminé le 2 novembre (`829fc54`), correction minimale choisie par le responsable : TC-321 et TC-322, banc `?espace=historique` |
 | C — décision | SEC-12, et SEC-13 avec elle | ✅ Décidé le 2 novembre : `docs/ia/DONNEES-ENVOYEES.md`. Numéro personnel et fiches des autres boutiques inchangés, figés par TC-301 [OL-06] ; navigateur : le texte seul (`7f3b82f`), TC-323 rouge puis vert |
-| Backlog — mineurs | QUA-09, DOC-03, QUA-08 (un paquet à la fois), UI-02, PERF-04 (mesure d'abord), QUA-07 suite | ✅ Traité le 2 novembre, un commit par point : QUA-09 `2a39878`, DOC-03 `211d3f1`, QUA-07 `bed97f5`, QUA-08 premier paquet `e3384b3`, UI-04 (trouvé en chemin) `3160060`, UI-02 `8a2c4c8`. PERF-04 mesuré, correction non proposée. Restent les autres paquets de QUA-08, un par un |
+| Backlog — mineurs | QUA-09, DOC-03, QUA-08 (un paquet à la fois), UI-02, PERF-04 (mesure d'abord), QUA-07 suite | ✅ Traité le 2 novembre, un commit par point : QUA-09 `2a39878`, DOC-03 `211d3f1`, QUA-07 `bed97f5`, QUA-08 premier paquet `e3384b3`, UI-04 (trouvé en chemin) `3160060`, UI-02 `8a2c4c8`. PERF-04 mesuré, correction non proposée. Les autres paquets de QUA-08 ont suivi un par un, les 2 et 3 novembre, jusqu'à `eslint` 10 `f4fbdba` |
 | A — humain, en dernier | SEC-11 : clé reCAPTCHA Enterprise et domaines, App Check appliqué à AI Logic dans la console, `VITE_FIREBASE_APPCHECK_KEY` dans Vercel, redéploiement du site | Une question posée à l'assistant en production reçoit sa réponse |
 
 Une correction métier et un nettoyage ne partagent pas un lot. B1 et B3 touchent tous deux le serveur : leurs déploiements restent une décision humaine.
