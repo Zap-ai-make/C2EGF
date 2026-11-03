@@ -1,5 +1,5 @@
 import { defineConfig, loadEnv } from 'vite'
-import react from '@vitejs/plugin-react-swc'
+import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { resolveProfile } from './config/clients/index.js'
@@ -7,7 +7,7 @@ import { pilotProfile } from './config/clients/_pilot.js'
 
 /**
  * Configuration Vite pour le CRM (produit standard paramétré par profil client).
- * - React avec SWC pour compilation rapide
+ * - React : JSX et Fast Refresh compilés par Oxc, intégré à Vite 8
  * - Tailwind CSS v4 intégré
  * - PWA avec Service Worker automatique
  *
