@@ -743,7 +743,16 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
   - **Mesuré au banc**, géométrie SVG avant/après : barres 1 px plus larges, effet de l'arrondi de la 3.9. Étiquettes, grille, ligne du zéro et infobulle sont identiques, et la console reste vide.
   - **Prix :** le morceau `Dashboard`, page d'accueil de la boutique, passe de 340,78 à 412,75 kB. Dans ces 72 kB, 7,6 kB venaient d'une seconde copie d'`immer` : `recharts` voulait la 11, son `@reduxjs/toolkit` 2.9 la 10.
   - **Choix du responsable : prendre, et dédoublonner.** `@reduxjs/toolkit` 2.13.0, que seul `recharts` emploie, ramène une copie unique d'`immer`. Coût final : +64 kB (+16 kB compressés).
-- **Restent, un par un :** `tailwindcss` (avec `@tailwindcss/vite`), `lucide-react` (mineures) ; puis les majeures `firebase` 13, `firebase-admin` 14, `vite` 8, `vitest` 5, `eslint` 10, chacune après lecture de ses notes.
+- **3 novembre 2026 : `tailwindcss` et `@tailwindcss/vite` 4.1.13 → 4.3.3 (`f9fabf3`).** La 4.3.3 est épinglée : la 4.3.4 est parue la veille.
+  - **Ce qui suit :** `lightningcss` passe aussi de 1.30.1 à 1.32.0 à la racine, puisque Tailwind l'exige exactement. C'est la bibliothèque de `scripts/compatCss.mjs`.
+  - **CSS final comparé règle par règle**, après `compatCss`. Une fois normalisées l'écriture des espacements et les espaces, il reste :
+    - la pile `font-sans` par défaut, que notre `body` remplace ;
+    - `0` qui devient `0px` dans deux variables ;
+    - `lg:px-0` déplié en deux propriétés ;
+    - le focus de Firefox, qui ne touche plus les `iframe`.
+  - **Au banc, au pixel près :** 21 captures sur 22 identiques. La 22e ne diffère que par l'horloge du banc.
+- **Observation, 3 novembre :** une passe de `check:audit` a échoué une fois en annonçant l'exception `@grpc/grpc-js` « devenue inutile ». Deux passes suivantes l'ont trouvée active. `npm audit` a dû répondre une fois sans avis, et le script prend une réponse vide pour une exception périmée. L'échec reste prudent, mais **le message pousse à retirer une exception encore nécessaire**. Correction proposée : refuser une réponse d'audit sans `metadata`, avec un message qui dit « audit illisible ».
+- **Restent, un par un :** `lucide-react` (mineure) ; puis les majeures `firebase` 13, `firebase-admin` 14, `vite` 8, `vitest` 5, `eslint` 10, chacune après lecture de ses notes.
 
 ### QUA-09 — Les suites émulateur échouent sous charge pour une raison d'environnement
 
