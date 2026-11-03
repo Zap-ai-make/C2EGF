@@ -760,7 +760,12 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
 - **Observation, 3 novembre : deux fois sur deux, la première passe de `check:audit` après un `npm install` a échoué** (Tailwind, puis `lucide-react`). Elle annonçait l'exception `@grpc/grpc-js` « devenue inutile ».
   - Toutes les passes suivantes l'ont trouvée active, dont six réponses brutes de `npm audit` capturées : 4 paquets signalés, l'avis présent. La cause n'est pas reproduite.
   - Le script lit une réponse qui ne contient pas l'avis comme une exception périmée. **Il échoue, ce qui est prudent, mais son message pousse à retirer une exception encore nécessaire.**
-  - Correction proposée : avant de déclarer une exception périmée, relancer l'audit une fois. Si l'avis manque encore, le dire avec le nombre d'avis reçus, pour qu'on voie une réponse vide.
+  - **Corrigé le 3 novembre 2026 (`2505186`).** La lecture du rapport sort dans `scripts/lib/analyseAudit.mjs` :
+    - une sortie vide, illisible ou sans `metadata` est refusée, et jamais lue comme « aucun avis » ;
+    - avant de déclarer une exception périmée, l'audit est relancé une fois, et c'est le second qui fait foi ;
+    - une exception absente des deux audits est annoncée avec le nombre d'avis reçus. S'il est nul, le script ajoute qu'il faut vérifier `npm audit` à la main.
+
+    TC-325 était rouge, puis vert. De bout en bout, une copie du script avec une fausse exception audite deux fois, puis la déclare périmée.
 - **Les mineures sont faites.** Restent les majeures : `firebase` 13, `firebase-admin` 14, `vite` 8, `vitest` 5, `eslint` 10, chacune après lecture de ses notes.
 
 ### QUA-09 — Les suites émulateur échouent sous charge pour une raison d'environnement
