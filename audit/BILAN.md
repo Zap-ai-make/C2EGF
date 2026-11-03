@@ -803,7 +803,14 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
   - **Vu en chemin :**
     - au tout premier démarrage du serveur de développement après la mise à jour, deux écrans du banc sont restés blancs : React signale `createRoot()` appelé deux fois sur la même page. Je ne l'ai pas reproduit en deux reprises, dont une avec le cache des dépendances vidé. Cela ne touche que le développement : recharger la page suffit ;
     - dans les tests, le plugin SWC recommande `@vitejs/plugin-react`, plus rapide sous Vite 8 puisque nous n'employons aucun plugin SWC. Ce serait un changement à part.
-- **Restent :** `vitest` 5, `eslint` 10.
+- **3 novembre 2026 : `vitest` 4.1.9 → 5.0.5 (`b096edc`).** La 5.1.0, parue la veille, est écartée. Vitest 5 exige Node 22.12 et Vite 6.4 ou plus, ce que le projet a déjà.
+  - **Les ruptures ont été cherchées dans les tests, et aucune ne s'y trouve :**
+    - `vi.mock` hors du premier niveau, désormais une erreur ;
+    - `.rejects` non attendu, désormais un échec. Les 82 appels de l'utilitaire `expectError` des tests Functions sont tous attendus ;
+    - faux minuteurs et `Temporal`, `toThrow('')`, `test.sequential`, points d'entrée retirés, motifs `-t`.
+  - **`clearMocks` vaut désormais `true`** : l'historique des appels est effacé avant chaque test. Ce défaut est gardé : tous les tests passent, donc aucun ne comptait sur des appels faits avant lui.
+  - **Vérifié :** toutes les suites, émulateurs compris. Les durées sont comparables à celles de Vitest 4.
+- **Reste :** `eslint` 10.
 
 ### QUA-09 — Les suites émulateur échouent sous charge pour une raison d'environnement
 
