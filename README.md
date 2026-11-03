@@ -36,7 +36,7 @@ L'application peut être installée sur n'importe quel appareil :
 ## 📦 Installation
 
 ### Prérequis
-- Node.js 20+
+- Node.js 22+ (exigé par `firebase-admin` 14, qui sert aux scripts d'administration et aux tests ; les Cloud Functions tournent déjà en Node 22)
 - npm ou yarn
 - Compte Firebase
 
