@@ -836,7 +836,17 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
   Trois suites possibles, chacune un choix :
   - adopter les règles du React Compiler, avec 48 signalements à traiter ;
   - activer `no-useless-assignment`, en retouchant six lignes de scripts ;
-  - passer de `@vitejs/plugin-react-swc` à `@vitejs/plugin-react`, que recommande Vite 8.
+  - passer de `@vitejs/plugin-react-swc` à `@vitejs/plugin-react`, que recommande Vite 8. **Fait le 3 novembre, à la demande du responsable** (voir ci-dessous).
+- **3 novembre 2026 : `@vitejs/plugin-react-swc` 4.3.3 → `@vitejs/plugin-react` 6.0.0 (`37c4088`).** La 6 n'a plus Babel : JSX et Fast Refresh passent par Oxc, intégré à Vite 8.
+  - **Pourquoi la 6.0.0, épinglée exactement.** Les versions 6.0.1 à 6.2.1 déclarent une chaîne de dépendances facultatives (`@rolldown/plugin-babel` ^0.2 → `@babel/plugin-transform-runtime` ^8.0.0-rc). npm 11.11 y retient une préversion qui exige Babel 8, en conflit avec le Babel 7 de `workbox-build`, et refuse l'installation (ERESOLVE). La 6.0.0 s'arrête à `@rolldown/plugin-babel` ^0.1.7, hors de cette chaîne. Forcer l'installation par `--legacy-peer-deps` aurait laissé le conflit au prochain `npm install`, celui de Vercel compris.
+  - **Ce qui manque à la 6.0.0 :** deux corrections de développement (le HMR des composants composés, `vite dev` sous `NODE_ENV=production`) et des réglages du React Compiler, que nous n'employons pas. Rien pour le build. À revoir quand `workbox-build` passera à Babel 8, ou que la chaîne sera corrigée.
+  - **Vérifié :**
+    - le build est identique au fichier près (mêmes 59 empreintes) : sous Vite 8, l'ancien plugin laissait déjà Oxc compiler le JSX au build ;
+    - Fast Refresh est actif en développement ;
+    - lint, unitaires, composants et `check:audit` passent ;
+    - au banc de développement : identique au pixel hors horloge, console vide ;
+    - `npm install` à vide reste stable.
+  - **Vu en chemin :** TC-200-A (« affiche la position ») a dépassé une fois la limite de 5 s, à 6,7 s, pendant que la machine était saturée, la suite ayant pris 451 s au lieu de 256. Au repos, il prend 1,1 s. Seul, il passe trois fois sur trois, et la suite relancée passe entière. C'est le même phénomène que TC-266.
 
 ### QUA-09 — Les suites émulateur échouent sous charge pour une raison d'environnement
 
