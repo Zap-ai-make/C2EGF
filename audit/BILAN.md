@@ -739,7 +739,11 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
   - aucune action de formulaire.
 
   **Vérifié :** audit, lint, unitaires, composants, build. Au banc, en `StrictMode` et en développement, 11 écrans à deux largeurs : aucune erreur ni aucun avertissement console. **Prix :** le bundle principal gagne 36,6 kB (1 280,21 kB, gzip 348,13).
-- **Restent, un par un :** `recharts`, `tailwindcss` (avec `@tailwindcss/vite`), `lucide-react` (mineures) ; puis les majeures `firebase` 13, `firebase-admin` 14, `vite` 8, `vitest` 5, `eslint` 10, chacune après lecture de ses notes.
+- **2 et 3 novembre 2026 : `recharts` 3.2.1 → 3.10.1 (`c988d7e`), puis une seule copie d'`immer` (`01e49da`).** Seul `FluxChart.jsx` emploie `recharts`, avec un graphique en barres empilées. Il n'utilise aucune des fonctions dépréciées ou retirées entre ces versions (légende, camembert, aires, `CartesianAxis`).
+  - **Mesuré au banc**, géométrie SVG avant/après : barres 1 px plus larges, effet de l'arrondi de la 3.9. Étiquettes, grille, ligne du zéro et infobulle sont identiques, et la console reste vide.
+  - **Prix :** le morceau `Dashboard`, page d'accueil de la boutique, passe de 340,78 à 412,75 kB. Dans ces 72 kB, 7,6 kB venaient d'une seconde copie d'`immer` : `recharts` voulait la 11, son `@reduxjs/toolkit` 2.9 la 10.
+  - **Choix du responsable : prendre, et dédoublonner.** `@reduxjs/toolkit` 2.13.0, que seul `recharts` emploie, ramène une copie unique d'`immer`. Coût final : +64 kB (+16 kB compressés).
+- **Restent, un par un :** `tailwindcss` (avec `@tailwindcss/vite`), `lucide-react` (mineures) ; puis les majeures `firebase` 13, `firebase-admin` 14, `vite` 8, `vitest` 5, `eslint` 10, chacune après lecture de ses notes.
 
 ### QUA-09 — Les suites émulateur échouent sous charge pour une raison d'environnement
 
