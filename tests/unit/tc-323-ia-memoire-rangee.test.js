@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { ChatSession } from 'firebase/ai'
+import { initializeApp } from 'firebase/app'
+import { AgentPlatformBackend, getAI, getGenerativeModel } from 'firebase/ai'
 import {
   chargerConversations,
   cleDesConversations,
@@ -52,8 +53,21 @@ const TOURS = Object.freeze([
   { role: 'ia', texte: 'Souleymane OUEDRAOGO, code 1234567.' },
 ])
 
-/** Le contrôle même du SDK, celui que passe `startChat` à la reprise. */
-const repriseAcceptee = (historique) => () => new ChatSession({}, 'modele', undefined, { history: historique })
+/**
+ * Le contrôle même du SDK, celui que passe `startChat` à la reprise.
+ *
+ * Par l'API publique : firebase 13 n'exporte plus la classe `ChatSession`,
+ * seulement son interface. Aucun appel ne part : `startChat` contrôle la
+ * mémoire sans joindre le modèle. [MR-08] vérifie que ce contrôle refuse
+ * encore une mémoire mal formée, sans quoi les « acceptée » ne prouveraient rien.
+ */
+const MODELE = getGenerativeModel(
+  getAI(initializeApp({ apiKey: 'cle-de-test', projectId: 'demo-tc-323', appId: '1:1:web:1' }, 'tc-323'), {
+    backend: new AgentPlatformBackend(),
+  }),
+  { model: 'gemini-3.5-flash' },
+)
+const repriseAcceptee = (historique) => () => MODELE.startChat({ history: historique })
 
 describe('TC-323 — la mémoire rangée avec une conversation', () => {
   const CLE = cleDesConversations('u-1', 'b-1')
@@ -147,5 +161,41 @@ describe('TC-323 — la mémoire rangée avec une conversation', () => {
   it('[MR-07] une mémoire illisible devient une mémoire vide, pas une panne', () => {
     expect(memoireSansDonnees(undefined)).toEqual([])
     expect(memoireSansDonnees([null, { role: 'user' }, { role: 'model', parts: 'x' }])).toEqual([])
+  })
+
+  it('[MR-08] le contrôle du SDK refuse encore une mémoire mal formée', () => {
+    expect(repriseAcceptee([{ role: 'model', parts: [{ text: 'réponse' }] }])).toThrow(/role 'user'/)
+    expect(repriseAcceptee([
+      { role: 'user', parts: [{ text: 'q1' }] },
+      { role: 'user', parts: [{ text: 'q2' }] },
+    ])).toThrow(/can't follow/)
+  })
+
+  it('[MR-09] l’historique typé de firebase 13 se range de même, et se reprend', () => {
+    // Depuis firebase 13, `getHistory()` rend des parts discriminées par `type`.
+    const typee = [
+      { role: 'user', parts: [{ type: 'text', text: 'retrouve ouedraogo' }] },
+      {
+        role: 'model',
+        parts: [
+          { type: 'text', text: 'je cherche dans la base', thought: true },
+          { type: 'text', text: 'Je regarde. ' },
+          { type: 'functionCall', functionCall: { name: 'chercher_client', args: { recherche: 'ouedraogo' } }, thoughtSignature: 'sig-1' },
+        ],
+      },
+      { role: 'user', parts: [{ type: 'functionResponse', functionResponse: { name: 'chercher_client', response: { clients: [FICHE_BRUTE] } } }] },
+      { role: 'model', parts: [{ type: 'text', text: 'Trouvé.' }] },
+    ]
+    rangerConversation(CLE, { id: 'a', tours: TOURS, historique: typee })
+
+    const brut = localStorage.getItem(CLE)
+    expect(brut).not.toContain(NUMERO_PERSONNEL)
+    expect(brut).not.toContain('je cherche dans la base')
+    const relue = chargerConversations(CLE)[0].historique
+    expect(relue).toEqual([
+      { role: 'user', parts: [{ text: 'retrouve ouedraogo' }] },
+      { role: 'model', parts: [{ text: 'Je regarde. ' }, { text: 'Trouvé.' }] },
+    ])
+    expect(repriseAcceptee(relue)).not.toThrow()
   })
 })
