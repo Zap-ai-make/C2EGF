@@ -751,8 +751,17 @@ Pendant la passe, la machine (8 Go) n'avait qu'environ 0,4 Go de mémoire libre.
     - `lg:px-0` déplié en deux propriétés ;
     - le focus de Firefox, qui ne touche plus les `iframe`.
   - **Au banc, au pixel près :** 21 captures sur 22 identiques. La 22e ne diffère que par l'horloge du banc.
-- **Observation, 3 novembre :** une passe de `check:audit` a échoué une fois en annonçant l'exception `@grpc/grpc-js` « devenue inutile ». Deux passes suivantes l'ont trouvée active. `npm audit` a dû répondre une fois sans avis, et le script prend une réponse vide pour une exception périmée. L'échec reste prudent, mais **le message pousse à retirer une exception encore nécessaire**. Correction proposée : refuser une réponse d'audit sans `metadata`, avec un message qui dit « audit illisible ».
-- **Restent, un par un :** `lucide-react` (mineure) ; puis les majeures `firebase` 13, `firebase-admin` 14, `vite` 8, `vitest` 5, `eslint` 10, chacune après lecture de ses notes.
+- **3 novembre 2026 : `lucide-react` 1.34.0 → 1.66.0 (`7500b9b`).** Les 47 icônes importées ont été rendues avec les deux versions :
+  - aucune ne manque, et les cinq anciens noms restent des alias ;
+  - seule la coche de `CheckCircle2` est redessinée, à peine plus ample. Elle ne sert qu'au toast « Succès » ;
+  - douze icônes gagnent des classes CSS, qu'aucun code ni test ne vise.
+
+  Au banc, le rendu est identique au pixel, hors horloge du banc. Bundle principal : +3,15 kB.
+- **Observation, 3 novembre : deux fois sur deux, la première passe de `check:audit` après un `npm install` a échoué** (Tailwind, puis `lucide-react`). Elle annonçait l'exception `@grpc/grpc-js` « devenue inutile ».
+  - Toutes les passes suivantes l'ont trouvée active, dont six réponses brutes de `npm audit` capturées : 4 paquets signalés, l'avis présent. La cause n'est pas reproduite.
+  - Le script lit une réponse qui ne contient pas l'avis comme une exception périmée. **Il échoue, ce qui est prudent, mais son message pousse à retirer une exception encore nécessaire.**
+  - Correction proposée : avant de déclarer une exception périmée, relancer l'audit une fois. Si l'avis manque encore, le dire avec le nombre d'avis reçus, pour qu'on voie une réponse vide.
+- **Les mineures sont faites.** Restent les majeures : `firebase` 13, `firebase-admin` 14, `vite` 8, `vitest` 5, `eslint` 10, chacune après lecture de ses notes.
 
 ### QUA-09 — Les suites émulateur échouent sous charge pour une raison d'environnement
 
