@@ -19,5 +19,8 @@ export default defineConfig({
     // Même raison pour la mise en place (création des comptes, connexion) :
     // audit QUA-09, un échec sur un délai de hook, passé avec ce délai.
     hookTimeout: 120000,
+    // Pas de serveur de métadonnées Google Cloud sur émulateur : voir
+    // vitest.functions.config.js.
+    env: { METADATA_SERVER_DETECTION: 'none' },
   },
 })

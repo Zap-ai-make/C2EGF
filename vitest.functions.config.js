@@ -13,5 +13,10 @@ export default defineConfig({
     fileParallelism: false,
     maxWorkers: 1,
     testTimeout: 15000,
+    // firebase-admin 14 cherche le serveur de métadonnées de Google Cloud avant
+    // sa première opération et attend son échec (~3 s par processus, scripts
+    // enfants compris). Sur émulateur, il n'existe pas : on coupe la détection.
+    // Mesuré le 3 novembre 2026 : cette suite 278 → 206 s, l'intégration 185 → 122 s.
+    env: { METADATA_SERVER_DETECTION: 'none' },
   },
 })

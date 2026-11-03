@@ -7,5 +7,8 @@ export default defineConfig({
     globals: false,
     fileParallelism: false,
     maxWorkers: 1,
+    // Pas de serveur de métadonnées Google Cloud sur émulateur : voir
+    // vitest.functions.config.js. Les scripts lancés par ces tests en héritent.
+    env: { METADATA_SERVER_DETECTION: 'none' },
   },
 })
