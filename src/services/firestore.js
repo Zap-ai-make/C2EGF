@@ -1037,6 +1037,48 @@ export class FirestoreService {
     )
   }
 
+  /**
+   * UNE fiche client, en temps réel — `null` si elle n'existe pas.
+   *
+   * ⚠ POURQUOI PAS `subscribeToAllClients` PUIS UNE RECHERCHE. Écouter la base
+   *   pour en lire une fiche coûtait ~15 700 lectures à chaque ouverture faite
+   *   après 30 minutes ; écouter le document en coûte UNE, plus une par
+   *   modification. Voir docs/rester-dans-le-quota-gratuit.md §A2.
+   *
+   * ⚠ POURQUOI UNE ÉCOUTE ET PAS UN `getDoc`. L'abonnement à la base suivait en
+   *   direct une fiche corrigée ou supprimée par une boutique. Un `getDoc`
+   *   l'aurait figée à l'ouverture.
+   *
+   * ⚠ L'IDENTIFIANT VIENT DE L'ADRESSE. `doc()` lève sur un identifiant vide ou
+   *   qui contient « / ». Aucune fiche ne peut en porter un : c'est une fiche
+   *   introuvable (`null`), comme le disait la recherche en mémoire, pas une
+   *   exception qui ferait tomber l'écran.
+   */
+  subscribeToClient(clientId, callback) {
+    const observer = normalizeSubscriptionObserver(callback)
+
+    let ref
+    try {
+      ref = this.docRef(FIRESTORE_CONFIG.COLLECTIONS.CLIENTS, clientId)
+    } catch {
+      observer.onNext(null)
+      return () => {}
+    }
+
+    return onSnapshot(ref,
+      (snapshot) => {
+        try {
+          observer.onNext(snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null)
+        } catch (error) {
+          notifySubscriptionError(observer, error, 'Client snapshot processing error')
+        }
+      },
+      (error) => {
+        notifySubscriptionError(observer, error, 'Client subscription error')
+      }
+    )
+  }
+
   // DRAFTS (Transactions non terminées) — délèguent à DraftService
 
   async getDrafts() {

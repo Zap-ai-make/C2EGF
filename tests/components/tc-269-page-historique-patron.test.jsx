@@ -25,9 +25,22 @@ vi.mock('../../src/hooks/useHistoriqueClient.js', () => ({
   useHistoriqueClient: () => etatHook,
 }))
 
+// ⚠ LES DEUX ABONNEMENTS SONT SIMULÉS, ET C'EST CE QUI FAIT DE CE FICHIER LA
+//   PREUVE DU LOT §A2 (docs/rester-dans-le-quota-gratuit.md). La page écoutait
+//   toute la base (`subscribeToAllClients`) ; elle n'écoute plus que sa fiche
+//   (`subscribeToClient`). `pousserClients` répond par le chemin que la page a
+//   ouvert : les tests 01 à 16 n'ont pas changé d'une ligne, et ils passaient
+//   avant comme après. Seul [TC-269-17] distingue les deux.
 let clientsCb = null
+let ficheCb = null
+let ficheDemandee = null
+const abonnementBase = vi.fn((cb) => { clientsCb = cb; return vi.fn() })
+const abonnementFiche = vi.fn((id, cb) => { ficheDemandee = id; ficheCb = cb; return vi.fn() })
 vi.mock('../../src/services/firestore.js', () => ({
-  firestoreService: { subscribeToAllClients: (cb) => { clientsCb = cb; return vi.fn() } },
+  firestoreService: {
+    subscribeToAllClients: (...a) => abonnementBase(...a),
+    subscribeToClient: (...a) => abonnementFiche(...a),
+  },
 }))
 
 const { default: PatronHistoriqueClient } = await import('../../src/pages/admin/PatronHistoriqueClient.jsx')
@@ -44,10 +57,16 @@ const arbre = (id) => (
 )
 const page = (id = 'c1') => render(arbre(id))
 
-/** Fait arriver la liste des clients, comme le ferait Firestore. */
-const pousserClients = (data) => act(() => { clientsCb(data) })
+/**
+ * Fait arriver la base telle que Firestore la connaît. Une page abonnée à sa
+ * seule fiche reçoit cette fiche, ou `null` si la base ne la contient pas.
+ */
+const pousserClients = (data) => act(() => {
+  if (ficheCb) ficheCb(data.find((c) => c.id === ficheDemandee) ?? null)
+  else clientsCb(data)
+})
 /** Fait tomber l'abonnement — `permission-denied`, coupure réseau, etc. */
-const echouerClients = (err) => act(() => { clientsCb.onError(err) })
+const echouerClients = (err) => act(() => { (ficheCb ?? clientsCb).onError(err) })
 
 const JOUR = 24 * 60 * 60 * 1000
 const debut = new Date('2026-10-01T08:00:00Z')
@@ -58,7 +77,14 @@ const op = (jours, typePlie = 'depot') => ({
   storeName: 'FADA', typePlie, createdAt: debut, validatedAt: new Date(debut.getTime() + jours * JOUR),
 })
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  clientsCb = null
+  ficheCb = null
+  ficheDemandee = null
+  abonnementBase.mockClear()
+  abonnementFiche.mockClear()
+})
 
 describe('TC-269 — la fiche et le verdict', () => {
   it('[TC-269-01] le nom du client est affiché', () => {
@@ -307,5 +333,38 @@ describe('TC-269 — « Envoyer » ouvre la fiche sur WhatsApp', () => {
     //   tabnabbing, ici sur un lien qui part du CRM.
     expect(lien).toHaveAttribute('target', '_blank')
     expect(lien.getAttribute('rel')).toMatch(/noopener/)
+  })
+})
+
+/**
+ * ⚠ UNE FICHE, PAS LA BASE (docs/rester-dans-le-quota-gratuit.md §A2). L'écran
+ *   s'abonnait aux ~15 700 fiches du réseau pour en afficher une : 15 679
+ *   lectures facturées à chaque ouverture faite après 30 minutes, contre une.
+ *
+ *   Les deux tests suivants figent ce que l'ancien abonnement donnait sans
+ *   qu'on le demande, et qu'un `getDoc` ponctuel aurait perdu : la fiche suit
+ *   en direct une correction ou une suppression faite par une boutique.
+ */
+describe('TC-269 — la page n’écoute que la fiche demandée', () => {
+  it('[TC-269-17] elle s’abonne à la fiche de l’adresse, jamais à toute la base', () => {
+    page('c1')
+    expect(abonnementFiche).toHaveBeenCalledWith('c1', expect.anything())
+    expect(abonnementBase).not.toHaveBeenCalled()
+  })
+
+  it('[TC-269-18] une fiche corrigée ailleurs se met à jour à l’écran', () => {
+    etatHook = { ...etatHook, etat: 'pret', lignes: [op(4)], encore: false, erreur: null }
+    page('c1')
+    pousserClients([{ id: 'c1', nom: 'OUEDRAOGO', prenom: 'Salif' }])
+    pousserClients([{ id: 'c1', nom: 'OUEDRAOGO', prenom: 'Salifou' }])
+    expect(screen.getByText(/OUEDRAOGO Salifou/)).toBeInTheDocument()
+  })
+
+  it('[TC-269-19] une fiche supprimée pendant la consultation devient « introuvable »', () => {
+    etatHook = { ...etatHook, etat: 'pret', lignes: [op(4)], encore: false, erreur: null }
+    page('c1')
+    pousserClients([{ id: 'c1', nom: 'OUEDRAOGO', prenom: 'Salif' }])
+    pousserClients([])
+    expect(screen.getByText(/fiche introuvable/i)).toBeInTheDocument()
   })
 })

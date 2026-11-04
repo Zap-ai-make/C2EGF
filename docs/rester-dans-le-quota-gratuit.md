@@ -151,10 +151,17 @@ déclencheur — c'est une raison de plus pour §C1.
 
 Branche `feat/espace-patron` — **à coordonner avec la fenêtre qui y travaille.**
 
-- [src/pages/admin/PatronHistoriqueClient.jsx:57](../src/pages/admin/PatronHistoriqueClient.jsx#L57)
-  s'abonne aux **15 679 fiches pour en trouver une seule**. Un `getDoc` sur
-  `globalClients/{clientId}` suffit : **1 lecture**. C'est le gain le plus simple
-  du dossier.
+- **Fait le 2026-11-04.**
+  [src/pages/admin/PatronHistoriqueClient.jsx](../src/pages/admin/PatronHistoriqueClient.jsx)
+  s'abonnait aux **15 679 fiches pour en trouver une seule**. Il écoute
+  désormais le seul document, par `firestoreService.subscribeToClient` : **1
+  lecture** à l'ouverture, plus une par modification.
+  - Une écoute plutôt qu'un `getDoc` : l'ancien abonnement suivait en direct une
+    fiche corrigée ou supprimée par une boutique, et un `getDoc` l'aurait figée.
+  - Tests : TC-265-07 à 11 pour le service, TC-269-17 à 19 pour la page.
+  - Vérifié sur les émulateurs : seule la fiche est écoutée, une correction faite
+    pendant la consultation s'affiche, et une adresse inconnue répond
+    « introuvable ».
 - [src/pages/admin/PatronClients.jsx:61](../src/pages/admin/PatronClients.jsx#L61)
   rouvre `subscribeToAllClients` à chaque visite. Il passera par l'annuaire de §A1.
 
@@ -418,7 +425,7 @@ sont une décision humaine.
 | # | Lot | Gain | Risque |
 |---|---|---|---|
 | 1 | E1 — retour aux émulateurs — **fait le 2026-11-04** | immédiat | nul |
-| 2 | A2 — `getDoc` dans `PatronHistoriqueClient` | 15 678 lectures par visite | faible |
+| 2 | A2 — une seule fiche écoutée dans `PatronHistoriqueClient` — **fait le 2026-11-04** | 15 678 lectures par visite | faible |
 | 3 | A1 — annuaire en tranches | ~98 % des lectures | moyen : déclencheur, règles, premier remplissage |
 | 4 | A3 — historique | ~150 lectures par ouverture | moyen : trois bugs déjà corrigés à ne pas rouvrir |
 | 5 | C1 + C2 — région et `getAll` | temps facturé ÷ 3 à 5 | moyen : migration de région |

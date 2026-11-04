@@ -15,11 +15,12 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 const onSnapshot = vi.fn(() => vi.fn())
 const collection = vi.fn((_db, path) => ({ path }))
+const doc = vi.fn((_db, ...segments) => ({ path: segments.join('/') }))
 
 vi.mock('firebase/firestore', () => ({
   collection: (...a) => collection(...a),
   onSnapshot: (...a) => onSnapshot(...a),
-  doc: vi.fn(), getDoc: vi.fn(), getDocs: vi.fn(), query: vi.fn(),
+  doc: (...a) => doc(...a), getDoc: vi.fn(), getDocs: vi.fn(), query: vi.fn(),
   where: vi.fn(), orderBy: vi.fn(), limit: vi.fn(), startAfter: vi.fn(),
   serverTimestamp: vi.fn(), addDoc: vi.fn(), setDoc: vi.fn(),
   updateDoc: vi.fn(), deleteDoc: vi.fn(), writeBatch: vi.fn(),
@@ -33,6 +34,7 @@ const { firestoreService } = await import('../../src/services/firestore.js')
 beforeEach(() => {
   onSnapshot.mockClear()
   collection.mockClear()
+  doc.mockClear()
   firestoreService.setActiveStore(null)
 })
 
@@ -70,5 +72,64 @@ describe('TC-265 — le chemin du gérant garde sa précondition', () => {
   it('[TC-265-06] et il fonctionne avec une boutique active', () => {
     firestoreService.setActiveStore({ id: 's1', name: 'FADA' })
     expect(() => firestoreService.subscribeToClients(vi.fn())).not.toThrow()
+  })
+})
+
+/**
+ * ⚠ UNE FICHE, PAS LA BASE (docs/rester-dans-le-quota-gratuit.md §A2).
+ *   L'historique d'un client écoutait les ~15 700 fiches du réseau pour en
+ *   afficher une seule : 15 679 lectures facturées à chaque ouverture faite
+ *   après 30 minutes, là où l'écoute d'un document en coûte une.
+ */
+describe('TC-265 — l’abonnement à une seule fiche', () => {
+  it('[TC-265-07] il vise le document `globalClients/{id}`, sans boutique active', () => {
+    firestoreService.subscribeToClient('c1', vi.fn())
+    expect(doc).toHaveBeenCalledWith(expect.anything(), 'globalClients', 'c1')
+    expect(collection).not.toHaveBeenCalled()
+    expect(onSnapshot).toHaveBeenCalledTimes(1)
+  })
+
+  it('[TC-265-08] la fiche arrive avec son identifiant, et le désabonnement est rendu', () => {
+    const stop = vi.fn()
+    onSnapshot.mockReturnValueOnce(stop)
+    const recu = vi.fn()
+    expect(firestoreService.subscribeToClient('c1', recu)).toBe(stop)
+    const [, surSuivant] = onSnapshot.mock.calls[0]
+    surSuivant({ id: 'c1', exists: () => true, data: () => ({ nom: 'OUEDRAOGO' }) })
+    expect(recu).toHaveBeenCalledWith({ id: 'c1', nom: 'OUEDRAOGO' })
+  })
+
+  it('[TC-265-09] une fiche absente — supprimée, ou jamais créée — rend `null`', () => {
+    const recu = vi.fn()
+    firestoreService.subscribeToClient('inconnu', recu)
+    const [, surSuivant] = onSnapshot.mock.calls[0]
+    surSuivant({ id: 'inconnu', exists: () => false, data: () => undefined })
+    expect(recu).toHaveBeenCalledWith(null)
+  })
+
+  /**
+   * ⚠ L'IDENTIFIANT VIENT DE L'ADRESSE. `doc()` LÈVE sur un identifiant vide ou
+   *   qui contient « / » (`/admin/clients/a%2Fb/historique`). L'ancienne
+   *   recherche en mémoire répondait « introuvable » ; une exception ferait
+   *   tomber l'écran. Aucune fiche ne peut porter un tel identifiant.
+   */
+  it('[TC-265-10] un identifiant que le SDK refuse rend `null` au lieu de lever', () => {
+    doc.mockImplementationOnce(() => { throw new Error('Invalid document reference') })
+    const recu = vi.fn()
+    let stop
+    expect(() => { stop = firestoreService.subscribeToClient('a/b', recu) }).not.toThrow()
+    expect(recu).toHaveBeenCalledWith(null)
+    expect(onSnapshot).not.toHaveBeenCalled()
+    expect(() => stop()).not.toThrow()
+  })
+
+  it('[TC-265-11] une erreur d’écoute atteint `onError` du callback', () => {
+    const recu = vi.fn()
+    recu.onError = vi.fn()
+    firestoreService.subscribeToClient('c1', recu)
+    const [, , surErreur] = onSnapshot.mock.calls[0]
+    const panne = Object.assign(new Error('Accès refusé.'), { code: 'permission-denied' })
+    surErreur(panne)
+    expect(recu.onError).toHaveBeenCalledWith(panne)
   })
 })

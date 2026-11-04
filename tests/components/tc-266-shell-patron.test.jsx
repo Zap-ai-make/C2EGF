@@ -167,6 +167,9 @@ vi.mock('../../src/services/firestore', () => ({
     // `PatronClients` (tâche 4) monte vraiment sous `/admin` ici — la VRAIE
     // App, pas un stub — et appelle ce flux dès le premier rendu.
     subscribeToAllClients: vi.fn(() => vi.fn()),
+    // `PatronHistoriqueClient` n'écoute plus que SA fiche (lot §A2 de
+    // docs/rester-dans-le-quota-gratuit.md) : [TC-266-09] la monte vraiment.
+    subscribeToClient: vi.fn(() => vi.fn()),
     subscribeToClients: vi.fn(() => vi.fn()),
     subscribeToDrafts: vi.fn(() => vi.fn()),
     subscribeToHistory: vi.fn(() => vi.fn()),

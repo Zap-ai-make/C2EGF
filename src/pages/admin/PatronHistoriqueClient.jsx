@@ -19,48 +19,44 @@ import LoadMoreButton from '../../components/ui/LoadMoreButton.jsx'
  *   L'adresse ne porte qu'un identifiant. Passer l'objet par `state` du routeur
  *   le perdrait au rechargement.
  *
- * ⚠ RONDE DE CORRECTION 1 (M-6) — CE N'EST PAS LE MÊME ABONNEMENT QUE CELUI DE
- *   `PatronClients`. `AdminLayout` monte l'écran d'accueil et cette page sous
- *   le MÊME `<Outlet>` : naviguer de l'un à l'autre démonte le premier avant de
- *   monter le second (routage, pas onglets superposés). Cette page ouvre donc
- *   un SECOND abonnement plein-collection sur ~15 700 fiches, pas une lecture
- *   d'un document déjà en mémoire. Un remontage partagé de l'abonnement (par
- *   exemple levé dans `AdminLayout`, au-dessus de l'`Outlet`) économiserait ce
- *   second coût réseau ; différé, pas traité par ce lot.
+ * ⚠ UNE FICHE ÉCOUTÉE, PAS LA BASE (docs/rester-dans-le-quota-gratuit.md
+ *   §A2). Cette page s'abonnait aux ~15 700 fiches du réseau pour en afficher
+ *   une : 15 679 lectures facturées à chaque ouverture faite après 30 minutes.
+ *   `subscribeToClient` écoute le seul document : une lecture, plus une par
+ *   modification — et la fiche suit toujours en direct une correction ou une
+ *   suppression faite par une boutique (TC-269-18, TC-269-19).
  *
- * ⚠ `subscribeToAllClients` PERD SES ERREURS SI ON LUI PASSE UNE FONCTION NUE.
- *   Il passe par `normalizeSubscriptionObserver`, qui cherche `callback.onError`
- *   — sans lui, un `permission-denied` ou une coupure finit dans `console.error`
- *   et rien n'atteint l'écran (même piège que `ClientsContext.jsx` et
- *   `PatronClients.jsx`). `clientsPret` ET `clientsErreur` sont donc DEUX états
- *   distincts : le premier dit que l'abonnement a répondu au moins une fois (que
- *   la liste soit vide ou pleine), le second qu'il a échoué. Les confondre
- *   referait exactement le bug que `PatronClients` a déjà dû corriger — un écran
- *   bloqué sur « Chargement… » pour toujours.
+ * ⚠ LA RÉPONSE EST RANGÉE AVEC L'IDENTIFIANT QU'ELLE CONCERNE. Si l'adresse
+ *   change sans démonter la page, `ficheRecue` repasse à faux jusqu'à la
+ *   réponse pour le nouvel identifiant : l'ancienne fiche ne s'affiche jamais
+ *   sous la nouvelle adresse.
+ *
+ * ⚠ L'ABONNEMENT PERD SES ERREURS SI ON LUI PASSE UNE FONCTION NUE. Il passe
+ *   par `normalizeSubscriptionObserver`, qui cherche `callback.onError` — sans
+ *   lui, un `permission-denied` ou une coupure finit dans `console.error` et
+ *   rien n'atteint l'écran (même piège que `ClientsContext.jsx` et
+ *   `PatronClients.jsx`). « Avoir une réponse » et « avoir échoué » restent
+ *   donc deux états distincts : les confondre referait le bug que
+ *   `PatronClients` a déjà dû corriger — un écran bloqué sur « Chargement… »
+ *   pour toujours.
  */
 function PatronHistoriqueClient() {
   const { clientId } = useParams()
-  const [clients, setClients] = useState([])
-  const [clientsPret, setClientsPret] = useState(false)
-  const [clientsErreur, setClientsErreur] = useState(null)
+  const [reponse, setReponse] = useState({ id: null, client: null, erreur: null })
 
   useEffect(() => {
-    const onClients = (data) => {
-      setClients(data)
-      setClientsPret(true)
-      setClientsErreur(null)
-    }
-    onClients.onError = (err) => {
-      setClientsErreur(err?.message || 'Erreur de chargement.')
-      setClientsPret(true)
-    }
-    return firestoreService.subscribeToAllClients(onClients)
-  }, [])
+    const onFiche = (fiche) => setReponse({ id: clientId, client: fiche, erreur: null })
+    onFiche.onError = (err) => setReponse({
+      id: clientId,
+      client: null,
+      erreur: err?.message || 'Erreur de chargement.',
+    })
+    return firestoreService.subscribeToClient(clientId, onFiche)
+  }, [clientId])
 
-  const client = useMemo(
-    () => clients.find((c) => c.id === clientId) ?? null,
-    [clients, clientId],
-  )
+  const ficheRecue = reponse.id === clientId
+  const ficheErreur = ficheRecue ? reponse.erreur : null
+  const client = ficheRecue ? reponse.client : null
 
   const { lignes, etat, erreur, encore, chargerPlus, reessayer } = useHistoriqueClient(clientId)
   const delai = useMemo(() => delaiMoyen(lignes), [lignes])
@@ -92,9 +88,9 @@ function PatronHistoriqueClient() {
 
   return (
     <div data-testid="patron-historique-client" className="flex h-full min-h-0 flex-col">
-      {clientsErreur ? (
+      {ficheErreur ? (
         <div className="px-4 py-6">
-          <ErrorState message={clientsErreur} />
+          <ErrorState message={ficheErreur} />
           <Link
             to="/admin"
             className="mt-4 inline-flex min-h-11 items-center text-brand-400 underline"
@@ -102,15 +98,13 @@ function PatronHistoriqueClient() {
             Retour au tableau
           </Link>
         </div>
-      ) : !clientsPret ? (
+      ) : !ficheRecue ? (
         <p className="px-6 py-12 text-center text-ink-muted">Chargement…</p>
       ) : !client ? (
-        // ⚠ `clientsPret` PLUTÔT QUE `clients.length > 0`. Avec le seul effectif,
-        //   une base réseau réellement vide aurait silencieusement affiché l'en-
-        //   tête générique « Client » au lieu de dire que la fiche est
-        //   introuvable. `clientsPret` est vrai dès que l'abonnement a répondu
-        //   une première fois, effectif nul ou pas — c'est la bonne question
-        //   ici, « a-t-on une réponse », pas « la base est-elle non vide ».
+        // ⚠ `ficheRecue` D'ABORD, `client` ENSUITE. Le premier dit « a-t-on une
+        //   réponse », le second « la fiche existe-t-elle ». Sans cet ordre,
+        //   l'attente de la première réponse se lirait « fiche introuvable »
+        //   (TC-269-06).
         <div className="px-6 py-12 text-center">
           <p className="mb-4 font-semibold text-ink">Fiche introuvable.</p>
           <p className="mb-6 text-sm text-ink-muted">
