@@ -13,9 +13,12 @@
  */
 
 import { initializeApp, getApps } from 'firebase-admin/app'
-import { getFirestore, FieldValue } from 'firebase-admin/firestore'
-import { onCall } from 'firebase-functions/v2/https'
+import { getFirestore, FieldValue, FieldPath } from 'firebase-admin/firestore'
+import { onCall, onRequest } from 'firebase-functions/v2/https'
+import { onDocumentWritten } from 'firebase-functions/v2/firestore'
+import { write } from 'firebase-functions/logger'
 import { wrapCallable } from './callable.js'
+import { buildSafeUnexpectedErrorLog, writeSafeErrorLog } from './logging.js'
 import { confirmDealerRequestHandler } from './dealerRequests/confirmDealerRequest.js'
 import { rejectDealerRequestHandler } from './dealerRequests/rejectDealerRequest.js'
 import { createDealerClosureHandler } from './closures/createDealerClosure.js'
@@ -42,6 +45,7 @@ import { rejectInternalDebtCompensationHandler } from './collaborations/rejectIn
 import { storeTransactionCommandHandler } from './storeTransactions/storeTransactionCommand.js'
 import { listOutstandingDraftsHandler } from './dealerMetrics/listOutstandingDrafts.js'
 import { listClientHistoryHandler } from './clients/listClientHistory.js'
+import { majAnnuaireClientsHandler, reconstruireAnnuaireClientsHandler } from './clients/annuaireClients.js'
 
 // Garde idempotente : évite "App named '[DEFAULT]' already exists" lors des imports
 // dans les tests d'intégration (TC-036) qui s'exécutent après TC-035 dans le même processus.
@@ -237,4 +241,47 @@ export const confirmInternalDebtCompensation = onCall(
 export const rejectInternalDebtCompensation = onCall(
   CALLABLE,
   wrapCallable(rejectInternalDebtCompensationHandler, deps)
+)
+
+// ── Annuaire des clients ────────────────────────────────────────────────────
+// La base clients en 64 tranches : un chargement complet coûte 64 lectures au
+// lieu de ~15 700 (docs/rester-dans-le-quota-gratuit.md §A1). Ce ne sont pas
+// des callables : le navigateur ne les appelle jamais.
+//
+// ⚠ us-central1, ET PAS europe-west1. La base est en nam5, et Eventarc n'accepte
+//   pas de multi-région pour un déclencheur Firestore : nam5 se déclenche
+//   depuis us-central1. Ailleurs, la function ne recevrait aucun événement.
+//   Le quota vCPU de cette région est distinct de celui d'europe-west1.
+
+const ANNUAIRE = Object.freeze({ region: 'us-central1', maxInstances: 3 })
+const depsAnnuaire = { db, FieldValue, FieldPath }
+
+export const majAnnuaireClients = onDocumentWritten(
+  { ...ANNUAIRE, document: 'globalClients/{clientId}' },
+  (event) => majAnnuaireClientsHandler(event, depsAnnuaire)
+)
+
+// Le premier remplissage, puis toute réparation. Une décision humaine :
+//   gcloud functions call reconstruireAnnuaireClients --gen2 --region=us-central1
+// ⚠ `invoker: 'private'` : seuls les comptes IAM du projet peuvent l'appeler.
+//   Publique, n'importe qui la déclencherait en boucle — ~15 700 lectures
+//   facturées par appel (TC-036 [WRA-11]).
+export const reconstruireAnnuaireClients = onRequest(
+  { ...ANNUAIRE, maxInstances: 1, invoker: 'private', timeoutSeconds: 540, memory: '512MiB' },
+  async (req, res) => {
+    if (req.method !== 'POST') {
+      res.status(405).json({ erreur: 'POST attendu.' })
+      return
+    }
+    try {
+      res.json(await reconstruireAnnuaireClientsHandler(depsAnnuaire))
+    } catch (err) {
+      try {
+        writeSafeErrorLog(write, buildSafeUnexpectedErrorLog({ action: 'reconstruireAnnuaireClients', error: err }))
+      } catch {
+        // Le journal ne doit jamais remplacer la réponse.
+      }
+      res.status(500).json({ erreur: 'La reconstruction a échoué.' })
+    }
+  }
 )

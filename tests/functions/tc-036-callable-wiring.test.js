@@ -124,6 +124,10 @@ describe('TC-036-WRA — exports callable de index.js', () => {
       'declareInternalDebtCompensation',
       'confirmInternalDebtCompensation',
       'rejectInternalDebtCompensation',
+      // Annuaire des clients (docs/rester-dans-le-quota-gratuit.md §A1) — pas
+      // des callables : un déclencheur Firestore et une route réservée à l'IAM.
+      'majAnnuaireClients',
+      'reconstruireAnnuaireClients',
     ])
     for (const key of Object.keys(indexModule)) {
       expect(
@@ -152,10 +156,38 @@ describe('TC-036-WRA — exports callable de index.js', () => {
     // Formulation générale plutôt qu'un test par export : un callable ajouté plus
     // tard dans une autre région (latence depuis l'Afrique de l'Ouest) échoue ici
     // sans qu'il faille penser à écrire son test.
-    for (const [name, fn] of Object.entries(indexModule)) {
+    //
+    // ⚠ LES CALLABLES, PAS TOUS LES EXPORTS. La règle vient de la latence vue
+    //   par le navigateur. Les deux functions de l'annuaire ne sont jamais
+    //   appelées par lui, et le déclencheur DOIT suivre la base (WRA-10). Un
+    //   callable reste repéré par `callableTrigger` : en ajouter un hors
+    //   d'europe-west1 échoue toujours ici.
+    const callables = Object.entries(indexModule).filter(([, fn]) => fn.__endpoint?.callableTrigger)
+    expect(callables.length).toBeGreaterThanOrEqual(26)
+    for (const [name, fn] of callables) {
       expect(Array.isArray(fn.__endpoint?.region), `${name} : région absente`).toBe(true)
       expect(fn.__endpoint.region, `${name} : mauvaise région`).toContain('europe-west1')
     }
+  })
+
+  it('[WRA-10] l’annuaire tourne en us-central1, la région que la base nam5 impose', () => {
+    // Eventarc n'accepte pas de multi-région pour un déclencheur Firestore : une
+    // base nam5 se déclenche depuis us-central1. Une function dans une autre
+    // région ne recevrait aucun événement. La reconstruction lit ~15 700 fiches :
+    // elle tourne au plus près de la base, pour la même raison.
+    const declencheur = indexModule.majAnnuaireClients.__endpoint
+    expect(declencheur.region).toEqual(['us-central1'])
+    expect(declencheur.eventTrigger?.eventType).toBe('google.cloud.firestore.document.v1.written')
+    expect(declencheur.eventTrigger?.eventFilterPathPatterns?.document).toBe('globalClients/{clientId}')
+    expect(indexModule.reconstruireAnnuaireClients.__endpoint.region).toEqual(['us-central1'])
+  })
+
+  it('[WRA-11] la reconstruction est réservée aux comptes du projet, jamais publique', () => {
+    // Elle lit toute la base : ouverte au public, n'importe qui pourrait la
+    // déclencher en boucle et faire payer ~15 700 lectures par appel.
+    const route = indexModule.reconstruireAnnuaireClients.__endpoint
+    expect(route.httpsTrigger).toBeDefined()
+    expect(route.httpsTrigger.invoker).toEqual(['private'])
   })
 
   it('[WRA-09] TOUS les callables plafonnent leurs instances', () => {

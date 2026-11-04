@@ -134,6 +134,52 @@ déclencheur — c'est une raison de plus pour §C1.
    et à faire lancer par le client.
 5. Tester à deux boutiques au moins (`AGENTS.md`).
 
+**Côté serveur — fait le 2026-11-04 (A1a), pas encore déployé.**
+
+- `functions/src/clients/annuaireClients.js` contient le découpage en tranches,
+  le contenu d'une entrée, le déclencheur `majAnnuaireClients` et la
+  reconstruction `reconstruireAnnuaireClients`. Les deux tournent en
+  `us-central1`.
+- Ce qui a changé par rapport au plan ci-dessus :
+  - **Pas de transaction dans le déclencheur.** Il relit la fiche, puis remplace
+    l'entrée `entrees.<id>` d'un seul `set` avec `mergeFields` : 1 lecture et 1
+    écriture, quel que soit l'ordre d'arrivée des événements.
+  - **Une entrée porte 17 champs**, vides compris : tous ceux du formulaire, de
+    l'export, du tri et du code agent. TC-340 lit ces champs dans le code source
+    et échoue si l'un manque.
+  - **Le document `_etat` est écrit en dernier** par la reconstruction. Le
+    navigateur ne lira l'annuaire que lorsqu'il dit `complet` : avant, il garde
+    l'écoute actuelle de `globalClients`.
+  - **La reconstruction est une route HTTP privée** (`invoker: 'private'`),
+    appelable seulement par un compte IAM du projet. Aucun écran n'y donne accès,
+    et aucun script du dépôt ne vise la production.
+- Les règles ouvrent la lecture exactement comme pour `globalClients` et
+  interdisent toute écriture depuis le navigateur. Le champ `entrees` est
+  exempté d'index dans `firestore.indexes.json`.
+- Tests : TC-340 (module pur), TC-341 (handlers sur émulateur), TC-342 (règles, à
+  deux boutiques), TC-036 [WRA-08, 10, 11].
+
+**Déploiement — décision et exécution humaines, dans cet ordre :**
+
+```powershell
+firebase use production
+firebase deploy --only "firestore:rules,firestore:indexes"
+$env:FUNCTIONS_DISCOVERY_TIMEOUT = 120
+firebase deploy --only "functions:majAnnuaireClients,functions:reconstruireAnnuaireClients"
+```
+
+Puis, **un soir où personne ne saisit**, dans Cloud Shell :
+
+```bash
+curl -X POST -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
+  https://us-central1-c2egf-b0b5a.cloudfunctions.net/reconstruireAnnuaireClients
+```
+
+La réponse attendue est `{"fiches":15679,"tranches":64}` (au nombre de fiches
+près). Le remplissage coûte ~15 700 lectures, une seule fois. Tant que le front
+(lot A1b) n'est pas déployé, l'application n'en lit rien : ce déploiement est
+sans effet visible.
+
 **Alternatives, si l'annuaire est refusé :**
 
 - **Recherche côté serveur.** Préfixe sur un nom normalisé, égalité sur les codes,

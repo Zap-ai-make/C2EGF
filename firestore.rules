@@ -385,6 +385,22 @@ service cloud.firestore {
         resource.data.registeredStoreId == profile().storeId;
     }
 
+    // L'ANNUAIRE DES CLIENTS : les mêmes fiches que `globalClients`, rangées en
+    // 64 documents pour qu'un chargement coûte 64 lectures et non ~15 700
+    // (docs/rester-dans-le-quota-gratuit.md §A1).
+    //
+    // ⚠ LA LECTURE EST EXACTEMENT CELLE DE `globalClients`, NI PLUS NI MOINS.
+    //   L'annuaire ne montre rien que la base ne montrait déjà ; l'élargir ici
+    //   ouvrirait les fiches par un chemin de traverse.
+    // ⚠ PERSONNE N'Y ÉCRIT DEPUIS LE NAVIGATEUR. Le déclencheur
+    //   `majAnnuaireClients` et la reconstruction passent par l'Admin SDK. Une
+    //   écriture cliente pourrait y glisser une fiche que `globalClients`
+    //   refuserait, ou effacer celles d'une autre boutique.
+    match /annuaireClients/{tranche} {
+      allow read: if hasProfile() || isSystemManager();
+      allow write: if false;
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Demandes Dealer
     // update/delete réservés aux Cloud Functions (Admin SDK)

@@ -255,6 +255,11 @@
   ],
   "fieldOverrides": [
     {
+      "collectionGroup": "annuaireClients",
+      "fieldPath": "entrees",
+      "indexes": []
+    },
+    {
       "collectionGroup": "history",
       "fieldPath": "createdAt",
       "indexes": [
