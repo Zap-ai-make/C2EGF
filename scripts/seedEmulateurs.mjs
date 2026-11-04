@@ -132,6 +132,40 @@ async function clients(boutiques) {
   }))
 }
 
+/**
+ * Remplit l'annuaire des clients, comme on le fera une fois en production
+ * (docs/rester-dans-le-quota-gratuit.md §A1). Sans lui, l'application lit
+ * `globalClients` en repli : elle marche, mais le développement ne passerait
+ * plus par le chemin de la production.
+ *
+ * ⚠ VIA L'ÉMULATEUR FUNCTIONS, PAS EN RECOPIANT LE HANDLER. C'est la même
+ *   route que la production, et elle n'existe que si les functions sont
+ *   chargées : sans elles, on le dit au lieu d'échouer.
+ *
+ * ⚠ ON ATTEND LES FUNCTIONS. `npm run emulateurs` lance ce script dès
+ *   qu'Auth et Firestore répondent ; l'émulateur Functions met encore une
+ *   dizaine de secondes à charger ses définitions, et répond 404 d'ici là.
+ */
+async function reconstruireAnnuaire() {
+  const route = `http://127.0.0.1:5001/${projectId}/us-central1/reconstruireAnnuaireClients`
+  let derniere = ''
+  for (let seconde = 0; seconde < 90; seconde += 1) {
+    try {
+      const reponse = await fetch(route, { method: 'POST' })
+      if (reponse.ok) {
+        const { fiches } = await reponse.json()
+        return `Annuaire des clients rempli : ${fiches} fiches.`
+      }
+      derniere = `HTTP ${reponse.status}`
+      if (reponse.status !== 404) break
+    } catch (err) {
+      derniere = err.message
+    }
+    await new Promise((resoudre) => setTimeout(resoudre, 1000))
+  }
+  return `Annuaire des clients NON rempli (${derniere}) : l'application lira globalClients en repli.`
+}
+
 try {
   const comptes = [
     await profilGlobal({ email: 'patron@c2egf.test', nom: 'Patron (essai)', role: 'system_manager' }),
@@ -142,8 +176,10 @@ try {
     await boutique({ id: 'boutique-essai-2', nom: "Boutique d'essai 2", email: 'boutique2@c2egf.test', stock: 250000, liquidite: 150000 }),
   ]
   await clients(boutiques)
+  const annuaire = await reconstruireAnnuaire()
 
   console.log(`\nJeu d'essai posé sur ${projectId} (émulateurs).`)
+  console.log(annuaire)
   console.log(`Mot de passe de tous les comptes : ${MOT_DE_PASSE}\n`)
   for (const c of [...comptes, ...boutiques]) {
     console.log(`  ${c.role.padEnd(15)} ${c.email}${c.id ? `  → ${c.id}` : ''}`)

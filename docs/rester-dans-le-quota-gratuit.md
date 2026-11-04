@@ -180,6 +180,31 @@ près). Le remplissage coûte ~15 700 lectures, une seule fois. Tant que le fron
 (lot A1b) n'est pas déployé, l'application n'en lit rien : ce déploiement est
 sans effet visible.
 
+**Côté navigateur — fait le 2026-11-04 (A1b), pas encore déployé.**
+
+- `subscribeToClients` (boutiques) et `subscribeToAllClients` (patron) gardent
+  leur nom et leur contrat : des fiches `{ id, ...champs }`, les erreurs vers
+  `onError`. Les écrans n'ont pas changé. Seule la source change
+  (`src/services/annuaireClients.js`) :
+  - **l'annuaire**, dès que `_etat` dit `complet` ;
+  - **sinon**, ou si sa lecture est refusée (règles pas encore déployées),
+    **l'écoute de `globalClients`** en repli. Celle-ci se ferme dès que
+    l'annuaire devient complet.
+- **Le déploiement est donc sans danger dans n'importe quel ordre.** L'ordre
+  économe reste : règles, functions, remplissage, puis front (Vercel). Un front
+  déployé trop tôt fonctionne, mais lit `globalClients` en repli, et paie donc
+  comme aujourd'hui.
+- Le jeu d'essai des émulateurs remplit l'annuaire par la même route que la
+  production : le développement passe par le même chemin.
+- Vérifié sur les émulateurs :
+  - une boutique et le patron voient leurs fiches par l'annuaire seul ;
+  - une fiche ajoutée par une autre boutique apparaît d'elle-même ;
+  - un `_etat` retiré fait basculer sur le repli sans perdre une ligne.
+- Tests : TC-343 (bascule), TC-265 (12 à 15 pour l'annuaire ; 02 à 04
+  réécrits pour le chemin de repli).
+- **Reste à mesurer après déploiement :** les lectures quotidiennes dans la
+  console, avant et après.
+
 **Alternatives, si l'annuaire est refusé :**
 
 - **Recherche côté serveur.** Préfixe sur un nom normalisé, égalité sur les codes,
@@ -472,7 +497,7 @@ sont une décision humaine.
 |---|---|---|---|
 | 1 | E1 — retour aux émulateurs — **fait le 2026-11-04** | immédiat | nul |
 | 2 | A2 — une seule fiche écoutée dans `PatronHistoriqueClient` — **fait le 2026-11-04** | 15 678 lectures par visite | faible |
-| 3 | A1 — annuaire en tranches | ~98 % des lectures | moyen : déclencheur, règles, premier remplissage |
+| 3 | A1 — annuaire en tranches — **code fait le 2026-11-04, déploiement à faire** | ~98 % des lectures | moyen : déclencheur, règles, premier remplissage |
 | 4 | A3 — historique | ~150 lectures par ouverture | moyen : trois bugs déjà corrigés à ne pas rouvrir |
 | 5 | C1 + C2 — région et `getAll` | temps facturé ÷ 3 à 5 | moyen : migration de région |
 | 6 | C3 — CPU | vCPU-s ÷ ~6 | à mesurer : démarrage à froid, concurrence |

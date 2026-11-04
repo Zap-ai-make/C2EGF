@@ -48,6 +48,7 @@ import { DraftService } from './draftService.js'
 import { HistoryService } from './historyService.js'
 import { BalanceService } from './balanceService.js'
 import { normalizeSubscriptionObserver, notifySubscriptionError } from './subscriptionObserver.js'
+import { COLLECTION_ANNUAIRE, ecouterAvecRepli, lireAnnuaire } from './annuaireClients.js'
 
 // Service Firestore modulaire avec cache, gestion d'erreurs et optimisations
 
@@ -972,27 +973,59 @@ export class FirestoreService {
     return this.deleteDocument(FIRESTORE_CONFIG.COLLECTIONS.CLIENTS, clientId)
   }
 
+  /**
+   * La base clients, pour l'espace boutique.
+   *
+   * ⚠ PAR L'ANNUAIRE QUAND IL EST COMPLET, PAR `globalClients` SINON
+   *   (docs/rester-dans-le-quota-gratuit.md §A1). L'annuaire range les mêmes
+   *   fiches en 64 documents : 64 lectures au lieu de ~15 700 à chaque
+   *   chargement. Le contrat ne change pas — des fiches `{ id, ...champs }`,
+   *   les erreurs vers `onError` — et le repli garde une liste entière tant que
+   *   l'annuaire n'est pas rempli ou pas lisible. Voir `annuaireClients.js`.
+   */
   subscribeToClients(callback) {
-    // Version simplifiée qui bypasse le système complexe
     this.requireActiveStore()
-    const collectionRef = this.collectionRef(FIRESTORE_CONFIG.COLLECTIONS.CLIENTS)
+    return ecouterAvecRepli({
+      ecouterAnnuaire: (cb) => this._ecouterAnnuaireClients(cb),
+      ecouterRepli: (cb) => this._ecouterGlobalClients(cb, 'Clients'),
+    }, normalizeSubscriptionObserver(callback))
+  }
 
+  /** L'annuaire des clients, lu par `lireAnnuaire` : `{ complet, clients }`. */
+  _ecouterAnnuaireClients(callback) {
     const observer = normalizeSubscriptionObserver(callback)
-    return onSnapshot(collectionRef,
+    return onSnapshot(collection(db, COLLECTION_ANNUAIRE),
       (snapshot) => {
         try {
-          const documents = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }))
-
-          observer.onNext(documents)
+          observer.onNext(lireAnnuaire(snapshot.docs))
         } catch (error) {
-          notifySubscriptionError(observer, error, 'Clients snapshot processing error')
+          notifySubscriptionError(observer, error, 'Annuaire snapshot processing error')
         }
       },
       (error) => {
-        notifySubscriptionError(observer, error, 'Clients subscription error')
+        notifySubscriptionError(observer, error, 'Annuaire subscription error')
+      }
+    )
+  }
+
+  /**
+   * `globalClients` en entier — ~15 700 lectures. Ce n'est plus que le REPLI de
+   * l'annuaire : ne pas l'appeler directement depuis un écran.
+   */
+  _ecouterGlobalClients(callback, libelle) {
+    const collectionRef = this.collectionRef(FIRESTORE_CONFIG.COLLECTIONS.CLIENTS)
+    const observer = normalizeSubscriptionObserver(callback)
+
+    return onSnapshot(collectionRef,
+      (snapshot) => {
+        try {
+          observer.onNext(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
+        } catch (error) {
+          notifySubscriptionError(observer, error, `${libelle} snapshot processing error`)
+        }
+      },
+      (error) => {
+        notifySubscriptionError(observer, error, `${libelle} subscription error`)
       }
     )
   }
@@ -1018,23 +1051,16 @@ export class FirestoreService {
    *   porte que `this.activeStore`. L'autorisation est tenue par le `RoleGuard`
    *   de la route et par `firestore.rules`, et aucun des deux n'est
    *   contournable depuis le navigateur.
+   *
+   * ⚠ MÊME SOURCE QUE `subscribeToClients` : l'annuaire, `globalClients` en
+   *   repli. Les règles de l'annuaire ouvrent la lecture au gérant système
+   *   comme celles de `globalClients`.
    */
   subscribeToAllClients(callback) {
-    const collectionRef = this.collectionRef(FIRESTORE_CONFIG.COLLECTIONS.CLIENTS)
-    const observer = normalizeSubscriptionObserver(callback)
-
-    return onSnapshot(collectionRef,
-      (snapshot) => {
-        try {
-          observer.onNext(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
-        } catch (error) {
-          notifySubscriptionError(observer, error, 'All clients snapshot processing error')
-        }
-      },
-      (error) => {
-        notifySubscriptionError(observer, error, 'All clients subscription error')
-      }
-    )
+    return ecouterAvecRepli({
+      ecouterAnnuaire: (cb) => this._ecouterAnnuaireClients(cb),
+      ecouterRepli: (cb) => this._ecouterGlobalClients(cb, 'All clients'),
+    }, normalizeSubscriptionObserver(callback))
   }
 
   /**

@@ -43,23 +43,82 @@ describe('TC-265 — le patron s’abonne sans boutique active', () => {
     expect(() => firestoreService.subscribeToAllClients(vi.fn())).not.toThrow()
   })
 
-  it('[TC-265-02] il vise la racine `globalClients`', () => {
+  // ⚠ 02 À 04 PASSENT PAR LE REPLI DEPUIS LE LOT §A1 (docs/rester-dans-le-
+  //   quota-gratuit.md). L'abonnement écoute d'abord l'annuaire ; `globalClients`
+  //   ne s'ouvre que si l'annuaire n'est pas complet. Ces trois tests figent ce
+  //   chemin-là, celui que tout projet sans annuaire rempli emprunte encore.
+  //   Le chemin par l'annuaire est couvert par 12 à 15 plus bas.
+  it('[TC-265-02] sans annuaire complet, il vise la racine `globalClients`', () => {
     firestoreService.subscribeToAllClients(vi.fn())
+    annuaireRepond([])
     expect(collection).toHaveBeenCalledWith(expect.anything(), 'globalClients')
   })
 
-  it('[TC-265-03] il rend la fonction de désabonnement', () => {
-    const stop = vi.fn()
-    onSnapshot.mockReturnValueOnce(stop)
-    expect(firestoreService.subscribeToAllClients(vi.fn())).toBe(stop)
+  it('[TC-265-03] il rend une fonction qui ferme toutes ses écoutes', () => {
+    const fermetures = [vi.fn(), vi.fn()]
+    onSnapshot.mockReturnValueOnce(fermetures[0]).mockReturnValueOnce(fermetures[1])
+    const stop = firestoreService.subscribeToAllClients(vi.fn())
+    annuaireRepond([])
+    stop()
+    expect(fermetures[0]).toHaveBeenCalled()
+    expect(fermetures[1]).toHaveBeenCalled()
   })
 
   it('[TC-265-04] les documents arrivent avec leur identifiant', () => {
     const recu = vi.fn()
     firestoreService.subscribeToAllClients(recu)
-    const [, surSuivant] = onSnapshot.mock.calls[0]
+    annuaireRepond([])
+    const [, surSuivant] = onSnapshot.mock.calls[1]
     surSuivant({ docs: [{ id: 'c1', data: () => ({ nom: 'OUEDRAOGO' }) }] })
     expect(recu).toHaveBeenCalledWith([{ id: 'c1', nom: 'OUEDRAOGO' }])
+  })
+})
+
+/** Fait répondre l'annuaire — toujours la PREMIÈRE écoute ouverte. */
+function annuaireRepond(docs) {
+  const [ref, surSuivant] = onSnapshot.mock.calls[0]
+  expect(ref).toEqual({ path: 'annuaireClients' })
+  surSuivant({ docs })
+}
+
+const tranche = (id, entrees) => ({ id, data: () => ({ entrees }) })
+const ETAT_COMPLET = { id: '_etat', data: () => ({ complet: true, tranches: 64, fiches: 2 }) }
+
+describe('TC-265 — par l’annuaire quand il est complet (§A1)', () => {
+  it('[TC-265-12] l’abonnement écoute l’annuaire avant tout', () => {
+    firestoreService.subscribeToAllClients(vi.fn())
+    expect(onSnapshot).toHaveBeenCalledTimes(1)
+    expect(collection).toHaveBeenCalledWith(expect.anything(), 'annuaireClients')
+    expect(collection).not.toHaveBeenCalledWith(expect.anything(), 'globalClients')
+  })
+
+  it('[TC-265-13] annuaire complet : les fiches en viennent, `globalClients` n’est jamais écouté', () => {
+    const recu = vi.fn()
+    firestoreService.subscribeToAllClients(recu)
+    annuaireRepond([ETAT_COMPLET, tranche('t00', { c1: { nom: 'OUEDRAOGO' } }), tranche('t01', { c2: { nom: 'KABORE' } })])
+    expect(recu).toHaveBeenCalledWith([{ id: 'c1', nom: 'OUEDRAOGO' }, { id: 'c2', nom: 'KABORE' }])
+    expect(onSnapshot).toHaveBeenCalledTimes(1)
+  })
+
+  it('[TC-265-14] le chemin boutique passe par le même annuaire, précondition intacte', () => {
+    firestoreService.setActiveStore({ id: 's1', name: 'FADA' })
+    const recu = vi.fn()
+    firestoreService.subscribeToClients(recu)
+    annuaireRepond([ETAT_COMPLET, tranche('t00', { c1: { nom: 'OUEDRAOGO' } })])
+    expect(recu).toHaveBeenCalledWith([{ id: 'c1', nom: 'OUEDRAOGO' }])
+    expect(onSnapshot).toHaveBeenCalledTimes(1)
+  })
+
+  it('[TC-265-15] une erreur de l’annuaire n’atteint pas l’écran : le repli s’ouvre', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const recu = vi.fn()
+    recu.onError = vi.fn()
+    firestoreService.subscribeToAllClients(recu)
+    const [, , surErreur] = onSnapshot.mock.calls[0]
+    surErreur(Object.assign(new Error('refusé'), { code: 'permission-denied' }))
+    expect(recu.onError).not.toHaveBeenCalled()
+    expect(collection).toHaveBeenCalledWith(expect.anything(), 'globalClients')
+    console.warn.mockRestore()
   })
 })
 
