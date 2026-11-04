@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "dev:local": "vite --host 127.0.0.1 --port 5173",
+    "emulateurs": "node scripts/emulateursDev.mjs",
+    "emulateurs:seed": "node scripts/seedEmulateurs.mjs",
     "build": "vite build && node scripts/compatCss.mjs",
     "lint": "eslint .",
     "check:generated": "node scripts/generate-rules.mjs --client c2egf_burkina --check && node scripts/generate-functions-config.mjs --client c2egf_burkina --check",
