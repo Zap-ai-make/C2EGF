@@ -178,8 +178,18 @@ curl -X POST -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
   https://us-central1-c2egf-b0b5a.cloudfunctions.net/reconstruireAnnuaireClients
 ```
 
+> **Cloud Shell, et non le PowerShell du poste.** Cloud Shell est le terminal
+> du navigateur, ouvert depuis la console Google Cloud (icône `>_` en haut à
+> droite, ou `https://console.cloud.google.com/?project=c2egf-b0b5a&cloudshell=true`).
+> Il est en bash, déjà connecté au compte, et `gcloud` y est installé. Dans
+> PowerShell, la commande échoue de trois façons à la fois : `gcloud` n'est pas
+> installé sur le poste, `curl` y est un alias d'`Invoke-WebRequest` qui
+> refuse `-H "…"`, et la barre oblique inverse n'y continue pas la ligne.
+
 La réponse attendue est `{"fiches":15679,"tranches":64}` (au nombre de fiches
-près). Le remplissage coûte ~15 700 lectures, une seule fois. Tant que le front
+près). Un `404` veut dire que la function n'est pas déployée : il faut relancer
+le déploiement. Un `403` veut dire que le compte de Cloud Shell n'a pas le droit
+d'appeler la function. Le remplissage coûte ~15 700 lectures, une seule fois. Tant que le front
 (lot A1b) n'est pas déployé, l'application n'en lit rien : ce déploiement est
 sans effet visible.
 
