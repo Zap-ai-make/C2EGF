@@ -4,7 +4,7 @@
  * Couvre :
  *   §SVC-CF  confirmDealerRequestCommand (validation, callable, payload, erreurs)
  *   §SVC-RJ  rejectDealerRequestCommand  (validation, callable, payload, erreurs)
- *   §SVC-SEC sécurité (aucune écriture Firestore directe, région europe-west1)
+ *   §SVC-SEC sécurité (aucune écriture Firestore directe, région us-central1)
  *   §SVC-MAP mapCallableError (toutes les branches de mapping)
  */
 

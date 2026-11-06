@@ -102,7 +102,7 @@ beforeAll(() => {
 
   clientAuth      = getClientAuth(clientApp)
   const clientFs  = getClientFirestore(clientApp)
-  clientFunctions = getFunctions(clientApp, 'europe-west1')
+  clientFunctions = getFunctions(clientApp, 'us-central1')
 
   connectAuthEmulator(clientAuth, `http://${AUTH_HOST}`, { disableWarnings: true })
   connectFirestoreEmulator(clientFs, 'localhost', 8080)

@@ -478,6 +478,21 @@ et exécution humaines.**
   traversées de l'Atlantique.
 - **La politique de sécurité du front** autorise `https://*.cloudfunctions.net`
   (`vercel.json`) : rien à changer.
+- **Un écran contournait la configuration commune.** `StoreAdminClosures.jsx` créait sa
+  propre instance, `getFunctions(undefined, 'europe-west1')`. Au temps 3, confirmer ou
+  rejeter une clôture aurait échoué. Sur les émulateurs, cette instance n'était même pas
+  branchée sur l'émulateur. L'écran passe maintenant par `functions` de
+  `src/config/firebase.js` (TC-365). Plus aucun appel ne contourne cette instance.
+
+**Vérifié** sur les émulateurs, qui servent les deux régions :
+- TC-036 [WRA-08] : les 26 callables déclarent les deux régions ;
+- tests de bout en bout (TC-037, TC-045, TC-061) par `us-central1` : 40 cas ;
+- l'essai navigateur du lot H, rejoué : 26 contrôles sur 26, et les 9 appels de
+  `storeTransactionCommand` passent tous par `us-central1`.
+
+Non vérifiable avant le déploiement : la création réelle des 26 services en
+`us-central1`, et le temps facturé par appel. À relever dans la console une semaine
+après (Cloud Run, temps de requête), avant et après.
 
 ### C2. Grouper les lectures d'une transaction
 
@@ -625,7 +640,7 @@ sont une décision humaine.
 | 2 | A2 — une seule fiche écoutée dans `PatronHistoriqueClient` — **fait le 2026-11-04** | 15 678 lectures par visite | faible |
 | 3 | A1 — annuaire en tranches — **serveur en ligne et rempli le 2026-11-06, front à déployer** | ~98 % des lectures | moyen : déclencheur, règles, premier remplissage |
 | 4 | A3 — historique — **A3a fait le 2026-11-06** (première page sans `getDocs`) ; A3b (fenêtre à ~25) à décider | 101 lectures par ouverture (A3a) ; ~75 de plus à froid (A3b) | moyen : trois bugs déjà corrigés à ne pas rouvrir |
-| 5 | C1 — région — **temps 1 et 2 préparés le 2026-11-06** ; C2 écarté (sans gain après C1) | temps facturé ÷ 3 à 5 | moyen : migration de région |
+| 5 | C1 — région — **temps 1 et 2 prêts le 2026-11-06, à déployer puis pousser** ; C2 écarté (sans gain après C1) | temps facturé ÷ 3 à 5 | moyen : migration de région |
 | 6 | C3 — CPU | vCPU-s ÷ ~6 | à mesurer : démarrage à froid, concurrence |
 | 7 | D1 — ordre du prompt | jetons d'entrée | faible |
 | 8 | B2, C5, A4 | stockage, images, dealer | faible |

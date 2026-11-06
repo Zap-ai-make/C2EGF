@@ -6,7 +6,7 @@
  * des soldes). Lectures : abonnements temps réel filtrés par rôle (les règles
  * Firestore cloisonnent : boutique voit ses transferts, dealer voit les siens).
  *
- * Région Functions : europe-west1 (config dans src/config/firebase.js).
+ * Région Functions : us-central1 (config dans src/config/firebase.js).
  */
 
 import { httpsCallable } from 'firebase/functions'

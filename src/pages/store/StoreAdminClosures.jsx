@@ -1,5 +1,8 @@
 import { useState, useCallback, useEffect, useRef, useId } from 'react'
-import { getFunctions, httpsCallable } from 'firebase/functions'
+import { httpsCallable } from 'firebase/functions'
+// L'instance commune : elle porte la région (lot C1) et le branchement sur les
+// émulateurs. Une instance créée ici échappait aux deux (TC-365).
+import { functions } from '../../config/firebase'
 import { useAuth } from '../../context/AuthContext.jsx'
 import PageHeader from '../../components/ui/PageHeader'
 import ErrorState from '../../components/ui/ErrorState'
@@ -47,7 +50,7 @@ function RejectModal({ closureId, onSuccess, onClose }) {
     setSubmitting(true)
     setErr(null)
     try {
-      const fn = httpsCallable(getFunctions(undefined, 'europe-west1'), 'rejectDealerClosure')
+      const fn = httpsCallable(functions, 'rejectDealerClosure')
       await fn({ closureId, rejectionReason: reason.trim() })
       onSuccess()
     } catch (e) {
@@ -142,7 +145,7 @@ function StoreAdminClosures() {
     setActionLoading(closureId)
     setActionError(null)
     try {
-      const fn = httpsCallable(getFunctions(undefined, 'europe-west1'), 'confirmDealerClosure')
+      const fn = httpsCallable(functions, 'confirmDealerClosure')
       await fn({ closureId })
       loadClosures(true)
     } catch (err) {

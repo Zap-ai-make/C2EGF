@@ -6,7 +6,7 @@
  * deleteDoc, writeBatch, runTransaction, increment).
  * Le backend reste l'autorité finale sur toutes les validations.
  *
- * Région Functions : europe-west1 (initialisée dans src/config/firebase.js).
+ * Région Functions : us-central1 (initialisée dans src/config/firebase.js).
  *
  * Erreurs retournées :
  *   Les erreurs Firebase callable sont converties en Error avec :

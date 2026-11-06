@@ -106,8 +106,10 @@ try {
     db = getFirestore(app)
   }
 
-  // Init Functions — région europe-west1 (proximité Afrique de l'Ouest)
-  functions = getFunctions(app, 'europe-west1')
+  // Init Functions — us-central1, à côté de la base nam5 (lot C1,
+  // docs/rester-dans-le-quota-gratuit.md §C1). ⚠ Ne pousser qu'une fois les
+  // callables déployés dans cette région : sinon chaque appel échoue.
+  functions = getFunctions(app, 'us-central1')
 
   if (runtime.useEmulators) {
     connectAuthEmulator(auth, `http://${runtime.hosts.auth}:${runtime.ports.auth}`, { disableWarnings: true })

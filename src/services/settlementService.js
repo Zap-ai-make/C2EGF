@@ -2,7 +2,7 @@
  * settlementService.js — Appels aux Cloud Functions de règlement.
  *
  * Couche cliente mince : délègue à `addTransactionPayment` / `addTransactionRefund`
- * (europe-west1). La clé d'idempotence DOIT être fournie par l'appelant.
+ * (us-central1, lot C1). La clé d'idempotence DOIT être fournie par l'appelant.
  *
  * Pattern idempotence client :
  *   L'appelant génère une clé stable par action utilisateur (voir TransactionTable.jsx).
