@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { getTransactionStyles, getAvailableActions, isDraftSettling, parsefrenchDate } from '../utils/helpers.js'
 import { STORAGE_KEYS } from '../constants/index.js'
 import { FIRESTORE_CONFIG } from '../constants/firestoreConstants.js'
@@ -6,7 +6,8 @@ import { firestoreService } from '../services/firestore'
 import { addTransactionPayment, addTransactionRefund } from '../services/settlementService'
 import { AuthContext } from './AuthContext'
 import { EnvoisContext } from './envoisContexte.js'
-import { ENVOYEE, REGLEMENT, REMBOURSEMENT, SAISIE } from '../services/fileEnvoi.js'
+import { ENVOYEE, REFUSEE, REGLEMENT, REMBOURSEMENT, SAISIE } from '../services/fileEnvoi.js'
+import { fusionnerEnAttente, lignesEnAttente } from '../utils/envoisEnAttente.js'
 import {
   businessDateKey,
   getBusinessDayBounds,
@@ -376,11 +377,36 @@ export const TransactionsProvider = ({ children }) => {
     publishHistory()
   }, [publishHistory])
 
+  // Ce que la file attend encore (lot G3c) : une saisie faite hors ligne
+  // apparaît dans les non terminées sous l'identifiant que le serveur lui
+  // donnera, et un règlement en attente fait déjà baisser le reste dû. Les
+  // listes exposées sont celles-ci ; l'état interne reste celui du serveur.
+  const operationsEnAttente = envois?.operations
+  const enAttente = useMemo(() => lignesEnAttente(operationsEnAttente ?? []), [operationsEnAttente])
+  const pendingAffichees = useMemo(
+    () => fusionnerEnAttente(pendingTransactions, enAttente.nonTerminees, enAttente.reglements, sortDraftsDesc),
+    [pendingTransactions, enAttente],
+  )
+  const completedAffichees = useMemo(
+    () => fusionnerEnAttente(completedTransactions, enAttente.validees, new Map(), sortHistoryDesc),
+    [completedTransactions, enAttente],
+  )
+  // Un règlement emporte la nature de sa ligne (dépôt, retrait) : les soldes
+  // provisoires en dépendent, et la ligne peut n'exister que dans la file.
+  const lignesAfficheesRef = useRef(pendingAffichees)
+  lignesAfficheesRef.current = pendingAffichees
+  const typeDeLigne = (draftId) => lignesAfficheesRef.current.find((t) => t.id === draftId)?.type
+
   const addTransaction = useCallback(async (transactionData) => {
     try {
       setError(null)
+      // `enAttente` marque une fiche pas encore envoyée (lot G3c). C'est un état
+      // de cet appareil : le serveur recopie le client tel quel dans la ligne, et
+      // l'historique porterait cette marque pour toujours.
+      const { enAttente: _marqueLocale, ...client } = transactionData.client ?? {}
       const transaction = {
         ...transactionData,
+        ...(transactionData.client ? { client } : {}),
         statut: transactionData.statut || 'Non Terminées',
         storeId: userProfile?.storeId,
         storeName: activeStore?.name || userProfile?.storeName,
@@ -446,7 +472,7 @@ export const TransactionsProvider = ({ children }) => {
       }
       // L'opération prend la clé du geste pour identifiant : le même règlement
       // confirmé deux fois n'entre qu'une fois dans la file.
-      return await soumettre(REGLEMENT, { draftId, amount, paymentMethod, idempotencyKey, agentCode }, { id: `${REGLEMENT}-${idempotencyKey}` })
+      return await soumettre(REGLEMENT, { draftId, amount, paymentMethod, idempotencyKey, agentCode, type: typeDeLigne(draftId) }, { id: `${REGLEMENT}-${idempotencyKey}` })
     } catch (error) {
       console.error('Erreur de règlement (paiement):', error)
       setError(error?.message || 'Erreur lors du paiement')
@@ -461,7 +487,7 @@ export const TransactionsProvider = ({ children }) => {
         await addTransactionRefund({ draftId, amount, paymentMethod, idempotencyKey, agentCode })
         return { statut: ENVOYEE }
       }
-      return await soumettre(REMBOURSEMENT, { draftId, amount, paymentMethod, idempotencyKey, agentCode }, { id: `${REMBOURSEMENT}-${idempotencyKey}` })
+      return await soumettre(REMBOURSEMENT, { draftId, amount, paymentMethod, idempotencyKey, agentCode, type: typeDeLigne(draftId) }, { id: `${REMBOURSEMENT}-${idempotencyKey}` })
     } catch (error) {
       console.error('Erreur de règlement (remboursement):', error)
       setError(error?.message || 'Erreur lors du remboursement')
@@ -616,6 +642,17 @@ export const TransactionsProvider = ({ children }) => {
 
   const getActionButtons = useCallback((transaction) => {
     const actions = getAvailableActions(transaction.type)
+    // Une saisie refusée n'existe pas au serveur : rien ne s'y applique. En
+    // attente, elle se règle (le règlement partira après elle), mais ne se
+    // modifie pas : la modification passe par le serveur, qui ne la connaît pas.
+    //
+    // De même une ligne que ses règlements en attente soldent : elle ne doit plus
+    // rien, et attend seulement de partir.
+    const soldeeEnAttente = transaction.reglementsEnAttente?.length > 0 && Number(transaction.remainingAmount) === 0
+    if (transaction.envoi?.etat === REFUSEE || soldeeEnAttente) {
+      return Object.fromEntries(Object.keys(actions).map((geste) => [geste, false]))
+    }
+    if (transaction.envoi) return { ...actions, modifier: false }
     // Dès qu'un règlement est engagé, `type`/`montant`/`clientId` sont figés côté
     // règles Firestore : on masque donc « Modifier » pour rester cohérent avec le
     // serveur (les tranches restent accessibles via Encaisser/Payer/Rembourser).
@@ -630,8 +667,8 @@ export const TransactionsProvider = ({ children }) => {
   }, [])
 
   const value = {
-    pendingTransactions,
-    completedTransactions,
+    pendingTransactions: pendingAffichees,
+    completedTransactions: completedAffichees,
     periode,
     periodeEnChargement,
     erreurPeriode,

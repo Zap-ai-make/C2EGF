@@ -189,8 +189,46 @@ describe('TC-352 — garde-fous', () => {
   it('[FE-14] le même geste confirmé deux fois pendant qu’il attend n’entre qu’une fois', async () => {
     const { f, stockage } = file({ executer: vi.fn(async () => { throw panne() }) })
     await f.soumettre('reglement', { amount: 100 }, { id: 'reglement-cle' })
+    await f.soumettre('saisie', { n: 2 }, { id: 'apres' })
     expect(await f.soumettre('reglement', { amount: 100 }, { id: 'reglement-cle' })).toMatchObject({ statut: EN_ATTENTE })
-    expect((await stockage.lister()).map((op) => op.id)).toEqual(['reglement-cle'])
+    // Elle garde sa place et ses essais : la remettre en file la ferait passer
+    // derrière une saisie qui dépend peut-être d'elle.
+    const operations = await stockage.lister()
+    expect(operations.map((op) => op.id)).toEqual(['reglement-cle', 'apres'])
+    expect(operations[0].tentatives).toBeGreaterThan(0)
+  })
+
+  it('[FE-15] une requête partie sans jeton n’est pas un refus : le jeton se rafraîchit au prochain essai', async () => {
+    const sansJeton = Object.assign(new Error('Vous devez être connecté.'), { code: 'UNAUTHENTICATED' })
+    const executer = vi.fn().mockRejectedValueOnce(sansJeton).mockResolvedValueOnce({ id: 'op-1' })
+    const { f, h, stockage } = file({ executer })
+
+    expect(await f.soumettre('saisie', {})).toMatchObject({ statut: EN_ATTENTE })
+    expect((await stockage.lister())[0].etat).toBe(EN_ATTENTE)
+
+    h.declencher(REESSAI_MS)
+    await attendreQue(async () => (await stockage.lister()).length === 0)
+  })
+
+  it('[FE-16] un serveur antérieur au lot G3a ne perd rien : l’opération attend son déploiement', async () => {
+    const enRetard = Object.assign(new Error('Le payload contient des champs non autorisés. [400]'), { code: 'INVALID_REQUEST_ID' })
+    const { f, stockage } = file({ executer: vi.fn(async () => { throw enRetard }) })
+
+    expect(await f.soumettre('saisie', {})).toMatchObject({ statut: EN_ATTENTE })
+    expect((await stockage.lister())[0].etat).toBe(EN_ATTENTE)
+    // Le même code pour une autre raison reste un refus.
+    expect(estRefusDefinitif({ code: 'INVALID_REQUEST_ID', message: 'Format de données invalide.' })).toBe(true)
+  })
+
+  it('[FE-17] la raison gardée n’a pas le statut HTTP que le SDK ajoute au message', async () => {
+    const executer = vi.fn().mockRejectedValueOnce(panne()).mockRejectedValueOnce(
+      Object.assign(new Error('Stock insuffisant pour Orange. [400]'), { code: 'INSUFFICIENT_STORE_BALANCE' }),
+    )
+    const { f, h, stockage } = file({ executer })
+    await f.soumettre('saisie', {})
+    h.declencher(REESSAI_MS)
+    await attendreQue(async () => (await stockage.lister())[0]?.etat === REFUSEE)
+    expect((await stockage.lister())[0].erreur.message).toBe('Stock insuffisant pour Orange.')
   })
 
   it('[FE-13] ce qui est un refus, et ce qui se retente', () => {

@@ -46,6 +46,7 @@ export const GROUPES = Object.freeze({
   RESERVES: 'reserves',
   CLIENTS: 'clients',
   ASSISTANT: 'assistant',
+  HORS_LIGNE: 'hors-ligne',
 })
 
 /**
@@ -54,7 +55,9 @@ export const GROUPES = Object.freeze({
  * Les réserves suivent la saisie parce qu'elles vivent sur le MÊME onglet : un
  * ravitaillement se fait depuis Transactions. Les clients viennent ensuite —
  * on les consulte, on n'y échoue pas. L'assistant ferme la marche : il est sur
- * tous les écrans, et il sait lui-même lire ces fiches.
+ * tous les écrans, et il sait lui-même lire ces fiches. Le hors-ligne vient en
+ * dernier : il ne dépend d'aucun onglet, et les fiches se citent par leur
+ * numéro, qu'une insertion plus haut décalerait toutes.
  */
 const ORDRE_GROUPES = Object.freeze([
   GROUPES.TRANSACTIONS,
@@ -62,6 +65,7 @@ const ORDRE_GROUPES = Object.freeze([
   GROUPES.HISTORIQUE,
   GROUPES.CLIENTS,
   GROUPES.ASSISTANT,
+  GROUPES.HORS_LIGNE,
 ])
 
 /**
@@ -92,6 +96,7 @@ export const TITRES_GROUPES = Object.freeze({
   [GROUPES.RESERVES]: { titre: 'Stock et espèces', ou: 'onglet Transactions' },
   [GROUPES.CLIENTS]: { titre: 'Les clients', ou: 'onglet Clients' },
   [GROUPES.ASSISTANT]: { titre: 'L’assistant', ou: 'bouton rond, en bas à droite' },
+  [GROUPES.HORS_LIGNE]: { titre: 'Sans internet', ou: 'partout' },
 })
 
 export const FICHES = Object.freeze([
@@ -400,5 +405,21 @@ export const FICHES = Object.freeze([
       'Le **+** repart d’une conversation vide.',
     ],
     texteFin: 'Elles restent sur cet appareil, à ton nom et pour ta boutique : une autre caissière ne les voit pas.',
+  },
+
+  {
+    id: 27,
+    groupe: GROUPES.HORS_LIGNE,
+    titre: 'Travailler sans internet',
+    texte: 'Sans internet, le logiciel continue. Tu peux saisir une opération, l’encaisser ou la payer, régler par tranche, rembourser et ajouter un client : **tout est gardé sur cet appareil et part tout seul** au retour de la connexion, même si la machine a été éteinte entre-temps.',
+    etapes: [
+      'La ligne porte « En attente d’envoi », et le haut de l’écran affiche {{Soldes provisoires}} : ces chiffres comptent déjà ce qui attend.',
+      'Le bandeau du bas dit combien d’opérations attendent. {{Voir}} les liste une par une.',
+      'Modifier ou annuler une opération demande internet : attends qu’elle soit partie.',
+    ],
+    retenir: {
+      titre: 'Une opération peut être refusée au retour',
+      texte: 'Si le stock a fondu entre-temps, le serveur la refuse : elle affiche « Refusée » et la raison, et les soldes ne bougent pas. {{Retirer}} l’enlève de la liste ; ressaisis-la si besoin. Et **ne te déconnecte pas le soir** : sans internet, tu ne pourrais plus te reconnecter.',
+    },
   },
 ])

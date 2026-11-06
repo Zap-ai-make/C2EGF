@@ -1,3 +1,4 @@
+import { REFUSEE } from '../services/fileEnvoi.js'
 import { montantRestant } from './argentDehors.js'
 
 /**
@@ -31,6 +32,9 @@ export function sommesEnAttente(transactions = []) {
   for (const transaction of transactions) {
     if (!transaction || vues.has(transaction.id)) continue
     vues.add(transaction.id)
+    // Une saisie refusée par le serveur (lot G3c) reste affichée le temps qu'on
+    // la retire, mais elle n'a jamais existé : aucune somme n'est en route.
+    if (transaction.envoi?.etat === REFUSEE) continue
 
     // ⚠ LE RESTE DÛ, PAS LE MONTANT D'ORIGINE.
     //   Une transaction partiellement réglée a déjà vu ses tranches encaissées

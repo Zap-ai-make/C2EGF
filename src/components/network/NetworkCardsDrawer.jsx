@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useSimpleNetworkData } from '../../hooks/useSimpleNetworkData'
+import { useSoldesProvisoires } from '../../context/NetworkConfigContext.jsx'
 import { useTransactions } from '../../context/transactions.jsx'
 import { activeProfile } from '../../config/activeClientProfile.js'
 import { sommesEnAttente, totalCaisse } from '../../utils/caisse.js'
@@ -24,6 +25,7 @@ const VISIBLE_NETWORK_CARDS = [...activeProfile.networks.enabled, 'Liquidite']
  */
 function NetworkCardsDrawer() {
   const { networkData } = useSimpleNetworkData()
+  const soldesProvisoires = useSoldesProvisoires()
   const { pendingTransactions = [] } = useTransactions()
   const visibleCards = VISIBLE_NETWORK_CARDS
     .map(network => [network, networkData[network]])
@@ -73,8 +75,15 @@ function NetworkCardsDrawer() {
             bande ne grandit pas d'un pixel. `md:contents` dissout ce groupe sur
             grand écran, où les trois éléments reprennent leur rang par `order`. */}
         <div className="flex w-full items-center justify-between gap-3 md:contents">
-          <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-200 md:order-1 md:text-center">
-            Soldes
+          {/* Des opérations attendent le réseau (lot G3c) : les cartes comptent
+              déjà leur effet, que le serveur n'a pas encore accepté. Le mot le
+              dit, sans agrandir la bande. */}
+          <span
+            className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.24em] text-brand-200 md:order-1 md:text-center"
+            data-testid="libelle-soldes"
+            title={soldesProvisoires ? 'Des opérations attendent le réseau : leur effet est compté, le serveur ne l’a pas encore accepté.' : undefined}
+          >
+            {soldesProvisoires ? 'Soldes provisoires' : 'Soldes'}
           </span>
 
           <div

@@ -14,7 +14,7 @@ import { createPortal } from 'react-dom'
 import { useTransactions } from '../../context/transactions.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
 import { MESSAGES, PAYMENT_METHODS } from '../../utils/constants.js'
-import { EN_ATTENTE } from '../../services/fileEnvoi.js'
+import { EN_ATTENTE, REFUSEE, REGLEMENT } from '../../services/fileEnvoi.js'
 import { getClientName, formatTransactionDateTime } from '../../utils/helpers.js'
 import { SkeletonRow } from '../ui/SkeletonList.jsx'
 import EmptyState from '../ui/EmptyState.jsx'
@@ -30,9 +30,33 @@ import { sommesEnAttente } from '../../utils/caisse.js'
 import { attenteDe } from '../../utils/attente.js'
 import { regrouperParClientEtType } from '../../utils/regroupement.js'
 import { ChevronRight } from 'lucide-react'
+import { useEnvois } from '../../context/envoisContexte.js'
+import EtatEnvoi from '../ui/EtatEnvoi.jsx'
+
+/** Les règlements d'une ligne qui attendent le réseau, et ceux qu'il a refusés. */
+function ReglementsEnAttente({ reglements, onRetirer }) {
+  if (!reglements?.length) return null
+  return (
+    <ul className="mt-1 space-y-0.5 text-xs font-normal">
+      {reglements.map((r) => {
+        const libelle = `${r.type === REGLEMENT ? 'Règlement' : 'Remboursement'} ${Number(r.amount).toLocaleString('fr-FR')} FCFA (${r.paymentMethod})`
+        return r.etat === REFUSEE ? (
+          <li key={r.id} className="text-danger" data-testid="reglement-refuse">
+            {libelle} refusé : {r.erreur?.message || 'refusé par le serveur.'}{' '}
+            <button type="button" onClick={() => onRetirer(r.id)} className="underline">Retirer</button>
+          </li>
+        ) : (
+          <li key={r.id} className="text-warn" data-testid="reglement-en-attente">{libelle} en attente d’envoi</li>
+        )
+      })}
+    </ul>
+  )
+}
 
 const TransactionTable = memo(function TransactionTable() {
   const { pendingTransactions, getActionButtons, getTransactionStyles, addPaymentTranche, addRefundTranche, startEditTransaction, trashTransaction, loading } = useTransactions()
+  const envois = useEnvois()
+  const retirerEnvoi = useCallback((id) => { envois?.retirer(id) }, [envois])
   const { themeClasses } = useTheme()
   // La ligne que le gérant s'apprête à supprimer, le temps qu'il confirme.
   const [aSupprimer, setASupprimer] = useState(null)
@@ -217,6 +241,11 @@ const TransactionTable = memo(function TransactionTable() {
       // bouge pas encore, il faut dire pourquoi.
       if (issue?.statut === EN_ATTENTE) {
         setRollbackToast({ show: true, message: MESSAGES.EN_ATTENTE.REGLEMENT, type: 'info' })
+        // `autoClose` ne règle que la croix : c'est à l'appelant de le fermer,
+        // sinon « Connexion absente » resterait affiché une fois le réseau revenu.
+        setTimeout(() => {
+          setRollbackToast({ show: false, message: '', type: 'info' })
+        }, 6000)
       }
 
       // Succès : supprimer la clé (la prochaine action génèrera une nouvelle clé)
@@ -535,6 +564,7 @@ const TransactionTable = memo(function TransactionTable() {
                           </span>
                         )}
                         {formatTransactionDateTime(transaction)}
+                        <EtatEnvoi envoi={transaction.envoi} />
                       </td>
                       <td className="px-4 py-3 text-base font-medium">
                         {getClientName(transaction.client)}
@@ -552,6 +582,7 @@ const TransactionTable = memo(function TransactionTable() {
                             Reste : {Number(transaction.remainingAmount).toLocaleString('fr-FR')} FCFA
                           </div>
                         )}
+                        <ReglementsEnAttente reglements={transaction.reglementsEnAttente} onRetirer={retirerEnvoi} />
                       </td>
                       <td className="px-4 py-3 text-base">
                         <div className="flex gap-2 justify-center">
@@ -595,9 +626,26 @@ const TransactionTable = memo(function TransactionTable() {
                             </button>
                           )}
 
+                          {/* Refusée par le serveur, la saisie n'existe que
+                              sur cet appareil : on la retire de la liste,
+                              rien d'autre ne s'y applique (lot G3c). */}
+                          {transaction.envoi?.etat === REFUSEE && (
+                            <button
+                              type="button"
+                              onClick={() => retirerEnvoi(transaction.id)}
+                              data-testid="retirer-envoi"
+                              className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:border-danger hover:text-danger focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                            >
+                              Retirer
+                            </button>
+                          )}
+
                           {/* « Annuler » ferme la rangée, après les gestes
                               qui font avancer la transaction : la défaire
-                              n'est pas une étape du flux normal. */}
+                              n'est pas une étape du flux normal. Une saisie
+                              qui attend le réseau ne s'annule pas : le serveur
+                              ne la connaît pas encore. */}
+                          {!transaction.envoi && (
                           <button
                             type="button"
                             onClick={() => setASupprimer(transaction)}
@@ -607,6 +655,7 @@ const TransactionTable = memo(function TransactionTable() {
                           >
                             Annuler
                           </button>
+                          )}
                         </div>
                       </td>
                     </tr>

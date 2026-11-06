@@ -8,6 +8,7 @@ import { AUTH_LABELS, AUTH_ROLE_LABELS } from '../constants/authMessages'
 import { AUTH_STYLES } from '../constants/authStyles'
 import { useUserActivity } from '../hooks/useUserActivity'
 import PageHeader from '../components/ui/PageHeader'
+import { useEnvois } from '../context/envoisContexte.js'
 
 function Profil() {
   const { currentUser, userProfile, activeStore, logout } = useAuth()
@@ -16,6 +17,10 @@ function Profil() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  // Une opération en attente reste sur l'appareil, rattachée à son compte (lot
+  // G3c) : déconnecté, ce compte ne l'enverrait plus, et se reconnecter exige
+  // justement le réseau qui manque.
+  const enAttente = useEnvois()?.enAttente?.length ?? 0
 
   // Utiliser les données Firebase Auth comme fallback
   const displayName = activeStore?.name || userProfile?.storeName || userProfile?.name || currentUser?.email?.split('@')[0] || 'Boutique'
@@ -236,6 +241,12 @@ function Profil() {
               Sans connexion internet, vous ne pourrez pas vous reconnecter. Pour travailler hors ligne,
               restez connecté : la session tient même machine éteinte.
             </p>
+            {enAttente > 0 && (
+              <p role="alert" className="mb-4 rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-sm text-danger" data-testid="deconnexion-bloquee">
+                {enAttente > 1 ? `${enAttente} opérations attendent` : 'Une opération attend'} encore le réseau. Déconnecté,
+                vous ne pourriez plus rien envoyer. Attendez que tout soit parti avant de vous déconnecter.
+              </p>
+            )}
             <div className={AUTH_STYLES.modal.footer}>
               <button
                 onClick={() => setShowLogoutConfirm(false)}
@@ -245,7 +256,7 @@ function Profil() {
               </button>
               <button
                 onClick={handleLogout}
-                disabled={loading}
+                disabled={loading || enAttente > 0}
                 className="flex-1 rounded-md bg-danger px-4 py-2 font-medium text-white transition-colors hover:bg-danger/90 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
               >
                 {loading ? AUTH_LABELS.LOADING_LOGOUT : AUTH_LABELS.SIGN_OUT}

@@ -40,7 +40,7 @@ import { ClientsContext } from '../../src/context/ClientsContext.jsx'
 import { AuthContext } from '../../src/context/AuthContext'
 import { EnvoisContext } from '../../src/context/envoisContexte.js'
 import { executerEnvoi } from '../../src/services/envois.js'
-import { CLIENT, EN_ATTENTE, ENVOYEE, REGLEMENT, REMBOURSEMENT, SAISIE } from '../../src/services/fileEnvoi.js'
+import { CLIENT, EN_ATTENTE, ENVOYEE, REFUSEE, REGLEMENT, REMBOURSEMENT, SAISIE } from '../../src/services/fileEnvoi.js'
 import { fauxHistorique } from '../fixtures/fauxHistorique.js'
 
 const AUTH = {
@@ -50,11 +50,11 @@ const AUTH = {
   loading: false,
 }
 
-const fileSimulee = (issue = { statut: EN_ATTENTE }) => ({
+const fileSimulee = (issue = { statut: EN_ATTENTE }, operations = []) => ({
   disponible: true,
   soumettre: vi.fn(async () => issue),
   retirer: vi.fn(),
-  operations: [],
+  operations,
   enAttente: [],
   refusees: [],
 })
@@ -162,6 +162,69 @@ describe('TC-353 — avec la file, les opérations y passent', () => {
 
     await act(async () => {
       await expect(cl.addClient({ nom: 'AUTRE', codeAgent: '1000003' })).rejects.toMatchObject({ code: 'CLIENT_DOUBLON' })
+    })
+    expect(envois.soumettre).not.toHaveBeenCalled()
+  })
+})
+
+describe('TC-353 — ce qui attend apparaît dans les listes (lot G3c)', () => {
+  const saisie = (id, statut, autres = {}) => ({
+    id, type: SAISIE, etat: EN_ATTENTE, creeLe: Date.UTC(2026, 10, 6, 9), tentatives: 0, erreur: null,
+    charge: { transaction: { clientId: 'c1', client: { nom: 'HORSLIGNE' }, type: 'Dépôt', reseau: 'Orange', montant: 2000, statut } },
+    ...autres,
+  })
+  const avecOperations = (operations) => fileSimulee({ statut: EN_ATTENTE }, operations)
+
+  it('[OF-09] une non terminée en attente rejoint les non terminées, une validée l’historique', async () => {
+    monter(avecOperations([saisie('cmd-1', 'Non Terminées'), saisie('cmd-2', 'Validée')]))
+    await waitFor(() => expect(tx?.pendingTransactions.map((t) => t.id)).toEqual(['cmd-1']))
+    expect(tx.pendingTransactions[0].envoi).toEqual({ etat: EN_ATTENTE, erreur: null })
+    expect(tx.completedTransactions.map((t) => t.id)).toContain('cmd-2')
+  })
+
+  it('[OF-10] en attente, elle se règle sans se modifier ; refusée, plus aucun geste', async () => {
+    monter(avecOperations([]))
+    await waitFor(() => expect(tx).toBeDefined())
+    const attente = tx.getActionButtons({ type: 'Dépôt', envoi: { etat: EN_ATTENTE } })
+    expect(attente).toMatchObject({ modifier: false, encaisser: true })
+    const refusee = tx.getActionButtons({ type: 'Dépôt', envoi: { etat: REFUSEE } })
+    expect(Object.values(refusee).some(Boolean)).toBe(false)
+    // Soldée par ses règlements en attente : elle ne doit plus rien.
+    const soldee = tx.getActionButtons({ type: 'Dépôt', remainingAmount: 0, reglementsEnAttente: [{ id: 'r' }] })
+    expect(Object.values(soldee).some(Boolean)).toBe(false)
+    const partielle = tx.getActionButtons({ type: 'Dépôt', remainingAmount: 100, reglementsEnAttente: [{ id: 'r' }] })
+    expect(partielle.encaisser).toBe(true)
+  })
+
+  it('[OF-11] le règlement d’une ligne en attente emporte sa nature, pour les soldes provisoires', async () => {
+    const envois = avecOperations([saisie('cmd-1', 'Non Terminées')])
+    monter(envois)
+    await waitFor(() => expect(tx?.pendingTransactions).toHaveLength(1))
+
+    await act(async () => { await tx.addPaymentTranche('cmd-1', 2000, 'Cash', 'cle-3') })
+    expect(envois.soumettre).toHaveBeenCalledWith(REGLEMENT,
+      expect.objectContaining({ draftId: 'cmd-1', type: 'Dépôt' }),
+      { id: 'reglement-cle-3' })
+  })
+
+  it('[OF-13] la marque « en attente » d’une fiche ne part pas avec la transaction', async () => {
+    const envois = avecOperations([])
+    monter(envois)
+    await waitFor(() => expect(tx).toBeDefined())
+    await act(async () => { await tx.addTransaction({ clientId: 'k-1', client: { id: 'k-1', nom: 'ATTENTE', enAttente: true }, type: 'Dépôt', reseau: 'Orange', montant: 100 }) })
+    const { transaction } = envois.soumettre.mock.calls[0][1]
+    expect(transaction.client).toEqual({ id: 'k-1', nom: 'ATTENTE' })
+  })
+
+  it('[OF-12] une fiche en attente est dans la liste, et compte pour le contrôle de doublon', async () => {
+    const op = { id: 'k-1', type: CLIENT, etat: EN_ATTENTE, creeLe: 1, tentatives: 0, erreur: null, charge: { donnees: { nom: 'ATTENTE', codeAgent: '1000050' } } }
+    const envois = avecOperations([op])
+    monter(envois)
+    await waitFor(() => expect(cl?.clients.map((c) => c.id)).toEqual(['k-1', 'c-existe']))
+    expect(cl.clients[0].enAttente).toBe(true)
+
+    await act(async () => {
+      await expect(cl.addClient({ nom: 'AUTRE', codeAgent: '1000050' })).rejects.toMatchObject({ code: 'CLIENT_DOUBLON' })
     })
     expect(envois.soumettre).not.toHaveBeenCalled()
   })

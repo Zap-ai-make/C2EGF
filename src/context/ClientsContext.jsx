@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext, createContext } from 'react'
+import { useState, useEffect, useContext, createContext, useMemo } from 'react'
 import { STORAGE_KEYS } from '../constants'
 import { firestoreService, normaliserChampsAgent } from '../services/firestore'
 import { parsefrenchDate } from '../utils/helpers.js'
@@ -6,6 +6,7 @@ import { messageDoublonAgent, trouverFicheAgent } from '../utils/agentFields.js'
 import { CLIENT, ENVOYEE } from '../services/fileEnvoi.js'
 import { AuthContext } from './AuthContext'
 import { EnvoisContext } from './envoisContexte.js'
+import { lignesEnAttente } from '../utils/envoisEnAttente.js'
 
 export const ClientsContext = createContext()
 
@@ -121,6 +122,18 @@ export function ClientsProvider({ children }) {
   }, [user, userProfile?.storeId, activeStore?.id, authLoading])
 
 
+  // Les fiches ajoutées sans réseau (lot G3c) : en tête, comme la dernière
+  // enregistrée, tant que l'annuaire ne les a pas reçues. Elles comptent aussi
+  // pour le contrôle de doublon : deux fiches hors ligne au même code seraient
+  // refusées l'une après l'autre au retour du réseau.
+  const operationsEnAttente = envois?.operations
+  const clientsAffiches = useMemo(() => {
+    const enAttente = lignesEnAttente(operationsEnAttente ?? []).clients
+    if (enAttente.length === 0) return clients
+    const connus = new Set(clients.map((c) => c.id))
+    return [...enAttente.filter((c) => !connus.has(c.id)), ...clients]
+  }, [clients, operationsEnAttente])
+
   const addClient = async (newClient) => {
     try {
       setError(null)
@@ -141,7 +154,7 @@ export function ClientsProvider({ children }) {
       // contrôle à l'envoi, pour une fiche créée ailleurs entre-temps.
       const normalise = normaliserChampsAgent(donnees)
       for (const valeur of [normalise.codeAgent, normalise.numeroAgent].filter(Boolean)) {
-        const autre = trouverFicheAgent(clients, valeur)
+        const autre = trouverFicheAgent(clientsAffiches, valeur)
         if (autre) throw Object.assign(new Error(messageDoublonAgent(autre, userProfile?.storeId)), { code: 'CLIENT_DOUBLON' })
       }
       const id = firestoreService.nouvelIdClient()
@@ -182,7 +195,7 @@ export function ClientsProvider({ children }) {
   }
 
   const value = {
-    clients,
+    clients: clientsAffiches,
     loading,
     error,
     addClient,

@@ -510,6 +510,7 @@ const ECRAN_DES_RUBRIQUES = Object.freeze({
   historique: 'historique',
   clients: 'clients',
   assistant: 'transactions', // l'assistant est sur tous les écrans ; Transactions est celui de la journée
+  'hors-ligne': 'transactions', // sans internet, c'est là que se fait la saisie gardée sur l'appareil
 })
 
 /** `{{Valider}}` → « Valider », `**gras**` → gras : la forme qu'on répète à voix haute. */

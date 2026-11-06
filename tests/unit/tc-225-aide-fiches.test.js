@@ -43,6 +43,7 @@ const SOURCES_INTERFACE = [
   'src/components/assistant/CarteAConfirmer.jsx',
   'src/components/assistant/PanneauAssistant.jsx',
   'src/components/network/NetworkCardsDrawer.jsx',
+  'src/components/OfflineBanner.jsx',
   'src/components/transactions/RavitaillementForm.jsx',
   'src/components/transactions/RavitaillementPanel.jsx',
   'src/components/ClientsTable.jsx',

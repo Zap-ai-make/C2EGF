@@ -367,7 +367,7 @@ describe('[OJ] bilan_du_jour : la journée, ou la période demandée', () => {
  * Les attentes viennent de `src/content/aideFiches.js`, relevées à la main.
  */
 describe('[ME] mode_d_emploi : les fiches de l\'onglet Aide', () => {
-  it('[ME-01] sans sujet, le sommaire : cinq rubriques, dans l\'ordre de l\'aide', async () => {
+  it('[ME-01] sans sujet, le sommaire : six rubriques, dans l\'ordre de l\'aide', async () => {
     const reponse = await executerOutil('mode_d_emploi')
 
     expect(reponse.sommaire.map((r) => [r.rubrique, r.ecran, r.fiches.map((f) => f.numero)])).toEqual([
@@ -376,6 +376,7 @@ describe('[ME] mode_d_emploi : les fiches de l\'onglet Aide', () => {
       ['Relire et corriger', 'historique', [12, 13, 14, 15, 16, 17, 18, 19]],
       ['Les clients', 'clients', [20, 21, 22]],
       ['L’assistant', 'transactions', [23, 24, 25, 26]],
+      ['Sans internet', 'transactions', [27]],
     ])
     expect(reponse.sommaire[0].fiches[2].titre).toBe('« Valider » ou « Non Terminées » : lequel choisir ?')
   })
@@ -404,7 +405,7 @@ describe('[ME] mode_d_emploi : les fiches de l\'onglet Aide', () => {
     expect(reponse.erreur).toBeUndefined()
     expect(reponse.fiches).toEqual([])
     expect(reponse.message).toBeTruthy()
-    expect(reponse.sommaire).toHaveLength(5)
+    expect(reponse.sommaire).toHaveLength(6)
   })
 
   it('[ME-05] par numéro : la fiche entière, gras retiré', async () => {
@@ -420,7 +421,7 @@ describe('[ME] mode_d_emploi : les fiches de l\'onglet Aide', () => {
     const reponse = await executerOutil('mode_d_emploi', { numero: 99 })
 
     expect(reponse.fiches).toEqual([])
-    expect(reponse.sommaire).toHaveLength(5)
+    expect(reponse.sommaire).toHaveLength(6)
   })
 
   it('[ME-07] chaque rubrique mène à un écran que l\'assistant sait ouvrir', async () => {

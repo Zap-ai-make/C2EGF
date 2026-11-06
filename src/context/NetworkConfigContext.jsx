@@ -1,7 +1,9 @@
-import { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
 import { getStorageKey } from '../config/clientIsolation'
 import { AuthContext } from './AuthContext'
 import { firestoreService } from '../services/firestore'
+import { EnvoisContext } from './envoisContexte.js'
+import { soldesProvisoires } from '../utils/envoisEnAttente.js'
 
 const NetworkConfigContext = createContext()
 
@@ -23,6 +25,14 @@ export function useNetworkConfig() {
     throw new Error('useNetworkConfig must be used within a NetworkConfigProvider')
   }
   return context
+}
+
+/**
+ * Vrai quand les soldes comptent des opérations qui attendent le réseau (lot
+ * G3c). Faux hors du fournisseur : un écran monté seul n'a rien de provisoire.
+ */
+export function useSoldesProvisoires() {
+  return useContext(NetworkConfigContext)?.soldesProvisoires === true
 }
 
 // Charger depuis localStorage
@@ -55,6 +65,7 @@ export function NetworkConfigProvider({ children }) {
   const { currentUser: user, userProfile, activeStore, loading: authLoading } = useContext(AuthContext)
   const [networkData, setNetworkData] = useState(() => loadNetworkDataFromStorage())
   const [error, setError] = useState(null)
+  const envois = useContext(EnvoisContext)
 
   useEffect(() => {
     if (authLoading) return undefined
@@ -125,8 +136,18 @@ export function NetworkConfigProvider({ children }) {
     localStorage.removeItem(NETWORK_DATA_STORAGE_KEY)
   }, [])
 
+  // Les soldes du serveur, plus l'effet des opérations qui attendent le réseau
+  // (lot G3c). Ce sont eux qu'on affiche ET qu'on contrôle : sans eux, une
+  // caissière hors ligne pourrait vendre trois fois le même stock. Le serveur
+  // tranchera à l'envoi ; `soldesProvisoires` dit à l'écran qu'il ne l'a pas fait.
+  const provisoire = useMemo(
+    () => soldesProvisoires(networkData, envois?.operations ?? []),
+    [networkData, envois?.operations],
+  )
+
   const value = {
-    networkData,
+    networkData: provisoire.soldes,
+    soldesProvisoires: provisoire.appliquees > 0,
     error,
     updateNetwork,
     resetToDefaults

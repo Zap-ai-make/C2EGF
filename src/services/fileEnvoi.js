@@ -49,17 +49,32 @@ const CODES_FIRESTORE_DEFINITIFS = ['permission-denied', 'invalid-argument', 'al
  * `details.code` : `storeTransactionCommandService.js` le remonte en `code`, le
  * service de règlement le laisse où il est. Une panne de réseau arrive en
  * `functions/internal` ou `unavailable`, sans `details` : elle se retente.
+ *
+ * ⚠ DEUX RÉPONSES EN MAJUSCULES NE SONT PAS DES REFUS. Les prendre pour tels
+ *   perdrait une opération que le serveur accepterait au prochain essai.
+ *   - `UNAUTHENTICATED` : le SDK envoie la requête SANS jeton quand il n'a pas
+ *     pu le rafraîchir (`getAuthToken` avale l'erreur). La machine est éteinte
+ *     la nuit, donc le jeton est expiré au matin ; sur un réseau instable, la
+ *     requête passe là où le rafraîchissement a échoué. La session, elle, est
+ *     bonne.
+ *   - « champs non autorisés » : un serveur antérieur au lot G3a ne connaît pas
+ *     `commandeId`. Il n'a rien appliqué : l'opération attend son déploiement.
+ *     C'est ce qui rend l'ordre de déploiement sans danger.
  */
 const codeDe = (erreur) => String(erreur?.details?.code ?? erreur?.code ?? '')
 
 export function estRefusDefinitif(erreur) {
   const code = codeDe(erreur)
+  if (code === 'UNAUTHENTICATED') return false
+  if (code === 'INVALID_REQUEST_ID' && /champs non autorisés/.test(String(erreur?.message ?? ''))) return false
   return /^[A-Z][A-Z0-9_]+$/.test(code) || CODES_FIRESTORE_DEFINITIFS.includes(code)
 }
 
+// Le SDK ajoute le statut HTTP à tout message (« … [400] ») : c'est de la
+// tuyauterie, et ce message-ci s'affiche sur la ligne refusée.
 const resumerErreur = (erreur) => ({
   code: codeDe(erreur),
-  message: String(erreur?.message ?? erreur ?? 'Erreur inconnue').slice(0, 300),
+  message: String(erreur?.message ?? erreur ?? 'Erreur inconnue').replace(/\s*\[\d+\]$/, '').slice(0, 300),
 })
 
 /**

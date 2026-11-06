@@ -649,7 +649,7 @@ abandonné, remplacé par G1.
 | G0 | Démarrage hors ligne : ne plus attendre `lastLogin`, demander le stockage persistant (`navigator.storage.persist()`), avertir avant une déconnexion — **fait le 2026-11-06** | l'application s'ouvre sans réseau |
 | G1 | Historique du jour courant, le reste sur demande de date — **fait le 2026-11-06** | ~101 lectures par ouverture à froid |
 | G2 | Annuaire gardé sur l'appareil, relu par différence — **fait le 2026-11-06**, sans changement côté serveur | 65 lectures et ~5 Mo → 1 lecture + tranches modifiées |
-| G3 | File d'envoi pour les quatre opérations — **G3a (serveur) fait le 2026-11-06, à déployer** ; G3b et G3c à faire | la saisie sans réseau |
+| G3 | File d'envoi pour les quatre opérations — **fait le 2026-11-06 ; functions et front à déployer** | la saisie sans réseau |
 
 ### G0 — fait le 2026-11-06 : l'application s'ouvre sans réseau
 
@@ -843,8 +843,8 @@ ligne : le formulaire reste figé.
 | # | Sous-lot | Ce qu'il apporte |
 |---|---|---|
 | G3a | Serveur : la saisie et la validation reconnues à leur `commandeId` — **fait le 2026-11-06, à déployer** | une opération renvoyée ne s'applique jamais deux fois |
-| G3b | La file d'envoi, sur l'appareil | les quatre opérations s'enregistrent sans réseau et partent au retour |
-| G3c | L'affichage : lignes en attente, soldes provisoires, refus | la caissière voit ce qui attend, et peut valider ou régler une non terminée saisie hors ligne |
+| G3b | La file d'envoi, sur l'appareil — **fait le 2026-11-06, à déployer** | les quatre opérations s'enregistrent sans réseau et partent au retour |
+| G3c | L'affichage : lignes en attente, soldes provisoires, refus — **fait le 2026-11-06, à déployer** | la caissière voit ce qui attend, et peut valider ou régler une non terminée saisie hors ligne |
 
 **G3b, la file d'envoi :**
 - **Une base IndexedDB par compte**, `c2egf-envois-<projet>-<uid>`. Chaque
@@ -854,8 +854,8 @@ ligne : le formulaire reste figé.
   formulaire attend la première réponse quelques secondes :
   - si elle arrive, rien ne change pour la caissière (succès, ou refus affiché
     avec les champs gardés) ;
-  - sinon, « Enregistrée, elle partira au retour du réseau », et les champs se
-    vident.
+  - sinon, « Connexion absente ou lente : gardée sur cet appareil », et les
+    champs se vident.
 - **Un seul envoi à la fois, dans l'ordre.** Un seul onglet envoie (Web
   Locks). L'envoi part à chaque ajout, au retour de la connexion à Firestore et
   toutes les 30 s tant qu'une opération attend.
@@ -877,12 +877,16 @@ ligne : le formulaire reste figé.
   serveur. Ils portent une marque « provisoire ».
 - Un panneau « Envois » liste les opérations en attente et les refusées, avec
   leur raison. Une refusée se retire d'un geste.
-- La déconnexion est refusée tant qu'une opération attend : sinon, elle
-  partirait sous un autre compte, ou jamais.
+- La déconnexion est refusée tant qu'une opération attend. L'opération reste
+  rattachée à son compte, qui ne l'enverrait plus une fois déconnecté ; et se
+  reconnecter exige justement le réseau qui manque.
 
-**Ordre de déploiement, impératif :** les functions de G3a d'abord, le front
-de G3b ensuite. Le front enverra toujours un `commandeId`, qu'un serveur
-ancien refuse comme « champ non autorisé ».
+**Ordre de déploiement : les functions de G3a d'abord, le front ensuite.** Le
+front envoie toujours un `commandeId`, qu'un serveur ancien refuse comme « champ
+non autorisé ». Dans l'ordre inverse, rien n'est perdu : ce refus ne compte pas
+comme définitif, et les saisies attendent dans la file le déploiement des
+functions (TC-352 [FE-16]). Mais d'ici là, aucune saisie ne part : les caissières
+verraient « Connexion absente ou lente ».
 
 ### G3a — fait le 2026-11-06 : le serveur reconnaît une opération renvoyée
 
@@ -967,6 +971,14 @@ qui reste en ligne.
 seulement dans `code` aurait fait renvoyer un règlement refusé sans fin
 (FE-13). Les pannes de réseau et les erreurs internes se retentent.
 
+Deux réponses en majuscules ne sont **pas** des refus, et se retentent aussi :
+- **`UNAUTHENTICATED`.** Le SDK envoie la requête sans jeton quand il n'a pas pu
+  le rafraîchir (`getAuthToken` avale l'erreur). La machine est éteinte la nuit,
+  donc le jeton est expiré au matin : sur un réseau instable, une opération
+  aurait été perdue alors que la session est bonne (FE-15).
+- **« champs non autorisés ».** Un serveur antérieur à G3a n'a rien appliqué, et
+  l'opération attend son déploiement (FE-16).
+
 **De quoi être reconnue au renvoi :**
 
 | Opération | Ce qui la fait reconnaître |
@@ -987,13 +999,101 @@ seulement dans `code` aurait fait renvoyer un règlement refusé sans fin
   (`envoisContexte.js`, `fileEnvoi.js`) ne chargent pas Firebase.
 
 **Tests :**
-- TC-352 : 14 cas sur la file elle-même.
-- TC-353 : 8 cas sur le passage des opérations par la file, et sur ce que
-  chacune devient au serveur.
+- TC-352 : 17 cas sur la file elle-même.
+- TC-353 : 13 cas sur le passage des opérations par la file, sur ce que chacune
+  devient au serveur et sur leur place dans les listes.
 
-**Reste pour G3c :** une non terminée saisie hors ligne n'apparaît pas encore
-dans la liste avant son envoi, et les soldes ne bougent qu'à la réponse du
-serveur.
+### G3c — fait le 2026-11-06 : la caissière voit ce qui attend
+
+**À l'écran** (`src/utils/envoisEnAttente.js`, fonctions pures) :
+- **Une saisie en attente** apparaît dans les non terminées, ou dans l'historique
+  du jour pour une validée d'un geste, avec « En attente d'envoi ». Elle porte déjà
+  l'identifiant que le serveur lui donnera (le `commandeId`). Une fois reçue, la
+  ligne du serveur la remplace (TC-354 [EE-10]).
+- **Elle se règle**, et le règlement part après elle. **Elle ne se modifie ni ne
+  s'annule** : le serveur ne la connaît pas encore.
+- **Un règlement en attente** se lit sous le montant et fait déjà baisser le reste
+  dû. Sans cela, le plafond laisserait encaisser deux fois le même reste
+  (EE-11). Réglée en entier, la ligne ne propose plus aucun geste.
+- **Les soldes deviennent provisoires** : ceux du serveur, plus l'effet de ce qui
+  attend, calculé par les fonctions du navigateur qui suivent celles du serveur.
+  La bande affiche « Soldes provisoires ». Ce sont eux que le formulaire contrôle :
+  sans cela, une caissière hors ligne pourrait vendre trois fois le même stock.
+- **Le total de la caisse** reste juste. Une saisie refusée n'y compte pas (EE-13).
+- **Une fiche client en attente** est dans la liste et compte pour le contrôle de
+  doublon. La marque `enAttente` ne part pas avec la transaction : le serveur
+  recopie le client dans la ligne, et l'historique la porterait pour toujours
+  (OF-13).
+- **Le bandeau du bas** compte ce qui attend, **même quand le navigateur se croit
+  en ligne**. C'est le signal plus sûr que `navigator.onLine` annoncé en G0.
+- **Le panneau « Voir »** (`EnvoisListe.jsx`) liste tout, avec la raison des refus.
+  Il n'est pas un doublon des lignes : une fiche refusée n'a aucune ligne où
+  apparaître, et un règlement refusé peut viser une ligne partie entre-temps
+  (TC-355 [EC-10]).
+- **La déconnexion** est refusée tant qu'une opération attend.
+- **Hors de la file**, un geste sans réseau dit « Cette opération demande une
+  connexion internet » au lieu de « internal [0] » (TC-356).
+- **L'aide** a sa fiche 27, « Travailler sans internet ».
+
+**Vérifié dans un vrai navigateur**, sur le build avec service worker et
+persistance, émulateurs neufs (boutique à 500 000 de stock, 300 000 d'espèces) :
+
+| Étape | Résultat |
+|---|---|
+| Saisie avec réseau | comme avant, file vide aussitôt |
+| Coupure, saisie d'une non terminée | message, ligne « En attente d'envoi », « Soldes provisoires », pas de bouton Annuler |
+| Rechargement sans réseau | l'opération et la ligne sont toujours là |
+| Encaissement de cette ligne | gardé, reste dû à zéro, plus aucun geste |
+| Fiche client neuve et validée sur elle | gardées ; visibles dans Clients et Historique, Modifier et Annuler bloqués |
+| Retour du réseau | tout part : stock 465 000, espèces 325 000, soit exactement le calcul attendu ; une seule ligne, une seule fiche |
+| **Réponse perdue** (le serveur applique, le navigateur ne reçoit rien) | gardée, puis renvoyée : le stock ne baisse qu'une fois, une seule ligne |
+| **Refus après coup** (le stock a fondu pendant la coupure) | « Refusée » et sa raison, soldes intacts, « Retirer » l'enlève |
+| **Fiche refusée** (même code agent créé ailleurs pendant la coupure) | visible dans le panneau avec sa raison, rien d'écrit au serveur |
+
+Ce scénario a trouvé trois défauts que les tests isolés ne voyaient pas :
+- le message « Pas de réseau » restait affiché une fois le réseau revenu ;
+- il était faux pour un serveur lent : sur émulateurs neufs, la première saisie a
+  demandé 7,6 s, juste sous les 8 s d'attente du formulaire. Au-delà, le message
+  s'affiche alors que le réseau est là, d'où « Connexion absente ou lente ».
+  L'opération part quand même, une seule fois ;
+- le « [400] » que le SDK ajoute au message s'affichait sur la ligne refusée.
+
+**Tests :** TC-354 (13 cas), TC-355 (11 cas), TC-356 (2 cas). Sur G3b et G3c, 18
+mutations des gardes : 16 attrapées du premier coup, et les 2 autres après avoir
+renforcé FE-14 et EE-10. Les toasts d'erreur en ligne gardent ce « [400] » : c'est
+le comportement d'avant, hors de ce lot.
+
+**Limites :**
+- **Restent en ligne** : modifier ou annuler une opération, le ravitaillement et son
+  retour, les collaborations, les demandes au dealer.
+- **Modifier une fiche client sans réseau** n'a pas été retenu. Essayé : le formulaire
+  reste sur « Enregistrement… », l'écriture arrive au retour du réseau, et il se
+  referme alors. Rien n'est perdu, mais la caissière attend.
+- **Une opération que le serveur rejette sans code métier**, par un défaut du
+  serveur, est retentée sans fin et bloque celles qui la suivent, ainsi que la
+  déconnexion. Le panneau la montre « En attente d'envoi » ; la cause reste à
+  corriger côté serveur.
+- **Une ligne groupée** de l'historique (« Voir les 2 ») ne montre l'état d'envoi
+  qu'une fois dépliée.
+- **Le jeu d'essai** écrit ses clients sans `orange`, que toute vraie fiche porte :
+  le formulaire refuse de les prendre pour une transaction sur les émulateurs. Le
+  scénario pose ce champ lui-même.
+
+**Déploiement — décision et exécution humaines, dans cet ordre :**
+
+1. Les functions (commande en G3a).
+2. Le front : push de la branche, puis promotion de la Preview.
+
+**Essai sur une vraie machine, après déploiement :**
+1. Avec internet, ouvrir l'application installée, attendre les soldes, puis ouvrir
+   Clients une fois : la copie de l'annuaire se fait à cette ouverture.
+2. Couper le wifi et enregistrer un dépôt en « Non Terminées ».
+3. Attendu : le message, la ligne « En attente d'envoi », « Soldes provisoires ».
+4. Éteindre la machine, la rallumer sans réseau, rouvrir : la ligne est toujours là.
+5. L'encaisser en Cash, puis remettre le wifi.
+6. Attendu : en moins d'une minute, le bandeau disparaît, la ligne passe dans
+   l'historique, et les soldes sont ceux du calcul. Vérifier dans la console Firebase
+   qu'il n'y a qu'une seule ligne.
 
 ---
 
