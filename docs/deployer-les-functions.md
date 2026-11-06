@@ -117,36 +117,49 @@ Les callables quittent europe-west1 pour us-central1, à côté de la base
 
 ---
 
-## 5. Jamais plus de ~20 functions déployées à la fois dans une région
-
-Vécu deux fois. Au premier déploiement, 20 functions sur 23 sont passées. Le
-2026-11-06, `firebase deploy --only functions` (lot C1, temps 1) a réussi une
-vingtaine d'opérations par région, et toutes les autres ont échoué :
+## 5. Une région ne fait tourner qu'une vingtaine d'instances à la fois
 
 ```
 Could not create or update Cloud Run service <nom>, Container Healthcheck failed.
 Quota exceeded for total allowable CPU per project per region.
 ```
 
-**Ce qu'on observe :** chaque function déployée démarre une instance de 1 vCPU
-pour se vérifier, et la garde inactive quelques minutes avant de l'éteindre. Le
-quota « Total CPU allocation, per project per region » de ce projet vaut ~20 vCPU.
-Au-delà de vingt démarrages simultanés, les suivants échouent.
+**Vécu le 2026-11-06 (lot C1, temps 1) :**
+- `firebase deploy --only functions` : une vingtaine d'opérations réussies par
+  région, toutes les autres en échec.
+- Un groupe de six, juste après : 0 sur 6 en europe-west1, 1 sur 6 en us-central1.
+  La région était encore pleine.
+- Une sonde `curl -X OPTIONS` sur les 26 callables d'europe-west1 : les vingt
+  premières répondent `204`, les six dernières `503 Rate exceeded`. Un quart d'heure
+  plus tard, elles répondent de nouveau.
 
-**Ce que ça fait en production.** Une mise à jour échouée n'éteint pas toujours la
-function : cinq ont répondu `503 Rate exceeded` pendant plusieurs minutes, une est
-revenue seule. Sonder avant de conclure (voir la mémoire du projet :
-`curl -X OPTIONS`, 204 = répond).
+**Ce qu'on en déduit :** le quota compte les instances qui existent, inactives
+comprises. Chacune vaut 1 vCPU et reste en vie jusqu'à ~15 min après sa dernière
+requête. Le plafond de ce projet tourne autour de 20 vCPU par région ; la page des
+quotas en donne la valeur, pas la consommation (elle affiche 0 %). Une mise à jour
+démarre une instance par function, un appel à froid aussi. Une fois la région
+pleine, toute function sans instance chaude répond `503`, production comprise.
+
+**Ce que ça implique :**
+- **Une mise à jour échouée ne casse pas la function** : l'ancienne révision continue
+  de servir. Les `503` viennent de la région pleine et s'effacent en ~15 min.
+- **Une sonde démarre des instances.** Ne sonder que les functions dont on a besoin,
+  jamais les 26 d'un coup dans une région qui sert la production.
+- **Le CLI ne saute pas les functions inchangées** ici (constaté sur le groupe de
+  six) : `functions:<nom>` redéploie la function dans ses deux régions.
 
 **Comment déployer :**
-- **Par groupes de huit functions au plus**, en guillemets (§1). Le CLI saute ce qui
-  n'a pas changé (« Skipped (No changes detected) »), ce qui allège les reprises.
-- **Si un groupe échoue sur ce quota**, attendre un quart d'heure que les instances
-  inactives s'éteignent, puis relancer la même commande.
+- **Le soir**, quand les boutiques ne travaillent plus.
+- **Huit functions au plus par commande**, en guillemets (§1).
+- **Si un groupe échoue sur ce quota**, ne rien relancer ni sonder pendant 20 min,
+  puis relancer la même commande.
 - **La vraie réponse : relever le quota**, gratuitement. Console Google Cloud > IAM
   et administration > Quotas et limites système, filtrer « Total CPU allocation, per
   project per region » (Cloud Run Admin API), cocher europe-west1 et us-central1,
   Modifier, demander 100. Décision et geste humains.
+- **L'autre réponse : des instances plus petites** (lot C3,
+  `docs/rester-dans-le-quota-gratuit.md`). À `cpu: 'gcf_gen1'`, une instance de
+  256 Mio vaut 1/6 de vCPU : six fois plus d'instances dans le même quota.
 
 ---
 
