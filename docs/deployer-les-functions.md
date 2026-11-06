@@ -61,6 +61,46 @@ s'exprime en SECONDES** (le CLI la multiplie par 1000) : `120` et non `120000`.
 
 ---
 
+## 3. Le premier déploiement dans une nouvelle région échoue une fois
+
+`majAnnuaireClients` et `reconstruireAnnuaireClients` (l'annuaire des clients,
+`docs/rester-dans-le-quota-gratuit.md` §A1) sont les premières functions du
+projet en `us-central1`, et `majAnnuaireClients` est son premier déclencheur
+Firestore. Leur premier déploiement, en novembre 2026, a échoué deux fois, sans
+rapport avec le code :
+
+```
+HTTP Error: 409, Could not create bucket gcf-v2-sources-594056712396-us-central1.
+```
+
+Chaque région a son bucket de sources. Les deux functions sont créées en
+parallèle, ont voulu créer ce bucket en même temps, et l'une a perdu la course.
+Au nouvel essai, le bucket existe.
+
+```
+Permission denied while using the Eventarc Service Agent. If you recently
+started to use Eventarc, it may take a few minutes before all necessary
+permissions are propagated to the Service Agent.
+```
+
+Le déploiement venait d'activer Eventarc et de créer son agent de service, dont
+les droits mettent quelques minutes à se propager. Le CLI le dit lui-même :
+« Retry the deployment in a few minutes ».
+
+**Le remède : relancer la même commande quelques minutes plus tard.** Rien
+d'autre à corriger.
+
+Si l'erreur Eventarc revient encore au-delà d'une demi-heure, c'est que l'agent
+n'a pas reçu son rôle. On le lui donne dans Cloud Shell (décision humaine) :
+
+```bash
+gcloud projects add-iam-policy-binding c2egf-b0b5a \
+  --member="serviceAccount:service-594056712396@gcp-sa-eventarc.iam.gserviceaccount.com" \
+  --role="roles/eventarc.serviceAgent"
+```
+
+---
+
 ## Ce qu'il n'y a PAS à déployer
 
 - `firestore.rules` et `firestore.indexes.json` ne changent que si on les a

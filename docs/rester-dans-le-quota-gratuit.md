@@ -134,7 +134,10 @@ déclencheur — c'est une raison de plus pour §C1.
    et à faire lancer par le client.
 5. Tester à deux boutiques au moins (`AGENTS.md`).
 
-**Côté serveur — fait le 2026-11-04 (A1a), pas encore déployé.**
+**Côté serveur — fait le 2026-11-04 (A1a).** Déploiement en cours : les règles et
+l'index sont en ligne. Les deux functions ont échoué au premier essai, comme
+attendu pour une première région ; il suffit de relancer la commande
+(`docs/deployer-les-functions.md` §3).
 
 - `functions/src/clients/annuaireClients.js` contient le découpage en tranches,
   le contenu d'une entrée, le déclencheur `majAnnuaireClients` et la
