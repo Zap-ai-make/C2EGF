@@ -120,6 +120,14 @@ export const MESSAGES = {
     TRANSACTION_CORRECTED: 'Transaction corrigée et replacée dans l’historique',
     MODIFICATION_CANCELLED: 'Modification annulée',
     IMPORT_SUCCESS: (count) => `${count} transactions importées avec succès !`
+  },
+  // Lot G3b : l'opération est écrite sur l'appareil et partira seule au
+  // retour du réseau. Ni « sauvée » ni « validée » : le serveur ne l'a pas
+  // encore vue, et elle peut encore être refusée.
+  EN_ATTENTE: {
+    TRANSACTION: 'Pas de réseau : la transaction est gardée sur cet appareil et partira dès le retour de la connexion.',
+    REGLEMENT: 'Pas de réseau : le règlement est gardé sur cet appareil et partira dès le retour de la connexion.',
+    CLIENT: 'Pas de réseau : la fiche est gardée sur cet appareil et partira dès le retour de la connexion.',
   }
 }
 

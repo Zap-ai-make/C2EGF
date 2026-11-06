@@ -1,8 +1,11 @@
 import { useState, useEffect, useContext, createContext } from 'react'
 import { STORAGE_KEYS } from '../constants'
-import { firestoreService } from '../services/firestore'
+import { firestoreService, normaliserChampsAgent } from '../services/firestore'
 import { parsefrenchDate } from '../utils/helpers.js'
+import { messageDoublonAgent, trouverFicheAgent } from '../utils/agentFields.js'
+import { CLIENT, ENVOYEE } from '../services/fileEnvoi.js'
 import { AuthContext } from './AuthContext'
+import { EnvoisContext } from './envoisContexte.js'
 
 export const ClientsContext = createContext()
 
@@ -29,6 +32,7 @@ export const sortClientsByRegistrationDesc = (list) =>
 
 export function ClientsProvider({ children }) {
   const { currentUser: user, userProfile, activeStore, loading: authLoading } = useContext(AuthContext)
+  const envois = useContext(EnvoisContext)
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -120,15 +124,32 @@ export function ClientsProvider({ children }) {
   const addClient = async (newClient) => {
     try {
       setError(null)
-      // La liste se met à jour par onSnapshot ; la fiche RENDUE sert à qui doit
-      // la reprendre tout de suite (la transaction qui vient de la créer).
-      return await firestoreService.addClient({
+      const donnees = {
         ...newClient,
         registeredBy: user?.uid,
         registeredByEmail: user?.email,
         registeredStoreId: userProfile?.storeId,
         registeredStoreName: activeStore?.name || userProfile?.storeName
-      })
+      }
+      // La liste se met à jour par onSnapshot ; la fiche RENDUE sert à qui doit
+      // la reprendre tout de suite (la transaction qui vient de la créer).
+      if (envois?.disponible !== true) return await firestoreService.addClient(donnees)
+
+      // Par la file d'envoi (lot G3b). Hors ligne, le serveur ne peut pas dire
+      // si le code agent est déjà pris : la copie de l'annuaire le peut, avec
+      // la règle même du serveur (`trouverFicheAgent`). Le serveur refera le
+      // contrôle à l'envoi, pour une fiche créée ailleurs entre-temps.
+      const normalise = normaliserChampsAgent(donnees)
+      for (const valeur of [normalise.codeAgent, normalise.numeroAgent].filter(Boolean)) {
+        const autre = trouverFicheAgent(clients, valeur)
+        if (autre) throw Object.assign(new Error(messageDoublonAgent(autre, userProfile?.storeId)), { code: 'CLIENT_DOUBLON' })
+      }
+      const id = firestoreService.nouvelIdClient()
+      const charge = { donnees: { ...donnees, dateAjout: new Date().toLocaleDateString('fr-FR') } }
+      const issue = await envois.soumettre(CLIENT, charge, { id })
+      // En attente du réseau, la fiche existe déjà sous son identifiant : la
+      // transaction qui l'a créée peut la prendre, et partira après elle.
+      return issue.statut === ENVOYEE ? issue.resultat : { id, ...charge.donnees, ...normalise, enAttente: true }
     } catch (error) {
       console.error('Client creation error:', error)
       setError(error.message)

@@ -5,6 +5,7 @@ import { TransactionsProvider } from './context/transactions.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { NetworkConfigProvider } from './context/NetworkConfigContext.jsx'
+import { EnvoisProvider } from './context/EnvoisContext.jsx'
 import { AUTH_ROLES } from './constants/authMessages'
 import { getDefaultRouteForRole } from './utils/roleRouting'
 import RoleGuard from './components/auth/RoleGuard.jsx'
@@ -194,15 +195,17 @@ function App() {
     <Router>
       <AuthProvider>
         <ThemeProvider>
-          <NetworkConfigProvider>
-            <ClientsProvider>
-              <TransactionsProvider>
-                <ErrorBoundary>
-                  <AppContent />
-                </ErrorBoundary>
-              </TransactionsProvider>
-            </ClientsProvider>
-          </NetworkConfigProvider>
+          <EnvoisProvider>
+            <NetworkConfigProvider>
+              <ClientsProvider>
+                <TransactionsProvider>
+                  <ErrorBoundary>
+                    <AppContent />
+                  </ErrorBoundary>
+                </TransactionsProvider>
+              </ClientsProvider>
+            </NetworkConfigProvider>
+          </EnvoisProvider>
         </ThemeProvider>
       </AuthProvider>
     </Router>

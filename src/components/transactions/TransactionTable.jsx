@@ -13,7 +13,8 @@ import { useState, useRef, useEffect, useMemo, memo, useCallback, useId } from '
 import { createPortal } from 'react-dom'
 import { useTransactions } from '../../context/transactions.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
-import { PAYMENT_METHODS } from '../../utils/constants.js'
+import { MESSAGES, PAYMENT_METHODS } from '../../utils/constants.js'
+import { EN_ATTENTE } from '../../services/fileEnvoi.js'
 import { getClientName, formatTransactionDateTime } from '../../utils/helpers.js'
 import { SkeletonRow } from '../ui/SkeletonList.jsx'
 import EmptyState from '../ui/EmptyState.jsx'
@@ -209,10 +210,13 @@ const TransactionTable = memo(function TransactionTable() {
       setAmountError('')
       setCodeAgentReglement('')
 
-      if (actionType === 'rembourser') {
-        await addRefundTranche(transactionId, amount, method, idempotencyKey, agentCode)
-      } else {
-        await addPaymentTranche(transactionId, amount, method, idempotencyKey, agentCode)
+      const issue = actionType === 'rembourser'
+        ? await addRefundTranche(transactionId, amount, method, idempotencyKey, agentCode)
+        : await addPaymentTranche(transactionId, amount, method, idempotencyKey, agentCode)
+      // Sans réseau, le règlement attend sur l'appareil (lot G3b) : la ligne ne
+      // bouge pas encore, il faut dire pourquoi.
+      if (issue?.statut === EN_ATTENTE) {
+        setRollbackToast({ show: true, message: MESSAGES.EN_ATTENTE.REGLEMENT, type: 'info' })
       }
 
       // Succès : supprimer la clé (la prochaine action génèrera une nouvelle clé)

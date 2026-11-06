@@ -925,6 +925,76 @@ firebase deploy --only "functions:storeTransactionCommand"
 Sans effet visible tant que le front n'envoie pas de `commandeId` : le front
 d'aujourd'hui n'en envoie aucun.
 
+### G3b — fait le 2026-11-06 : la file d'envoi
+
+**Ce que la caissière voit :**
+- **Avec réseau, rien ne change.** Succès, ou refus affiché avec les champs
+  gardés.
+- **Sans réseau**, le formulaire rend la main au lieu de rester figé. Un
+  message dit que l'opération est gardée sur l'appareil et partira dès le
+  retour de la connexion.
+
+**Ce qui passe par la file** (`src/services/fileEnvoi.js`) :
+- la saisie, non terminée ou validée d'un geste ;
+- le règlement, par tranche ou en entier ;
+- le remboursement ;
+- l'ajout d'un client, depuis le formulaire de transaction comme depuis
+  l'onglet Clients.
+
+En pratique, la validation et l'encaissement d'une non terminée passent par le
+règlement : `validateDraft` ne sert qu'à la correction d'une ligne rouverte,
+qui reste en ligne.
+
+**Le chemin d'une opération :**
+1. Elle est écrite dans IndexedDB (`c2egf-envois-<projet>-<uid>`,
+   `stockageEnvois.js`) **avant** d'être envoyée (TC-352 [FE-01]).
+2. Elle part aussitôt, et le formulaire attend sa réponse 8 s au plus.
+3. Si la réponse arrive, c'est comme avant. Un refus arrivé pendant cette
+   attente retire l'opération de la file : la caissière l'a sous les yeux
+   (FE-03).
+4. Sinon, l'opération reste et repart seule :
+   - au retour du réseau (événement `online`) ;
+   - toutes les 30 s ;
+   - à l'ouverture suivante de l'application, même après l'extinction de la
+     machine (FE-08).
+5. Les opérations partent une à la fois, dans l'ordre de saisie. Une panne
+   arrête l'envoi des suivantes et leur rend la main tout de suite (FE-07). Un
+   refus arrivé plus tard reste visible avec sa raison, et les suivantes
+   partent quand même (FE-06).
+
+**Ce qui est un refus :** un code métier en majuscules, dans `code` ou dans
+`details.code`. Le service de règlement laisse le code dans `details` : le lire
+seulement dans `code` aurait fait renvoyer un règlement refusé sans fin
+(FE-13). Les pannes de réseau et les erreurs internes se retentent.
+
+**De quoi être reconnue au renvoi :**
+
+| Opération | Ce qui la fait reconnaître |
+|---|---|
+| Saisie | son `commandeId` (G3a) |
+| Règlement, remboursement | la clé du geste (`idempotencyKey`), qui sert aussi d'identifiant dans la file : le même geste confirmé deux fois n'y entre qu'une fois (FE-14) |
+| Client | son identifiant, tiré sur l'appareil (`nouvelIdClient`). `enregistrerClientEnvoye` relit d'abord la fiche au serveur, puis refait le contrôle de doublon sur l'état du serveur |
+
+- **Hors ligne, le doublon de code agent** se cherche dans la copie de
+  l'annuaire, avec la règle même du serveur (`trouverFicheAgent`), avant
+  d'entrer dans la file (TC-353 [OF-05]).
+- **Le refus de doublon** porte désormais le code `CLIENT_DOUBLON` : sans lui,
+  la file l'aurait pris pour une panne.
+- **Un seul onglet envoie** (Web Locks, `verrouillerEnvois`). Chaque envoi
+  relit la file, donc les opérations d'un autre onglet partent aussi.
+- **Sans fournisseur de file** (tests, aperçu), les contextes reprennent l'appel
+  direct d'avant, à l'identique (OF-06). Les modules lus par ces contextes
+  (`envoisContexte.js`, `fileEnvoi.js`) ne chargent pas Firebase.
+
+**Tests :**
+- TC-352 : 14 cas sur la file elle-même.
+- TC-353 : 8 cas sur le passage des opérations par la file, et sur ce que
+  chacune devient au serveur.
+
+**Reste pour G3c :** une non terminée saisie hors ligne n'apparaît pas encore
+dans la liste avant son envoi, et les soldes ne bougent qu'à la réponse du
+serveur.
+
 ---
 
 ## Ce qui n'a pas pu être vérifié

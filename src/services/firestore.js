@@ -2,6 +2,8 @@ import {
   collection,
   doc,
   getDoc,
+  getDocFromServer,
+  setDoc,
   addDoc,
   updateDoc,
   deleteDoc,
@@ -909,7 +911,9 @@ export class FirestoreService {
         )
         const autre = existants.find((fiche) => fiche.id !== idExclu)
         if (autre) {
-          throw new Error(messageDoublonAgent(autre, storeId))
+          // Le code dit à la file d'envoi que c'est un refus, pas une panne : la
+          // renvoyer ne changerait rien (lot G3b).
+          throw Object.assign(new Error(messageDoublonAgent(autre, storeId)), { code: 'CLIENT_DOUBLON' })
         }
       }
     }
@@ -941,6 +945,52 @@ export class FirestoreService {
       registeredStoreName: activeStore.name,
       dateAjout: new Date().toLocaleDateString('fr-FR')
     })
+  }
+
+  /** Un identifiant de fiche client, tiré sur l'appareil, réseau ou pas (lot G3b). */
+  nouvelIdClient() {
+    return doc(this.collectionRef(FIRESTORE_CONFIG.COLLECTIONS.CLIENTS)).id
+  }
+
+  /**
+   * La fiche client venue de la file d'envoi (lot G3b) : `addClient`, sous un
+   * identifiant tiré sur l'appareil au moment de la saisie.
+   *
+   * ⚠ RENVOYÉE, ELLE EST RECONNUE. Une réponse perdue fait renvoyer une fiche
+   *   déjà écrite : on la relit d'abord au serveur. Cette lecture échoue hors
+   *   ligne, et c'est voulu : la file réessaiera, sans qu'aucune écriture ne
+   *   s'empile dans le cache de Firestore en attendant.
+   *
+   * ⚠ LE MÊME ANTI-DOUBLON QUE `addClient`, sur l'état du serveur. Le contrôle
+   *   fait hors ligne sur la copie de l'annuaire ne voit pas une fiche créée
+   *   entre-temps par une autre boutique : c'est ici qu'elle est refusée.
+   */
+  async enregistrerClientEnvoye(clientId, clientData) {
+    const activeStore = this.requireActiveStore()
+    if (!activeStore?.id || !activeStore?.name) {
+      throw new Error('Boutique active non disponible pour la création du client')
+    }
+
+    const ref = this.docRef(FIRESTORE_CONFIG.COLLECTIONS.CLIENTS, clientId)
+    const deja = await getDocFromServer(ref)
+    if (deja.exists()) return { id: clientId, ...deja.data() }
+
+    const normalise = normaliserChampsAgent(clientData)
+    await this._refuserDoublonAgent(normalise, activeStore.id)
+
+    const donnees = {
+      ...clientData,
+      ...normalise,
+      registeredStoreId: activeStore.id,
+      registeredStoreName: activeStore.name,
+      dateAjout: clientData.dateAjout || new Date().toLocaleDateString('fr-FR'),
+    }
+    const validation = this.validateData(FIRESTORE_CONFIG.COLLECTIONS.CLIENTS, donnees)
+    if (!validation.isValid) {
+      throw Object.assign(new Error(`Données invalides: ${validation.errors.join(', ')}`), { code: 'CLIENT_INVALIDE' })
+    }
+    await setDoc(ref, { ...donnees, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
+    return { id: clientId, ...donnees }
   }
 
   /**

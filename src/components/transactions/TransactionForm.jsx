@@ -8,6 +8,7 @@ import { useTransactions } from '../../context/transactions.jsx'
 import { useSimpleNetworkData } from '../../hooks/useSimpleNetworkData'
 import Toast from '../Toast'
 import { NETWORK_OPTIONS, TRANSACTION_TYPES, MESSAGES } from '../../utils/constants.js'
+import { EN_ATTENTE } from '../../services/fileEnvoi.js'
 import logger from '../../utils/logger.js'
 import { reconnaitreClient } from '../../utils/rechercheClients.js'
 import {
@@ -183,8 +184,9 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
           'success',
         )
       } else {
-        await addTransaction(pendingConfirmation.transactionData)
-        showToast(
+        const issue = await addTransaction(pendingConfirmation.transactionData)
+        if (issue?.statut === EN_ATTENTE) showToast(MESSAGES.EN_ATTENTE.TRANSACTION, 'info')
+        else showToast(
           pendingConfirmation.isDirectValidation ? MESSAGES.SUCCESS.TRANSACTION_VALIDATED : MESSAGES.SUCCESS.TRANSACTION_SAVED,
           'success'
         )
@@ -230,7 +232,8 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
     if (cree?.id) {
       setSelectedClient(cree)
       setManualAgentCode('')
-      showToast(`Client enregistré : ${[cree.prenom, cree.nom].filter(Boolean).join(' ')}`, 'success')
+      if (cree.enAttente) showToast(MESSAGES.EN_ATTENTE.CLIENT, 'info')
+      else showToast(`Client enregistré : ${[cree.prenom, cree.nom].filter(Boolean).join(' ')}`, 'success')
     }
   }, [onAddClient, showToast])
 

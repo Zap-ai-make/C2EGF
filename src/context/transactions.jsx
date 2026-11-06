@@ -5,6 +5,8 @@ import { FIRESTORE_CONFIG } from '../constants/firestoreConstants.js'
 import { firestoreService } from '../services/firestore'
 import { addTransactionPayment, addTransactionRefund } from '../services/settlementService'
 import { AuthContext } from './AuthContext'
+import { EnvoisContext } from './envoisContexte.js'
+import { ENVOYEE, REGLEMENT, REMBOURSEMENT, SAISIE } from '../services/fileEnvoi.js'
 import {
   businessDateKey,
   getBusinessDayBounds,
@@ -94,6 +96,11 @@ export const useTransactions = () => {
 
 export const TransactionsProvider = ({ children }) => {
   const { currentUser: user, userProfile, activeStore, loading: authLoading } = useContext(AuthContext)
+  // La file d'envoi (lot G3b). Absente hors de son fournisseur : l'appel
+  // direct d'avant la file reprend alors, à l'identique.
+  const envois = useContext(EnvoisContext)
+  const parLaFile = envois?.disponible === true
+  const soumettre = envois?.soumettre
 
   // États pour les deux collections Firestore
   const [pendingTransactions, setPendingTransactions] = useState([])
@@ -385,14 +392,20 @@ export const TransactionsProvider = ({ children }) => {
         userEmail: user?.email || 'Utilisateur inconnu'
       }
 
-      await firestoreService.addTransaction(transaction)
-      // La mise à jour de l'état se fera automatiquement via onSnapshot
+      // Rend `{ statut }` : « envoyee » quand le serveur a répondu, « en_attente »
+      // quand la saisie attend le réseau sur l'appareil. La liste se met à jour
+      // par onSnapshot, comme avant.
+      if (!parLaFile) {
+        await firestoreService.addTransaction(transaction)
+        return { statut: ENVOYEE }
+      }
+      return await soumettre(SAISIE, { transaction })
     } catch (error) {
       console.error('Erreur lors de l\'ajout de la transaction:', error)
       setError(error.message)
       throw error
     }
-  }, [activeStore?.name, user, userProfile?.name, userProfile?.role, userProfile?.storeId, userProfile?.storeName])
+  }, [activeStore?.name, user, userProfile?.name, userProfile?.role, userProfile?.storeId, userProfile?.storeName, parLaFile, soumettre])
 
   const updateTransaction = useCallback(async (id, updates) => {
     try {
@@ -427,26 +440,34 @@ export const TransactionsProvider = ({ children }) => {
   const addPaymentTranche = useCallback(async (draftId, amount, paymentMethod, idempotencyKey, agentCode) => {
     try {
       setError(null)
-      await addTransactionPayment({ draftId, amount, paymentMethod, idempotencyKey, agentCode })
-      return true
+      if (!parLaFile) {
+        await addTransactionPayment({ draftId, amount, paymentMethod, idempotencyKey, agentCode })
+        return { statut: ENVOYEE }
+      }
+      // L'opération prend la clé du geste pour identifiant : le même règlement
+      // confirmé deux fois n'entre qu'une fois dans la file.
+      return await soumettre(REGLEMENT, { draftId, amount, paymentMethod, idempotencyKey, agentCode }, { id: `${REGLEMENT}-${idempotencyKey}` })
     } catch (error) {
       console.error('Erreur de règlement (paiement):', error)
       setError(error?.message || 'Erreur lors du paiement')
       throw error
     }
-  }, [])
+  }, [parLaFile, soumettre])
 
   const addRefundTranche = useCallback(async (draftId, amount, paymentMethod, idempotencyKey, agentCode) => {
     try {
       setError(null)
-      await addTransactionRefund({ draftId, amount, paymentMethod, idempotencyKey, agentCode })
-      return true
+      if (!parLaFile) {
+        await addTransactionRefund({ draftId, amount, paymentMethod, idempotencyKey, agentCode })
+        return { statut: ENVOYEE }
+      }
+      return await soumettre(REMBOURSEMENT, { draftId, amount, paymentMethod, idempotencyKey, agentCode }, { id: `${REMBOURSEMENT}-${idempotencyKey}` })
     } catch (error) {
       console.error('Erreur de règlement (remboursement):', error)
       setError(error?.message || 'Erreur lors du remboursement')
       throw error
     }
-  }, [])
+  }, [parLaFile, soumettre])
 
   /**
    * Met une transaction à la corbeille, qu'elle soit non terminée ou validée.
