@@ -9,7 +9,6 @@ import { stockDejaPris } from '../../utils/financialImpact.js'
 import { useSimpleNetworkData } from '../../hooks/useSimpleNetworkData'
 import Toast from '../Toast'
 import { NETWORK_OPTIONS, TRANSACTION_TYPES, MESSAGES } from '../../utils/constants.js'
-import { EN_ATTENTE } from '../../services/fileEnvoi.js'
 import logger from '../../utils/logger.js'
 import { reconnaitreClient } from '../../utils/rechercheClients.js'
 import {
@@ -182,24 +181,21 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
         // correction et la revalidation par le mode de règlement mémorisé, au
         // lieu de l'abandonner dans les non terminées où la caissière devrait
         // la retrouver et la revalider à la main.
-        const issue = editingTransaction.reopenedFromHistoryId
-          ? await saveReopenedCorrection(editingTransaction, pendingConfirmation.transactionData)
-          : await updateTransaction(editingTransaction.id, pendingConfirmation.transactionData)
+        if (editingTransaction.reopenedFromHistoryId) await saveReopenedCorrection(editingTransaction, pendingConfirmation.transactionData)
+        else await updateTransaction(editingTransaction.id, pendingConfirmation.transactionData)
         clearEditTransaction()
         // Le formulaire se ferme juste après : son message partirait avec lui. La
         // page qui le porte le garde à l'écran.
         const dire = annoncer ?? showToast
-        if (issue?.statut === EN_ATTENTE) dire(MESSAGES.EN_ATTENTE.MODIFICATION, 'info')
-        else dire(
+        dire(
           editingTransaction.reopenedFromHistoryId
             ? MESSAGES.SUCCESS.TRANSACTION_CORRECTED
             : MESSAGES.SUCCESS.TRANSACTION_MODIFIED,
           'success',
         )
       } else {
-        const issue = await addTransaction(pendingConfirmation.transactionData)
-        if (issue?.statut === EN_ATTENTE) showToast(MESSAGES.EN_ATTENTE.TRANSACTION, 'info')
-        else showToast(
+        await addTransaction(pendingConfirmation.transactionData)
+        showToast(
           pendingConfirmation.isDirectValidation ? MESSAGES.SUCCESS.TRANSACTION_VALIDATED : MESSAGES.SUCCESS.TRANSACTION_SAVED,
           'success'
         )
@@ -245,8 +241,7 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
     if (cree?.id) {
       setSelectedClient(cree)
       setManualAgentCode('')
-      if (cree.enAttente) showToast(MESSAGES.EN_ATTENTE.CLIENT, 'info')
-      else showToast(`Client enregistré : ${[cree.prenom, cree.nom].filter(Boolean).join(' ')}`, 'success')
+      showToast(`Client enregistré : ${[cree.prenom, cree.nom].filter(Boolean).join(' ')}`, 'success')
     }
   }, [onAddClient, showToast])
 

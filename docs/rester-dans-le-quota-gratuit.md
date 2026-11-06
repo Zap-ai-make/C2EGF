@@ -649,8 +649,9 @@ abandonné, remplacé par G1.
 | G0 | Démarrage hors ligne : ne plus attendre `lastLogin`, demander le stockage persistant (`navigator.storage.persist()`), avertir avant une déconnexion — **fait le 2026-11-06** | l'application s'ouvre sans réseau |
 | G1 | Historique du jour courant, le reste sur demande de date — **fait le 2026-11-06** | ~101 lectures par ouverture à froid |
 | G2 | Annuaire gardé sur l'appareil, relu par différence — **fait le 2026-11-06**, sans changement côté serveur | 65 lectures et ~5 Mo → 1 lecture + tranches modifiées |
-| G3 | File d'envoi pour les quatre opérations — **fait le 2026-11-06 ; functions et front à déployer** | la saisie sans réseau |
-| G4 | Le ravitaillement, son retour, la modification, l'annulation, et la date réelle — **fait le 2026-11-06 ; functions et front à déployer** | toute la caisse sans réseau |
+| G3 | File d'envoi pour les quatre opérations — **en production le 2026-11-06** | la saisie sans réseau |
+| G4 | Le ravitaillement, son retour, la modification, l'annulation, et la date réelle — **en production le 2026-11-06** | toute la caisse sans réseau |
+| H | D'abord sur l'appareil : le formulaire n'attend plus le réseau, l'écran ne clignote pas, le fond de l'en-tête reste hors ligne — **fait le 2026-11-06, front seul** | plus d'attente de 8 s par opération |
 
 ### G0 — fait le 2026-11-06 : l'application s'ouvre sans réseau
 
@@ -953,11 +954,12 @@ qui reste en ligne.
 **Le chemin d'une opération :**
 1. Elle est écrite dans IndexedDB (`c2egf-envois-<projet>-<uid>`,
    `stockageEnvois.js`) **avant** d'être envoyée (TC-352 [FE-01]).
-2. Elle part aussitôt, et le formulaire attend sa réponse 8 s au plus.
-3. Si la réponse arrive, c'est comme avant. Un refus arrivé pendant cette
-   attente retire l'opération de la file : la caissière l'a sous les yeux
+2. Elle part aussitôt. ~~Le formulaire attend sa réponse 8 s au plus~~ : depuis le
+   lot H, il se ferme dès l'écriture, et l'envoi part derrière.
+3. ~~Un refus arrivé pendant cette attente retire l'opération de la file~~ : depuis
+   le lot H, tout refus arrive après coup, sur la ligne et dans la liste des envois
    (FE-03).
-4. Sinon, l'opération reste et repart seule :
+4. Tant qu'elle n'est pas acceptée, l'opération reste et repart seule :
    - au retour du réseau (événement `online`) ;
    - toutes les 30 s ;
    - à l'ouverture suivante de l'application, même après l'extinction de la
@@ -1212,10 +1214,9 @@ et les 2 autres après avoir renforcé TC-360 [GA-19] et TC-361 [GF-04].
 **Limites :**
 - **Restent en ligne** : les collaborations, les demandes au dealer. Une fiche client se
   modifie toujours en attendant le réseau (voir G3c).
-- **Une correction ou une annulation sur une ligne d'un jour relu**, faite sans réseau :
-  une fois partie, la ligne d'origine reste affichée jusqu'à ce qu'on relise ces dates,
-  puisque rien n'écoute la période. Un second geste dessus serait refusé (« introuvable »),
-  sans dégât.
+- ~~**Une correction ou une annulation sur une ligne d'un jour relu**, faite sans réseau :
+  une fois partie, la ligne d'origine reste affichée jusqu'à ce qu'on relise ces dates.~~
+  Levée par le lot H : la file prévient l'écran quand une opération est acceptée.
 - **Une saisie refusée entraîne ce qui la vise** : sa modification et son annulation sont
   refusées aussi (« introuvable »). Chacune se retire de la liste des envois.
 - **Sur une ligne déjà appliquée dont la réponse est perdue**, les soldes provisoires la
@@ -1244,6 +1245,66 @@ champs non autorisés, et la file retente. Mais aucun geste ne part d'ici là.
 4. Éteindre la machine, la rallumer le lendemain sans réseau, puis remettre le wifi.
 5. Attendu : en moins d'une minute, le bandeau disparaît et les soldes sont ceux de l'écran.
    Dans l'Historique, choisir la veille : les opérations y sont, datées de la veille.
+
+### H — fait le 2026-11-06 : d'abord sur l'appareil
+
+Retour de l'utilisateur après son essai sans internet : « impeccable », trois choses à
+reprendre.
+
+| Constat | Cause | Correction |
+|---|---|---|
+| Les opérations sont lentes, le client attend | le formulaire attendait la réponse du serveur jusqu'à 8 s (`ATTENTE_FORMULAIRE_MS`). Wifi coupé net, l'échec arrive vite ; box allumée sans internet, `navigator.onLine` reste vrai et chaque opération coûtait les 8 s | `soumettre` rend la main dès l'écriture sur l'appareil ; l'envoi part derrière |
+| Le long message n'est pas utile | « Connexion absente ou lente : … gardée sur cet appareil … » après chaque geste | le message court habituel, avec ou sans réseau ; le bandeau du bas dit ce qui attend |
+| Le fond de l'en-tête disparaît hors ligne | `bandeau-reseau.jpg` exclu du precache en août, pour les téléphones | precaché (89 Ko, une fois) |
+
+**Ce qui change aussi avec internet :** un refus du serveur n'apparaît plus dans le
+formulaire ouvert. Il arrive après coup, comme hors ligne : la ligne passe « Refusée » avec
+la raison, le bandeau le signale, la caissière ressaisit. C'est rare : le formulaire vérifie
+déjà le stock et les doublons de clients.
+
+**Sans clignoter.** Avec internet, une opération part dans la seconde : la montrer
+« en attente » ferait clignoter le bandeau, « Soldes provisoires » et la mention de la
+ligne à chaque geste. `attenteASignaler` (`fileEnvoi.js`) ne les allume que hors ligne,
+après un échec, ou passé `SIGNAL_APRES_MS` (5 s) : sur un wifi sans internet, c'est l'âge
+de l'opération qui le dit. Les soldes, eux, comptent l'opération tout de suite. La liste
+complète `enAttente` ne change pas : la déconnexion s'y fie.
+
+**Ce que l'écran faisait à la réponse, il le fait au départ.** Annuler ou corriger une
+ligne d'une période relue demande de corriger cette période à la main, puisque rien ne
+l'écoute. C'était fait à la réponse reçue pendant l'attente. La file prévient maintenant
+quand une opération est acceptée (`apresEnvoi`). Cela lève la limite de G4 : la ligne
+corrigée remplace l'origine (TC-361 [GF-20]). Et une annulation refusée ne marque plus la
+ligne relue comme supprimée ([GF-21]).
+
+**Vérifié dans un navigateur** (build avec service worker et persistance, émulateurs) :
+
+| Situation | Résultat |
+|---|---|
+| Avec internet : saisir un dépôt | formulaire libéré en 260 ms ; en 3 s, ni bandeau, ni « Soldes provisoires », ni « En attente d'envoi » ; la saisie est au serveur |
+| Wifi sans internet (le serveur ne répond pas, le navigateur se croit en ligne) | formulaire libéré en 261 ms, contre 8 s avant ; le stock compte la saisie aussitôt ; rien à 2 s, le bandeau, « Soldes provisoires » et la mention passé 5 s |
+| Le stock a fondu au serveur pendant ce temps, puis le serveur répond | « 1 opération refusée », la ligne dit « Refusée : Stock insuffisant… », rien d'écrit au serveur, « Retirer » l'enlève |
+| Hors ligne complet : ravitailler de 100 000, saisir 3 000 | 78 ms et 264 ms ; « Ravitaillement enregistré », « Transaction sauvée en attente », plus aucun « Connexion absente » ; bandeau immédiat, soldes provisoires 102 000 |
+| Recharger hors ligne | le fond de l'en-tête est servi par le service worker (HTTP 200) |
+| Le réseau revient | le serveur arrive à 102 000, la file se vide ; le bandeau s'éteint sans se rallumer |
+
+Console : aucune erreur, hors le bruit connu du hors-ligne (le même filtre qu'en G4).
+
+Cet essai a trouvé un défaut que les tests isolés ne voyaient pas. Quand la première
+opération partait, la suivante était jugée avec une heure figée au dernier réveil du
+minuteur. Elle paraissait fraîche, et le bandeau s'éteignait un instant avant de revenir.
+L'heure est maintenant relue avec la liste, dans le même rendu (`EnvoisContext.jsx`).
+
+**Tests :** TC-352 réécrit sur le nouveau contrat, avec [FE-18] et [FE-19] ; TC-361
+[GF-20] à [GF-22] ; TC-364 (6 cas) ; TC-353, TC-355 et TC-363 adaptés.
+16 mutations, toutes attrapées.
+
+**Déploiement :** front seul, aucune function. Un push suffit.
+
+**Essai sur une vraie machine, après le push :**
+1. Box allumée, internet coupé (câble de la box débranché) : chaque opération se ferme
+   aussitôt ; le bandeau n'arrive qu'après 5 s.
+2. Wifi coupé, page rechargée : le fond de l'en-tête reste.
+3. Avec internet : aucun bandeau ni « Soldes provisoires » entre deux opérations.
 
 ---
 

@@ -27,6 +27,8 @@ export default function EtatEnvoi({ envoi, id }) {
       </div>
     )
   }
+  // Partie dans la seconde, réseau présent : rien à dire (lot H).
+  if (envois?.signalerAttente === false) return null
   return (
     <div className="mt-1 text-xs font-medium text-warn" data-testid="envoi-en-attente">
       En attente d’envoi

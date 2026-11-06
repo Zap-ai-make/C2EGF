@@ -418,8 +418,8 @@ export const FICHES = Object.freeze([
       'Les collaborations et les demandes au dealer demandent internet : attends que la connexion revienne.',
     ],
     retenir: {
-      titre: 'Une opération peut être refusée au retour',
-      texte: 'Si le stock a fondu entre-temps, le serveur la refuse : elle affiche « Refusée » et la raison, et les soldes ne bougent pas. {{Retirer}} l’enlève de la liste ; ressaisis-la si besoin. Et **ne te déconnecte pas le soir** : sans internet, tu ne pourrais plus te reconnecter.',
+      titre: 'Une opération peut être refusée après coup',
+      texte: 'Avec ou sans internet, le formulaire se ferme tout de suite et l’opération part ensuite. Si le stock a fondu entre-temps, le serveur la refuse : elle affiche « Refusée » et la raison, et les soldes ne bougent pas. {{Retirer}} l’enlève de la liste ; ressaisis-la si besoin. Et **ne te déconnecte pas le soir** : sans internet, tu ne pourrais plus te reconnecter.',
     },
   },
 ])

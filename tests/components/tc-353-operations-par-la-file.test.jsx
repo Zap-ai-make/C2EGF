@@ -145,16 +145,6 @@ describe('TC-353 — avec la file, les opérations y passent', () => {
       { id: 'id-local-1' })
   })
 
-  it('[OF-04] le client envoyé revient tel que le serveur l’a écrit', async () => {
-    const envois = fileSimulee({ statut: ENVOYEE, resultat: { id: 'id-local-1', nom: 'OUATTARA' } })
-    monter(envois)
-    await waitFor(() => expect(cl?.clients).toHaveLength(1))
-
-    let fiche
-    await act(async () => { fiche = await cl.addClient({ nom: 'OUATTARA' }) })
-    expect(fiche).toEqual({ id: 'id-local-1', nom: 'OUATTARA' })
-  })
-
   it('[OF-05] un code agent déjà dans l’annuaire est refusé avant d’entrer dans la file', async () => {
     const envois = fileSimulee()
     monter(envois)

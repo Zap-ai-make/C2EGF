@@ -82,11 +82,10 @@ export default defineConfig(({ mode }) => {
         // Fichiers à mettre en cache automatiquement
         globPatterns: ['**/*.{js,css,html,ico,png,svg,jpg,jpeg,webp}'],
 
-        // Le fond du bandeau ne s'affiche qu'au-dela de 768 px (src/index.css).
-        // Le precacher le ferait telecharger a l'installation y compris sur
-        // telephone, ou il ne sera jamais peint. Hors ligne, le bandeau retombe
-        // sur ses degrades : la degradation est invisible.
-        globIgnores: ['**/bandeau-reseau.jpg'],
+        // Le fond du bandeau (`bandeau-reseau.jpg`, 89 Ko) est precache, telephones
+        // compris, ou il n'est pas peint (src/index.css, au-dela de 768 px). Exclu
+        // jusqu'au lot H, il disparaissait hors ligne sur les postes des caissieres,
+        // et la difference se voyait (essai du 2026-11-06).
         navigateFallback: '/index.html',
         navigateFallbackAllowlist: [/^\/(?!__).*/],
 

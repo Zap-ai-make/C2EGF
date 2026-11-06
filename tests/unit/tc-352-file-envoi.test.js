@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
-  ATTENTE_FORMULAIRE_MS, EN_ATTENTE, ENVOYEE, REESSAI_MS, REFUSEE,
-  creerFileEnvoi, estRefusDefinitif,
+  EN_ATTENTE, REESSAI_MS, REFUSEE, SIGNAL_APRES_MS,
+  attenteASignaler, creerFileEnvoi, estRefusDefinitif,
 } from '../../src/services/fileEnvoi.js'
 import { stockageEnMemoire } from '../../src/services/stockageEnvois.js'
 
@@ -10,7 +10,7 @@ import { stockageEnMemoire } from '../../src/services/stockageEnvois.js'
  *
  * Ce que ce fichier verrouille :
  * - une opération est écrite sur l'appareil AVANT d'être envoyée ;
- * - réseau présent, la caissière voit la réponse du serveur comme avant ;
+ * - la caissière n'attend jamais le réseau, même présent (lot H) ;
  * - réseau absent, l'opération attend et repart seule, dans l'ordre ;
  * - un refus du serveur est définitif, une panne se retente ;
  * - jamais deux envois simultanés de la même opération depuis un onglet.
@@ -33,6 +33,9 @@ function horloge() {
 const panne = () => Object.assign(new Error('internal'), { code: 'functions/internal' })
 const refus = () => Object.assign(new Error('Stock Orange insuffisant.'), { code: 'INSUFFICIENT_STORE_BALANCE' })
 const attendreQue = (condition) => vi.waitFor(async () => expect(await condition()).toBe(true))
+// L'envoi part derrière `soumettre` : on attend la fin d'un essai avant d'en juger.
+const essais = async (stockage, id) => (await stockage.lister()).find((op) => op.id === id)?.tentatives ?? 0
+const essaye = (stockage, id, n = 1) => attendreQue(async () => (await essais(stockage, id)) >= n)
 
 function file({ executer = vi.fn(async () => ({ ok: true })), stockage = stockageEnMemoire() } = {}) {
   const h = horloge()
@@ -46,7 +49,7 @@ function file({ executer = vi.fn(async () => ({ ok: true })), stockage = stockag
 
 afterEach(() => vi.restoreAllMocks())
 
-describe('TC-352 — réseau présent : rien ne change pour la caissière', () => {
+describe('TC-352 — d’abord sur l’appareil, la caissière n’attend jamais (lot H)', () => {
   it('[FE-01] l’opération est écrite sur l’appareil avant de partir', async () => {
     const ordre = []
     const stockage = stockageEnMemoire()
@@ -55,22 +58,59 @@ describe('TC-352 — réseau présent : rien ne change pour la caissière', () =
     const { f } = file({ stockage, executer: vi.fn(async () => { ordre.push('envoyée') }) })
 
     await f.soumettre('saisie', { transaction: { montant: 100 } })
+    await attendreQue(() => ordre.length === 2)
     expect(ordre).toEqual(['écrite', 'envoyée'])
   })
 
-  it('[FE-02] envoyée : la réponse du serveur revient au formulaire, et la file se vide', async () => {
+  it('[FE-02] envoyée : la file se vide, et la réponse du serveur va à qui écoute les envois', async () => {
     const { f, stockage, executer } = file({ executer: vi.fn(async () => ({ id: 'op-1' })) })
+    const recus = []
+    f.apresEnvoi((op, resultat) => recus.push([op.id, op.type, resultat]))
     const issue = await f.soumettre('saisie', { transaction: {} })
 
-    expect(issue).toMatchObject({ statut: ENVOYEE, resultat: { id: 'op-1' } })
+    expect(issue).toMatchObject({ statut: EN_ATTENTE, operation: { id: 'op-1', type: 'saisie' } })
+    await attendreQue(async () => (await stockage.lister()).length === 0)
     expect(executer).toHaveBeenCalledWith(expect.objectContaining({ id: 'op-1', type: 'saisie', etat: EN_ATTENTE }))
-    expect(await stockage.lister()).toEqual([])
+    expect(recus).toEqual([['op-1', 'saisie', { id: 'op-1' }]])
   })
 
-  it('[FE-03] refusée pendant l’attente : le formulaire reçoit le refus, et rien ne reste dans la file', async () => {
+  it('[FE-03] refusée : la main est déjà rendue, le refus reste dans la file avec sa raison', async () => {
     const { f, stockage } = file({ executer: vi.fn(async () => { throw refus() }) })
-    await expect(f.soumettre('saisie', {})).rejects.toMatchObject({ code: 'INSUFFICIENT_STORE_BALANCE' })
-    expect(await stockage.lister()).toEqual([])
+    const recus = []
+    f.apresEnvoi((op) => recus.push(op.id))
+    expect(await f.soumettre('saisie', {})).toMatchObject({ statut: EN_ATTENTE })
+    await attendreQue(async () => (await stockage.lister())[0]?.etat === REFUSEE)
+    expect((await stockage.lister())[0].erreur).toEqual({ code: 'INSUFFICIENT_STORE_BALANCE', message: 'Stock Orange insuffisant.' })
+    expect(recus).toEqual([])
+  })
+
+  it('[FE-05] un serveur muet ne retient pas la caissière : la main revient tout de suite, l’opération part quand il répond', async () => {
+    let repondre
+    const { f, stockage } = file({ executer: vi.fn(() => new Promise((r) => { repondre = r })) })
+    expect(await f.soumettre('saisie', {})).toMatchObject({ statut: EN_ATTENTE })
+    await attendreQue(() => typeof repondre === 'function')
+    expect(await stockage.lister()).toHaveLength(1)
+
+    repondre({ id: 'op-1' })
+    await attendreQue(async () => (await stockage.lister()).length === 0)
+  })
+
+  it('[FE-18] un écouteur qui lève n’arrête pas l’envoi des suivantes, et se désabonne', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { f, stockage } = file()
+    const recus = []
+    f.apresEnvoi(() => { throw new Error('écran démonté') })
+    const desabonner = f.apresEnvoi((op) => recus.push(op.id))
+    await f.soumettre('saisie', {})
+    await attendreQue(() => recus.length === 1)
+    await f.soumettre('saisie', {})
+    await attendreQue(async () => (await stockage.lister()).length === 0)
+    expect(recus).toEqual(['op-1', 'op-2'])
+
+    desabonner()
+    await f.soumettre('saisie', {})
+    await attendreQue(async () => (await stockage.lister()).length === 0)
+    expect(recus).toEqual(['op-1', 'op-2'])
   })
 })
 
@@ -80,6 +120,7 @@ describe('TC-352 — réseau absent : l’opération attend et repart seule', ()
     const { f, h, stockage } = file({ executer })
 
     expect(await f.soumettre('saisie', {})).toMatchObject({ statut: EN_ATTENTE })
+    await essaye(stockage, 'op-1')
     expect(await stockage.lister()).toEqual([expect.objectContaining({ id: 'op-1', etat: EN_ATTENTE, tentatives: 1, erreur: { code: 'functions/internal', message: 'internal' } })])
     expect(h.planifies(REESSAI_MS)).toBe(1)
 
@@ -88,30 +129,16 @@ describe('TC-352 — réseau absent : l’opération attend et repart seule', ()
     expect(executer).toHaveBeenCalledTimes(2)
   })
 
-  it(`[FE-05] un serveur muet : la main revient au bout de ${ATTENTE_FORMULAIRE_MS / 1000} s, et l’opération part quand il répond`, async () => {
-    let repondre
-    const { f, h, stockage } = file({ executer: vi.fn(() => new Promise((r) => { repondre = r })) })
-    const issue = f.soumettre('saisie', {})
-    await attendreQue(async () => typeof repondre === 'function')
-
-    h.declencher(ATTENTE_FORMULAIRE_MS)
-    expect(await issue).toMatchObject({ statut: EN_ATTENTE })
-    expect(await stockage.lister()).toHaveLength(1)
-
-    repondre({ id: 'op-1' })
-    await attendreQue(async () => (await stockage.lister()).length === 0)
-  })
-
   it('[FE-06] refusée plus tard, elle reste visible avec sa raison, et les suivantes partent quand même', async () => {
     const executer = vi.fn()
       .mockRejectedValueOnce(panne())
       .mockRejectedValueOnce(refus())
       .mockResolvedValueOnce({ ok: true })
-    const { f, h, stockage } = file({ executer })
+    const { f, stockage } = file({ executer })
     await f.soumettre('saisie', { n: 1 })
-    await f.soumettre('reglement', { n: 2 }, { attente: 0 })
-
-    h.declencher(REESSAI_MS)
+    await essaye(stockage, 'op-1')
+    // Une nouvelle opération relance l'envoi, dans l'ordre : la première d'abord.
+    await f.soumettre('reglement', { n: 2 })
     await attendreQue(async () => (await stockage.lister()).every((op) => op.etat === REFUSEE))
     const reste = await stockage.lister()
     expect(reste).toEqual([expect.objectContaining({ id: 'op-1', etat: REFUSEE, erreur: { code: 'INSUFFICIENT_STORE_BALANCE', message: 'Stock Orange insuffisant.' } })])
@@ -122,8 +149,11 @@ describe('TC-352 — réseau absent : l’opération attend et repart seule', ()
     const executer = vi.fn(async () => { throw panne() })
     const { f, stockage } = file({ executer })
     await f.soumettre('client', { n: 1 })
+    await essaye(stockage, 'op-1', 1)
     await f.soumettre('saisie', { n: 2 })
+    await essaye(stockage, 'op-1', 2)
     await f.soumettre('reglement', { n: 3 })
+    await essaye(stockage, 'op-1', 3)
 
     expect(executer.mock.calls.map(([op]) => op.id)).toEqual(['op-1', 'op-1', 'op-1'])
     expect((await stockage.lister()).map((op) => op.id)).toEqual(['op-1', 'op-2', 'op-3'])
@@ -154,11 +184,10 @@ describe('TC-352 — garde-fous', () => {
 
   it('[FE-10] seule une opération refusée se retire ; une en attente, jamais', async () => {
     const executer = vi.fn().mockRejectedValueOnce(panne()).mockRejectedValueOnce(refus()).mockRejectedValue(panne())
-    const { f, h, stockage } = file({ executer })
+    const { f, stockage } = file({ executer })
     await f.soumettre('saisie', {})
-    await f.soumettre('saisie', {}, { attente: 0 })
-
-    h.declencher(REESSAI_MS)
+    await essaye(stockage, 'op-1')
+    await f.soumettre('saisie', {})
     await attendreQue(async () => (await stockage.lister())[0]?.etat === REFUSEE)
     expect(await f.retirer('op-2')).toBe(false)
     expect(await f.retirer('op-1')).toBe(true)
@@ -167,10 +196,11 @@ describe('TC-352 — garde-fous', () => {
 
   it('[FE-11] les abonnés reçoivent la liste à chaque changement', async () => {
     const executer = vi.fn().mockRejectedValueOnce(panne()).mockResolvedValue({})
-    const { f, h } = file({ executer })
+    const { f, h, stockage } = file({ executer })
     const vues = []
     f.abonner((ops) => vues.push(ops.map((op) => `${op.id}:${op.tentatives}`)))
     await f.soumettre('saisie', {})
+    await essaye(stockage, 'op-1')
     h.declencher(REESSAI_MS)
     await attendreQue(async () => vues.at(-1)?.length === 0)
     expect(vues).toContainEqual(['op-1:0'])
@@ -178,8 +208,10 @@ describe('TC-352 — garde-fous', () => {
   })
 
   it('[FE-12] arrêtée (déconnexion), elle ne relance plus rien', async () => {
-    const { f, h, executer } = file({ executer: vi.fn(async () => { throw panne() }) })
+    const { f, h, executer, stockage } = file({ executer: vi.fn(async () => { throw panne() }) })
     await f.soumettre('saisie', {})
+    await essaye(stockage, 'op-1')
+    expect(h.planifies(REESSAI_MS)).toBe(1)
     f.arreter()
     expect(h.planifies(REESSAI_MS)).toBe(0)
     await f.vider()
@@ -189,6 +221,7 @@ describe('TC-352 — garde-fous', () => {
   it('[FE-14] le même geste confirmé deux fois pendant qu’il attend n’entre qu’une fois', async () => {
     const { f, stockage } = file({ executer: vi.fn(async () => { throw panne() }) })
     await f.soumettre('reglement', { amount: 100 }, { id: 'reglement-cle' })
+    await essaye(stockage, 'reglement-cle')
     await f.soumettre('saisie', { n: 2 }, { id: 'apres' })
     expect(await f.soumettre('reglement', { amount: 100 }, { id: 'reglement-cle' })).toMatchObject({ statut: EN_ATTENTE })
     // Elle garde sa place et ses essais : la remettre en file la ferait passer
@@ -204,6 +237,7 @@ describe('TC-352 — garde-fous', () => {
     const { f, h, stockage } = file({ executer })
 
     expect(await f.soumettre('saisie', {})).toMatchObject({ statut: EN_ATTENTE })
+    await essaye(stockage, 'op-1')
     expect((await stockage.lister())[0].etat).toBe(EN_ATTENTE)
 
     h.declencher(REESSAI_MS)
@@ -215,6 +249,7 @@ describe('TC-352 — garde-fous', () => {
     const { f, stockage } = file({ executer: vi.fn(async () => { throw enRetard }) })
 
     expect(await f.soumettre('saisie', {})).toMatchObject({ statut: EN_ATTENTE })
+    await essaye(stockage, 'op-1')
     expect((await stockage.lister())[0].etat).toBe(EN_ATTENTE)
     // Le même code pour une autre raison reste un refus.
     expect(estRefusDefinitif({ code: 'INVALID_REQUEST_ID', message: 'Format de données invalide.' })).toBe(true)
@@ -226,9 +261,22 @@ describe('TC-352 — garde-fous', () => {
     )
     const { f, h, stockage } = file({ executer })
     await f.soumettre('saisie', {})
+    await essaye(stockage, 'op-1')
     h.declencher(REESSAI_MS)
     await attendreQue(async () => (await stockage.lister())[0]?.etat === REFUSEE)
     expect((await stockage.lister())[0].erreur.message).toBe('Stock insuffisant pour Orange.')
+  })
+
+  it('[FE-19] l’écran ne signale l’attente qu’hors ligne, après un échec, ou passé le délai', () => {
+    const op = (over = {}) => ({ etat: EN_ATTENTE, creeLe: 10_000, tentatives: 0, ...over })
+    const juste = 10_000 + SIGNAL_APRES_MS
+    expect(attenteASignaler([], { enLigne: false, maintenant: juste })).toBe(false)
+    expect(attenteASignaler([op()], { enLigne: true, maintenant: juste - 1 })).toBe(false)
+    expect(attenteASignaler([op()], { enLigne: true, maintenant: juste })).toBe(true)
+    expect(attenteASignaler([op()], { enLigne: false, maintenant: 10_000 })).toBe(true)
+    expect(attenteASignaler([op({ tentatives: 1 })], { enLigne: true, maintenant: 10_000 })).toBe(true)
+    // Une seule en retard suffit : la plus récente ne cache pas l'ancienne.
+    expect(attenteASignaler([op({ creeLe: 0 }), op({ creeLe: juste })], { enLigne: true, maintenant: juste })).toBe(true)
   })
 
   it('[FE-13] ce qui est un refus, et ce qui se retente', () => {

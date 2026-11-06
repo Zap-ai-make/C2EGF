@@ -3,10 +3,9 @@ import { useToast } from '../../hooks/useToast'
 import { useTransactions } from '../../context/transactions.jsx'
 import { useSimpleNetworkData } from '../../hooks/useSimpleNetworkData'
 import { useEnvois } from '../../context/envoisContexte.js'
-import { EN_ATTENTE } from '../../services/fileEnvoi.js'
 import { envoyerMouvement } from '../../services/mouvementsBoutique.js'
 import { formatCurrency } from '../../utils/formatCurrency'
-import { MESSAGES, NETWORK_OPTIONS } from '../../utils/constants'
+import { NETWORK_OPTIONS } from '../../utils/constants'
 import Dialog from '../ui/Dialog.jsx'
 import Toast from '../Toast'
 import EtatEnvoi from '../ui/EtatEnvoi.jsx'
@@ -109,9 +108,8 @@ function FormulaireRetour({ ravitaillement, onFait, onAnnuler, annoncer }) {
     verrou.current = true
     setEnvoiEnCours(true)
     try {
-      const issue = await envoyerMouvement(envois, preparation.commande)
-      if (issue?.statut === EN_ATTENTE) annoncer(MESSAGES.EN_ATTENTE.RETOUR, 'info')
-      else annoncer(`Retour enregistré : ${formatCurrency(preparation.valeur)} en ${libelleVase(vase).toLowerCase()}.`, 'success')
+      await envoyerMouvement(envois, preparation.commande)
+      annoncer(`Retour enregistré : ${formatCurrency(preparation.valeur)} en ${libelleVase(vase).toLowerCase()}.`, 'success')
       onFait?.()
     } catch (err) {
       // Le serveur rédige des refus lisibles — « Stock insuffisant.

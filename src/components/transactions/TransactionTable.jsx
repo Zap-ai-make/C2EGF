@@ -13,8 +13,8 @@ import { useState, useRef, useEffect, useMemo, memo, useCallback, useId } from '
 import { createPortal } from 'react-dom'
 import { useTransactions } from '../../context/transactions.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
-import { MESSAGES, PAYMENT_METHODS } from '../../utils/constants.js'
-import { EN_ATTENTE, REFUSEE, REGLEMENT } from '../../services/fileEnvoi.js'
+import { PAYMENT_METHODS } from '../../utils/constants.js'
+import { REFUSEE, REGLEMENT } from '../../services/fileEnvoi.js'
 import { getClientName, formatTransactionDateTime } from '../../utils/helpers.js'
 import { SkeletonRow } from '../ui/SkeletonList.jsx'
 import EmptyState from '../ui/EmptyState.jsx'
@@ -161,15 +161,6 @@ const TransactionTable = memo(function TransactionTable() {
   const pendingKeyRef = useRef({})
 
 
-  const direEnAttente = useCallback((message) => {
-    setRollbackToast({ show: true, message, type: 'info' })
-    // `autoClose` ne règle que la croix : c'est à l'appelant de le fermer,
-    // sinon « Connexion absente » resterait affiché une fois le réseau revenu.
-    setTimeout(() => {
-      setRollbackToast({ show: false, message: '', type: 'info' })
-    }, 6000)
-  }, [])
-
   const handleActionClick = useCallback((transactionId, actionType, event) => {
     if ([...processingActions].some(key => key.startsWith(`${transactionId}-`))) {
       return
@@ -243,12 +234,9 @@ const TransactionTable = memo(function TransactionTable() {
       setAmountError('')
       setCodeAgentReglement('')
 
-      const issue = actionType === 'rembourser'
-        ? await addRefundTranche(transactionId, amount, method, idempotencyKey, agentCode)
-        : await addPaymentTranche(transactionId, amount, method, idempotencyKey, agentCode)
-      // Sans réseau, le règlement attend sur l'appareil (lot G3b) : il faut dire
-      // pourquoi rien n'est encore parti.
-      if (issue?.statut === EN_ATTENTE) direEnAttente(MESSAGES.EN_ATTENTE.REGLEMENT)
+      // Écrit sur l'appareil, il part derrière (lot H) : le bandeau du bas dit s'il tarde.
+      if (actionType === 'rembourser') await addRefundTranche(transactionId, amount, method, idempotencyKey, agentCode)
+      else await addPaymentTranche(transactionId, amount, method, idempotencyKey, agentCode)
 
       // Succès : supprimer la clé (la prochaine action génèrera une nouvelle clé)
       const fingerprint = `${transactionId}-${actionType}-${method}-${amount}-${agentCode ?? ''}`
@@ -274,7 +262,7 @@ const TransactionTable = memo(function TransactionTable() {
         return newSet
       })
     }
-  }, [processingActions, pendingTransactions, addPaymentTranche, addRefundTranche, setActiveDropdown, setCurrentActionType, direEnAttente])
+  }, [processingActions, pendingTransactions, addPaymentTranche, addRefundTranche, setActiveDropdown, setCurrentActionType])
 
 
   const handleMethodChosen = useCallback((method) => {
@@ -866,9 +854,8 @@ const TransactionTable = memo(function TransactionTable() {
                 if (!aSupprimer) return
                 setSuppressionEnCours(true)
                 try {
-                  const issue = await trashTransaction(aSupprimer.id)
+                  await trashTransaction(aSupprimer.id)
                   setASupprimer(null)
-                  if (issue?.statut === EN_ATTENTE) direEnAttente(MESSAGES.EN_ATTENTE.ANNULATION)
                 } catch (error) {
                   // On garde le modal ouvert : disparaître sans rien dire
                   // laisserait croire que l'annulation a eu lieu.

@@ -16,7 +16,9 @@ export default function OfflineBanner() {
   const [isOnline, setIsOnline] = useState(() => navigator.onLine)
   const [listeOuverte, setListeOuverte] = useState(false)
   const envois = useEnvois()
-  const enAttente = envois?.enAttente?.length ?? 0
+  // Réseau présent, une opération part en une seconde : la compter ferait clignoter
+  // le bandeau à chaque geste (lot H). La file dit quand il faut le dire.
+  const enAttente = envois?.signalerAttente === false ? 0 : (envois?.enAttente?.length ?? 0)
   const refusees = envois?.refusees?.length ?? 0
 
   useEffect(() => {

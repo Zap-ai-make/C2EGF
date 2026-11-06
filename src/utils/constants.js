@@ -121,19 +121,9 @@ export const MESSAGES = {
     MODIFICATION_CANCELLED: 'Modification annulée',
     IMPORT_SUCCESS: (count) => `${count} transactions importées avec succès !`
   },
-  // Lot G3b : l'opération est écrite sur l'appareil et partira seule. Ni
-  // « sauvée » ni « validée » : le serveur ne l'a pas encore vue, et elle peut
-  // encore être refusée. Ni « pas de réseau » : un serveur qui démarre à froid
-  // peut dépasser l'attente du formulaire, réseau présent.
-  EN_ATTENTE: {
-    TRANSACTION: 'Connexion absente ou lente : la transaction est gardée sur cet appareil et partira dès que possible.',
-    REGLEMENT: 'Connexion absente ou lente : le règlement est gardé sur cet appareil et partira dès que possible.',
-    CLIENT: 'Connexion absente ou lente : la fiche est gardée sur cet appareil et partira dès que possible.',
-    RAVITAILLEMENT: 'Connexion absente ou lente : le ravitaillement est gardé sur cet appareil et partira dès que possible.',
-    RETOUR: 'Connexion absente ou lente : le retour est gardé sur cet appareil et partira dès que possible.',
-    MODIFICATION: 'Connexion absente ou lente : la modification est gardée sur cet appareil et partira dès que possible.',
-    ANNULATION: 'Connexion absente ou lente : l’annulation est gardée sur cet appareil et partira dès que possible.',
-  }
+  // Lot H : plus de message « gardée sur cet appareil ». Toute opération est écrite
+  // sur l'appareil avant de partir, réseau ou pas : le message court suffit, et le
+  // bandeau du bas dit ce qui attend encore.
 }
 
 // Configuration des filtres

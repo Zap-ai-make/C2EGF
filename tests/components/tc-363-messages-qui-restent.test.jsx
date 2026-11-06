@@ -26,7 +26,6 @@ vi.mock('../../src/hooks/useSimpleNetworkData', () => ({
 import RavitaillementPanel from '../../src/components/transactions/RavitaillementPanel.jsx'
 import { EnvoisContext } from '../../src/context/envoisContexte.js'
 import { EN_ATTENTE } from '../../src/services/fileEnvoi.js'
-import { MESSAGES } from '../../src/utils/constants.js'
 
 const fileAvec = (soumettre) => ({ disponible: true, soumettre, retirer: vi.fn(), operations: [], enAttente: [], refusees: [] })
 const monter = (envois) => render(
@@ -41,10 +40,10 @@ const nouveauRavitaillement = () => {
 beforeEach(() => { runStoreTransactionCommand.mockReset() })
 
 describe('TC-363 — le panneau de ravitaillement', () => {
-  it('[TO-01] sans réseau, le message reste à l’écran une fois revenu à la liste', async () => {
+  it('[TO-01] par la file, le message court reste à l’écran une fois revenu à la liste', async () => {
     monter(fileAvec(vi.fn(async () => ({ statut: EN_ATTENTE }))))
     nouveauRavitaillement()
-    await screen.findByText(MESSAGES.EN_ATTENTE.RAVITAILLEMENT)
+    await screen.findByText(/^Ravitaillement enregistré/)
     expect(screen.getByTestId('nouveau-ravitaillement')).toBeInTheDocument()
   })
 
@@ -60,7 +59,7 @@ describe('TC-363 — le panneau de ravitaillement', () => {
     fireEvent.click(screen.getByTestId('retour-r1'))
     fireEvent.change(screen.getByTestId('retour-montant'), { target: { value: '100' } })
     fireEvent.click(screen.getByTestId('confirmer-retour'))
-    await screen.findByText(MESSAGES.EN_ATTENTE.RETOUR)
+    await screen.findByText(/^Retour enregistré/)
     await waitFor(() => expect(screen.getByTestId('nouveau-ravitaillement')).toBeInTheDocument())
   })
 

@@ -50,7 +50,6 @@ import {
   RETOUR,
   SAISIE,
 } from '../../src/services/fileEnvoi.js'
-import { MESSAGES } from '../../src/utils/constants.js'
 import { fauxHistorique } from '../fixtures/fauxHistorique.js'
 
 const AUTH = {
@@ -299,13 +298,76 @@ describe('TC-361 — chaque geste devient l’appel qui le reconnaîtra', () => 
   })
 })
 
+describe('TC-361 — quand le serveur a accepté (lot H)', () => {
+  // Une ligne d'un jour relu : aucune écoute ne la corrigera après l'envoi.
+  const ancienne = { id: 'p1', clientId: 'c2', client: { nom: 'KABORE' }, type: 'Dépôt', reseau: 'Orange', montant: 7000, statut: 'Encaissé par Cash', paymentMethod: 'Cash', effectiveNetwork: 'Liquidite', date: '05/10/2026', validatedAt: new Date('2026-10-05T10:00:00Z') }
+  let ecouteur
+  const fileQuiEcoute = () => ({ ...fileSimulee(), apresEnvoi: vi.fn((e) => { ecouteur = e; return () => { ecouteur = null } }) })
+  // L'opération telle que la file la rend à l'écouteur, au moment où elle part.
+  const partie = (envois, id) => {
+    const [type, charge] = envois.soumettre.mock.calls.at(-1)
+    return { id, type, charge, etat: EN_ATTENTE, creeLe: 1, tentatives: 0, erreur: null }
+  }
+  const ligneAffichee = (id) => tx.completedTransactions.find((l) => l.id === id)
+
+  beforeEach(async () => {
+    ecouteur = null
+    service.getHistoryBetween = vi.fn(async () => [ancienne])
+  })
+  const relirePeriode = async () => {
+    await act(async () => { await tx.chargerPeriode({ from: '2026-10-05', to: '2026-10-05' }) })
+    await waitFor(() => expect(ligneAffichee('p1')).toBeTruthy())
+  }
+
+  it('[GF-20] une correction partie : la ligne corrigée prend la place de l’origine, sans marque d’envoi', async () => {
+    const envois = fileQuiEcoute()
+    monter(envois)
+    await pret()
+    await relirePeriode()
+
+    await act(async () => { await tx.saveReopenedCorrection({ reopenedFromHistoryId: 'p1' }, { montant: 6000 }) })
+    expect(ligneAffichee('p1')).toMatchObject({ montant: 7000 })
+
+    await act(async () => { ecouteur(partie(envois, 'cmd-cor'), { corrected: true }) })
+    expect(ligneAffichee('p1')).toBeUndefined()
+    expect(ligneAffichee('cmd-cor')).toMatchObject({ montant: 6000, client: { nom: 'KABORE' }, date: '05/10/2026' })
+    expect(ligneAffichee('cmd-cor').envoi).toBeUndefined()
+  })
+
+  it('[GF-21] une annulation ne touche la ligne relue qu’une fois partie : refusée, elle ne l’aurait jamais marquée', async () => {
+    const envois = fileQuiEcoute()
+    monter(envois)
+    await pret()
+    await relirePeriode()
+
+    await act(async () => { await tx.trashTransaction('p1') })
+    expect(envois.soumettre).toHaveBeenCalledWith(ANNULATION, expect.objectContaining({ cible: CIBLE_VALIDEE, cibleId: 'p1' }), { id: 'annulation-p1' })
+    expect(ligneAffichee('p1').statut).toBe('Encaissé par Cash')
+
+    await act(async () => { ecouteur(partie(envois, 'annulation-p1'), { trashed: true }) })
+    expect(ligneAffichee('p1').statut).toBe('Supprimée')
+  })
+
+  it('[GF-22] la saisie, l’annulation d’une non terminée : les écoutes s’en chargent, rien n’est touché', async () => {
+    const envois = fileQuiEcoute()
+    monter(envois)
+    await pret()
+    await relirePeriode()
+    const avant = tx.completedTransactions
+
+    await act(async () => { await tx.trashTransaction('d1') })
+    await act(async () => { ecouteur(partie(envois, 'annulation-d1'), { trashed: true }) })
+    expect(tx.completedTransactions).toBe(avant)
+  })
+})
+
 describe('TC-361 — à l’écran', () => {
   const remplir = () => {
     fireEvent.change(screen.getByLabelText('Montant (FCFA)'), { target: { value: '300' } })
     fireEvent.click(screen.getByTestId('valider-ravitaillement'))
   }
 
-  it('[GF-14] un ravitaillement sans réseau le dit, et le panneau revient à la liste', async () => {
+  it('[GF-14] un ravitaillement par la file dit le montant, comme avant, et le panneau revient à la liste', async () => {
     const envois = fileSimulee()
     const onComplete = vi.fn()
     render(<EnvoisContext.Provider value={envois}><RavitaillementForm annoncer={showToast} expediteurs={['Mme Sawadogo']} onComplete={onComplete} onCancel={() => {}} /></EnvoisContext.Provider>)
@@ -315,7 +377,7 @@ describe('TC-361 — à l’écran', () => {
       commande: expect.objectContaining({ action: 'replenish', amount: 300, balanceType: 'stock', expediteur: 'Mme Sawadogo' }),
       reseau: 'Orange',
     })
-    expect(showToast).toHaveBeenCalledWith(MESSAGES.EN_ATTENTE.RAVITAILLEMENT, 'info')
+    expect(showToast).toHaveBeenCalledWith(expect.stringMatching(/^Ravitaillement enregistré : 300/), 'success')
     expect(runStoreTransactionCommand).not.toHaveBeenCalled()
   })
 

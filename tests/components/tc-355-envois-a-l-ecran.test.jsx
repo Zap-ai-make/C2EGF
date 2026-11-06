@@ -115,22 +115,16 @@ describe('TC-355 — les non terminées en attente', () => {
   })
 })
 
-describe('TC-355 — le message d’un règlement gardé', () => {
-  it('[EC-09] « Connexion absente » ne reste pas affiché : il se ferme seul', async () => {
+describe('TC-355 — le règlement par la file', () => {
+  it('[EC-09] il ne dit rien de plus : pas de message « gardé sur cet appareil », le bandeau du bas suffit (lot H)', async () => {
     monterTableau([ligne()])
     contextValue.addPaymentTranche = vi.fn(async () => ({ statut: EN_ATTENTE }))
     const r = rangee(/BANABA/)
     fireEvent.click(within(r).getByRole('button', { name: 'Encaisser' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cash' }))
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    try {
-      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Confirmer' })) })
-      expect(screen.getByText(/Connexion absente ou lente : le règlement est gardé/)).toBeInTheDocument()
-      await act(async () => { vi.advanceTimersByTime(6100) })
-      expect(screen.queryByText(/Connexion absente ou lente : le règlement est gardé/)).toBeNull()
-    } finally {
-      vi.useRealTimers()
-    }
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Confirmer' })) })
+    expect(contextValue.addPaymentTranche).toHaveBeenCalled()
+    expect(screen.queryByText(/Connexion absente|sur cet appareil/)).toBeNull()
   })
 })
 

@@ -147,7 +147,9 @@ export function NetworkConfigProvider({ children }) {
 
   const value = {
     networkData: provisoire.soldes,
-    soldesProvisoires: provisoire.appliquees > 0,
+    // Les chiffres comptent l'opération tout de suite ; le titre ne le dit que si
+    // elle tarde à partir (lot H), sans quoi il clignoterait à chaque geste.
+    soldesProvisoires: provisoire.appliquees > 0 && envois?.signalerAttente !== false,
     error,
     updateNetwork,
     resetToDefaults

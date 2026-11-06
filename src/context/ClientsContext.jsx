@@ -3,7 +3,7 @@ import { STORAGE_KEYS } from '../constants'
 import { firestoreService, normaliserChampsAgent } from '../services/firestore'
 import { parsefrenchDate } from '../utils/helpers.js'
 import { messageDoublonAgent, trouverFicheAgent } from '../utils/agentFields.js'
-import { CLIENT, ENVOYEE } from '../services/fileEnvoi.js'
+import { CLIENT } from '../services/fileEnvoi.js'
 import { AuthContext } from './AuthContext'
 import { EnvoisContext } from './envoisContexte.js'
 import { clientsEnAttente } from '../utils/envoisEnAttente.js'
@@ -159,10 +159,10 @@ export function ClientsProvider({ children }) {
       }
       const id = firestoreService.nouvelIdClient()
       const charge = { donnees: { ...donnees, dateAjout: new Date().toLocaleDateString('fr-FR') } }
-      const issue = await envois.soumettre(CLIENT, charge, { id })
-      // En attente du réseau, la fiche existe déjà sous son identifiant : la
-      // transaction qui l'a créée peut la prendre, et partira après elle.
-      return issue.statut === ENVOYEE ? issue.resultat : { id, ...charge.donnees, ...normalise, enAttente: true }
+      await envois.soumettre(CLIENT, charge, { id })
+      // Avant même son envoi, la fiche existe sous son identifiant : la transaction
+      // qui l'a créée peut la prendre, et partira après elle.
+      return { id, ...charge.donnees, ...normalise, enAttente: true }
     } catch (error) {
       console.error('Client creation error:', error)
       setError(error.message)

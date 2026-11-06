@@ -436,9 +436,9 @@ export const TransactionsProvider = ({ children }) => {
         userEmail: user?.email || 'Utilisateur inconnu'
       }
 
-      // Rend `{ statut }` : « envoyee » quand le serveur a répondu, « en_attente »
-      // quand la saisie attend le réseau sur l'appareil. La liste se met à jour
-      // par onSnapshot, comme avant.
+      // Rend `{ statut }` : « en_attente » dès que la saisie est écrite sur
+      // l'appareil, sans attendre le réseau (lot H) ; « envoyee » sans file. La
+      // liste se met à jour par onSnapshot, comme avant.
       if (!parLaFile) {
         await firestoreService.addTransaction(transaction)
         return { statut: ENVOYEE }
@@ -518,6 +518,54 @@ export const TransactionsProvider = ({ children }) => {
     }
   }, [parLaFile, soumettre])
 
+  /*
+   * CE QU'UNE ANNULATION OU UNE CORRECTION ACCEPTÉE DOIT AUX LIGNES AFFICHÉES
+   * La période relue n'est branchée sur aucun onSnapshot : personne d'autre ne la
+   * corrigera. Les autres sources ne le diront qu'au prochain snapshot. Appelé à la
+   * réponse de l'appel direct, ou quand l'opération quitte la file (lot H) : tant
+   * qu'elle attend, `appliquerFile` montre déjà son effet, et un refus n'a rien à
+   * défaire.
+   */
+  const marquerAnnulee = useCallback((id) => {
+    const marquerSupprimee = (items) => items.map((item) => (
+      item.id === id
+        ? { ...item, statut: FIRESTORE_CONFIG.STATUS.DELETED, deletedAt: new Date() }
+        : item
+    ))
+    periodeHistoryRef.current = marquerSupprimee(periodeHistoryRef.current)
+    // La ligne doit quitter l'onglet clients tout de suite, sinon le gérant reclique.
+    todayHistoryRef.current = marquerSupprimee(todayHistoryRef.current)
+    valideesRecemmentRef.current = marquerSupprimee(valideesRecemmentRef.current)
+    publishHistory()
+  }, [publishHistory])
+
+  const remplacerCorrigee = useCallback((historyId, operation = null) => {
+    const origine = periodeHistoryRef.current.find((item) => item.id === historyId)
+    const retiree = (items) => items.filter((item) => item.id !== historyId)
+    periodeHistoryRef.current = retiree(periodeHistoryRef.current)
+    todayHistoryRef.current = retiree(todayHistoryRef.current)
+    valideesRecemmentRef.current = retiree(valideesRecemmentRef.current)
+    // La ligne corrigée garde son jour : sur une période relue, aucune écoute ne la
+    // rapportera. On y pose ce que l'écran montrait pendant l'attente, sans la marque.
+    if (origine && operation) {
+      const corrigee = appliquerFile([], [origine], [operation]).historique.find((item) => item.id === operation.id)
+      if (corrigee) {
+        const { envoi: _marque, ...ligne } = corrigee
+        periodeHistoryRef.current = [...periodeHistoryRef.current, ligne]
+      }
+    }
+    publishHistory()
+  }, [publishHistory])
+
+  const apresEnvoi = envois?.apresEnvoi
+  useEffect(() => {
+    if (!apresEnvoi) return undefined
+    return apresEnvoi((operation) => {
+      if (operation.type === CORRECTION) remplacerCorrigee(operation.charge.historyId, operation)
+      else if (operation.type === ANNULATION && operation.charge.cible !== CIBLE_NON_TERMINEE) marquerAnnulee(operation.charge.cibleId)
+    })
+  }, [apresEnvoi, remplacerCorrigee, marquerAnnulee])
+
   /**
    * Met une transaction à la corbeille, qu'elle soit non terminée ou validée.
    *
@@ -557,38 +605,19 @@ export const TransactionsProvider = ({ children }) => {
       const ligne = historique.find((item) => item?.id === id)
       const estRetour = ligne?.type === TYPE_RETOUR
 
-      let issue
-      if (parLaFile) {
-        issue = await annuler(estRetour ? CIBLE_RETOUR : CIBLE_VALIDEE, ligne)
-      } else {
-        const trashed = estRetour
-          ? await firestoreService.trashReplenishmentReturn(id)
-          : await firestoreService.trashHistory(id)
-        issue = trashed ? { statut: ENVOYEE } : { statut: null }
-      }
-
-      const marquerSupprimee = (items) => items.map((item) => (
-        item.id === id
-          ? { ...item, statut: FIRESTORE_CONFIG.STATUS.DELETED, deletedAt: new Date() }
-          : item
-      ))
-      // La période relue n'est branchée sur aucun onSnapshot : personne d'autre ne
-      // la corrigera une fois l'opération partie.
-      if (issue.statut !== null) periodeHistoryRef.current = marquerSupprimee(periodeHistoryRef.current)
-      if (issue.statut === ENVOYEE) {
-        // Marquage optimiste : la ligne doit quitter l'onglet clients tout de
-        // suite — sinon le gérant reclique.
-        todayHistoryRef.current = marquerSupprimee(todayHistoryRef.current)
-        valideesRecemmentRef.current = marquerSupprimee(valideesRecemmentRef.current)
-      }
-      if (issue.statut !== null) publishHistory()
-      return issue
+      if (parLaFile) return await annuler(estRetour ? CIBLE_RETOUR : CIBLE_VALIDEE, ligne)
+      const trashed = estRetour
+        ? await firestoreService.trashReplenishmentReturn(id)
+        : await firestoreService.trashHistory(id)
+      if (!trashed) return { statut: null }
+      marquerAnnulee(id)
+      return { statut: ENVOYEE }
     } catch (error) {
       console.error('Erreur lors de la suppression de la transaction:', error)
       setError(error.message)
       throw error
     }
-  }, [parLaFile, soumettre, publishHistory])
+  }, [parLaFile, soumettre, marquerAnnulee])
 
   /**
    * Ouvre le formulaire sur une transaction validée, pour correction.
@@ -636,30 +665,19 @@ export const TransactionsProvider = ({ children }) => {
       setError(null)
       const historyId = transaction.reopenedFromHistoryId
       const corrections = sansMarqueLocale(updates)
-      let issue
       if (parLaFile) {
         const ligne = lignesAfficheesRef.current.historique.find((t) => t.id === historyId)
-        issue = await soumettre(CORRECTION, { historyId, updates: corrections, avant: resumeLigne(ligne) })
-      } else {
-        await firestoreService.correctHistory(historyId, corrections)
-        issue = { statut: ENVOYEE }
+        return await soumettre(CORRECTION, { historyId, updates: corrections, avant: resumeLigne(ligne) })
       }
-      if (issue.statut === ENVOYEE) {
-        // La ligne d'origine n'existe plus : la période relue n'écoute rien, et les
-        // autres sources ne le diront qu'au prochain snapshot.
-        const retiree = (items) => items.filter((item) => item.id !== historyId)
-        periodeHistoryRef.current = retiree(periodeHistoryRef.current)
-        todayHistoryRef.current = retiree(todayHistoryRef.current)
-        valideesRecemmentRef.current = retiree(valideesRecemmentRef.current)
-        publishHistory()
-      }
-      return issue
+      await firestoreService.correctHistory(historyId, corrections)
+      remplacerCorrigee(historyId)
+      return { statut: ENVOYEE }
     } catch (error) {
       console.error('Erreur lors de la correction de la transaction:', error)
       setError(error.message)
       throw error
     }
-  }, [parLaFile, soumettre, publishHistory])
+  }, [parLaFile, soumettre, remplacerCorrigee])
 
   const startEditTransaction = useCallback((transaction) => {
     setEditingTransaction(transaction)

@@ -1,9 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { Check } from 'lucide-react'
 import { useEnvois } from '../../context/envoisContexte.js'
-import { EN_ATTENTE } from '../../services/fileEnvoi.js'
 import { envoyerMouvement } from '../../services/mouvementsBoutique.js'
-import { MESSAGES } from '../../utils/constants'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { AJOUTER_UN_NOM, VASES, libelleVase, preparerRavitaillement } from '../../utils/ravitaillement.js'
 
@@ -69,9 +67,8 @@ function RavitaillementForm({ onComplete, onCancel, annoncer, expediteurs = [] }
     verrou.current = true
     setEnvoiEnCours(true)
     try {
-      const issue = await envoyerMouvement(envois, preparation.commande)
-      if (issue?.statut === EN_ATTENTE) annoncer(MESSAGES.EN_ATTENTE.RAVITAILLEMENT, 'info')
-      else annoncer(`Ravitaillement enregistré : ${formatCurrency(preparation.valeur)} en ${libelleVase(vase).toLowerCase()}.`, 'success')
+      await envoyerMouvement(envois, preparation.commande)
+      annoncer(`Ravitaillement enregistré : ${formatCurrency(preparation.valeur)} en ${libelleVase(vase).toLowerCase()}.`, 'success')
       onComplete?.()
     } catch (err) {
       annoncer(err?.message || "Le ravitaillement n'a pas pu être enregistré.", 'error')

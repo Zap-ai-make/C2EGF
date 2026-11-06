@@ -8,6 +8,12 @@
  * est d'abord ÉCRITE sur l'appareil, puis envoyée. Une coupure ne la perd pas :
  * elle repart au retour du réseau, même après l'extinction de la machine.
  *
+ * ⚠ LA CAISSIÈRE N'ATTEND JAMAIS LE RÉSEAU (lot H). Le formulaire attendait la
+ *   première réponse jusqu'à 8 s : sur un wifi sans internet, le navigateur se croit
+ *   en ligne, et chaque opération coûtait ces 8 s au client devant le comptoir.
+ *   `soumettre` rend la main dès l'écriture ; un refus arrive après coup, sur la
+ *   ligne et dans la liste des envois, réseau présent ou pas.
+ *
  * ⚠ RENVOYER UNE OPÉRATION DOIT ÊTRE SANS DANGER, ET C'EST LE SERVEUR QUI LE
  *   GARANTIT. Une réponse perdue en route fait renvoyer une opération que le
  *   serveur a peut-être déjà appliquée. Les commandes portent leur `commandeId`,
@@ -44,8 +50,12 @@ export const EN_ATTENTE = 'en_attente'
 export const REFUSEE = 'refusee'
 export const ENVOYEE = 'envoyee'
 
-/** Ce que le formulaire attend la première réponse avant de rendre la main. */
-export const ATTENTE_FORMULAIRE_MS = 8000
+/**
+ * Ce qu'une opération peut attendre, réseau présent, avant que l'écran ne le dise.
+ * Elle part d'ordinaire en une seconde : la signaler tout de suite ferait clignoter
+ * le bandeau à chaque geste.
+ */
+export const SIGNAL_APRES_MS = 5000
 
 /** Entre deux essais, tant qu'une opération attend. */
 export const REESSAI_MS = 30000
@@ -78,6 +88,21 @@ export function estRefusDefinitif(erreur) {
   if (code === 'UNAUTHENTICATED') return false
   if (code === 'INVALID_REQUEST_ID' && /champs non autorisés/.test(String(erreur?.message ?? ''))) return false
   return /^[A-Z][A-Z0-9_]+$/.test(code) || CODES_FIRESTORE_DEFINITIFS.includes(code)
+}
+
+/**
+ * Faut-il dire à l'écran que des opérations attendent ? Hors ligne, oui. Réseau
+ * présent, seulement quand l'une a déjà échoué une fois, ou n'est pas partie après
+ * `SIGNAL_APRES_MS`. Sur un wifi sans internet, `navigator.onLine` reste vrai : c'est
+ * alors l'âge de l'opération qui le dit.
+ *
+ * @param {object[]} enAttente les opérations en attente
+ * @param {{ enLigne: boolean, maintenant: number }} contexte
+ */
+export function attenteASignaler(enAttente, { enLigne, maintenant }) {
+  if (enAttente.length === 0) return false
+  if (!enLigne) return true
+  return enAttente.some((op) => op.tentatives > 0 || maintenant - op.creeLe >= SIGNAL_APRES_MS)
 }
 
 // Le SDK ajoute le statut HTTP à tout message (« … [400] ») : c'est de la
@@ -115,7 +140,7 @@ export function creerFileEnvoi({
   maintenant = () => Date.now(),
 }) {
   const abonnes = new Set()
-  const attentes = new Map()
+  const envoyees = new Set()
   let enCours = null
   let encoreUneFois = false
   let relance = null
@@ -127,13 +152,15 @@ export function creerFileEnvoi({
     for (const abonne of abonnes) abonne(operations)
   }
 
-  const regler = (id, issue) => {
-    const attente = attentes.get(id)
-    if (!attente) return false
-    attentes.delete(id)
-    annulerPlan(attente.minuteur)
-    issue(attente)
-    return true
+  // Un écouteur qui lève ne doit pas arrêter l'envoi des suivantes.
+  const signalerEnvoi = (operation, resultat) => {
+    for (const ecouteur of envoyees) {
+      try {
+        ecouteur(operation, resultat)
+      } catch (erreur) {
+        console.warn('Après l’envoi d’une opération :', erreur?.message ?? erreur)
+      }
+    }
   }
 
   const boucle = async () => {
@@ -150,30 +177,22 @@ export function creerFileEnvoi({
         resultat = await executer(prochaine)
       } catch (erreur) {
         if (estRefusDefinitif(erreur)) {
-          // La caissière attend encore la réponse : elle verra le refus dans
-          // son formulaire, champs gardés, comme avant la file. Ailleurs, le
-          // refus reste visible dans la liste des envois.
-          const attendue = attentes.has(prochaine.id)
-          if (attendue) await stockage.retirer(prochaine.id)
-          else await stockage.modifier(prochaine.id, { etat: REFUSEE, erreur: resumerErreur(erreur), tentatives: prochaine.tentatives + 1 })
-          regler(prochaine.id, (a) => a.reject(erreur))
+          // Le formulaire est fermé depuis longtemps : le refus reste visible, avec
+          // sa raison, sur la ligne et dans la liste des envois.
+          await stockage.modifier(prochaine.id, { etat: REFUSEE, erreur: resumerErreur(erreur), tentatives: prochaine.tentatives + 1 })
           await notifier()
           continue
         }
         await stockage.modifier(prochaine.id, { erreur: resumerErreur(erreur), tentatives: prochaine.tentatives + 1, dernierEssai: maintenant() })
-        // Le réseau manque : aucune opération ne partira avant le prochain
-        // essai. Celles qu'un formulaire attend rendent la main tout de suite,
-        // au lieu de faire patienter la caissière pour rien.
-        for (const id of [...attentes.keys()]) {
-          regler(id, (a) => a.resolve({ statut: EN_ATTENTE, operation: a.operation }))
-        }
         if (!arretee) relance = planifier(() => { relance = null; vider() }, REESSAI_MS)
         await notifier()
         return
       }
 
       await stockage.retirer(prochaine.id)
-      regler(prochaine.id, (a) => a.resolve({ statut: ENVOYEE, resultat, operation: a.operation }))
+      // Avant la liste : l'écran corrige ses sources dans le même rendu que celui
+      // où l'opération quitte la file, sans montrer un instant l'ancienne ligne.
+      signalerEnvoi(prochaine, resultat)
       await notifier()
     }
   }
@@ -199,12 +218,11 @@ export function creerFileEnvoi({
   }
 
   /**
-   * Écrit l'opération sur l'appareil, l'envoie, et attend sa première réponse.
+   * Écrit l'opération sur l'appareil et rend la main : l'envoi part derrière.
    *
-   * @returns {Promise<{ statut: 'envoyee' | 'en_attente', resultat?: any, operation: object }>}
-   *   rejetée par un refus du serveur arrivé pendant l'attente
+   * @returns {Promise<{ statut: 'en_attente', operation: object }>}
    */
-  async function soumettre(type, charge, { id = nouvelId(), attente = ATTENTE_FORMULAIRE_MS } = {}) {
+  async function soumettre(type, charge, { id = nouvelId() } = {}) {
     // Le même geste confirmé deux fois (même clé de règlement) pendant qu'il
     // attend : une seule opération dans la file. Le serveur, lui, reconnaîtrait
     // le doublon, mais la liste des envois le montrerait deux fois.
@@ -216,15 +234,9 @@ export function creerFileEnvoi({
     if (deja) await stockage.retirer(id)
     const operation = { id, type, charge, etat: EN_ATTENTE, creeLe: maintenant(), tentatives: 0, erreur: null }
     await stockage.ajouter(operation)
-    const issue = new Promise((resolve, reject) => {
-      const minuteur = planifier(() => {
-        regler(id, (a) => a.resolve({ statut: EN_ATTENTE, operation: a.operation }))
-      }, attente)
-      attentes.set(id, { resolve, reject, minuteur, operation })
-    })
     await notifier()
     vider()
-    return issue
+    return { statut: EN_ATTENTE, operation }
   }
 
   /** Retire une opération refusée de la liste. Une opération en attente ne se retire pas. */
@@ -244,12 +256,25 @@ export function creerFileEnvoi({
     return () => abonnes.delete(abonne)
   }
 
+  /**
+   * Prévient quand le serveur a accepté une opération, au moment où elle quitte la
+   * file : ce que l'écran ne recevra d'aucune écoute (une période relue) se corrige là.
+   *
+   * @param {(operation: object, resultat: any) => void} ecouteur
+   * @returns {() => void} le désabonnement
+   */
+  function apresEnvoi(ecouteur) {
+    envoyees.add(ecouteur)
+    return () => envoyees.delete(ecouteur)
+  }
+
   function arreter() {
     arretee = true
     if (relance !== null) annulerPlan(relance)
     relance = null
     abonnes.clear()
+    envoyees.clear()
   }
 
-  return { soumettre, vider, retirer, abonner, arreter }
+  return { soumettre, vider, retirer, abonner, apresEnvoi, arreter }
 }
