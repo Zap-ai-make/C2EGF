@@ -101,6 +101,27 @@ gcloud projects add-iam-policy-binding c2egf-b0b5a \
 
 ---
 
+## 4. Changer de région : le passage en us-central1 (lot C1)
+
+Les callables quittent europe-west1 pour us-central1, à côté de la base
+(`docs/rester-dans-le-quota-gratuit.md` §C1). Trois temps, dans cet ordre :
+
+1. **Les deux régions.** `CALLABLE.region` vaut `['europe-west1', 'us-central1']`.
+   On déploie TOUT, sans virgule à protéger :
+   ```powershell
+   firebase use production
+   $env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"
+   firebase deploy --only functions
+   ```
+   Le CLI crée les 26 callables en us-central1 et met à jour celles d'europe-west1.
+   Le bucket de sources d'us-central1 existe déjà (§3) : pas de 409 attendu.
+2. **Le front**, poussé seulement une fois le temps 1 réussi.
+3. **Une semaine plus tard**, `CALLABLE.region` revient à `'us-central1'`, et on
+   redéploie de même. Le CLI voit 26 functions d'europe-west1 absentes du code et
+   demande s'il faut les supprimer : répondre oui. Elles ne servent plus personne.
+
+---
+
 ## Ce qu'il n'y a PAS à déployer
 
 - `firestore.rules` et `firestore.indexes.json` ne changent que si on les a

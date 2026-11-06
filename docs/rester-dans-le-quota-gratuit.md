@@ -455,6 +455,30 @@ Le quota vCPU de `us-central1` est neuf : le piège décrit dans
 `docs/deployer-les-functions.md` peut s'y reproduire. **Déploiement : décision
 et exécution humaines.**
 
+**Lancé le 2026-11-06, en trois temps.**
+
+| Temps | Code | Geste humain |
+|---|---|---|
+| 1 | `CALLABLE.region` vaut `['europe-west1', 'us-central1']` : les 26 callables servent les deux régions (TC-036 [WRA-08]) | `firebase deploy --only functions` |
+| 2 | le front appelle `us-central1` (`src/config/firebase.js`) ; les tests de bout en bout aussi | demander le push, **après** le temps 1 |
+| 3 | une semaine après le push, `CALLABLE.region` revient à `'us-central1'` seul | redéployer, et accepter la suppression des functions d'`europe-west1` |
+
+- **Pourquoi deux régions d'abord.** Une application pas encore rechargée appelle
+  `europe-west1`, et un poste resté hors ligne peut garder l'ancienne version
+  plusieurs jours. Couper tout de suite ferait échouer ses gestes en ligne. La file
+  d'envoi, elle, ne perdrait rien : elle retente.
+- **Le temps du passage ne coûte rien de plus.** Sans instance minimale, une function
+  qu'on n'appelle pas ne se paie pas. Seules les images de build doublent, d'où C5.
+- **Le quota vCPU de `us-central1`.** 26 callables × 3 instances font 78 vCPU, plus 6
+  pour l'annuaire. C'est loin des ~230 qu'europe-west1 a supportés avant son mur
+  (`functions/src/index.js`, commentaire de `CALLABLE`).
+- **La latence.** Entre l'Afrique de l'Ouest et l'Iowa, il faut compter ~100 ms de plus
+  par appel. Depuis le lot H, la caissière n'attend plus le serveur. Un geste en ligne
+  (demande au dealer, collaboration) y gagne encore : il économise quatre à cinq
+  traversées de l'Atlantique.
+- **La politique de sécurité du front** autorise `https://*.cloudfunctions.net`
+  (`vercel.json`) : rien à changer.
+
 ### C2. Grouper les lectures d'une transaction
 
 `readActor` ([functions/src/storeTransactions/storeTransactionCommand.js:180](../functions/src/storeTransactions/storeTransactionCommand.js#L180))
@@ -462,6 +486,10 @@ enchaîne deux `t.get`, suivis d'un troisième pour les soldes. Un seul
 `t.getAll(profil, boutique, soldes[, non terminée])` fait un seul aller-retour.
 Les lectures facturées restent les mêmes, mais le temps facturé baisse. À regarder
 de la même façon dans les autres handlers.
+
+**Écarté le 2026-11-06, au profit de C1.** À côté de la base, un aller-retour dure
+quelques millisecondes : en économiser deux par appel ne se verrait pas sur la
+facture, et réécrirait les lectures de chaque handler pour rien.
 
 ### C3. Réduire le CPU alloué — à mesurer avant d'adopter
 
@@ -491,7 +519,15 @@ de la même façon dans les autres handlers.
 ### C5. Les images de build
 
 `firebase functions:artifacts:setpolicy` (CLI 14 ou plus) supprime les anciennes
-images d'Artifact Registry, qui offre 0,5 Go gratuits. Le bucket des sources
+images d'Artifact Registry, qui offre 0,5 Go gratuits. Une commande par région, à
+lancer par un humain (vérifiée par `--help` sur la CLI 15.13) :
+
+```powershell
+firebase use production
+firebase functions:artifacts:setpolicy --location europe-west1 --days 1
+firebase functions:artifacts:setpolicy --location us-central1 --days 1
+```
+ Le bucket des sources
 (`gcf-v2-sources-…-europe-west1`) est hors de la zone gratuite de Cloud Storage
 (réservée à trois régions américaines), mais il pèse quelques Mo.
 
@@ -589,7 +625,7 @@ sont une décision humaine.
 | 2 | A2 — une seule fiche écoutée dans `PatronHistoriqueClient` — **fait le 2026-11-04** | 15 678 lectures par visite | faible |
 | 3 | A1 — annuaire en tranches — **serveur en ligne et rempli le 2026-11-06, front à déployer** | ~98 % des lectures | moyen : déclencheur, règles, premier remplissage |
 | 4 | A3 — historique — **A3a fait le 2026-11-06** (première page sans `getDocs`) ; A3b (fenêtre à ~25) à décider | 101 lectures par ouverture (A3a) ; ~75 de plus à froid (A3b) | moyen : trois bugs déjà corrigés à ne pas rouvrir |
-| 5 | C1 + C2 — région et `getAll` | temps facturé ÷ 3 à 5 | moyen : migration de région |
+| 5 | C1 — région — **temps 1 et 2 préparés le 2026-11-06** ; C2 écarté (sans gain après C1) | temps facturé ÷ 3 à 5 | moyen : migration de région |
 | 6 | C3 — CPU | vCPU-s ÷ ~6 | à mesurer : démarrage à froid, concurrence |
 | 7 | D1 — ordre du prompt | jetons d'entrée | faible |
 | 8 | B2, C5, A4 | stockage, images, dealer | faible |

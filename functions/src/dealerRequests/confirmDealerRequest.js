@@ -12,7 +12,7 @@
  *   - La mise à jour du solde utilise le chemin pointé (balances.Orange.<field>)
  *     pour préserver les autres réseaux et champs.
  *
- * Région choisie : europe-west1 (proximité géographique Afrique de l'Ouest / FCFA).
+ * Région : celle de `CALLABLE` dans index.js, à côté de la base (lot C1).
  */
 
 import { DealerRequestError } from '../errors.js'

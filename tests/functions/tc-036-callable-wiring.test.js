@@ -7,7 +7,7 @@
  *     Aucune copie de la logique de production dans ce fichier.
  *   - Vérifie la conversion DealerRequestError → HttpsError (code, message, details).
  *   - Vérifie le masquage des erreurs internes inconnues.
- *   - Vérifie que la région europe-west1 est configurée.
+ *   - Vérifie les régions : us-central1, et europe-west1 le temps du passage (lot C1).
  *
  * RÉSOLUTION DES MODULES :
  *   callable.js est dans functions/src/, donc firebase-functions est résolu depuis
@@ -152,21 +152,21 @@ describe('TC-036-WRA — exports callable de index.js', () => {
     expect(regions).toContain('europe-west1')
   })
 
-  it('[WRA-08] TOUS les callables déclarent europe-west1', () => {
+  it('[WRA-08] TOUS les callables servent us-central1, à côté de la base, et europe-west1 le temps du passage', () => {
     // Formulation générale plutôt qu'un test par export : un callable ajouté plus
-    // tard dans une autre région (latence depuis l'Afrique de l'Ouest) échoue ici
-    // sans qu'il faille penser à écrire son test.
+    // tard dans une autre région échoue ici sans qu'il faille penser à écrire son
+    // test.
     //
-    // ⚠ LES CALLABLES, PAS TOUS LES EXPORTS. La règle vient de la latence vue
-    //   par le navigateur. Les deux functions de l'annuaire ne sont jamais
-    //   appelées par lui, et le déclencheur DOIT suivre la base (WRA-10). Un
-    //   callable reste repéré par `callableTrigger` : en ajouter un hors
-    //   d'europe-west1 échoue toujours ici.
+    // ⚠ LA RÈGLE VIENT DE LA BASE (lot C1, docs/rester-dans-le-quota-gratuit.md §C1).
+    //   Elle est en nam5 : depuis europe-west1, chaque lecture traversait
+    //   l'Atlantique, en série, et Cloud Run facture ce temps d'attente. Les deux
+    //   régions servent tant qu'une application pas encore rechargée appelle
+    //   l'ancienne. Le jour où on la retire, ce test passe à `['us-central1']`.
     const callables = Object.entries(indexModule).filter(([, fn]) => fn.__endpoint?.callableTrigger)
     expect(callables.length).toBeGreaterThanOrEqual(26)
     for (const [name, fn] of callables) {
       expect(Array.isArray(fn.__endpoint?.region), `${name} : région absente`).toBe(true)
-      expect(fn.__endpoint.region, `${name} : mauvaise région`).toContain('europe-west1')
+      expect([...fn.__endpoint.region].sort(), `${name} : mauvaises régions`).toEqual(['europe-west1', 'us-central1'])
     }
   })
 

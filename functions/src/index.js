@@ -1,7 +1,8 @@
 /**
  * Entry point des Cloud Functions V2.
  *
- * Région : europe-west1 — proximité géographique Afrique de l'Ouest (FCFA).
+ * Région : us-central1, à côté de la base nam5 ; europe-west1 le temps du passage
+ * (lot C1, voir `CALLABLE`).
  *
  * Architecture :
  *   - Les handlers métier (confirm/reject) sont dans ./dealerRequests/.
@@ -54,7 +55,7 @@ const db = getFirestore()
 const deps = { db, FieldValue }
 
 /**
- * Les options communes des 23 callables.
+ * Les options communes des 26 callables.
  *
  * POURQUOI UN PLAFOND D'INSTANCES
  * ──────────────────────────────
@@ -86,12 +87,26 @@ const deps = { db, FieldValue }
  *   (« Total CPU allocation, per project per region », europe-west1). Baisser le
  *   plafond achète de la marge ; il ne repousse pas le mur indéfiniment.
  *
- * Un seul objet plutôt que la même accolade recopiée vingt-trois fois : le jour
+ * LA RÉGION : À CÔTÉ DE LA BASE (lot C1, docs/rester-dans-le-quota-gratuit.md §C1)
+ * ──────────────────────────────────────────────────────────────────────────────
+ * La base est en nam5 (us-central1 + us-central2). Depuis europe-west1, chaque
+ * lecture traversait l'Atlantique, en série : quatre à cinq allers-retours d'une
+ * centaine de millisecondes par appel, que Cloud Run facture à 1 vCPU. À côté de la
+ * base, quelques millisecondes. Depuis le lot H, la caissière n'attend plus le
+ * réseau : les ~100 ms de plus entre l'Afrique de l'Ouest et l'Iowa ne se voient
+ * pas, et un geste en ligne y gagne encore, puisqu'il économise les traversées.
+ *
+ * ⚠ LES DEUX RÉGIONS LE TEMPS DU PASSAGE. Une application pas encore rechargée
+ *   appelle europe-west1, et un poste resté hors ligne peut garder l'ancienne
+ *   version plusieurs jours. On retire europe-west1 une semaine après le passage
+ *   du front. Le plafond vaut par région : 26 callables × 3 = 78 vCPU chacune.
+ *
+ * Un seul objet plutôt que la même accolade recopiée vingt-six fois : le jour
  * où la région ou le plafond change, il change à UN endroit. TC-036 [WRA-08] et
  * [WRA-09] vérifient que tous les callables les portent.
  */
 const CALLABLE = Object.freeze({
-  region: 'europe-west1',
+  region: ['europe-west1', 'us-central1'],
   enforceAppCheck: false,
   maxInstances: 3,
 })
