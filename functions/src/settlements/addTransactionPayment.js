@@ -237,14 +237,23 @@ export async function addTransactionPaymentHandler(request, { db, FieldValue, lo
         createdAt:   now,
       }
 
+      // Déplacée vers l'historique, la ligne prend l'identifiant de la non terminée.
+      // Hors connexion, la caissière peut annuler ou corriger un encaissement qui
+      // attend le réseau : la file doit pouvoir viser sa ligne d'avance (lot G4a).
+      //
+      // ⚠ Ce numéro, le navigateur l'a choisi à la saisie, et `add` ne le cherche
+      //   que parmi les non terminées. S'il porte déjà une ligne d'historique, l'écrire
+      //   l'écraserait (TC-357 [IDEM-14]). Lu AVANT la première écriture, comme toute
+      //   lecture de transaction, et seulement quand la ligne part.
+      const historyRef = db.doc(`clients/${storeId}/history/${draftId}`)
+      if (fullySettled && (await t.get(historyRef)).exists) {
+        throw new DealerRequestError('IDEMPOTENCY_CONFLICT', 'Ce numéro de transaction est déjà pris par une autre ligne.')
+      }
+
       // ── Mise à jour des soldes ────────────────────────────────────────────
       t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
 
       if (fullySettled) {
-        // Déplacer vers l'historique, sous l'identifiant de la non terminée. Hors
-        // connexion, la caissière peut annuler ou corriger un encaissement qui
-        // attend le réseau : la file doit pouvoir viser sa ligne d'avance (lot G4a).
-        const historyRef = db.doc(`clients/${storeId}/history/${draftId}`)
         const historyId  = historyRef.id
 
         const finalSummary = {

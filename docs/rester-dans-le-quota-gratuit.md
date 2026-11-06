@@ -1137,6 +1137,13 @@ Sans `commandeId`, tout reste comme avant : TC-357 [CAR-01] à [CAR-07] le figen
 2. **L'encaissement complet garde son numéro.** La ligne d'historique prend
    l'identifiant de la non terminée (`addTransactionPayment`). Sans cela, une annulation
    ou une correction faite sans réseau ne pourrait pas viser cette ligne.
+
+   **Corrigé le jour même, après le premier déploiement :** ce numéro, le navigateur l'a
+   choisi à la saisie, et `add` ne le cherche que parmi les non terminées. Une saisie
+   sous le numéro d'une ligne d'historique existante, puis encaissée en entier,
+   écrasait cette ligne. L'encaissement refuse maintenant (`IDEMPOTENCY_CONFLICT`),
+   et TC-357 [IDEM-14] le vérifie. Il ne fallait pas de garde dans `add` : elle aurait
+   coûté une lecture à chaque saisie, ~5 000 par jour pour la flotte.
 3. **Une opération partie en retard garde le jour où elle a eu lieu.** Décision de
    l'utilisateur, contre la date d'envoi. La file envoie l'**âge** de l'opération, pas
    une date, et le serveur la situe sur sa propre horloge (`instantDeLaCaisse`). Une
@@ -1145,6 +1152,12 @@ Sans `commandeId`, tout reste comme avant : TC-357 [CAR-01] à [CAR-07] le figen
    bornes, c'est la date du serveur. La ligne garde aussi son heure de réception
    (`recuLe`). Conséquence attendue : une saisie de lundi soir, partie mardi matin,
    n'apparaît pas dans la journée de mardi. On la retrouve en choisissant lundi.
+
+   **Le revers, accepté :** une caissière qui avance l'horloge de la machine entre la
+   saisie et l'envoi peut dater une opération jusqu'à 7 jours en arrière. Les soldes
+   bougent quand même à l'arrivée. Chaque geste laisse aussi une entrée `auditLogs` à
+   l'heure du serveur, et la ligne garde `recuLe`. Rien ne le signale encore au patron
+   à l'écran.
 
 **Deux défauts anciens, trouvés par l'essai dans le navigateur :**
 
@@ -1192,7 +1205,7 @@ Sans `commandeId`, tout reste comme avant : TC-357 [CAR-01] à [CAR-07] le figen
 
 Console : aucune erreur, hors le bruit connu du hors-ligne et le refus attendu (400).
 
-**Tests :** TC-357 (22 cas), TC-358 (37), TC-359 (18), TC-360 (33), TC-361 (25), TC-362 (10),
+**Tests :** TC-357 (23 cas), TC-358 (37), TC-359 (18), TC-360 (33), TC-361 (25), TC-362 (10),
 TC-363 (4). 23 mutations du serveur, toutes attrapées. 30 de l'application : 28 du premier coup,
 et les 2 autres après avoir renforcé TC-360 [GA-19] et TC-361 [GF-04].
 

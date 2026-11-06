@@ -2,6 +2,7 @@ import { beforeAll, afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { initializeApp, getApps, deleteApp } from 'firebase-admin/app'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { storeTransactionCommandHandler } from '../../functions/src/storeTransactions/storeTransactionCommand.js'
+import { addTransactionPaymentHandler } from '../../functions/src/settlements/addTransactionPayment.js'
 
 /**
  * TC-357 — le ravitaillement, son retour, la modification et l'annulation
@@ -222,6 +223,26 @@ describe('TC-357 — l’annulation', () => {
     await db.doc(`clients/${STORE}/history/cmd-v`).update({ remainingAmount: 40, settlementStatus: 'partial' })
     await expect(call({ action: 'trashHistory', historyId: 'cmd-v', commandeId: 'cmd-a' }))
       .rejects.toMatchObject({ code: 'SETTLED_DRAFT_IMMUTABLE' })
+  })
+})
+
+describe('TC-357 — un numéro déjà pris', () => {
+  it('[IDEM-14] encaissée en entier, une non terminée n’écrase pas la ligne d’historique qui porte déjà son numéro', async () => {
+    // Le navigateur choisit le numéro d'une saisie, et `add` ne le cherche que parmi
+    // les non terminées : celui d'un ravitaillement déjà inscrit passe. L'encaissement
+    // complet écrit sous ce numéro (lot G4a) : sans garde, le ravitaillement disparaît.
+    await call(ravitailler({ commandeId: 'cmd-pris' }))
+    await call({ action: 'add', transaction: tx(), commandeId: 'cmd-pris' })
+    const avant = await ligne('cmd-pris')
+    const soldesAvant = await soldes()
+
+    const payer = { draftId: 'cmd-pris', amount: 100, paymentMethod: 'Cash', idempotencyKey: 'k' }
+    await expect(addTransactionPaymentHandler({ auth: { uid: UID }, data: payer }, { db, FieldValue, logWriter: () => {} }))
+      .rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' })
+    expect(await ligne('cmd-pris')).toEqual(avant)
+    expect(await ligne('cmd-pris', 'drafts')).toMatchObject({ montant: 100 })
+    expect(await compter('drafts/cmd-pris/settlements')).toBe(0)
+    expect(await soldes()).toEqual(soldesAvant)
   })
 })
 
