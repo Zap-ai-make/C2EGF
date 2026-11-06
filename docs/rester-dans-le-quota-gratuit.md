@@ -134,10 +134,11 @@ déclencheur — c'est une raison de plus pour §C1.
    et à faire lancer par le client.
 5. Tester à deux boutiques au moins (`AGENTS.md`).
 
-**Côté serveur — fait le 2026-11-04 (A1a).** Déploiement en cours : les règles et
-l'index sont en ligne. Les deux functions ont échoué au premier essai, comme
-attendu pour une première région ; il suffit de relancer la commande
-(`docs/deployer-les-functions.md` §3).
+**Côté serveur — fait le 2026-11-04 (A1a), en ligne et rempli le 2026-11-06.**
+Règles, index et les deux functions sont déployés. Les functions avaient échoué
+au premier essai, comme attendu pour une première région, et sont passées à la
+relance (`docs/deployer-les-functions.md` §3). Le premier remplissage a répondu
+`{"fiches":15750,"tranches":64}`.
 
 - `functions/src/clients/annuaireClients.js` contient le découpage en tranches,
   le contenu d'une entrée, le déclencheur `majAnnuaireClients` et la
@@ -217,6 +218,34 @@ sans effet visible.
   réécrits pour le chemin de repli).
 - **Reste à mesurer après déploiement :** les lectures quotidiennes dans la
   console, avant et après.
+
+**Déployer le front depuis ce poste : le `.env` vise les émulateurs.**
+
+Le CLI Vercel n'exclut pas `.env` de ce qu'il envoie. Sa liste par défaut
+n'écarte que `.env.local` et `.env.*.local`, et il ignore `.gitignore`. Le build
+distant lit donc le `.env` du poste, qui vise les émulateurs depuis le lot E1.
+Les variables du projet Vercel l'emportent sur ce fichier, mais
+`.env.vercel` ne définit ni `VITE_FIREBASE_RUNTIME_MODE` ni
+`VITE_USE_FIREBASE_EMULATORS`. Ces deux-là viendraient donc du `.env`.
+
+Le bundle porterait alors `development`, `true` et `c2egf-b0b5a`.
+`src/config/firebaseRuntime.js` refuse ce mélange au démarrage (« Le projet
+Firebase doit commencer par demo- hors production. »), d'où une page blanche dans
+toutes les boutiques. Constaté le 2026-11-06 par deux builds locaux, sans rien
+publier.
+
+Le remède est de les fixer au build. Les autres valeurs du `.env` restent celles
+des déploiements précédents, qui se faisaient avec le `.env` de production :
+
+```powershell
+npx vercel --prod `
+  --build-env VITE_FIREBASE_RUNTIME_MODE=production `
+  --build-env VITE_USE_FIREBASE_EMULATORS=false `
+  --build-env VITE_FIREBASE_PROJECT_ID=c2egf-b0b5a
+```
+
+Le CLI publie l'arbre de travail tel qu'il est sur le disque, et non un commit :
+vérifier `git status` avant de publier.
 
 **Alternatives, si l'annuaire est refusé :**
 
@@ -510,7 +539,7 @@ sont une décision humaine.
 |---|---|---|---|
 | 1 | E1 — retour aux émulateurs — **fait le 2026-11-04** | immédiat | nul |
 | 2 | A2 — une seule fiche écoutée dans `PatronHistoriqueClient` — **fait le 2026-11-04** | 15 678 lectures par visite | faible |
-| 3 | A1 — annuaire en tranches — **code fait le 2026-11-04, déploiement à faire** | ~98 % des lectures | moyen : déclencheur, règles, premier remplissage |
+| 3 | A1 — annuaire en tranches — **serveur en ligne et rempli le 2026-11-06, front à déployer** | ~98 % des lectures | moyen : déclencheur, règles, premier remplissage |
 | 4 | A3 — historique | ~150 lectures par ouverture | moyen : trois bugs déjà corrigés à ne pas rouvrir |
 | 5 | C1 + C2 — région et `getAll` | temps facturé ÷ 3 à 5 | moyen : migration de région |
 | 6 | C3 — CPU | vCPU-s ÷ ~6 | à mesurer : démarrage à froid, concurrence |
