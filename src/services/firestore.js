@@ -1151,10 +1151,6 @@ export class FirestoreService {
     return this._historyService.getHistoryBetween(fenetre)
   }
 
-  async getHistoryPage(options = {}) {
-    return this._historyService.getHistoryPage(options)
-  }
-
   async addToHistory(transactionData) {
     return runStoreTransactionCommand({ action: 'add', transaction: { ...transactionData, statut: 'Validée' } })
   }
@@ -1207,17 +1203,16 @@ export class FirestoreService {
     return this._historyService.subscribeToHistory(callback, filters)
   }
 
-  // Les dernières lignes, en temps réel et en forme de page : la première page
-  // de l'historique, sans le getDocs facturé à chaque ouverture. Voir
-  // HistoryService.subscribeToHistoryWindow.
-  subscribeToHistoryWindow(callback, options) {
-    return this._historyService.subscribeToHistoryWindow(callback, options)
-  }
-
   // Les lignes validees depuis un instant donne, meme si elles ont ete saisies
   // bien avant : voir HistoryService.subscribeToValidatedSince.
   subscribeToValidatedSince(callback, since) {
     return this._historyService.subscribeToValidatedSince(callback, since)
+  }
+
+  // Les lignes supprimees depuis un instant donne, meme saisies bien avant : la
+  // corbeille du jour. Voir HistoryService.subscribeToDeletedSince.
+  subscribeToDeletedSince(callback, since) {
+    return this._historyService.subscribeToDeletedSince(callback, since)
   }
 
   // Les ravitaillements encore dus, hors fenetre de pagination : voir

@@ -38,13 +38,11 @@ vi.mock('../../src/context/ThemeContext.jsx', () => ({
 // ── Dépendances du provider réel (section B) ─────────────────────────────────
 const service = {
   subscribeToDrafts: vi.fn(),
-  getHistoryPage: vi.fn(),
   subscribeToHistory: vi.fn(),
-  // La premiere page vient de l'ecoute de la fenetre, plus d'un getDocs (lot A3a).
-  subscribeToHistoryWindow: vi.fn(),
-  // La dette de ravitaillement a sa propre ecoute, hors fenetre de pagination.
+  // La dette de ravitaillement a sa propre ecoute, quelle que soit son anciennete.
   subscribeToOpenReplenishments: vi.fn(),
   subscribeToValidatedSince: vi.fn(),
+  subscribeToDeletedSince: vi.fn(),
   trashHistory: vi.fn(),
   trashReplenishmentReturn: vi.fn(),
 }
@@ -240,13 +238,12 @@ describe('TC-230 — la commande réellement envoyée', () => {
 
   const monter = async (historique, id) => {
     service.subscribeToDrafts.mockImplementation((cb) => { cb([]); return () => {} })
-    service.subscribeToHistory.mockImplementation((cb) => { cb([]); return () => {} })
+    // Les lignes viennent de l'écoute de la journée : depuis le lot G1, c'est
+    // tout l'historique lu à l'ouverture.
+    service.subscribeToHistory.mockImplementation((cb) => { cb(historique); return () => {} })
     service.subscribeToOpenReplenishments.mockImplementation((cb) => { cb([]); return () => {} })
     service.subscribeToValidatedSince.mockImplementation((cb) => { cb([]); return () => {} })
-    service.subscribeToHistoryWindow.mockImplementation((cb) => {
-      cb({ transactions: historique, lastDoc: null, hasMore: false, fromCache: false })
-      return () => {}
-    })
+    service.subscribeToDeletedSince.mockImplementation((cb) => { cb([]); return () => {} })
 
     render(
       <AuthContext.Provider value={contexteAuth}>

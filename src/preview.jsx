@@ -772,10 +772,11 @@ function PosteHistorique() {
               completedTransactions: mouvementsBoutique,
               pendingTransactions: [],
               trashTransaction: () => Promise.resolve(true),
-              historyHasMore: true,
-              historyLoadingMore: false,
-              historyDepuis: '25/10/2026',
-              loadMoreHistory: () => {},
+              periode: { from: '2026-10-25', to: '2026-10-31' },
+              periodeEnChargement: false,
+              erreurPeriode: null,
+              chargerPeriode: () => Promise.resolve(true),
+              revenirAuJour: () => {},
             }}
           >
             <main className="mx-auto max-w-6xl p-4 md:p-8">

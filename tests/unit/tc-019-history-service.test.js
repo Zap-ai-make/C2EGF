@@ -97,7 +97,6 @@ vi.mock('../../src/utils/cacheManager', () => ({
 import { HistoryService } from '../../src/services/historyService.js'
 import { FirestoreService } from '../../src/services/firestore.js'
 import { runTransaction } from 'firebase/firestore'
-import { getDocs, limit, onSnapshot, orderBy, query, startAfter, where } from 'firebase/firestore'
 import { FIRESTORE_CONFIG } from '../../src/constants/firestoreConstants.js'
 
 // ---------------------------------------------------------------------------
@@ -776,134 +775,40 @@ describe('TC-019-Q — subscribeToHistory retourne l\'unsubscribe', () => {
   })
 })
 
-describe('TC-019-Q2 — getHistoryPage borne chaque lecture', () => {
-  beforeEach(() => {
-    vi.mocked(getDocs).mockReset()
-    vi.mocked(query).mockClear()
-    vi.mocked(where).mockClear()
-    vi.mocked(orderBy).mockClear()
-    vi.mocked(limit).mockClear()
-    vi.mocked(startAfter).mockClear()
-  })
+// Lot G1 : l'historique s'arrête à la journée, et la corbeille du jour doit
+// pourtant montrer une ligne saisie la semaine dernière et supprimée ce matin.
+describe('TC-019-Q2 — subscribeToDeletedSince, la corbeille du jour', () => {
+  it('TC-019-17d : un seul filtre d\'intervalle sur deletedAt, ni tri ni limite', () => {
+    const mockUnsub = vi.fn()
+    const { service, mockSubscribeToCollection, mockRequireActiveStore } = makeHistoryService()
+    mockSubscribeToCollection.mockReturnValueOnce(mockUnsub)
+    const depuis = new Date('2026-11-06T00:00:00Z')
+    const cb = vi.fn()
 
-  it('TC-019-17d : lit N+1 documents, rend N lignes et un curseur', async () => {
-    const snapshots = Array.from({ length: 101 }, (_, i) => ({
-      id: `h-${i}`,
-      data: () => ({ montant: i }),
-    }))
-    vi.mocked(getDocs).mockResolvedValueOnce({ docs: snapshots })
-    const { service, mockCollectionRef } = makeHistoryService()
-
-    const page = await service.getHistoryPage({ pageSize: 100 })
-
-    expect(mockCollectionRef).toHaveBeenCalledWith(FIRESTORE_CONFIG.COLLECTIONS.HISTORY)
-    expect(where).not.toHaveBeenCalled()
-    expect(orderBy).toHaveBeenCalledWith('createdAt', 'desc')
-    expect(limit).toHaveBeenCalledWith(101)
-    expect(page.transactions).toHaveLength(100)
-    expect(page.transactions[0]).toEqual({ id: 'h-0', montant: 0 })
-    expect(page.hasMore).toBe(true)
-    expect(page.lastDoc).toBe(snapshots[99])
-  })
-
-  it('TC-019-17e : reprend après le dernier snapshot sans doublon', async () => {
-    const cursor = { id: 'cursor' }
-    vi.mocked(getDocs).mockResolvedValueOnce({ docs: [] })
-    const { service } = makeHistoryService()
-
-    const page = await service.getHistoryPage({ lastDoc: cursor, pageSize: 25 })
-
-    expect(startAfter).toHaveBeenCalledWith(cursor)
-    expect(limit).toHaveBeenCalledWith(26)
-    expect(page).toEqual({ transactions: [], lastDoc: null, hasMore: false })
-  })
-})
-
-// La première page vient désormais de cette écoute, et non plus d'un getDocs
-// facturé à chaque ouverture (lot A3a, docs/rester-dans-le-quota-gratuit.md §A3).
-describe('TC-019-Q3 — subscribeToHistoryWindow, la première page en temps réel', () => {
-  beforeEach(() => {
-    vi.mocked(onSnapshot).mockReset()
-    vi.mocked(query).mockClear()
-    vi.mocked(where).mockClear()
-    vi.mocked(orderBy).mockClear()
-    vi.mocked(limit).mockClear()
-  })
-
-  const ecouter = (callback, options) => {
-    const { service, mockCollectionRef, mockRequireActiveStore } = makeHistoryService()
-    const unsubscribe = vi.fn()
-    vi.mocked(onSnapshot).mockReturnValueOnce(unsubscribe)
-    const retour = service.subscribeToHistoryWindow(callback, options)
-    const [, optionsEcoute, onNext, onError] = vi.mocked(onSnapshot).mock.calls[0]
-    return { retour, unsubscribe, optionsEcoute, onNext, onError, mockCollectionRef, mockRequireActiveStore }
-  }
-  const instantane = (nombre, { fromCache = false } = {}) => ({
-    docs: Array.from({ length: nombre }, (_, i) => ({ id: `h-${i}`, data: () => ({ montant: i }) })),
-    metadata: { fromCache },
-  })
-
-  it('TC-019-17f : même requête que la première page, N+1 documents, sans filtre', () => {
-    const { mockCollectionRef, mockRequireActiveStore } = ecouter(vi.fn())
+    const unsub = service.subscribeToDeletedSince(cb, depuis)
 
     expect(mockRequireActiveStore).toHaveBeenCalled()
-    expect(mockCollectionRef).toHaveBeenCalledWith(FIRESTORE_CONFIG.COLLECTIONS.HISTORY)
-    expect(where).not.toHaveBeenCalled()
-    expect(orderBy).toHaveBeenCalledWith('createdAt', 'desc')
-    expect(limit).toHaveBeenCalledWith(101)
+    const [col, calledCb, options] = mockSubscribeToCollection.mock.calls[0]
+    expect(col).toBe(FIRESTORE_CONFIG.COLLECTIONS.HISTORY)
+    expect(calledCb).toBe(cb)
+    expect(options).toEqual({ where: [{ field: 'deletedAt', operator: '>=', value: depuis }] })
+    expect(unsub).toBe(mockUnsub)
   })
 
-  it('TC-019-17g : demande les changements de métadonnées, sinon la confirmation du serveur ne vient pas', () => {
-    const { optionsEcoute } = ecouter(vi.fn())
-    expect(optionsEcoute).toEqual({ includeMetadataChanges: true })
-  })
-
-  it('TC-019-17h : rend N lignes, le curseur, la suite et la provenance', () => {
-    const callback = vi.fn()
-    const { onNext } = ecouter(callback)
-    const snap = instantane(101, { fromCache: true })
-
-    onNext(snap)
-
-    const page = callback.mock.calls[0][0]
-    expect(page.transactions).toHaveLength(100)
-    expect(page.transactions[0]).toEqual({ id: 'h-0', montant: 0 })
-    expect(page.lastDoc).toBe(snap.docs[99])
-    expect(page.hasMore).toBe(true)
-    expect(page.fromCache).toBe(true)
-  })
-
-  it('TC-019-17i : tout tient dans la page — pas de suite', () => {
-    const callback = vi.fn()
-    const { onNext } = ecouter(callback, { pageSize: 25 })
-    expect(limit).toHaveBeenCalledWith(26)
-
-    onNext(instantane(3))
-
-    expect(callback.mock.calls[0][0]).toMatchObject({ hasMore: false, fromCache: false })
-    expect(callback.mock.calls[0][0].transactions).toHaveLength(3)
-  })
-
-  it('TC-019-17j : l\'erreur part vers onError, et l\'appelant reçoit le désabonnement', () => {
-    const callback = vi.fn()
-    callback.onError = vi.fn()
-    const { onError, retour, unsubscribe } = ecouter(callback)
-    const erreur = new Error('permission-denied')
-
-    onError(erreur)
-
-    expect(callback.onError).toHaveBeenCalledWith(erreur)
-    expect(callback).not.toHaveBeenCalled()
-    expect(retour).toBe(unsubscribe)
-  })
-
-  it('TC-019-17k : la façade délègue à HistoryService', () => {
+  it('TC-019-17e : la façade délègue à HistoryService', () => {
     const svc = new FirestoreService()
-    const espion = vi.spyOn(svc._historyService, 'subscribeToHistoryWindow').mockReturnValue('desabonner')
-    const callback = vi.fn()
+    const espion = vi.spyOn(svc._historyService, 'subscribeToDeletedSince').mockReturnValue('desabonner')
+    const cb = vi.fn()
+    const depuis = new Date('2026-11-06T00:00:00Z')
 
-    expect(svc.subscribeToHistoryWindow(callback, { pageSize: 10 })).toBe('desabonner')
-    expect(espion).toHaveBeenCalledWith(callback, { pageSize: 10 })
+    expect(svc.subscribeToDeletedSince(cb, depuis)).toBe('desabonner')
+    expect(espion).toHaveBeenCalledWith(cb, depuis)
+  })
+
+  it('TC-019-17f : la fenêtre et la pagination ont disparu avec le lot G1', () => {
+    const svc = new FirestoreService()
+    expect(svc.getHistoryPage).toBeUndefined()
+    expect(svc.subscribeToHistoryWindow).toBeUndefined()
   })
 })
 
@@ -955,15 +860,6 @@ describe('TC-019-S — facade FirestoreService réserve les écritures à la com
 
     const result = await fs.getHistory()
     expect(result).toStrictEqual(mockDocs)
-  })
-
-  it('TC-019-19a2 : getHistoryPage délègue les options et retourne la page', async () => {
-    const options = { lastDoc: { id: 'cursor' }, pageSize: 50 }
-    const mockPage = { transactions: [{ id: 'fh1' }], lastDoc: null, hasMore: false }
-    vi.spyOn(fs._historyService, 'getHistoryPage').mockResolvedValueOnce(mockPage)
-
-    await expect(fs.getHistoryPage(options)).resolves.toBe(mockPage)
-    expect(fs._historyService.getHistoryPage).toHaveBeenCalledWith(options)
   })
 
   it('TC-019-19b : addToHistory appelle la commande serveur et retourne le résultat', async () => {

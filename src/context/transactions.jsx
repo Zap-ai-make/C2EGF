@@ -8,10 +8,10 @@ import { AuthContext } from './AuthContext'
 import {
   businessDateKey,
   getBusinessDayBounds,
-  jourDeSaisie,
   millisecondsUntilNextBusinessDay,
 } from '../utils/businessDate.js'
 import { TYPE_RETOUR } from '../utils/ravitaillement.js'
+import { bornerPeriode, bornesServeur } from '../utils/periodeHistorique.js'
 
 // Exporté comme ClientsContext : permet de fournir une valeur sans monter le
 // provider réel (bancs d'essai, tests de rendu) — cf. src/preview.jsx.
@@ -98,47 +98,64 @@ export const TransactionsProvider = ({ children }) => {
   // États pour les deux collections Firestore
   const [pendingTransactions, setPendingTransactions] = useState([])
   const [completedTransactions, setCompletedTransactions] = useState([])
-  const [historyHasMore, setHistoryHasMore] = useState(false)
-  const [historyLoadingMore, setHistoryLoadingMore] = useState(false)
-  // Le jour de saisie de la plus ancienne ligne chargée, tant qu'il en reste à
-  // charger. Les onglets Ravitaillement et Corbeille lisent la fenêtre : ils
-  // disent ainsi jusqu'où ils remontent (TC-321).
-  const [historyDepuis, setHistoryDepuis] = useState(null)
+  // La période relue à la demande, `{ from, to }` en clés de jour, ou `null`
+  // quand l'historique s'en tient à la journée en cours (lot G1).
+  const [periode, setPeriode] = useState(null)
+  const [periodeEnChargement, setPeriodeEnChargement] = useState(false)
+  const [erreurPeriode, setErreurPeriode] = useState(null)
   const [editingTransaction, setEditingTransaction] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const liveHistoryRef = useRef([])
+  /*
+   * L'HISTORIQUE S'EN TIENT À LA JOURNÉE EN COURS (lot G1)
+   * ──────────────────────────────────────────────────────
+   * Décision du 2026-11-06 (docs/rester-dans-le-quota-gratuit.md §G) : rien
+   * d'antérieur ne se lit à l'ouverture. Quatre sources vivantes, toutes bornées :
+   * la journée, les validées depuis ce matin, les supprimées depuis ce matin, les
+   * ravitaillements encore dus. Une cinquième, la période, ne se lit qu'à la
+   * demande, une fois, quand on choisit des dates.
+   *
+   * Les sources plus loin dans la liste l'emportent sur les précédentes pour une
+   * même ligne : la période, lue une fois, passe en premier, pour que la version
+   * vivante d'une ligne remplace toujours sa copie figée.
+   */
+  const periodeHistoryRef = useRef([])
   const todayHistoryRef = useRef([])
-  // Les ravitaillements encore dus. Une dette ne se perime pas avec la
-  // pagination : cette source-la ignore la fenetre des 100 lignes.
+  // Les ravitaillements encore dus. Une dette ne se périme pas avec le jour :
+  // une livraison d'il y a trois semaines reste due, et le badge doit le dire.
   const dettesRavitaillementRef = useRef([])
   // Ce qui vient d'etre VALIDE, meme si la saisie est ancienne. Voir
   // `subscribeToValidatedSince` : sans cette source, une non terminee vieille de
   // trois jours validee a l'instant n'apparaissait nulle part a l'ecran.
   const valideesRecemmentRef = useRef([])
-  const archiveHistoryRef = useRef([])
-  const historyCursorRef = useRef(null)
+  // Ce qui vient d'être SUPPRIMÉ, même saisi avant aujourd'hui : la corbeille du
+  // jour. Voir `subscribeToDeletedSince`.
+  const supprimeesRecemmentRef = useRef([])
+  // La demande de période en cours. Une réponse arrivée après qu'on a choisi
+  // une autre période, ou qu'on est revenu au jour, est ignorée.
+  const periodeDemandeeRef = useRef(null)
 
   const publishHistory = useCallback(() => {
     setCompletedTransactions(mergeHistoryPages(
-      archiveHistoryRef.current,
+      periodeHistoryRef.current,
       dettesRavitaillementRef.current,
-      liveHistoryRef.current,
       todayHistoryRef.current,
       valideesRecemmentRef.current,
+      supprimeesRecemmentRef.current,
     ))
   }, [])
 
   // Synchronisation temps réel avec Firestore pour les deux collections - seulement si authentifié
   useEffect(() => {
-    liveHistoryRef.current = []
+    periodeHistoryRef.current = []
     todayHistoryRef.current = []
     dettesRavitaillementRef.current = []
     valideesRecemmentRef.current = []
-    archiveHistoryRef.current = []
-    historyCursorRef.current = null
-    setHistoryLoadingMore(false)
-    setHistoryDepuis(null)
+    supprimeesRecemmentRef.current = []
+    periodeDemandeeRef.current = null
+    setPeriode(null)
+    setPeriodeEnChargement(false)
+    setErreurPeriode(null)
 
     // Ne pas initialiser si l'auth est encore en cours de chargement
     if (authLoading) {
@@ -149,13 +166,12 @@ export const TransactionsProvider = ({ children }) => {
     if (!user || !userProfile?.storeId || activeStore?.id !== userProfile.storeId) {
       setPendingTransactions([])
       setCompletedTransactions([])
-      setHistoryHasMore(false)
       setLoading(false)
       return
     }
 
     let isMounted = true
-    let unsubscribeDrafts, unsubscribeHistory, unsubscribeToday, unsubscribeDettes, unsubscribeValidees, rolloverTimeout
+    let unsubscribeDrafts, unsubscribeToday, unsubscribeDettes, unsubscribeValidees, unsubscribeSupprimees, rolloverTimeout
 
     const initializeTransactions = async () => {
       try {
@@ -179,9 +195,8 @@ export const TransactionsProvider = ({ children }) => {
             localStorage.removeItem(STORAGE_KEYS.COMPLETED_TRANSACTIONS)
           }
         }
-        // Seule attente de l'initialisation depuis que la première page ne passe
-        // plus par `getDocs` : démonté pendant la migration, on n'ouvre aucune
-        // écoute que le nettoyage, déjà passé, ne fermerait plus.
+        // Seule attente de l'initialisation : démonté pendant la migration, on
+        // n'ouvre aucune écoute que le nettoyage, déjà passé, ne fermerait plus.
         if (!isMounted) return
 
         // Écouter les drafts (transactions non terminées)
@@ -201,35 +216,9 @@ export const TransactionsProvider = ({ children }) => {
         onDrafts.onError = onSubscriptionError
         unsubscribeDrafts = firestoreService.subscribeToDrafts(onDrafts)
 
-        // Les cent dernières lignes, en temps réel. Leur premier résultat
-        // CONFIRMÉ PAR LE SERVEUR tient lieu de première page : il fige
-        // l'archive, le curseur de « plus » et `historyHasMore`, comme le
-        // faisait le `getDocs` qu'il remplace (101 lectures à chaque ouverture,
-        // docs/rester-dans-le-quota-gratuit.md §A3).
-        //
-        // ⚠ PAS LE PREMIER RÉSULTAT TOUT COURT : il peut venir d'un cache en
-        //   retard. Figé dans l'archive, ce cache y laisserait des lignes rouvertes
-        //   ailleurs, et un curseur qui saute les lignes que le cache ignore
-        //   (TC-344 [CH-08]).
-        let premierePageRecue = false
-        const onFenetre = ({ transactions, lastDoc, hasMore, fromCache }) => {
-            if (!isMounted) return
-            liveHistoryRef.current = transactions
-            if (!fromCache && !premierePageRecue) {
-              premierePageRecue = true
-              archiveHistoryRef.current = transactions
-              historyCursorRef.current = lastDoc
-              setHistoryHasMore(hasMore)
-              setHistoryDepuis(hasMore ? jourDeSaisie(transactions.at(-1)) : null)
-            }
-            publishHistory()
-            setLoading(false)
-        }
-        onFenetre.onError = onSubscriptionError
-        unsubscribeHistory = firestoreService.subscribeToHistoryWindow(onFenetre)
-
-        // Une journée métier peut dépasser la page de 100 lignes : cette écoute
-        // journalière garde les indicateurs du tableau de bord exacts.
+        // La journée en cours, en entier et en temps réel : c'est tout
+        // l'historique qu'on lit à l'ouverture. Sa première réponse baisse
+        // `loading`.
         const subscribeToday = () => {
           unsubscribeToday?.()
           const now = new Date()
@@ -238,6 +227,7 @@ export const TransactionsProvider = ({ children }) => {
             if (!isMounted) return
             todayHistoryRef.current = historyData
             publishHistory()
+            setLoading(false)
           }
           onToday.onError = onSubscriptionError
           unsubscribeToday = firestoreService.subscribeToHistory(onToday, {
@@ -258,14 +248,25 @@ export const TransactionsProvider = ({ children }) => {
           onValidees.onError = onSubscriptionError
           unsubscribeValidees = firestoreService.subscribeToValidatedSince(onValidees, start)
 
+          // Ce qui a été SUPPRIMÉ aujourd'hui, quelle que soit sa date de saisie :
+          // sans elle, la corbeille ne montrerait que les lignes du jour.
+          unsubscribeSupprimees?.()
+          const onSupprimees = (historyData) => {
+            if (!isMounted) return
+            supprimeesRecemmentRef.current = historyData
+            publishHistory()
+          }
+          onSupprimees.onError = onSubscriptionError
+          unsubscribeSupprimees = firestoreService.subscribeToDeletedSince(onSupprimees, start)
+
           rolloverTimeout = setTimeout(subscribeToday, millisecondsUntilNextBusinessDay(now) + 25)
         }
         subscribeToday()
 
         // Ce que la boutique doit encore au dealer, quelle que soit son
-        // anciennete. Sans cette ecoute, une livraison sortie de la fenetre
-        // disparaissait de « ce qu'il reste a rendre » et du badge : le logiciel
-        // annoncait une dette soldee qui ne l'etait pas.
+        // ancienneté. Sans cette écoute, une livraison d'avant aujourd'hui
+        // disparaîtrait de « ce qu'il reste à rendre » et du badge : le logiciel
+        // annoncerait une dette soldée qui ne l'est pas.
         const onDettes = (historyData) => {
           if (!isMounted) return
           dettesRavitaillementRef.current = historyData
@@ -273,9 +274,8 @@ export const TransactionsProvider = ({ children }) => {
         }
         onDettes.onError = onSubscriptionError
         unsubscribeDettes = firestoreService.subscribeToOpenReplenishments(onDettes)
-        // `loading` retombe à la première réponse de la fenêtre (`onFenetre`)
-        // ou à la première erreur, comme il retombait après le `getDocs` : pas
-        // ici, où aucune ligne n'est encore arrivée.
+        // `loading` retombe à la première réponse de la journée (`onToday`) ou
+        // à la première erreur : pas ici, où aucune ligne n'est encore arrivée.
       } catch (error) {
         console.error('Erreur lors de l\'initialisation des transactions:', error)
         if (isMounted) {
@@ -303,35 +303,71 @@ export const TransactionsProvider = ({ children }) => {
       if (unsubscribeDrafts && typeof unsubscribeDrafts === 'function') {
         unsubscribeDrafts()
       }
-      if (unsubscribeHistory && typeof unsubscribeHistory === 'function') {
-        unsubscribeHistory()
-      }
       if (unsubscribeToday && typeof unsubscribeToday === 'function') unsubscribeToday()
       if (unsubscribeDettes && typeof unsubscribeDettes === 'function') unsubscribeDettes()
       if (unsubscribeValidees && typeof unsubscribeValidees === 'function') unsubscribeValidees()
+      if (unsubscribeSupprimees && typeof unsubscribeSupprimees === 'function') unsubscribeSupprimees()
       if (rolloverTimeout) clearTimeout(rolloverTimeout)
     }
   }, [user, userProfile?.storeId, activeStore?.id, authLoading, publishHistory])
 
-  const loadMoreHistory = useCallback(async () => {
-    if (!historyHasMore || historyLoadingMore || !historyCursorRef.current) return false
-    try {
-      setHistoryLoadingMore(true)
-      setError(null)
-      const page = await firestoreService.getHistoryPage({ lastDoc: historyCursorRef.current })
-      archiveHistoryRef.current = mergeHistoryPages(archiveHistoryRef.current, page.transactions)
-      historyCursorRef.current = page.lastDoc
-      setHistoryHasMore(page.hasMore)
-      setHistoryDepuis(page.hasMore ? jourDeSaisie(page.transactions.at(-1)) : null)
+  /**
+   * Relit une période passée, une fois, quand on choisit des dates.
+   *
+   * Lecture unique (`getHistoryBetween`, sans cache) et non écoute : les jours
+   * passés ne bougent presque plus, et une écoute de période se refacturerait
+   * en entier à chaque réouverture tardive. Les gestes faits ici sur une ligne
+   * de la période (suppression, réouverture) la corrigent localement, et les
+   * écoutes des validées et des supprimées du jour l'apportent à jour.
+   *
+   * Coût : une lecture par ligne de la période, journée en cours exclue
+   * (`bornesServeur`). Une période au-delà de PERIODE_MAX_JOURS est refusée.
+   *
+   * @param {{ from?: string, to?: string }} choix  clés de jour `AAAA-MM-JJ`
+   * @returns {Promise<boolean>} vrai quand la période est affichée
+   */
+  const chargerPeriode = useCallback(async (choix) => {
+    const bornee = bornerPeriode(choix)
+    if (bornee.erreur) {
+      setErreurPeriode(bornee.erreur)
+      return false
+    }
+    const demande = periodeDemandeeRef.current
+    if (demande && demande.from === bornee.from && demande.to === bornee.to) return true
+
+    periodeDemandeeRef.current = bornee
+    setPeriode(bornee)
+    setErreurPeriode(null)
+    const bornes = bornesServeur(bornee)
+    if (!bornes) {
+      periodeHistoryRef.current = []
       publishHistory()
       return true
-    } catch (loadError) {
-      setError(loadError.message)
+    }
+    try {
+      setPeriodeEnChargement(true)
+      const lignes = await firestoreService.getHistoryBetween(bornes)
+      if (periodeDemandeeRef.current !== bornee) return false
+      periodeHistoryRef.current = lignes
+      publishHistory()
+      return true
+    } catch (lectureError) {
+      if (periodeDemandeeRef.current === bornee) setErreurPeriode(lectureError.message)
       return false
     } finally {
-      setHistoryLoadingMore(false)
+      if (periodeDemandeeRef.current === bornee) setPeriodeEnChargement(false)
     }
-  }, [historyHasMore, historyLoadingMore, publishHistory])
+  }, [publishHistory])
+
+  /** Revient à la journée en cours : la période relue est oubliée. */
+  const revenirAuJour = useCallback(() => {
+    periodeDemandeeRef.current = null
+    periodeHistoryRef.current = []
+    setPeriode(null)
+    setPeriodeEnChargement(false)
+    setErreurPeriode(null)
+    publishHistory()
+  }, [publishHistory])
 
   const addTransaction = useCallback(async (transactionData) => {
     try {
@@ -435,26 +471,27 @@ export const TransactionsProvider = ({ children }) => {
         // Le routage vit ici parce que le tableau n'a pas à connaître les deux
         // commandes — il sait seulement qu'on supprime une ligne.
         const ligne = [
-          ...liveHistoryRef.current,
           ...todayHistoryRef.current,
-          ...archiveHistoryRef.current,
+          ...valideesRecemmentRef.current,
+          ...dettesRavitaillementRef.current,
+          ...periodeHistoryRef.current,
         ].find((item) => item?.id === id)
 
         const trashed = ligne?.type === TYPE_RETOUR
           ? await firestoreService.trashReplenishmentReturn(id)
           : await firestoreService.trashHistory(id)
         if (trashed) {
-          // Marquage optimiste : les pages d'archive ne sont pas toutes
-          // branchées sur un onSnapshot, et la ligne doit quitter l'onglet
-          // clients tout de suite — sinon le gérant reclique.
+          // Marquage optimiste : la période relue n'est branchée sur aucun
+          // onSnapshot, et la ligne doit quitter l'onglet clients tout de
+          // suite — sinon le gérant reclique.
           const marquerSupprimee = (items) => items.map((item) => (
             item.id === id
               ? { ...item, statut: FIRESTORE_CONFIG.STATUS.DELETED, deletedAt: new Date() }
               : item
           ))
-          archiveHistoryRef.current = marquerSupprimee(archiveHistoryRef.current)
-          liveHistoryRef.current = marquerSupprimee(liveHistoryRef.current)
+          periodeHistoryRef.current = marquerSupprimee(periodeHistoryRef.current)
           todayHistoryRef.current = marquerSupprimee(todayHistoryRef.current)
+          valideesRecemmentRef.current = marquerSupprimee(valideesRecemmentRef.current)
           publishHistory()
         }
       }
@@ -481,9 +518,9 @@ export const TransactionsProvider = ({ children }) => {
       setError(null)
       const { draftId, direct } = await firestoreService.reopenHistory(transaction.id)
       const retiree = (items) => items.filter((item) => item.id !== transaction.id)
-      archiveHistoryRef.current = retiree(archiveHistoryRef.current)
-      liveHistoryRef.current = retiree(liveHistoryRef.current)
+      periodeHistoryRef.current = retiree(periodeHistoryRef.current)
       todayHistoryRef.current = retiree(todayHistoryRef.current)
+      valideesRecemmentRef.current = retiree(valideesRecemmentRef.current)
       publishHistory()
       // Liste blanche, comme côté serveur : recopier la ligne d'historique en
       // entier traînerait ses neuf champs de règlement dans l'objet en cours
@@ -574,10 +611,11 @@ export const TransactionsProvider = ({ children }) => {
   const value = {
     pendingTransactions,
     completedTransactions,
-    historyHasMore,
-    historyLoadingMore,
-    historyDepuis,
-    loadMoreHistory,
+    periode,
+    periodeEnChargement,
+    erreurPeriode,
+    chargerPeriode,
+    revenirAuJour,
     editingTransaction,
     loading,
     error,

@@ -63,40 +63,46 @@ const ONGLETS = [
   { cle: 'corbeille', libelle: 'Corbeille' },
 ]
 
+/** `AAAA-MM-JJ` → `JJ/MM/AAAA`, comme les dates de l'historique. */
+const jourAffiche = (cle) => cle.split('-').reverse().join('/')
+
 /**
- * Ce que disent les onglets tirés de la FENÊTRE de l'historique — cent lignes,
- * plus celles qu'on charge — quand il en reste à charger (BUG-08, TC-321).
+ * Ce que montrent les onglets qui lisent l'historique, et jusqu'où (lot G1).
  *
- * La phrase compte autant que le bouton : un clic lit cent lignes de tout type
- * et peut n'ajouter aucun mouvement. C'est la date qui recule qui dit que le
- * clic a servi. L'onglet clients garde son bouton à lui, sans phrase (TC-116).
+ * L'historique ne contient que la journée en cours, plus la période qu'on a
+ * choisie. Il faut le dire : sans cette phrase, un historique d'une journée se
+ * lirait comme des données perdues. Elle remplace les boutons « Charger … »,
+ * qui relisaient cent lignes à chaque clic (docs/rester-dans-le-quota-gratuit.md
+ * §G).
  */
-const CHARGEMENT_PAR_ONGLET = {
+const PHRASES_PAR_ONGLET = {
+  clients: {
+    jour: 'Seule la journée en cours est chargée. Choisissez des dates pour relire les jours précédents.',
+    periode: (du, au) => (du === au ? `Le ${du}, et la journée en cours.` : `Du ${du} au ${au}, et la journée en cours.`),
+  },
   dealer: {
-    charger: 'Charger les mouvements précédents',
-    enCours: 'Chargement des mouvements précédents',
-    phrase: (jour) => `Mouvements depuis le ${jour}. Les livraisons encore dues sont toutes affichées, même plus anciennes.`,
+    jour: 'Mouvements de la journée en cours. Les livraisons encore dues sont toutes affichées, même plus anciennes.',
+    periode: (du, au) => `Mouvements ${du === au ? `du ${du}` : `du ${du} au ${au}`} et de la journée en cours. Les livraisons encore dues sont toutes affichées.`,
   },
   corbeille: {
-    charger: 'Charger les lignes précédentes',
-    enCours: 'Chargement des lignes précédentes',
-    phrase: (jour) => `Lignes saisies depuis le ${jour}.`,
+    jour: 'Lignes supprimées aujourd\u2019hui. Choisissez des dates pour relire celles d\u2019autres jours.',
+    periode: (du, au) => `Lignes supprimées aujourd\u2019hui, et celles saisies ${du === au ? `le ${du}` : `du ${du} au ${au}`}.`,
   },
 }
 
-function ChargerPrecedents({ charger, enCours, phrase, depuis, enChargement, onCharger }) {
+function PeriodeAffichee({ onglet, periode, enChargement, erreur }) {
+  const phrases = PHRASES_PAR_ONGLET[onglet]
+  if (!phrases) return null
   return (
-    <div className="mt-4 flex flex-col items-center gap-2 text-center">
-      {depuis && <p className="text-sm text-ink-muted">{phrase(depuis)}</p>}
-      <button
-        type="button"
-        onClick={onCharger}
-        disabled={enChargement}
-        aria-label={enChargement ? enCours : charger}
-        className="rounded-lg border border-brand-200 px-4 py-2 text-sm font-medium text-brand-600 hover:bg-brand-50 disabled:cursor-wait disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-      >
-        {enChargement ? 'Chargement…' : charger}
-      </button>
+    <div className="space-y-1 text-sm" data-testid="periode-affichee">
+      {erreur && <p role="alert" className="text-danger">{erreur}</p>}
+      <p role="status" className="text-ink-muted">
+        {enChargement
+          ? 'Lecture de la période…'
+          : periode
+            ? phrases.periode(jourAffiche(periode.from), jourAffiche(periode.to))
+            : phrases.jour}
+      </p>
     </div>
   )
 }
@@ -106,7 +112,14 @@ function Historique() {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const storeId = userProfile?.storeId ?? null
-  const { historyHasMore, historyLoadingMore, historyDepuis, loadMoreHistory, reopenTransaction } = useTransactions()
+  const {
+    reopenTransaction,
+    periode = null,
+    periodeEnChargement = false,
+    erreurPeriode = null,
+    chargerPeriode,
+    revenirAuJour,
+  } = useTransactions()
 
   const demande = params.get('onglet')
   const onglet = ONGLETS.some((o) => o.cle === demande) ? demande : ONGLETS[0].cle
@@ -189,6 +202,13 @@ function Historique() {
             </div>
           </div>
 
+          <PeriodeAffichee
+            onglet="clients"
+            periode={periode}
+            enChargement={periodeEnChargement}
+            erreur={erreurPeriode}
+          />
+
           {/* Navigation par jour */}
           <DailyPagination
             transactions={allTransactions}
@@ -202,21 +222,6 @@ function Historique() {
               onReopen={rouvrirPuisCorriger}
             />
 
-            {historyHasMore && (
-              <div className="mt-5 flex justify-center">
-                <button
-                  type="button"
-                  onClick={loadMoreHistory}
-                  disabled={historyLoadingMore}
-                  aria-label={historyLoadingMore
-                    ? 'Chargement des transactions précédentes'
-                    : 'Charger les transactions précédentes'}
-                  className="rounded-lg border border-brand-200 px-4 py-2 text-sm font-medium text-brand-600 hover:bg-brand-50 disabled:cursor-wait disabled:opacity-60"
-                >
-                  {historyLoadingMore ? 'Chargement…' : 'Charger les transactions précédentes'}
-                </button>
-              </div>
-            )}
 
             <ActionButtons
               filteredTransactions={filteredTransactions}
@@ -237,13 +242,21 @@ function Historique() {
         </div>
       )}
 
-      {CHARGEMENT_PAR_ONGLET[onglet] && historyHasMore && (
-        <ChargerPrecedents
-          {...CHARGEMENT_PAR_ONGLET[onglet]}
-          depuis={historyDepuis}
-          enChargement={historyLoadingMore}
-          onCharger={loadMoreHistory}
-        />
+      {/* Ces deux onglets lisent l'historique du contexte : la journée, plus la
+          période choisie ici ou sur l'onglet clients. Le filtre de date ne trie
+          pas leurs lignes, il dit seulement quels jours relire. */}
+      {(onglet === 'dealer' || onglet === 'corbeille') && (
+        <div className="mt-4 grid grid-cols-1 items-end gap-4 rounded-lg bg-white p-6 shadow-md lg:grid-cols-3">
+          <DateFilter onDateChange={chargerPeriode} onResetToToday={revenirAuJour} />
+          <div className="lg:col-span-2">
+            <PeriodeAffichee
+              onglet={onglet}
+              periode={periode}
+              enChargement={periodeEnChargement}
+              erreur={erreurPeriode}
+            />
+          </div>
+        </div>
       )}
     </div>
   )

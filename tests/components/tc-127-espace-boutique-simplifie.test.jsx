@@ -17,9 +17,6 @@ vi.mock('../../src/context/transactions.jsx', () => ({
     ],
     editingTransaction: null,
     clearEditTransaction: vi.fn(),
-    historyHasMore: false,
-    historyLoadingMore: false,
-    loadMoreHistory: vi.fn(),
   }),
 }))
 vi.mock('../../src/hooks/useIncomingCollaborationsCount', () => ({

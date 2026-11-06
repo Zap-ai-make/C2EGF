@@ -62,9 +62,6 @@ beforeEach(() => {
   transactionsValue = {
     completedTransactions: LIGNES,
     pendingTransactions: [],
-    historyHasMore: false,
-    historyLoadingMore: false,
-    loadMoreHistory: vi.fn(),
   }
 })
 

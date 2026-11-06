@@ -646,8 +646,8 @@ abandonné, remplacé par G1.
 
 | # | Lot | Ce qu'il apporte |
 |---|---|---|
-| G0 | Démarrage hors ligne : ne plus attendre `lastLogin`, demander le stockage persistant (`navigator.storage.persist()`), avertir avant une déconnexion | l'application s'ouvre sans réseau |
-| G1 | Historique du jour courant, le reste sur demande de date | ~101 lectures par ouverture à froid |
+| G0 | Démarrage hors ligne : ne plus attendre `lastLogin`, demander le stockage persistant (`navigator.storage.persist()`), avertir avant une déconnexion — **fait le 2026-11-06** | l'application s'ouvre sans réseau |
+| G1 | Historique du jour courant, le reste sur demande de date — **fait le 2026-11-06** | ~101 lectures par ouverture à froid |
 | G2 | Annuaire gardé sur l'appareil, relu par version | 64 lectures et ~5 Mo → 1 lecture + tranches modifiées |
 | G3 | File d'envoi pour les quatre opérations | la saisie sans réseau |
 
@@ -684,6 +684,66 @@ Reste, sans bloquer :
 4. Rallumer sans réseau et ouvrir l'application installée.
 5. Attendu : la page Transactions s'ouvre, avec les soldes de la veille et le
    bandeau « Hors ligne ». Une saisie échouera encore : c'est le lot G3.
+
+### G1 — fait le 2026-11-06 : l'historique s'en tient à la journée en cours
+
+**À l'ouverture**, quatre écoutes, toutes bornées :
+- la journée (`createdAt` dans le jour) ;
+- les validées depuis ce matin (`validatedAt`) ;
+- les **supprimées depuis ce matin** (`deletedAt`, nouvelle) ;
+- les ravitaillements encore dus.
+
+Plus les non terminées, comme avant. La fenêtre des 100 dernières lignes
+(A3a), `getHistoryPage` et les trois boutons « Charger … précédent(e)s » sont
+retirés.
+
+L'écoute des supprimées est ce qui garde la corbeille juste. Une ligne saisie la
+semaine dernière et supprimée ce matin garde son `createdAt` d'alors : l'écoute
+de la journée ne la verrait pas. Le serveur pose `deletedAt` à chaque mise à la
+corbeille. Ce filtre sur un seul champ passe par l'index automatique, sans
+déploiement.
+
+**Les jours passés** sont relus à la demande, par `chargerPeriode` du contexte,
+avec une seule lecture (`getHistoryBetween`) :
+- Les dates se choisissent sur les onglets Transactions clients (filtre et
+  navigation par jour), Ravitaillement et Corbeille.
+- « Du » seul garde son sens de « à partir de », « Au » seul celui de
+  « jusqu'à » (TC-116), bornés tous deux à 31 jours. Au-delà, la période est
+  refusée (`src/utils/periodeHistorique.js`).
+- La journée en cours n'est jamais relue : son écoute la tient déjà, donc la
+  lecture s'arrête à ce matin minuit.
+- La même période redemandée ne se relit pas. Une réponse arrivée après un
+  retour au jour est ignorée.
+- « Aujourd'hui » oublie la période.
+- Une phrase sous les filtres dit ce qui est chargé : sans elle, un historique
+  d'une journée se lirait comme des données perdues.
+
+**Tests :**
+- TC-347 : le contexte, 15 cas, dont les trois garanties reprises de TC-344 (la
+  journée de plus de cent lignes, la validée tardive, la dette ancienne).
+- TC-348 : la règle des dates.
+- TC-349 : les onglets Ravitaillement et Corbeille.
+- TC-116 : mis à jour.
+- Les fiches d'aide suivent (TC-225).
+- Retirés, leur objet n'existant plus : TC-321, TC-322, TC-344 et TC-345
+  (fenêtre, pagination, boutons « Charger »), et `jourDeSaisie`.
+
+**Vérifié dans l'application**, sur les émulateurs, avec 3 lignes aujourd'hui et
+140 avant :
+- à l'ouverture, la navigation par jour ne montre que « 06/11/2026 — 3 » et les
+  quatre écoutes bornées ;
+- « Du 04/11 au 05/11 » fait une seule lecture et ajoute exactement 48 + 35
+  lignes ;
+- « Aujourd'hui » revient à 3 ;
+- aucune erreur dans la console.
+
+Gain : la fenêtre (101 lectures à froid) disparaît, et l'ouverture ne coûte plus
+que les lignes du jour.
+
+**Limites acceptées :**
+- Les expéditeurs proposés dans le formulaire de ravitaillement ne viennent plus
+  que de la journée et des livraisons dues.
+- Les estimations d'activité du profil ne comptent plus que la journée.
 
 ---
 

@@ -38,6 +38,7 @@ const SOURCES_INTERFACE = [
   'src/components/historique/HistoriqueTable.jsx',
   'src/components/historique/HistoriqueArchives.jsx',
   'src/components/historique/ActionButtons.jsx',
+  'src/components/historique/DateFilter.jsx',
   'src/components/TableRow.jsx',
   'src/components/assistant/CarteAConfirmer.jsx',
   'src/components/assistant/PanneauAssistant.jsx',

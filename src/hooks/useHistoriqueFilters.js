@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useTransactions } from '../context/transactions.jsx'
 import { matchesSearchTerm, matchesDateFilter } from '../utils/helpers.js'
 import { STORE_MOVEMENT_TYPES, estSupprimee } from '../utils/constants.js'
+import { bornerPeriode } from '../utils/periodeHistorique.js'
 
 /** Horodatage de mise à la corbeille, pour le tri du plus récent au plus ancien. */
 const instantSuppression = (transaction) => {
@@ -14,7 +15,7 @@ const instantSuppression = (transaction) => {
 }
 
 export const useHistoriqueFilters = () => {
-  const { completedTransactions } = useTransactions()
+  const { completedTransactions, chargerPeriode, revenirAuJour } = useTransactions()
   const [dateFilter, setDateFilter] = useState({ from: '', to: '' })
   const [searchTerm, setSearchTerm] = useState('')
   const [appliedDateFilter, setAppliedDateFilter] = useState({ from: '', to: '' })
@@ -55,9 +56,21 @@ export const useHistoriqueFilters = () => {
     [completedTransactions],
   )
 
+  /**
+   * Choisir des dates relit cette période au serveur (lot G1) : l'historique
+   * ne contient sinon que la journée en cours.
+   *
+   * Le filtre affiché suit la période normalisée par `bornerPeriode` (une seule
+   * date = ce jour-là), pour que l'écran montre exactement ce qu'on a lu. Une
+   * période refusée (plus de 31 jours) laisse le filtre tel quel : le contexte
+   * porte la raison du refus.
+   */
   const applyDateFilter = (filter) => {
-    setDateFilter(filter)
-    setAppliedDateFilter(filter)
+    chargerPeriode?.(filter)
+    const bornee = bornerPeriode(filter)
+    if (bornee.erreur) return
+    setDateFilter(bornee)
+    setAppliedDateFilter(bornee)
     setShowTodayOnly(false) // Désactive l'affichage "aujourd'hui seulement" quand on filtre par date
   }
 
@@ -79,6 +92,7 @@ export const useHistoriqueFilters = () => {
     setAppliedDateFilter({ from: '', to: '' })
     setAppliedSearchTerm('')
     setShowTodayOnly(true)
+    revenirAuJour?.()
   }
 
   const resetFilters = () => {
@@ -87,6 +101,7 @@ export const useHistoriqueFilters = () => {
     setAppliedDateFilter({ from: '', to: '' })
     setAppliedSearchTerm('')
     setShowTodayOnly(false)
+    revenirAuJour?.()
   }
 
   return {

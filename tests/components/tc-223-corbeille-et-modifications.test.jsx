@@ -117,9 +117,6 @@ const SUPPRIMEE_BROUILLON = {
 const contexteBase = (completed = []) => ({
   completedTransactions: completed,
   pendingTransactions: [],
-  historyHasMore: false,
-  historyLoadingMore: false,
-  loadMoreHistory: vi.fn(),
   getTransactionStyles: () => ({ textColor: '' }),
   trashTransaction: vi.fn().mockResolvedValue(undefined),
   reopenTransaction: vi.fn().mockResolvedValue('draft-9'),

@@ -1,17 +1,14 @@
 /**
  * Un faux historique de boutique, pour monter le vrai `TransactionsProvider`.
  *
- * Il parle les deux langues du service : l'ancienne lecture de la première page
- * (`getHistoryPage` + `subscribeToHistory`) et la nouvelle
- * (`subscribeToHistoryWindow`, lot A3a). Les mêmes lignes servent les deux, si
- * bien qu'un test de comportement passe avant et après le lot (TC-344).
+ * Il sert les sources du lot G1 (docs/rester-dans-le-quota-gratuit.md §G) à
+ * partir des mêmes lignes : la journée (`subscribeToHistory` avec une plage),
+ * les validées et les supprimées depuis un instant, les ravitaillements dus, et
+ * la lecture unique d'une période (`getHistoryBetween`).
  *
  * Il trie comme Firestore (`createdAt` décroissant, puis identifiant
- * décroissant) et rejoue chaque écoute à chaque changement.
- *
- * `cache` simule la persistance : tant que `synchroniser()` n'a pas été appelé,
- * les écoutes répondent depuis ces lignes-là, et la fenêtre dit `fromCache`.
- * `getHistoryPage`, comme un `getDocs` en ligne, lit toujours le serveur.
+ * décroissant) et rejoue chaque écoute à chaque changement, comme le ferait un
+ * `onSnapshot`.
  */
 
 import { vi } from 'vitest'
@@ -32,15 +29,12 @@ export const serie = (prefixe, nombre, depuis, pasMinutes = 10) => Array.from({ 
   new Date(new Date(depuis).getTime() - i * pasMinutes * 60_000).toISOString(),
 ))
 
-export function fauxHistorique(lignes, { cache = null } = {}) {
+export function fauxHistorique(lignes) {
   let serveur = [...lignes]
-  let synchronise = cache === null
   const ecoutes = new Set()
   const ms = (l) => l.createdAt.toMillis()
   const trier = (liste) => [...liste].sort((a, b) => (ms(b) - ms(a)) || (a.id > b.id ? -1 : 1))
-  const apres = (l, curseur) => ms(l) < curseur.ms || (ms(l) === curseur.ms && l.id < curseur.id)
-  const curseurDe = (l) => (l ? { id: l.id, ms: ms(l) } : null)
-  const courant = () => trier(synchronise ? serveur : cache)
+  const depuis = (champ, instant) => trier(serveur).filter((l) => l[champ] && l[champ].toMillis() >= instant.getTime())
 
   const ecouter = (calculer, emettre) => {
     const ecoute = () => emettre(calculer())
@@ -52,32 +46,21 @@ export function fauxHistorique(lignes, { cache = null } = {}) {
 
   const api = {
     subscribeToDrafts: vi.fn((cb) => { cb([]); return () => {} }),
-    getHistoryPage: vi.fn(async ({ lastDoc = null, pageSize = 100 } = {}) => {
-      const tout = trier(serveur)
-      const reste = lastDoc ? tout.filter((l) => apres(l, lastDoc)) : tout
-      const page = reste.slice(0, pageSize)
-      return { transactions: page, lastDoc: curseurDe(page.at(-1)), hasMore: reste.length > pageSize }
-    }),
     subscribeToHistory: vi.fn((cb, filtres = {}) => ecouter(() => {
-      let liste = courant()
+      let liste = trier(serveur)
       const plage = filtres.dateRange
       if (plage?.start) liste = liste.filter((l) => ms(l) >= plage.start.getTime())
       if (plage?.endExclusive) liste = liste.filter((l) => ms(l) < plage.endExclusive.getTime())
       return filtres.limitCount === null ? liste : liste.slice(0, filtres.limitCount ?? 100)
     }, cb)),
-    subscribeToHistoryWindow: vi.fn((cb, { pageSize = 100 } = {}) => ecouter(() => {
-      const tout = courant()
-      const page = tout.slice(0, pageSize)
-      return { transactions: page, lastDoc: curseurDe(page.at(-1)), hasMore: tout.length > pageSize, fromCache: !synchronise }
-    }, cb)),
-    subscribeToValidatedSince: vi.fn((cb, depuis) => ecouter(
-      () => courant().filter((l) => l.validatedAt && l.validatedAt.toMillis() >= depuis.getTime()),
-      cb,
-    )),
+    subscribeToValidatedSince: vi.fn((cb, instant) => ecouter(() => depuis('validatedAt', instant), cb)),
+    subscribeToDeletedSince: vi.fn((cb, instant) => ecouter(() => depuis('deletedAt', instant), cb)),
     subscribeToOpenReplenishments: vi.fn((cb) => ecouter(
-      () => courant().filter((l) => l.replenishmentStatus === 'open'),
+      () => trier(serveur).filter((l) => l.replenishmentStatus === 'open'),
       cb,
     )),
+    getHistoryBetween: vi.fn(async ({ start, endExclusive }) => trier(serveur)
+      .filter((l) => ms(l) >= start.getTime() && ms(l) < endExclusive.getTime())),
   }
 
   return {
@@ -87,6 +70,5 @@ export function fauxHistorique(lignes, { cache = null } = {}) {
       serveur = serveur.map((l) => (l.id === id ? { ...l, ...champs } : l))
       return rejouer()
     },
-    synchroniser: () => { synchronise = true; return rejouer() },
   }
 }

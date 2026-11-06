@@ -285,7 +285,7 @@ export const FICHES = Object.freeze([
     groupe: GROUPES.HISTORIQUE,
     titre: 'Retrouver une opération annulée',
     texte: "Onglet {{Historique}}, puis {{Corbeille}}. Ce qui a été annulé s'y trouve — venu des non terminées comme de l'historique —, de la plus récente à la plus ancienne, avec qui l'a fait et quand.",
-    texteFin: 'Une opération saisie il y a longtemps ? En bas, la phrase dit jusqu’où la liste remonte, et {{Charger les lignes précédentes}} remonte plus loin. On y **lit**. On n’y restaure pas : pour la remettre, ressaisis-la.',
+    texteFin: 'La liste montre ce qui a été annulé aujourd’hui. Pour une opération saisie un autre jour, choisis ses dates sous la liste, puis {{Filtrer}}. On y **lit**. On n’y restaure pas : pour la remettre, ressaisis-la.',
   },
   {
     id: 16,
@@ -303,7 +303,7 @@ export const FICHES = Object.freeze([
       'Un retour fait par erreur : sur sa ligne, clique {{Annuler}}.',
       'Relis, puis {{Annuler le retour}}. Le montant revient dans la réserve, et la livraison **redevient due** d’autant.',
     ],
-    texteFin: 'Un ravitaillement, lui, ne s’annule pas : il se solde en rendant (fiche 11). Les livraisons encore dues sont toujours toutes là ; pour un mouvement plus ancien, {{Charger les mouvements précédents}}, en bas. Les anciennes clôtures restent listées pour mémoire. Les demandes au dealer sont dessous.',
+    texteFin: 'Un ravitaillement, lui, ne s’annule pas : il se solde en rendant (fiche 11). Les livraisons encore dues sont toujours toutes là ; pour un mouvement ou une clôture d’un autre jour, choisis ses dates sous la liste, puis {{Filtrer}}. Les demandes au dealer sont dessous.',
   },
   {
     id: 18,
@@ -319,7 +319,8 @@ export const FICHES = Object.freeze([
     etapes: [
       'Onglet {{Historique}}, puis {{Transactions clients}}.',
       'Choisis les dates, ou tape le nom ou le code du client dans la recherche.',
-      'La navigation par jour saute d’une journée à l’autre. Plus bas, {{Charger les transactions précédentes}} remonte le temps.',
+      'Seule la journée en cours est chargée. {{Filtrer}} relit les dates choisies, 31 jours au plus ; la phrase sous les filtres dit lesquels. {{Aujourd\'hui}} y revient.',
+      'La navigation par jour saute d’une journée chargée à l’autre.',
       'Les opérations d’un même client et d’un même type se replient sur une ligne avec leur total, comme dans la liste qui attend (fiche 7).',
       '{{Exporter XLSM}} enregistre ce qui est affiché dans un fichier Excel.',
     ],

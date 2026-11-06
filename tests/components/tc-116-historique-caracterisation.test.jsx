@@ -69,9 +69,11 @@ const tx = (over = {}) => ({
 
 const baseContext = (completedTransactions = []) => ({
   completedTransactions,
-  historyHasMore: false,
-  historyLoadingMore: false,
-  loadMoreHistory: vi.fn(),
+  periode: null,
+  periodeEnChargement: false,
+  erreurPeriode: null,
+  chargerPeriode: vi.fn(),
+  revenirAuJour: vi.fn(),
   getTransactionStyles: () => ({ bgColor: '', textColor: '' }),
   addTransaction: vi.fn(),
 })
@@ -176,20 +178,36 @@ describe('TC-116-A — structure de la page', () => {
     expect(clientCells()).toEqual(['Ligne SEULE'])
   })
 
-  it('propose de charger les archives seulement quand une page suivante existe', () => {
-    const loadMoreHistory = vi.fn()
-    contextValue = { ...baseContext([tx()]), historyHasMore: true, loadMoreHistory }
+  // Lot G1 : l'historique ne contient que la journée en cours. Le bouton
+  // « Charger les transactions précédentes » a disparu ; ce sont les dates qui
+  // relisent les jours passés, et une phrase dit ce qui est chargé.
+  it('dit que seule la journée en cours est chargée, sans bouton pour remonter', () => {
+    contextValue = baseContext([tx()])
     poser()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Charger les transactions précédentes' }))
-    expect(loadMoreHistory).toHaveBeenCalledOnce()
+    expect(screen.getByTestId('periode-affichee')).toHaveTextContent('Seule la journée en cours est chargée.')
+    expect(screen.queryByRole('button', { name: /Charger les transactions/ })).toBeNull()
   })
 
-  it('désactive la commande pendant le chargement', () => {
-    contextValue = { ...baseContext([tx()]), historyHasMore: true, historyLoadingMore: true }
-    poser()
+  it('avec une période relue, dit laquelle ; pendant la lecture, le dit aussi', () => {
+    contextValue = { ...baseContext([tx()]), periode: { from: '2026-08-24', to: '2026-08-26' } }
+    const { unmount } = poser()
+    expect(screen.getByTestId('periode-affichee')).toHaveTextContent('Du 24/08/2026 au 26/08/2026, et la journée en cours.')
+    unmount()
 
-    expect(screen.getByRole('button', { name: 'Chargement des transactions précédentes' })).toBeDisabled()
+    contextValue = { ...baseContext([tx()]), periodeEnChargement: true }
+    poser()
+    expect(screen.getByTestId('periode-affichee')).toHaveTextContent('Lecture de la période…')
+  })
+
+  it('« Filtrer » demande la période au contexte, « Aujourd\'hui » l\'oublie', () => {
+    poser()
+    setDates('2026-08-24', '2026-08-25')
+    fireEvent.click(screen.getByRole('button', { name: 'Filtrer' }))
+    expect(contextValue.chargerPeriode).toHaveBeenCalledWith({ from: '2026-08-24', to: '2026-08-25' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Aujourd\'hui' }))
+    expect(contextValue.revenirAuJour).toHaveBeenCalledOnce()
   })
 })
 

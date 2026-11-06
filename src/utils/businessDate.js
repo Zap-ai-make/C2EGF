@@ -85,25 +85,6 @@ export function storedBusinessDateKey(value, timeZone = BUSINESS_TIME_ZONE) {
   return businessDateKey(value, timeZone)
 }
 
-/**
- * Le jour de saisie d'une ligne d'historique, au format de l'écran (JJ/MM/AAAA).
- *
- * Lu sur `createdAt`, le champ qui ordonne les pages : c'est lui qui dit
- * jusqu'où une liste tirée de la fenêtre remonte (onglets Ravitaillement et
- * Corbeille, TC-321). L'ancien champ texte `date` ne sert qu'à défaut. Une
- * ligne illisible rend `null` : mieux vaut taire la date que l'inventer.
- */
-export function jourDeSaisie(ligne, timeZone = BUSINESS_TIME_ZONE) {
-  try {
-    const source = typeof ligne?.createdAt?.toDate === 'function' ? ligne.createdAt.toDate() : ligne?.date
-    if (source === undefined || source === null) return null
-    const [annee, mois, jour] = storedBusinessDateKey(source, timeZone).split('-')
-    return `${jour}/${mois}/${annee}`
-  } catch {
-    return null
-  }
-}
-
 export function getBusinessDayBounds(dateKey, timeZone = BUSINESS_TIME_ZONE) {
   return {
     start: zonedMidnightToUtc(dateKey, timeZone),
