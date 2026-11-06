@@ -309,6 +309,45 @@ dette de ravitaillement, validations tardives) : **test de caractérisation
 d'abord**, ces trois écoutes existent chacune pour un bug documenté dans
 `historyService.js`.
 
+**Découpé en deux lots, parce qu'un seul des deux change l'écran.**
+
+**A3a — fait le 2026-11-06 : la première page sans `getDocs`.** L'ouverture
+n'appelle plus `getHistoryPage`. Une seule écoute,
+`subscribeToHistoryWindow` (`historyService.js`), sert les cent dernières
+lignes en forme de page : `{ transactions, lastDoc, hasMore, fromCache }`.
+
+- Son premier résultat **confirmé par le serveur** fige l'archive, le curseur de
+  « plus » et `historyHasMore`, comme le faisait le `getDocs`. Ce n'est jamais un
+  résultat venu du cache, qui peut être en retard (TC-344 [CH-08], TC-345
+  [UL-02]).
+- Cette confirmation n'arrive qu'avec `includeMetadataChanges`. Vérifié sur
+  l'émulateur avec le vrai SDK : quand le cache disait déjà la même chose qu'au
+  serveur, une écoute sans l'option ne reçoit jamais `fromCache: false`.
+- Pas de délai d'abandon de trente secondes : le `getDocs` remplacé attendait
+  le réseau aussi longtemps qu'il le fallait.
+- `loading` retombe à la première réponse de la fenêtre, cache compris.
+- Une erreur de la fenêtre passe par `onError`, comme les autres écoutes. Elle
+  ne coupe plus les trois écoutes de complément, que l'échec du `getDocs`
+  empêchait d'ouvrir (TC-345 [UL-04]).
+- **L'écran ne change pas.** TC-344 décrit ce qui s'affiche avec un faux
+  historique qui parle les deux langues (`tests/fixtures/fauxHistorique.js`) :
+  ses huit cas passent sur l'ancien contexte comme sur le nouveau.
+- Dans l'application, sur les émulateurs, avec 143 lignes : à l'ouverture, une
+  seule requête de première page (101) au lieu de deux (101 + 100) ; « Charger
+  les transactions précédentes » envoie une requête avec curseur, puis
+  disparaît quand tout est là ; aucune erreur dans la console.
+
+Gain : **101 lectures à chaque ouverture**. Une ouverture à chaud (écoute reprise
+dans les 30 minutes) passe de 101 lectures à zéro, une ouverture à froid
+d'environ 201 à 101.
+
+**A3b — à décider : la fenêtre de 100 à ~25 lignes.** Encore ~75 lectures par
+ouverture à froid. Mais l'écran change : avant le premier « plus », on ne voit
+plus que la journée et les ~25 dernières lignes. La Corbeille et l'onglet
+Ravitaillement, qui lisent la fenêtre, remontent moins loin. Chaque « plus »
+coûte 101 lectures, donc une boutique qui remonte souvent dans son historique
+pourrait y perdre. C'est une décision de l'utilisateur, pas un lot technique.
+
 ### A4. Le dealer
 
 - `listAllActiveStores` ([src/services/dealerService.js:159](../src/services/dealerService.js#L159)) :
@@ -549,7 +588,7 @@ sont une décision humaine.
 | 1 | E1 — retour aux émulateurs — **fait le 2026-11-04** | immédiat | nul |
 | 2 | A2 — une seule fiche écoutée dans `PatronHistoriqueClient` — **fait le 2026-11-04** | 15 678 lectures par visite | faible |
 | 3 | A1 — annuaire en tranches — **serveur en ligne et rempli le 2026-11-06, front à déployer** | ~98 % des lectures | moyen : déclencheur, règles, premier remplissage |
-| 4 | A3 — historique | ~150 lectures par ouverture | moyen : trois bugs déjà corrigés à ne pas rouvrir |
+| 4 | A3 — historique — **A3a fait le 2026-11-06** (première page sans `getDocs`) ; A3b (fenêtre à ~25) à décider | 101 lectures par ouverture (A3a) ; ~75 de plus à froid (A3b) | moyen : trois bugs déjà corrigés à ne pas rouvrir |
 | 5 | C1 + C2 — région et `getAll` | temps facturé ÷ 3 à 5 | moyen : migration de région |
 | 6 | C3 — CPU | vCPU-s ÷ ~6 | à mesurer : démarrage à froid, concurrence |
 | 7 | D1 — ordre du prompt | jetons d'entrée | faible |

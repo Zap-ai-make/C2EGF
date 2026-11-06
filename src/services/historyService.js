@@ -30,6 +30,7 @@
 import {
   getDocs,
   limit,
+  onSnapshot,
   orderBy,
   query,
   runTransaction,
@@ -41,6 +42,7 @@ import { getUserFriendlyMessage } from '../utils/errorHandler'
 import { formatDateToFrench } from '../utils/helpers'
 import { FIRESTORE_CONFIG } from '../constants/firestoreConstants'
 import { parseFcfaAmount } from '../utils/fcfaAmount.js'
+import { normalizeSubscriptionObserver, notifySubscriptionError } from './subscriptionObserver.js'
 
 export const HISTORY_PAGE_SIZE = 100
 
@@ -121,6 +123,56 @@ export class HistoryService {
       lastDoc: pageDocs.at(-1) ?? null,
       hasMore: snapshot.docs.length > safePageSize,
     }
+  }
+
+  /**
+   * Les `pageSize` dernières lignes, en temps réel, sous la forme d'une page :
+   * `{ transactions, lastDoc, hasMore, fromCache }`.
+   *
+   * POURQUOI ELLE REMPLACE `getHistoryPage` À L'OUVERTURE
+   * ─────────────────────────────────────────────────────
+   * L'ouverture lisait la première page par `getDocs`, puis écoutait les mêmes
+   * lignes. Un `getDocs` en ligne repart toujours au serveur : 101 lectures à
+   * chaque ouverture, même quand l'écoute, reprise par la persistance, n'en
+   * facturait aucune (docs/rester-dans-le-quota-gratuit.md §A3). Une seule
+   * requête sert désormais les deux usages, et `lastDoc` sert de curseur à
+   * `getHistoryPage` pour la suite.
+   *
+   * ⚠ `includeMetadataChanges`, ET CE N'EST PAS UN DÉTAIL. Avec la
+   *   persistance, la première réponse peut venir du cache, et le cache peut
+   *   être en retard (lignes rouvertes ailleurs, ou manquantes). Sans cette
+   *   option, Firestore ne signale pas le moment où le serveur confirme un
+   *   résultat identique au cache. Le contexte ne saurait alors jamais quand
+   *   prendre sa première page : `fromCache` le lui dit.
+   *
+   * ⚠ PAS DE DÉLAI D'ABANDON, contrairement à `subscribeToCollection`. Le
+   *   `getDocs` remplacé attendait le réseau aussi longtemps qu'il le fallait.
+   *   Couper l'écoute au bout de trente secondes laisserait un historique vide
+   *   sur une connexion lente.
+   */
+  subscribeToHistoryWindow(callback, { pageSize = HISTORY_PAGE_SIZE } = {}) {
+    this._requireActiveStore()
+    const observer = normalizeSubscriptionObserver(callback)
+    const fenetre = query(
+      this._collectionRef(FIRESTORE_CONFIG.COLLECTIONS.HISTORY),
+      orderBy('createdAt', 'desc'),
+      limit(pageSize + 1),
+    )
+
+    return onSnapshot(
+      fenetre,
+      { includeMetadataChanges: true },
+      (snapshot) => {
+        const pageDocs = snapshot.docs.slice(0, pageSize)
+        observer.onNext({
+          transactions: pageDocs.map((doc) => ({ id: doc.id, ...doc.data() })),
+          lastDoc: pageDocs.at(-1) ?? null,
+          hasMore: snapshot.docs.length > pageSize,
+          fromCache: snapshot.metadata.fromCache,
+        })
+      },
+      (error) => notifySubscriptionError(observer, error, 'subscribeToHistoryWindow'),
+    )
   }
 
   // ---------------------------------------------------------------------------

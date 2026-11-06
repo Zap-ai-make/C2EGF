@@ -173,6 +173,7 @@ vi.mock('../../src/services/firestore', () => ({
     subscribeToClients: vi.fn(() => vi.fn()),
     subscribeToDrafts: vi.fn(() => vi.fn()),
     subscribeToHistory: vi.fn(() => vi.fn()),
+    subscribeToHistoryWindow: vi.fn(() => vi.fn()),
     getHistoryPage: vi.fn(() => Promise.resolve({ transactions: [], lastDoc: null, hasMore: false })),
     subscribeToTransactions: vi.fn(() => vi.fn()),
     ensureNetworkBalances: vi.fn(() => Promise.resolve()),

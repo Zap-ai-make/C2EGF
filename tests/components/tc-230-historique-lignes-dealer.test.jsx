@@ -40,6 +40,8 @@ const service = {
   subscribeToDrafts: vi.fn(),
   getHistoryPage: vi.fn(),
   subscribeToHistory: vi.fn(),
+  // La premiere page vient de l'ecoute de la fenetre, plus d'un getDocs (lot A3a).
+  subscribeToHistoryWindow: vi.fn(),
   // La dette de ravitaillement a sa propre ecoute, hors fenetre de pagination.
   subscribeToOpenReplenishments: vi.fn(),
   subscribeToValidatedSince: vi.fn(),
@@ -241,7 +243,10 @@ describe('TC-230 — la commande réellement envoyée', () => {
     service.subscribeToHistory.mockImplementation((cb) => { cb([]); return () => {} })
     service.subscribeToOpenReplenishments.mockImplementation((cb) => { cb([]); return () => {} })
     service.subscribeToValidatedSince.mockImplementation((cb) => { cb([]); return () => {} })
-    service.getHistoryPage.mockResolvedValue({ transactions: historique, lastDoc: null, hasMore: false })
+    service.subscribeToHistoryWindow.mockImplementation((cb) => {
+      cb({ transactions: historique, lastDoc: null, hasMore: false, fromCache: false })
+      return () => {}
+    })
 
     render(
       <AuthContext.Provider value={contexteAuth}>

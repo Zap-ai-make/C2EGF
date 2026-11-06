@@ -15,6 +15,9 @@ const service = {
   subscribeToDrafts: vi.fn(),
   getHistoryPage: vi.fn(),
   subscribeToHistory: vi.fn(),
+  // La première page vient de l'écoute de la fenêtre (lot A3a) ;
+  // `getHistoryPage` ne sert plus qu'aux pages suivantes.
+  subscribeToHistoryWindow: vi.fn(),
   subscribeToOpenReplenishments: vi.fn(),
   subscribeToValidatedSince: vi.fn(),
 }
@@ -53,6 +56,12 @@ function Lecteur() {
   )
 }
 
+/** La fenêtre répond une fois, confirmée par le serveur : c'est la première page. */
+const premierePage = (page) => service.subscribeToHistoryWindow.mockImplementation((cb) => {
+  cb({ ...page, fromCache: false })
+  return () => {}
+})
+
 const monter = () => render(
   <AuthContext.Provider value={AUTH}>
     <TransactionsProvider>
@@ -70,8 +79,8 @@ beforeEach(() => {
 
 describe('TC-322 — historyDepuis', () => {
   it('[FD-01] la plus ancienne ligne chargée, puis elle recule, puis plus rien', async () => {
+    premierePage({ transactions: [saisieLe('2026-10-31T10:00:00Z', 'a'), saisieLe('2026-10-25T10:00:00Z', 'b')], lastDoc: { id: 'b' }, hasMore: true })
     service.getHistoryPage
-      .mockResolvedValueOnce({ transactions: [saisieLe('2026-10-31T10:00:00Z', 'a'), saisieLe('2026-10-25T10:00:00Z', 'b')], lastDoc: { id: 'b' }, hasMore: true })
       .mockResolvedValueOnce({ transactions: [saisieLe('2026-10-20T10:00:00Z', 'c')], lastDoc: { id: 'c' }, hasMore: true })
       .mockResolvedValueOnce({ transactions: [saisieLe('2026-10-12T10:00:00Z', 'd')], lastDoc: null, hasMore: false })
     monter()
@@ -87,10 +96,10 @@ describe('TC-322 — historyDepuis', () => {
   })
 
   it('[FD-02] tout tient dans la première page : rien à dire', async () => {
-    service.getHistoryPage.mockResolvedValueOnce({ transactions: [saisieLe('2026-10-31T10:00:00Z', 'a')], lastDoc: null, hasMore: false })
+    premierePage({ transactions: [saisieLe('2026-10-31T10:00:00Z', 'a')], lastDoc: null, hasMore: false })
     monter()
 
-    await waitFor(() => expect(service.getHistoryPage).toHaveBeenCalled())
+    await waitFor(() => expect(service.subscribeToHistoryWindow).toHaveBeenCalled())
     expect(screen.getByTestId('depuis')).toHaveTextContent('aucune')
   })
 })

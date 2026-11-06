@@ -179,6 +179,10 @@ export const TransactionsProvider = ({ children }) => {
             localStorage.removeItem(STORAGE_KEYS.COMPLETED_TRANSACTIONS)
           }
         }
+        // Seule attente de l'initialisation depuis que la première page ne passe
+        // plus par `getDocs` : démonté pendant la migration, on n'ouvre aucune
+        // écoute que le nettoyage, déjà passé, ne fermerait plus.
+        if (!isMounted) return
 
         // Écouter les drafts (transactions non terminées)
         const onSubscriptionError = (subscriptionError) => {
@@ -197,22 +201,32 @@ export const TransactionsProvider = ({ children }) => {
         onDrafts.onError = onSubscriptionError
         unsubscribeDrafts = firestoreService.subscribeToDrafts(onDrafts)
 
-        const firstPage = await firestoreService.getHistoryPage()
-        if (!isMounted) return
-        archiveHistoryRef.current = firstPage.transactions
-        historyCursorRef.current = firstPage.lastDoc
-        setHistoryHasMore(firstPage.hasMore)
-        setHistoryDepuis(firstPage.hasMore ? jourDeSaisie(firstPage.transactions.at(-1)) : null)
-        publishHistory()
-
-        // Écouter l'historique récent en temps réel.
-        const onHistory = (historyData) => {
+        // Les cent dernières lignes, en temps réel. Leur premier résultat
+        // CONFIRMÉ PAR LE SERVEUR tient lieu de première page : il fige
+        // l'archive, le curseur de « plus » et `historyHasMore`, comme le
+        // faisait le `getDocs` qu'il remplace (101 lectures à chaque ouverture,
+        // docs/rester-dans-le-quota-gratuit.md §A3).
+        //
+        // ⚠ PAS LE PREMIER RÉSULTAT TOUT COURT : il peut venir d'un cache en
+        //   retard. Figé dans l'archive, ce cache y laisserait des lignes rouvertes
+        //   ailleurs, et un curseur qui saute les lignes que le cache ignore
+        //   (TC-344 [CH-08]).
+        let premierePageRecue = false
+        const onFenetre = ({ transactions, lastDoc, hasMore, fromCache }) => {
             if (!isMounted) return
-            liveHistoryRef.current = historyData
+            liveHistoryRef.current = transactions
+            if (!fromCache && !premierePageRecue) {
+              premierePageRecue = true
+              archiveHistoryRef.current = transactions
+              historyCursorRef.current = lastDoc
+              setHistoryHasMore(hasMore)
+              setHistoryDepuis(hasMore ? jourDeSaisie(transactions.at(-1)) : null)
+            }
             publishHistory()
+            setLoading(false)
         }
-        onHistory.onError = onSubscriptionError
-        unsubscribeHistory = firestoreService.subscribeToHistory(onHistory)
+        onFenetre.onError = onSubscriptionError
+        unsubscribeHistory = firestoreService.subscribeToHistoryWindow(onFenetre)
 
         // Une journée métier peut dépasser la page de 100 lignes : cette écoute
         // journalière garde les indicateurs du tableau de bord exacts.
@@ -259,10 +273,9 @@ export const TransactionsProvider = ({ children }) => {
         }
         onDettes.onError = onSubscriptionError
         unsubscribeDettes = firestoreService.subscribeToOpenReplenishments(onDettes)
-
-        if (isMounted) {
-          setLoading(false)
-        }
+        // `loading` retombe à la première réponse de la fenêtre (`onFenetre`)
+        // ou à la première erreur, comme il retombait après le `getDocs` : pas
+        // ici, où aucune ligne n'est encore arrivée.
       } catch (error) {
         console.error('Erreur lors de l\'initialisation des transactions:', error)
         if (isMounted) {
