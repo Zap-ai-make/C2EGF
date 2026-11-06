@@ -6,7 +6,8 @@ import { useClients } from '../../hooks/useClients'
 import { useTransactions } from '../../context/transactions.jsx'
 import { useSimpleNetworkData } from '../../hooks/useSimpleNetworkData'
 import { useReducedMotion } from '../../hooks/useReducedMotion'
-import { runStoreTransactionCommand } from '../../services/storeTransactionCommandService'
+import { useEnvois } from '../../context/envoisContexte.js'
+import { envoyerMouvement } from '../../services/mouvementsBoutique.js'
 import { generateIdempotencyKey } from '../../services/settlementService.js'
 import { NETWORK_OPTIONS } from '../../utils/constants.js'
 import { expediteursConnus, ravitaillementsEnCours } from '../../utils/ravitaillement.js'
@@ -317,6 +318,7 @@ function PanneauAssistant({ ouvert, onFermer }) {
     addRefundTranche,
     trashTransaction,
   } = useTransactions()
+  const envois = useEnvois()
   const { networkData = {}, validateAmount, getLiquidite, getStock, getNetworkLiquidite } = useSimpleNetworkData()
 
   // Les soldes PAR RÉSEAU, tels que le serveur les jugera : les réseaux du
@@ -402,7 +404,7 @@ function PanneauAssistant({ ouvert, onFermer }) {
         // est reconnu par le serveur comme le même règlement.
         await regler(execution.draftId, execution.montant, execution.moyen, carte.cle, execution.codeAgent)
       } else if (execution.genre === 'commande') {
-        await runStoreTransactionCommand(execution.commande)
+        await envoyerMouvement(envois, execution.commande)
       } else if (execution.genre === 'corbeille') {
         await trashTransaction(execution.id)
       } else {
@@ -417,7 +419,7 @@ function PanneauAssistant({ ouvert, onFermer }) {
     } finally {
       verrouCarte.current = false
     }
-  }, [carte, addTransaction, addPaymentTranche, addRefundTranche, trashTransaction])
+  }, [carte, addTransaction, addPaymentTranche, addRefundTranche, trashTransaction, envois])
 
   const envoyer = useCallback(async (texteImpose) => {
     const demande = (typeof texteImpose === 'string' ? texteImpose : question).trim()

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { CLIENT, EN_ATTENTE, REFUSEE, REGLEMENT, REMBOURSEMENT, SAISIE } from '../../src/services/fileEnvoi.js'
-import { fusionnerEnAttente, lignesEnAttente, soldesProvisoires } from '../../src/utils/envoisEnAttente.js'
+import { appliquerFile, clientsEnAttente, soldesProvisoires } from '../../src/utils/envoisEnAttente.js'
 import { sommesEnAttente } from '../../src/utils/caisse.js'
 
 /**
@@ -22,10 +22,10 @@ const SOLDES = { Orange: { stock: 10_000, liquidite: 5_000 } }
 
 describe('TC-354 — les lignes en attente', () => {
   it('[EE-01] une non terminée en attente prend son identifiant de commande, sa date du jour et son état', () => {
-    const { nonTerminees, validees } = lignesEnAttente([
+    const { nonTerminees, historique } = appliquerFile([], [], [
       saisie('cmd-1', { type: 'Dépôt', montant: 2000, statut: 'Non Terminées' }),
     ])
-    expect(validees).toEqual([])
+    expect(historique).toEqual([])
     expect(nonTerminees).toHaveLength(1)
     expect(nonTerminees[0]).toMatchObject({
       id: 'cmd-1', type: 'Dépôt', montant: 2000, statut: 'Non Terminées', date: '06/11/2026',
@@ -36,23 +36,24 @@ describe('TC-354 — les lignes en attente', () => {
 
   it('[EE-02] une validée d’un geste va avec l’historique ; une refusée garde sa raison', () => {
     const erreur = { code: 'INSUFFICIENT_STORE_BALANCE', message: 'Stock insuffisant.' }
-    const { nonTerminees, validees } = lignesEnAttente([
+    const { nonTerminees, historique } = appliquerFile([], [], [
       saisie('cmd-2', { type: 'Retrait', montant: 500, statut: 'Validée' }),
       saisie('cmd-3', { type: 'Dépôt', montant: 900, statut: 'Non Terminées' }, { etat: REFUSEE, erreur }),
     ])
-    expect(validees.map((l) => l.id)).toEqual(['cmd-2'])
+    expect(historique.map((l) => l.id)).toEqual(['cmd-2'])
     expect(nonTerminees[0].envoi).toEqual({ etat: REFUSEE, erreur })
   })
 
   it('[EE-03] les règlements se rangent sous la ligne qu’ils règlent ; les clients en attente sont listés', () => {
-    const { reglements, clients } = lignesEnAttente([
+    const operations = [
       op('r1', REGLEMENT, { draftId: 'd1', amount: 1000, paymentMethod: 'Cash' }),
       op('r2', REMBOURSEMENT, { draftId: 'd1', amount: 200, paymentMethod: 'Orange Money' }),
       op('k1', CLIENT, { donnees: { nom: 'OUATTARA' } }),
       op('k2', CLIENT, { donnees: { nom: 'REFUSE' } }, { etat: REFUSEE }),
-    ])
-    expect(reglements.get('d1').map((r) => [r.type, r.amount])).toEqual([[REGLEMENT, 1000], [REMBOURSEMENT, 200]])
-    expect(clients).toEqual([{ id: 'k1', nom: 'OUATTARA', enAttente: true }])
+    ]
+    const { nonTerminees } = appliquerFile([{ id: 'd1', type: 'Dépôt', montant: 5000 }], [], operations)
+    expect(nonTerminees[0].reglementsEnAttente.map((r) => [r.type, r.amount])).toEqual([[REGLEMENT, 1000], [REMBOURSEMENT, 200]])
+    expect(clientsEnAttente(operations)).toEqual([{ id: 'k1', nom: 'OUATTARA', enAttente: true }])
   })
 })
 
@@ -80,7 +81,7 @@ describe('TC-354 — les soldes provisoires', () => {
       saisie('cmd-1', { type: 'Retrait', montant: 4000, statut: 'Non Terminées' }),
       op('r1', REGLEMENT, { draftId: 'cmd-1', amount: 4000, paymentMethod: 'Cash' }),
     ]
-    const brouillons = new Map(lignesEnAttente(operations).nonTerminees.map((l) => [l.id, l]))
+    const brouillons = new Map(appliquerFile([], [], operations.slice(0, 1)).nonTerminees.map((l) => [l.id, l]))
     const { soldes, appliquees } = soldesProvisoires(SOLDES, operations, brouillons)
     expect(soldes.Orange).toEqual({ stock: 14_000, liquidite: 1000 })
     expect(appliquees).toBe(2)
@@ -122,35 +123,45 @@ describe('TC-354 — la fusion avec les lignes du serveur', () => {
   const serveur = [{ id: 'd1', type: 'Dépôt', montant: 5000 }, { id: 'd2', type: 'Retrait', montant: 3000, paidAmount: 1000, remainingAmount: 2000, settlementStatus: 'partial' }]
 
   it('[EE-09] sans rien en attente, la liste du serveur revient telle quelle', () => {
-    expect(fusionnerEnAttente(serveur, [], new Map())).toBe(serveur)
+    const historique = []
+    const resultat = appliquerFile(serveur, historique, [])
+    expect(resultat.nonTerminees).toBe(serveur)
+    expect(resultat.historique).toBe(historique)
+    // Une fiche client ne change aucune ligne : pas de copie non plus.
+    expect(appliquerFile(serveur, historique, [op('k1', CLIENT, { donnees: {} })]).nonTerminees).toBe(serveur)
   })
 
   it('[EE-10] une ligne en attente s’ajoute ; renvoyée par le serveur, c’est la sienne qui reste', () => {
-    const locale = { id: 'cmd-1', montant: 100, envoi: { etat: EN_ATTENTE } }
-    expect(fusionnerEnAttente(serveur, [locale]).map((l) => l.id)).toEqual(['d1', 'd2', 'cmd-1'])
-    const dejaLa = fusionnerEnAttente([...serveur, { id: 'cmd-1', montant: 100 }], [locale])
+    const locale = saisie('cmd-1', { type: 'Dépôt', montant: 100, statut: 'Non Terminées' })
+    expect(appliquerFile(serveur, [], [locale]).nonTerminees.map((l) => l.id)).toEqual(['d1', 'd2', 'cmd-1'])
+    const dejaLa = appliquerFile([...serveur, { id: 'cmd-1', montant: 100 }], [], [locale]).nonTerminees
     const memeLigne = dejaLa.filter((l) => l.id === 'cmd-1')
     expect(memeLigne).toHaveLength(1)
     expect(memeLigne[0].envoi).toBeUndefined()
   })
 
   it('[EE-11] un règlement en attente fait baisser le reste dû ; un remboursement le fait remonter', () => {
-    const reglements = new Map([
-      ['d1', [{ id: 'r1', type: REGLEMENT, amount: 2000, etat: EN_ATTENTE }]],
-      ['d2', [{ id: 'r2', type: REGLEMENT, amount: 2000, etat: EN_ATTENTE }, { id: 'r3', type: REMBOURSEMENT, amount: 500, etat: EN_ATTENTE }]],
+    const { nonTerminees: [d1, d2] } = appliquerFile(serveur, [], [
+      op('r1', REGLEMENT, { draftId: 'd1', amount: 2000, paymentMethod: 'Cash' }),
+      op('r2', REGLEMENT, { draftId: 'd2', amount: 1500, paymentMethod: 'Cash' }),
+      op('r3', REMBOURSEMENT, { draftId: 'd2', amount: 500, paymentMethod: 'Cash' }),
     ])
-    const [d1, d2] = fusionnerEnAttente(serveur, [], reglements)
     expect(d1).toMatchObject({ paidAmount: 2000, remainingAmount: 3000, settlementStatus: 'partial' })
-    expect(d2).toMatchObject({ paidAmount: 3000, refundedAmount: 500, remainingAmount: 500, settlementStatus: 'partial' })
+    expect(d2).toMatchObject({ paidAmount: 2500, refundedAmount: 500, remainingAmount: 1000, settlementStatus: 'partial' })
   })
 
-  it('[EE-12] réglée en entier hors ligne, la ligne ne doit plus rien ; un règlement refusé ne compte pas', () => {
-    const reglements = new Map([
-      ['d1', [{ id: 'r1', type: REGLEMENT, amount: 5000, etat: EN_ATTENTE }]],
-      ['d2', [{ id: 'r2', type: REGLEMENT, amount: 2000, etat: REFUSEE }]],
+  it('[EE-12] réglée en entier hors ligne, la ligne passe dans l’historique sous son identifiant ; un règlement refusé ne compte pas', () => {
+    const { nonTerminees, historique } = appliquerFile(serveur, [], [
+      op('r1', REGLEMENT, { draftId: 'd1', amount: 5000, paymentMethod: 'Cash' }),
+      op('r2', REGLEMENT, { draftId: 'd2', amount: 2000, paymentMethod: 'Cash' }, { etat: REFUSEE }),
     ])
-    const [d1, d2] = fusionnerEnAttente(serveur, [], reglements)
-    expect(d1).toMatchObject({ remainingAmount: 0, settlementStatus: 'settled' })
-    expect(d2).toMatchObject({ remainingAmount: 2000, paidAmount: 1000, reglementsEnAttente: reglements.get('d2') })
+    expect(historique).toHaveLength(1)
+    expect(historique[0]).toMatchObject({
+      id: 'd1', remainingAmount: 0, settlementStatus: 'settled', statut: 'Encaissé par Cash',
+      paymentMethod: 'Cash', effectiveNetwork: 'Liquidite', envoi: { etat: EN_ATTENTE },
+    })
+    expect(nonTerminees.map((l) => l.id)).toEqual(['d2'])
+    expect(nonTerminees[0]).toMatchObject({ remainingAmount: 2000, paidAmount: 1000 })
+    expect(nonTerminees[0].reglementsEnAttente[0]).toMatchObject({ id: 'r2', etat: REFUSEE })
   })
 })

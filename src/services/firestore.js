@@ -1278,17 +1278,13 @@ export class FirestoreService {
   }
 
   /**
-   * Ramène une ligne validée dans les non terminées pour correction.
-   *
-   * Renvoie l'identifiant du BROUILLON créé — c'est lui, pas la ligne
-   * d'historique d'origine, que le formulaire doit modifier ensuite.
+   * Corrige une ligne validée d'un seul geste : elle reste dans l'historique, sous
+   * un nouvel identifiant. Le serveur décide seul de ce que la ligne portait : la
+   * règle ne se devine pas depuis la copie locale.
    */
-  async reopenHistory(historyId) {
-    const result = await runStoreTransactionCommand({ action: 'reopenHistory', historyId })
-    // `direct` vient du serveur et non d'un test refait ici : lui seul a lu le
-    // document d'historique, et la règle (« la ligne portait-elle ses deux
-    // jambes ? ») ne se devine pas depuis la copie locale.
-    return { draftId: result.draftId, direct: result.direct === true }
+  async correctHistory(historyId, updates) {
+    const result = await runStoreTransactionCommand({ action: 'correctHistory', historyId, updates })
+    return result.historyId
   }
 
   subscribeToHistory(callback, filters = {}) {

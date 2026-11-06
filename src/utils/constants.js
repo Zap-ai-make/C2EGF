@@ -129,6 +129,10 @@ export const MESSAGES = {
     TRANSACTION: 'Connexion absente ou lente : la transaction est gardée sur cet appareil et partira dès que possible.',
     REGLEMENT: 'Connexion absente ou lente : le règlement est gardé sur cet appareil et partira dès que possible.',
     CLIENT: 'Connexion absente ou lente : la fiche est gardée sur cet appareil et partira dès que possible.',
+    RAVITAILLEMENT: 'Connexion absente ou lente : le ravitaillement est gardé sur cet appareil et partira dès que possible.',
+    RETOUR: 'Connexion absente ou lente : le retour est gardé sur cet appareil et partira dès que possible.',
+    MODIFICATION: 'Connexion absente ou lente : la modification est gardée sur cet appareil et partira dès que possible.',
+    ANNULATION: 'Connexion absente ou lente : l’annulation est gardée sur cet appareil et partira dès que possible.',
   }
 }
 

@@ -6,7 +6,7 @@ import { messageDoublonAgent, trouverFicheAgent } from '../utils/agentFields.js'
 import { CLIENT, ENVOYEE } from '../services/fileEnvoi.js'
 import { AuthContext } from './AuthContext'
 import { EnvoisContext } from './envoisContexte.js'
-import { lignesEnAttente } from '../utils/envoisEnAttente.js'
+import { clientsEnAttente } from '../utils/envoisEnAttente.js'
 
 export const ClientsContext = createContext()
 
@@ -128,7 +128,7 @@ export function ClientsProvider({ children }) {
   // refusées l'une après l'autre au retour du réseau.
   const operationsEnAttente = envois?.operations
   const clientsAffiches = useMemo(() => {
-    const enAttente = lignesEnAttente(operationsEnAttente ?? []).clients
+    const enAttente = clientsEnAttente(operationsEnAttente ?? [])
     if (enAttente.length === 0) return clients
     const connus = new Set(clients.map((c) => c.id))
     return [...enAttente.filter((c) => !connus.has(c.id)), ...clients]

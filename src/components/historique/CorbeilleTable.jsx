@@ -14,6 +14,7 @@ import { useTransactions } from '../../context/transactions.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
 import { getClientName, formatTransactionDateTime, formatInstant } from '../../utils/helpers.js'
 import EmptyState from '../ui/EmptyState.jsx'
+import EtatEnvoi from '../ui/EtatEnvoi.jsx'
 
 const PROVENANCES = {
   draft: 'Non terminée',
@@ -115,6 +116,7 @@ function CorbeilleTable({ transactions = [] }) {
                   <td className="whitespace-nowrap px-4 py-3 text-sm text-ink-muted">
                     {formatInstant(transaction.deletedAt)}
                     {transaction.deletedByName ? ` · ${transaction.deletedByName}` : ''}
+                    <EtatEnvoi envoi={transaction.envoi} />
                   </td>
                 </tr>
               )

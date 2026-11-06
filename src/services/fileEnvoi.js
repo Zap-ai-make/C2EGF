@@ -1,34 +1,44 @@
 /**
- * fileEnvoi.js — les opérations de caisse qui attendent le réseau (lot G3b,
- * docs/rester-dans-le-quota-gratuit.md §G3).
+ * fileEnvoi.js — les opérations de caisse qui attendent le réseau (lots G3b et
+ * G4b, docs/rester-dans-le-quota-gratuit.md §G3 et §G4).
  *
- * Quatre opérations y passent, réseau ou pas : la saisie, le règlement (par
- * tranche ou en entier), le remboursement et l'ajout d'un client. Chacune est
- * d'abord ÉCRITE sur l'appareil, puis envoyée. Une coupure ne la perd pas :
+ * Y passent, réseau ou pas : la saisie, sa modification et son annulation, le
+ * règlement (par tranche ou en entier), le remboursement, la correction d'une
+ * ligne validée, le ravitaillement et son retour, et l'ajout d'un client. Chacune
+ * est d'abord ÉCRITE sur l'appareil, puis envoyée. Une coupure ne la perd pas :
  * elle repart au retour du réseau, même après l'extinction de la machine.
  *
  * ⚠ RENVOYER UNE OPÉRATION DOIT ÊTRE SANS DANGER, ET C'EST LE SERVEUR QUI LE
  *   GARANTIT. Une réponse perdue en route fait renvoyer une opération que le
- *   serveur a peut-être déjà appliquée. La saisie porte son `commandeId`, le
- *   règlement son `idempotencyKey`, le client son identifiant : chacun est
- *   reconnu au second passage (lot G3a). Sans cette garde, la file doublerait
- *   des mouvements d'argent.
+ *   serveur a peut-être déjà appliquée. Les commandes portent leur `commandeId`,
+ *   le règlement son `idempotencyKey`, le client son identifiant : chacun est
+ *   reconnu au second passage (lots G3a et G4a). Sans cette garde, la file
+ *   doublerait des mouvements d'argent.
  *
  * ⚠ UN REFUS EST DÉFINITIF, UNE PANNE NE L'EST PAS. Un code métier
  *   (`INSUFFICIENT_STORE_BALANCE`…) dit que le serveur a lu l'opération et n'en
  *   veut pas : la renvoyer ne changerait rien. Tout le reste (réseau absent,
  *   délai dépassé, erreur interne) se retente, dans l'ordre.
  *
- * ⚠ UNE SEULE À LA FOIS, DANS L'ORDRE DE SAISIE. Un règlement hors ligne vise
- *   une non terminée saisie hors ligne : il ne peut partir qu'après elle.
+ * ⚠ UNE SEULE À LA FOIS, DANS L'ORDRE DE SAISIE. Un règlement, une modification
+ *   ou une annulation hors ligne visent une ligne saisie hors ligne : ils ne
+ *   peuvent partir qu'après elle.
  */
 
-// Les quatre opérations (cinq types : le règlement et le remboursement partent
-// par deux functions distinctes).
 export const SAISIE = 'saisie'
 export const REGLEMENT = 'reglement'
 export const REMBOURSEMENT = 'remboursement'
 export const CLIENT = 'client'
+export const RAVITAILLEMENT = 'ravitaillement'
+export const RETOUR = 'retour'
+export const MODIFICATION = 'modification'
+export const CORRECTION = 'correction'
+export const ANNULATION = 'annulation'
+
+// Ce qu'une annulation vise : chacune de ces lignes a sa commande au serveur.
+export const CIBLE_NON_TERMINEE = 'non_terminee'
+export const CIBLE_VALIDEE = 'validee'
+export const CIBLE_RETOUR = 'retour'
 
 export const EN_ATTENTE = 'en_attente'
 export const REFUSEE = 'refusee'

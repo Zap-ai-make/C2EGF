@@ -26,6 +26,8 @@ import { formatTransactionDateTime } from '../../utils/helpers'
 import { FIRESTORE_CONFIG } from '../../constants/firestoreConstants'
 import Dialog from '../ui/Dialog.jsx'
 import StatusBadge from '../ui/StatusBadge'
+import EtatEnvoi from '../ui/EtatEnvoi.jsx'
+import { REFUSEE } from '../../services/fileEnvoi.js'
 
 /**
  * Les archives — les trois sources qui rejoignent l'historique.
@@ -288,7 +290,7 @@ function MouvementsBoutique({ mouvements, onAnnuler }) {
                   {`${signe(m.type)}${formatCurrency(m.montant)}`}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-right">
-                  {annulable ? (
+                  {annulable && m.envoi?.etat !== REFUSEE ? (
                     <button
                       type="button"
                       onClick={() => onAnnuler(m)}
@@ -303,6 +305,7 @@ function MouvementsBoutique({ mouvements, onAnnuler }) {
                       label={m.statut}
                     />
                   )}
+                  <EtatEnvoi envoi={m.envoi} />
                 </td>
               </tr>
             )

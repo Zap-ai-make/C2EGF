@@ -2,10 +2,14 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import { useToast } from '../../hooks/useToast'
 import { useTransactions } from '../../context/transactions.jsx'
 import { useSimpleNetworkData } from '../../hooks/useSimpleNetworkData'
-import { runStoreTransactionCommand } from '../../services/storeTransactionCommandService'
+import { useEnvois } from '../../context/envoisContexte.js'
+import { EN_ATTENTE } from '../../services/fileEnvoi.js'
+import { envoyerMouvement } from '../../services/mouvementsBoutique.js'
 import { formatCurrency } from '../../utils/formatCurrency'
-import { NETWORK_OPTIONS } from '../../utils/constants'
+import { MESSAGES, NETWORK_OPTIONS } from '../../utils/constants'
 import Dialog from '../ui/Dialog.jsx'
+import Toast from '../Toast'
+import EtatEnvoi from '../ui/EtatEnvoi.jsx'
 import RavitaillementForm from './RavitaillementForm.jsx'
 import {
   ravitaillementsEnCours,
@@ -50,8 +54,8 @@ import {
  */
 const RESEAU = NETWORK_OPTIONS[0]
 
-function FormulaireRetour({ ravitaillement, onFait, onAnnuler }) {
-  const { showToast } = useToast()
+function FormulaireRetour({ ravitaillement, onFait, onAnnuler, annoncer }) {
+  const envois = useEnvois()
   const { getStock, getNetworkLiquidite } = useSimpleNetworkData()
   const [montant, setMontant] = useState('')
   const [vase, setVase] = useState(ravitaillement.balanceType ?? 'stock')
@@ -59,9 +63,9 @@ function FormulaireRetour({ ravitaillement, onFait, onAnnuler }) {
   // ⚠ VERROU SYNCHRONE, ET PAS SEULEMENT `envoiEnCours`.
   //   `setEnvoiEnCours` ne prend effet qu'au rendu suivant : deux clics dans le
   //   même tick voient tous deux `peutEnvoyer === true` et partent tous deux.
-  //   Et l'action serveur `returnReplenishment` n'a pas de clé d'idempotence —
-  //   rien ne rattraperait le second envoi, qui viderait la réserve deux fois
-  //   et solderait une dette qui ne l'est pas. Le formulaire voisin
+  //   Et chaque clic deviendrait une opération de la file, avec son propre
+  //   identifiant : rien ne rattraperait le second envoi, qui viderait la réserve
+  //   deux fois et solderait une dette qui ne l'est pas. Le formulaire voisin
   //   (RavitaillementForm) porte le même verrou, pour la même raison.
   const verrou = useRef(false)
 
@@ -105,18 +109,19 @@ function FormulaireRetour({ ravitaillement, onFait, onAnnuler }) {
     verrou.current = true
     setEnvoiEnCours(true)
     try {
-      await runStoreTransactionCommand(preparation.commande)
-      showToast(`Retour enregistré : ${formatCurrency(preparation.valeur)} en ${libelleVase(vase).toLowerCase()}.`, 'success')
+      const issue = await envoyerMouvement(envois, preparation.commande)
+      if (issue?.statut === EN_ATTENTE) annoncer(MESSAGES.EN_ATTENTE.RETOUR, 'info')
+      else annoncer(`Retour enregistré : ${formatCurrency(preparation.valeur)} en ${libelleVase(vase).toLowerCase()}.`, 'success')
       onFait?.()
     } catch (err) {
       // Le serveur rédige des refus lisibles — « Stock insuffisant.
       // Disponible : … » — et c'est lui qui connaît l'état réel.
-      showToast(err?.message || "Le retour n'a pas pu être enregistré.", 'error')
+      annoncer(err?.message || "Le retour n'a pas pu être enregistré.", 'error')
     } finally {
       setEnvoiEnCours(false)
       verrou.current = false
     }
-  }, [peutEnvoyer, preparation, vase, showToast, onFait])
+  }, [peutEnvoyer, preparation, vase, annoncer, onFait, envois])
 
   return (
     <form onSubmit={envoyer} className="space-y-4" data-testid="formulaire-retour">
@@ -213,6 +218,9 @@ function FormulaireRetour({ ravitaillement, onFait, onAnnuler }) {
 
 function RavitaillementPanel({ open, onClose }) {
   const { completedTransactions = [] } = useTransactions()
+  // ⚠ LES MESSAGES VIVENT ICI, PAS DANS LES FORMULAIRES. Un formulaire disparaît dès
+  //   le geste fait : ses messages partaient avec lui, et aucun refus ne s'affichait.
+  const { toasts, showToast, removeToast } = useToast()
   const [vue, setVue] = useState('liste')
   const [cible, setCible] = useState(null)
 
@@ -231,8 +239,9 @@ function RavitaillementPanel({ open, onClose }) {
 
   const fermer = useCallback(() => {
     revenirALaListe()
+    for (const toast of toasts) removeToast(toast.id)
     onClose?.()
-  }, [revenirALaListe, onClose])
+  }, [revenirALaListe, onClose, toasts, removeToast])
 
   const titre = vue === 'nouveau' ? 'Nouveau ravitaillement' : vue === 'retour' ? 'Rendre au dealer' : 'Ravitaillement'
 
@@ -249,6 +258,7 @@ function RavitaillementPanel({ open, onClose }) {
       {vue === 'nouveau' && (
         <RavitaillementForm
           expediteurs={expediteurs}
+          annoncer={showToast}
           onComplete={revenirALaListe}
           onCancel={revenirALaListe}
         />
@@ -257,6 +267,7 @@ function RavitaillementPanel({ open, onClose }) {
       {vue === 'retour' && cible && (
         <FormulaireRetour
           ravitaillement={cible}
+          annoncer={showToast}
           onFait={revenirALaListe}
           onAnnuler={revenirALaListe}
         />
@@ -317,6 +328,7 @@ function RavitaillementPanel({ open, onClose }) {
                       </p>
                     </div>
 
+                    <EtatEnvoi envoi={ligne.envoi} />
                     <button
                       type="button"
                       onClick={() => { setCible(ligne); setVue('retour') }}
@@ -343,6 +355,16 @@ function RavitaillementPanel({ open, onClose }) {
           </div>
         </div>
       )}
+
+      {toasts.map((toast) => (
+        <Toast
+          key={toast.id}
+          message={toast.message}
+          type={toast.type}
+          duration={toast.duration}
+          onClose={() => removeToast(toast.id)}
+        />
+      ))}
     </Dialog>
   )
 }

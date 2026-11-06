@@ -1,6 +1,18 @@
 import Dialog from './ui/Dialog'
-import { CLIENT, REFUSEE, REGLEMENT, REMBOURSEMENT, SAISIE } from '../services/fileEnvoi.js'
+import {
+  ANNULATION,
+  CLIENT,
+  CORRECTION,
+  MODIFICATION,
+  RAVITAILLEMENT,
+  REFUSEE,
+  REGLEMENT,
+  REMBOURSEMENT,
+  RETOUR,
+  SAISIE,
+} from '../services/fileEnvoi.js'
 import { getClientName } from '../utils/helpers.js'
+import { libelleVase } from '../utils/ravitaillement.js'
 
 const fcfa = (montant) => `${(Number(montant) || 0).toLocaleString('fr-FR')} FCFA`
 
@@ -15,6 +27,22 @@ export function decrireOperation({ type, charge = {} }) {
   if (type === CLIENT) {
     const { prenom, nom } = charge.donnees ?? {}
     return `Fiche client : ${[prenom, nom].filter(Boolean).join(' ')}`
+  }
+  if (type === RAVITAILLEMENT) {
+    const { amount, balanceType, expediteur } = charge.commande ?? {}
+    return `Ravitaillement de ${fcfa(amount)} en ${libelleVase(balanceType).toLowerCase()} — reçu de ${expediteur}`
+  }
+  if (type === RETOUR) {
+    const { amount, balanceType } = charge.commande ?? {}
+    return `Retour de ${fcfa(amount)} en ${libelleVase(balanceType).toLowerCase()}`
+  }
+  if (type === MODIFICATION || type === CORRECTION) {
+    const { type: nature, montant } = { ...charge.avant, ...charge.updates }
+    return `Correction : ${nature} de ${fcfa(montant)}`
+  }
+  if (type === ANNULATION) {
+    const { type: nature, montant } = charge.avant ?? {}
+    return `Annulation : ${nature ?? 'opération'} de ${fcfa(montant)}`
   }
   return 'Opération inconnue'
 }

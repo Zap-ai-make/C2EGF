@@ -23,7 +23,7 @@ const showToast = vi.fn()
 let historique = []
 let transactionsValue
 
-vi.mock('../../src/hooks/useToast', () => ({ useToast: () => ({ showToast }) }))
+vi.mock('../../src/hooks/useToast', () => ({ useToast: () => ({ showToast, toasts: [], removeToast: () => {} }) }))
 vi.mock('../../src/services/storeTransactionCommandService', () => ({
   runStoreTransactionCommand: (...args) => runStoreTransactionCommand(...args),
 }))

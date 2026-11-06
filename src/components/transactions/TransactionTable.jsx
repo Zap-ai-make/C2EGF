@@ -161,6 +161,15 @@ const TransactionTable = memo(function TransactionTable() {
   const pendingKeyRef = useRef({})
 
 
+  const direEnAttente = useCallback((message) => {
+    setRollbackToast({ show: true, message, type: 'info' })
+    // `autoClose` ne règle que la croix : c'est à l'appelant de le fermer,
+    // sinon « Connexion absente » resterait affiché une fois le réseau revenu.
+    setTimeout(() => {
+      setRollbackToast({ show: false, message: '', type: 'info' })
+    }, 6000)
+  }, [])
+
   const handleActionClick = useCallback((transactionId, actionType, event) => {
     if ([...processingActions].some(key => key.startsWith(`${transactionId}-`))) {
       return
@@ -237,16 +246,9 @@ const TransactionTable = memo(function TransactionTable() {
       const issue = actionType === 'rembourser'
         ? await addRefundTranche(transactionId, amount, method, idempotencyKey, agentCode)
         : await addPaymentTranche(transactionId, amount, method, idempotencyKey, agentCode)
-      // Sans réseau, le règlement attend sur l'appareil (lot G3b) : la ligne ne
-      // bouge pas encore, il faut dire pourquoi.
-      if (issue?.statut === EN_ATTENTE) {
-        setRollbackToast({ show: true, message: MESSAGES.EN_ATTENTE.REGLEMENT, type: 'info' })
-        // `autoClose` ne règle que la croix : c'est à l'appelant de le fermer,
-        // sinon « Connexion absente » resterait affiché une fois le réseau revenu.
-        setTimeout(() => {
-          setRollbackToast({ show: false, message: '', type: 'info' })
-        }, 6000)
-      }
+      // Sans réseau, le règlement attend sur l'appareil (lot G3b) : il faut dire
+      // pourquoi rien n'est encore parti.
+      if (issue?.statut === EN_ATTENTE) direEnAttente(MESSAGES.EN_ATTENTE.REGLEMENT)
 
       // Succès : supprimer la clé (la prochaine action génèrera une nouvelle clé)
       const fingerprint = `${transactionId}-${actionType}-${method}-${amount}-${agentCode ?? ''}`
@@ -272,7 +274,7 @@ const TransactionTable = memo(function TransactionTable() {
         return newSet
       })
     }
-  }, [processingActions, pendingTransactions, addPaymentTranche, addRefundTranche, setActiveDropdown, setCurrentActionType])
+  }, [processingActions, pendingTransactions, addPaymentTranche, addRefundTranche, setActiveDropdown, setCurrentActionType, direEnAttente])
 
 
   const handleMethodChosen = useCallback((method) => {
@@ -642,10 +644,8 @@ const TransactionTable = memo(function TransactionTable() {
 
                           {/* « Annuler » ferme la rangée, après les gestes
                               qui font avancer la transaction : la défaire
-                              n'est pas une étape du flux normal. Une saisie
-                              qui attend le réseau ne s'annule pas : le serveur
-                              ne la connaît pas encore. */}
-                          {!transaction.envoi && (
+                              n'est pas une étape du flux normal. */}
+                          {actions.annuler !== false && (
                           <button
                             type="button"
                             onClick={() => setASupprimer(transaction)}
@@ -866,8 +866,9 @@ const TransactionTable = memo(function TransactionTable() {
                 if (!aSupprimer) return
                 setSuppressionEnCours(true)
                 try {
-                  await trashTransaction(aSupprimer.id)
+                  const issue = await trashTransaction(aSupprimer.id)
                   setASupprimer(null)
+                  if (issue?.statut === EN_ATTENTE) direEnAttente(MESSAGES.EN_ATTENTE.ANNULATION)
                 } catch (error) {
                   // On garde le modal ouvert : disparaître sans rien dire
                   // laisserait croire que l'annulation a eu lieu.

@@ -6,14 +6,27 @@ import { firestoreService } from '../services/firestore'
 import { addTransactionPayment, addTransactionRefund } from '../services/settlementService'
 import { AuthContext } from './AuthContext'
 import { EnvoisContext } from './envoisContexte.js'
-import { ENVOYEE, REFUSEE, REGLEMENT, REMBOURSEMENT, SAISIE } from '../services/fileEnvoi.js'
-import { fusionnerEnAttente, lignesEnAttente } from '../utils/envoisEnAttente.js'
+import {
+  ANNULATION,
+  CIBLE_NON_TERMINEE,
+  CIBLE_RETOUR,
+  CIBLE_VALIDEE,
+  CORRECTION,
+  ENVOYEE,
+  MODIFICATION,
+  REFUSEE,
+  REGLEMENT,
+  REMBOURSEMENT,
+  SAISIE,
+} from '../services/fileEnvoi.js'
+import { appliquerFile, resumeLigne } from '../utils/envoisEnAttente.js'
 import {
   businessDateKey,
   getBusinessDayBounds,
   millisecondsUntilNextBusinessDay,
 } from '../utils/businessDate.js'
 import { TYPE_RETOUR } from '../utils/ravitaillement.js'
+import { stockDejaPris } from '../utils/financialImpact.js'
 import { bornerPeriode, bornesServeur } from '../utils/periodeHistorique.js'
 
 // Exporté comme ClientsContext : permet de fournir une valeur sans monter le
@@ -85,6 +98,17 @@ export const mergeHistoryPages = (...lists) => {
     }
   }
   return sortHistoryDesc([...byId.values()])
+}
+
+/**
+ * `enAttente` marque une fiche pas encore envoyée (lot G3c). C'est un état de cet
+ * appareil : le serveur recopie le client tel quel dans la ligne, et l'historique
+ * porterait cette marque pour toujours.
+ */
+const sansMarqueLocale = (transactionData) => {
+  if (!transactionData.client) return transactionData
+  const { enAttente: _marqueLocale, ...client } = transactionData.client
+  return { ...transactionData, client }
 }
 
 export const useTransactions = () => {
@@ -377,36 +401,30 @@ export const TransactionsProvider = ({ children }) => {
     publishHistory()
   }, [publishHistory])
 
-  // Ce que la file attend encore (lot G3c) : une saisie faite hors ligne
-  // apparaît dans les non terminées sous l'identifiant que le serveur lui
-  // donnera, et un règlement en attente fait déjà baisser le reste dû. Les
-  // listes exposées sont celles-ci ; l'état interne reste celui du serveur.
+  // Ce que la file attend encore (lots G3c et G4c) : une saisie faite hors ligne
+  // apparaît sous l'identifiant que le serveur lui donnera, un règlement en attente
+  // fait déjà baisser le reste dû, une annulation envoie la ligne à la corbeille.
+  // Les listes exposées sont celles-ci ; l'état interne reste celui du serveur.
   const operationsEnAttente = envois?.operations
-  const enAttente = useMemo(() => lignesEnAttente(operationsEnAttente ?? []), [operationsEnAttente])
-  const pendingAffichees = useMemo(
-    () => fusionnerEnAttente(pendingTransactions, enAttente.nonTerminees, enAttente.reglements, sortDraftsDesc),
-    [pendingTransactions, enAttente],
+  const affichees = useMemo(
+    () => appliquerFile(pendingTransactions, completedTransactions, operationsEnAttente ?? [], {
+      trierNonTerminees: sortDraftsDesc,
+      trierHistorique: sortHistoryDesc,
+    }),
+    [pendingTransactions, completedTransactions, operationsEnAttente],
   )
-  const completedAffichees = useMemo(
-    () => fusionnerEnAttente(completedTransactions, enAttente.validees, new Map(), sortHistoryDesc),
-    [completedTransactions, enAttente],
-  )
-  // Un règlement emporte la nature de sa ligne (dépôt, retrait) : les soldes
-  // provisoires en dépendent, et la ligne peut n'exister que dans la file.
-  const lignesAfficheesRef = useRef(pendingAffichees)
-  lignesAfficheesRef.current = pendingAffichees
-  const typeDeLigne = (draftId) => lignesAfficheesRef.current.find((t) => t.id === draftId)?.type
+  // Un geste part de la ligne telle qu'elle est À L'ÉCRAN : elle peut n'exister que
+  // dans la file. Il emporte ce qu'elle a laissé dans les soldes, pour les soldes
+  // provisoires.
+  const lignesAfficheesRef = useRef(affichees)
+  lignesAfficheesRef.current = affichees
+  const typeDeLigne = (draftId) => lignesAfficheesRef.current.nonTerminees.find((t) => t.id === draftId)?.type
 
   const addTransaction = useCallback(async (transactionData) => {
     try {
       setError(null)
-      // `enAttente` marque une fiche pas encore envoyée (lot G3c). C'est un état
-      // de cet appareil : le serveur recopie le client tel quel dans la ligne, et
-      // l'historique porterait cette marque pour toujours.
-      const { enAttente: _marqueLocale, ...client } = transactionData.client ?? {}
       const transaction = {
-        ...transactionData,
-        ...(transactionData.client ? { client } : {}),
+        ...sansMarqueLocale(transactionData),
         statut: transactionData.statut || 'Non Terminées',
         storeId: userProfile?.storeId,
         storeName: activeStore?.name || userProfile?.storeName,
@@ -436,14 +454,19 @@ export const TransactionsProvider = ({ children }) => {
   const updateTransaction = useCallback(async (id, updates) => {
     try {
       setError(null)
-      await firestoreService.updateDraft(id, updates)
-      // La mise à jour de l'état se fera automatiquement via onSnapshot
+      if (!parLaFile) {
+        await firestoreService.updateDraft(id, updates)
+        // La mise à jour de l'état se fera automatiquement via onSnapshot
+        return { statut: ENVOYEE }
+      }
+      const ligne = lignesAfficheesRef.current.nonTerminees.find((t) => t.id === id)
+      return await soumettre(MODIFICATION, { draftId: id, updates: sansMarqueLocale(updates), avant: resumeLigne(ligne) })
     } catch (error) {
       console.error('Erreur lors de la mise à jour de la transaction:', error)
       setError(error.message)
       throw error
     }
-  }, [])
+  }, [parLaFile, soumettre])
 
   const validateTransaction = useCallback(async (id, customStatus = 'Validée', selectedPaymentMethod = null, amountOverride = null) => {
     try {
@@ -504,133 +527,139 @@ export const TransactionsProvider = ({ children }) => {
    * appellent ceci, et le routage se fait sur ce que le contexte sait déjà.
    * Dans les deux cas le serveur rend le montant aux soldes et la ligne
    * réapparaît dans la corbeille.
+   *
+   * L'identifiant de l'opération vient de la ligne : le même geste confirmé deux
+   * fois n'entre qu'une fois dans la file.
+   *
+   * @returns {Promise<{ statut: string }>} « envoyee » ou « en_attente »
    */
   const trashTransaction = useCallback(async (id) => {
     try {
       setError(null)
-      const isDraft = pendingTransactions.some(t => t.id === id)
+      const { nonTerminees, historique } = lignesAfficheesRef.current
+      const brouillon = nonTerminees.find((t) => t.id === id)
+      const annuler = (cible, ligne) => soumettre(
+        ANNULATION,
+        { cible, cibleId: id, avant: resumeLigne(ligne) },
+        { id: `${ANNULATION}-${id}` },
+      )
 
-      if (isDraft) {
+      if (brouillon) {
+        if (parLaFile) return await annuler(CIBLE_NON_TERMINEE, brouillon)
         await firestoreService.trashDraft(id)
-      } else {
-        // Un retour de ravitaillement ne se défait pas comme une transaction
-        // client : il faut AUSSI faire remonter le reste dû de sa livraison.
-        // Le routage vit ici parce que le tableau n'a pas à connaître les deux
-        // commandes — il sait seulement qu'on supprime une ligne.
-        const ligne = [
-          ...todayHistoryRef.current,
-          ...valideesRecemmentRef.current,
-          ...dettesRavitaillementRef.current,
-          ...periodeHistoryRef.current,
-        ].find((item) => item?.id === id)
+        return { statut: ENVOYEE }
+      }
 
-        const trashed = ligne?.type === TYPE_RETOUR
+      // Un retour de ravitaillement ne se défait pas comme une transaction
+      // client : il faut AUSSI faire remonter le reste dû de sa livraison.
+      // Le routage vit ici parce que le tableau n'a pas à connaître les deux
+      // commandes — il sait seulement qu'on supprime une ligne.
+      const ligne = historique.find((item) => item?.id === id)
+      const estRetour = ligne?.type === TYPE_RETOUR
+
+      let issue
+      if (parLaFile) {
+        issue = await annuler(estRetour ? CIBLE_RETOUR : CIBLE_VALIDEE, ligne)
+      } else {
+        const trashed = estRetour
           ? await firestoreService.trashReplenishmentReturn(id)
           : await firestoreService.trashHistory(id)
-        if (trashed) {
-          // Marquage optimiste : la période relue n'est branchée sur aucun
-          // onSnapshot, et la ligne doit quitter l'onglet clients tout de
-          // suite — sinon le gérant reclique.
-          const marquerSupprimee = (items) => items.map((item) => (
-            item.id === id
-              ? { ...item, statut: FIRESTORE_CONFIG.STATUS.DELETED, deletedAt: new Date() }
-              : item
-          ))
-          periodeHistoryRef.current = marquerSupprimee(periodeHistoryRef.current)
-          todayHistoryRef.current = marquerSupprimee(todayHistoryRef.current)
-          valideesRecemmentRef.current = marquerSupprimee(valideesRecemmentRef.current)
-          publishHistory()
-        }
+        issue = trashed ? { statut: ENVOYEE } : { statut: null }
       }
+
+      const marquerSupprimee = (items) => items.map((item) => (
+        item.id === id
+          ? { ...item, statut: FIRESTORE_CONFIG.STATUS.DELETED, deletedAt: new Date() }
+          : item
+      ))
+      // La période relue n'est branchée sur aucun onSnapshot : personne d'autre ne
+      // la corrigera une fois l'opération partie.
+      if (issue.statut !== null) periodeHistoryRef.current = marquerSupprimee(periodeHistoryRef.current)
+      if (issue.statut === ENVOYEE) {
+        // Marquage optimiste : la ligne doit quitter l'onglet clients tout de
+        // suite — sinon le gérant reclique.
+        todayHistoryRef.current = marquerSupprimee(todayHistoryRef.current)
+        valideesRecemmentRef.current = marquerSupprimee(valideesRecemmentRef.current)
+      }
+      if (issue.statut !== null) publishHistory()
+      return issue
     } catch (error) {
       console.error('Erreur lors de la suppression de la transaction:', error)
       setError(error.message)
       throw error
     }
-  }, [pendingTransactions, publishHistory])
+  }, [parLaFile, soumettre, publishHistory])
 
   /**
-   * Ramène une transaction validée dans le formulaire pour correction.
+   * Ouvre le formulaire sur une transaction validée, pour correction.
    *
-   * Le serveur rend la part encaissée aux soldes et recrée un brouillon ; on
-   * ouvre le formulaire sur CE brouillon, pas sur la ligne d'historique qui
-   * vient de disparaître — c'est son identifiant que la correction modifiera.
-   *
-   * On préremplit depuis la ligne qu'on a déjà en main plutôt que d'attendre
-   * le snapshot : le formulaire s'ouvre sans latence, et l'abonnement corrige
-   * la copie locale dans la seconde.
+   * Rien ne part au serveur, et les soldes ne bougent pas : sans réseau, une
+   * réouverture ne pourrait pas précéder le formulaire (lot G4b). La ligne reste
+   * validée tant que la caissière n'a pas confirmé, et fermer le formulaire ne
+   * change rien.
    */
   const reopenTransaction = useCallback(async (transaction) => {
-    try {
-      setError(null)
-      const { draftId, direct } = await firestoreService.reopenHistory(transaction.id)
-      const retiree = (items) => items.filter((item) => item.id !== transaction.id)
-      periodeHistoryRef.current = retiree(periodeHistoryRef.current)
-      todayHistoryRef.current = retiree(todayHistoryRef.current)
-      valideesRecemmentRef.current = retiree(valideesRecemmentRef.current)
-      publishHistory()
-      // Liste blanche, comme côté serveur : recopier la ligne d'historique en
-      // entier traînerait ses neuf champs de règlement dans l'objet en cours
-      // d'édition, qui paraîtrait alors déjà réglé à qui l'inspecte.
-      setEditingTransaction({
-        client: transaction.client,
-        clientId: transaction.clientId,
-        code: transaction.code,
-        type: transaction.type,
-        reseau: transaction.reseau,
-        montant: transaction.montant,
-        id: draftId,
-        statut: FIRESTORE_CONFIG.STATUS.PENDING,
-        reopenedFromHistoryId: transaction.id,
-        reopenedPaymentMethod: transaction.paymentMethod ?? null,
-        // Validée d'un geste depuis le formulaire, sans règlement : la
-        // correction devra rejouer CE geste, pas en inventer un autre.
-        //
-        // Le drapeau vient du SERVEUR. Le déduire ici de `!paymentMethod`
-        // reviendrait à inventer une jambe de liquidité aux lignes qui n'en ont
-        // jamais porté — un montant corrigé à l'identique déplacerait les soldes.
-        reopenedDirect: direct,
-      })
-      return draftId
-    } catch (error) {
-      console.error('Erreur lors de la réouverture de la transaction:', error)
-      setError(error.message)
-      throw error
-    }
-  }, [publishHistory])
+    setError(null)
+    // Liste blanche : recopier la ligne d'historique en entier traînerait ses neuf
+    // champs de règlement dans l'objet en cours d'édition, qui paraîtrait alors
+    // déjà réglé à qui l'inspecte.
+    setEditingTransaction({
+      client: transaction.client,
+      clientId: transaction.clientId,
+      code: transaction.code,
+      type: transaction.type,
+      reseau: transaction.reseau,
+      montant: transaction.montant,
+      id: transaction.id,
+      statut: FIRESTORE_CONFIG.STATUS.PENDING,
+      reopenedFromHistoryId: transaction.id,
+      stockDejaPris: stockDejaPris(transaction),
+    })
+    return transaction.id
+  }, [])
 
   /**
-   * Enregistre la correction d'une ligne rouverte et la REMET dans l'historique.
+   * Enregistre la correction d'une ligne validée, qui RESTE dans l'historique.
    *
    * Une transaction venue de l'historique doit y retourner. La laisser dans les
    * non terminées obligerait la caissière à re-cliquer « Encaisser » et à
    * re-choisir un mode de règlement qu'elle n'a jamais voulu changer : elle n'a
    * corrigé qu'un montant.
    *
-   * DEUX APPELS, ET C'EST SANS DANGER
-   * `updateDraft` ajuste la jambe du brouillon et journalise la correction ;
-   * `validateDraft` rejoue la jambe du règlement avec le mode mémorisé. Chacun
-   * est atomique de son côté. Si le second échouait, le brouillon resterait
-   * dans les non terminées avec des soldes COHÉRENTS pour un brouillon — rien
-   * de faux, juste une étape à reprendre d'un clic.
+   * UN SEUL ENVOI : `correctHistory` fait tout ou rien (lot G4a). Un refus laisse la
+   * ligne telle qu'elle était, et le serveur décide seul du mode à rejouer.
+   *
+   * @returns {Promise<{ statut: string }>} « envoyee » ou « en_attente »
    */
   const saveReopenedCorrection = useCallback(async (transaction, updates) => {
     try {
       setError(null)
-      await firestoreService.updateDraft(transaction.id, updates)
-      await firestoreService.validateTransaction(
-        transaction.id,
-        FIRESTORE_CONFIG.STATUS.VALIDATED,
-        transaction.reopenedPaymentMethod ?? null,
-        null,
-        Boolean(transaction.reopenedDirect),
-      )
+      const historyId = transaction.reopenedFromHistoryId
+      const corrections = sansMarqueLocale(updates)
+      let issue
+      if (parLaFile) {
+        const ligne = lignesAfficheesRef.current.historique.find((t) => t.id === historyId)
+        issue = await soumettre(CORRECTION, { historyId, updates: corrections, avant: resumeLigne(ligne) })
+      } else {
+        await firestoreService.correctHistory(historyId, corrections)
+        issue = { statut: ENVOYEE }
+      }
+      if (issue.statut === ENVOYEE) {
+        // La ligne d'origine n'existe plus : la période relue n'écoute rien, et les
+        // autres sources ne le diront qu'au prochain snapshot.
+        const retiree = (items) => items.filter((item) => item.id !== historyId)
+        periodeHistoryRef.current = retiree(periodeHistoryRef.current)
+        todayHistoryRef.current = retiree(todayHistoryRef.current)
+        valideesRecemmentRef.current = retiree(valideesRecemmentRef.current)
+        publishHistory()
+      }
+      return issue
     } catch (error) {
       console.error('Erreur lors de la correction de la transaction:', error)
       setError(error.message)
       throw error
     }
-  }, [])
+  }, [parLaFile, soumettre, publishHistory])
 
   const startEditTransaction = useCallback((transaction) => {
     setEditingTransaction(transaction)
@@ -642,22 +671,17 @@ export const TransactionsProvider = ({ children }) => {
 
   const getActionButtons = useCallback((transaction) => {
     const actions = getAvailableActions(transaction.type)
-    // Une saisie refusée n'existe pas au serveur : rien ne s'y applique. En
-    // attente, elle se règle (le règlement partira après elle), mais ne se
-    // modifie pas : la modification passe par le serveur, qui ne la connaît pas.
-    //
-    // De même une ligne que ses règlements en attente soldent : elle ne doit plus
-    // rien, et attend seulement de partir.
-    const soldeeEnAttente = transaction.reglementsEnAttente?.length > 0 && Number(transaction.remainingAmount) === 0
-    if (transaction.envoi?.etat === REFUSEE || soldeeEnAttente) {
-      return Object.fromEntries(Object.keys(actions).map((geste) => [geste, false]))
+    // Une saisie refusée n'existe pas au serveur : rien ne s'y applique. En attente,
+    // tout s'y applique : le geste partira après elle (lot G4b).
+    if (transaction.envoi?.etat === REFUSEE) {
+      return { ...Object.fromEntries(Object.keys(actions).map((geste) => [geste, false])), annuler: false }
     }
-    if (transaction.envoi) return { ...actions, modifier: false }
     // Dès qu'un règlement est engagé, `type`/`montant`/`clientId` sont figés côté
-    // règles Firestore : on masque donc « Modifier » pour rester cohérent avec le
-    // serveur (les tranches restent accessibles via Encaisser/Payer/Rembourser).
+    // règles Firestore, et le serveur refuse d'annuler : on masque les deux gestes
+    // pour rester cohérent avec lui (les tranches restent accessibles via
+    // Encaisser/Payer/Rembourser). Sans réseau, le refus n'arriverait qu'au retour.
     if (isDraftSettling(transaction)) {
-      return { ...actions, modifier: false }
+      return { ...actions, modifier: false, annuler: false }
     }
     return actions
   }, [])
@@ -667,8 +691,8 @@ export const TransactionsProvider = ({ children }) => {
   }, [])
 
   const value = {
-    pendingTransactions: pendingAffichees,
-    completedTransactions: completedAffichees,
+    pendingTransactions: affichees.nonTerminees,
+    completedTransactions: affichees.historique,
     periode,
     periodeEnChargement,
     erreurPeriode,

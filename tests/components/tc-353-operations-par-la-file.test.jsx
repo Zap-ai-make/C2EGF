@@ -182,18 +182,16 @@ describe('TC-353 — ce qui attend apparaît dans les listes (lot G3c)', () => {
     expect(tx.completedTransactions.map((t) => t.id)).toContain('cmd-2')
   })
 
-  it('[OF-10] en attente, elle se règle sans se modifier ; refusée, plus aucun geste', async () => {
+  it('[OF-10] en attente, elle accepte les mêmes gestes qu’une autre ; refusée, plus aucun', async () => {
     monter(avecOperations([]))
     await waitFor(() => expect(tx).toBeDefined())
     const attente = tx.getActionButtons({ type: 'Dépôt', envoi: { etat: EN_ATTENTE } })
-    expect(attente).toMatchObject({ modifier: false, encaisser: true })
+    expect(attente).toMatchObject({ modifier: true, encaisser: true })
     const refusee = tx.getActionButtons({ type: 'Dépôt', envoi: { etat: REFUSEE } })
     expect(Object.values(refusee).some(Boolean)).toBe(false)
-    // Soldée par ses règlements en attente : elle ne doit plus rien.
-    const soldee = tx.getActionButtons({ type: 'Dépôt', remainingAmount: 0, reglementsEnAttente: [{ id: 'r' }] })
-    expect(Object.values(soldee).some(Boolean)).toBe(false)
+    // Une tranche en attente fige la ligne, comme au serveur ; il reste à la solder.
     const partielle = tx.getActionButtons({ type: 'Dépôt', remainingAmount: 100, reglementsEnAttente: [{ id: 'r' }] })
-    expect(partielle.encaisser).toBe(true)
+    expect(partielle).toMatchObject({ encaisser: true, modifier: false, annuler: false })
   })
 
   it('[OF-11] le règlement d’une ligne en attente emporte sa nature, pour les soldes provisoires', async () => {
@@ -250,13 +248,13 @@ describe('TC-353 — sans file, l’appel direct d’avant reprend', () => {
 describe('TC-353 — chaque opération devient l’appel qui la reconnaîtra', () => {
   it('[OF-07] la saisie porte son commandeId, le règlement sa clé, le client son identifiant', async () => {
     service.enregistrerClientEnvoye = vi.fn(async () => ({ id: 'op-c' }))
-    await executerEnvoi({ id: 'op-s', type: SAISIE, charge: { transaction: { montant: 1 } } })
-    await executerEnvoi({ id: 'op-r', type: REGLEMENT, charge: { draftId: 'd', amount: 1, paymentMethod: 'Cash', idempotencyKey: 'k1' } })
-    await executerEnvoi({ id: 'op-b', type: REMBOURSEMENT, charge: { draftId: 'd', amount: 1, paymentMethod: 'Cash', idempotencyKey: 'k2', agentCode: '1000001' } })
-    await executerEnvoi({ id: 'op-c', type: CLIENT, charge: { donnees: { nom: 'X' } } })
+    await executerEnvoi({ id: 'op-s', type: SAISIE, creeLe: 1000, charge: { transaction: { montant: 1 } } }, 91000)
+    await executerEnvoi({ id: 'op-r', type: REGLEMENT, creeLe: 1000, charge: { draftId: 'd', amount: 1, paymentMethod: 'Cash', idempotencyKey: 'k1' } }, 91000)
+    await executerEnvoi({ id: 'op-b', type: REMBOURSEMENT, creeLe: 1000, charge: { draftId: 'd', amount: 1, paymentMethod: 'Cash', idempotencyKey: 'k2', agentCode: '1000001' } }, 91000)
+    await executerEnvoi({ id: 'op-c', type: CLIENT, creeLe: 1000, charge: { donnees: { nom: 'X' } } }, 91000)
 
-    expect(runStoreTransactionCommand).toHaveBeenCalledWith({ action: 'add', transaction: { montant: 1 }, commandeId: 'op-s' })
-    expect(addTransactionPayment).toHaveBeenCalledWith({ draftId: 'd', amount: 1, paymentMethod: 'Cash', idempotencyKey: 'k1', agentCode: undefined })
+    expect(runStoreTransactionCommand).toHaveBeenCalledWith({ action: 'add', transaction: { montant: 1 }, commandeId: 'op-s', ageMs: 90000 })
+    expect(addTransactionPayment).toHaveBeenCalledWith({ draftId: 'd', amount: 1, paymentMethod: 'Cash', idempotencyKey: 'k1', agentCode: undefined, ageMs: 90000 })
     expect(addTransactionRefund).toHaveBeenCalledWith({ draftId: 'd', amount: 1, paymentMethod: 'Cash', idempotencyKey: 'k2', agentCode: '1000001' })
     expect(service.enregistrerClientEnvoye).toHaveBeenCalledWith('op-c', { nom: 'X' })
   })

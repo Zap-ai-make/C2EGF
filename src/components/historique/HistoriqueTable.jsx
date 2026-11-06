@@ -7,6 +7,7 @@ import EmptyState from '../ui/EmptyState.jsx'
 import { History } from 'lucide-react'
 import StatusBadge from '../ui/StatusBadge.jsx'
 import EtatEnvoi from '../ui/EtatEnvoi.jsx'
+import { REFUSEE } from '../../services/fileEnvoi.js'
 import Dialog from '../ui/Dialog.jsx'
 import ModificationsDialog from './ModificationsDialog.jsx'
 import { STORE_HISTORY_CONFIG } from '../../constants/storeWorkspace.js'
@@ -95,15 +96,15 @@ const RAISON_PARTIEL = 'Transaction partiellement réglée : corrigez-la par un 
  * d'une validation directe ; d'autres asymétries viendront. Les garder
  * distinctes évite d'avoir à les redécoudre.
  */
-// Une ligne qui attend le réseau (lot G3c) n'existe pas encore au serveur :
-// ni l'annuler ni la corriger n'y trouverait rien.
-const RAISON_EN_ATTENTE = 'En attente d’envoi : elle se corrige ou s’annule une fois reçue par le serveur.'
+// Refusée, une saisie n'existe pas au serveur : elle se retire, rien d'autre. En
+// attente, elle se corrige et s'annule : le geste partira après elle (lot G4b).
+const RAISON_REFUSEE = 'Refusée par le serveur : retirez-la, ou ressaisissez-la.'
 
 const raisonNonSupprimable = (transaction) =>
-  transaction.envoi ? RAISON_EN_ATTENTE : reglementInacheve(transaction) ? RAISON_PARTIEL : null
+  transaction.envoi?.etat === REFUSEE ? RAISON_REFUSEE : reglementInacheve(transaction) ? RAISON_PARTIEL : null
 
 const raisonNonModifiable = (transaction) =>
-  transaction.envoi ? RAISON_EN_ATTENTE : reglementInacheve(transaction) ? RAISON_PARTIEL : null
+  transaction.envoi?.etat === REFUSEE ? RAISON_REFUSEE : reglementInacheve(transaction) ? RAISON_PARTIEL : null
 
 /**
  * `onReopen` est une PROP, alors que la suppression passe par le contexte.
@@ -173,7 +174,7 @@ function HistoriqueTable({ transactions = [], onReopen }) {
     try {
       await onReopen(transaction)
     } catch (error) {
-      setEchec(error?.message || 'La réouverture a échoué.')
+      setEchec(error?.message || 'La correction n’a pas pu s’ouvrir.')
     } finally {
       setEnCours(false)
     }

@@ -141,12 +141,10 @@ function Historique() {
   )
 
   /**
-   * Rouvrir une transaction validée, puis emmener le gérant sur le formulaire.
+   * Garnir le formulaire avec une transaction validée, puis y emmener le gérant.
    *
-   * Les deux moitiés sont indissociables : le serveur rend la part encaissée
-   * aux soldes et recrée un brouillon, mais si personne ne déplace le gérant,
-   * il reste devant un historique dont la ligne a disparu, sans comprendre où
-   * elle est passée ni que l'argent lui a été rendu.
+   * Le formulaire vit sur /transactions. Rien ne bouge avant qu'il ne confirme : la
+   * ligne reste dans l'historique, et les soldes sont intacts.
    */
   const rouvrirPuisCorriger = useCallback(
     async (transaction) => {

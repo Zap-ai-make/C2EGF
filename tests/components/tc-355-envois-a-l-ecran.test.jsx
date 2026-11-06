@@ -3,8 +3,8 @@
  * docs/rester-dans-le-quota-gratuit.md §G3).
  *
  * Ce que ce fichier verrouille :
- * - une saisie faite hors ligne apparaît dans les non terminées, se règle,
- *   mais ne se modifie ni ne s'annule ; refusée, elle se retire ;
+ * - une saisie faite hors ligne apparaît dans les non terminées et accepte les
+ *   mêmes gestes qu'une autre ; refusée, elle se retire ;
  * - un règlement en attente se lit sous le montant ; refusé, il se retire ;
  * - le bandeau du bas compte ce qui attend, même quand le navigateur se croit
  *   en ligne (wifi sans internet) ;
@@ -56,8 +56,8 @@ function monterTableau(lignes, envois = envoisSimules()) {
   contextValue = {
     pendingTransactions: lignes,
     loading: false,
-    // Comme le contexte : une ligne en attente se règle mais ne se modifie pas.
-    getActionButtons: (t) => (t.envoi?.etat === REFUSEE ? {} : { modifier: !t.envoi, encaisser: true }),
+    // Comme le contexte : refusée, une ligne n'accepte plus rien.
+    getActionButtons: (t) => (t.envoi?.etat === REFUSEE ? { annuler: false } : { modifier: true, encaisser: true }),
     getTransactionStyles: () => ({ bgColor: '', textColor: '' }),
     addPaymentTranche: vi.fn(), addRefundTranche: vi.fn(), startEditTransaction: vi.fn(), trashTransaction: vi.fn(),
   }
@@ -73,13 +73,13 @@ beforeEach(() => {
 })
 
 describe('TC-355 — les non terminées en attente', () => {
-  it('[EC-01] une saisie en attente se lit, se règle, mais ne se modifie ni ne s’annule', () => {
+  it('[EC-01] une saisie en attente se lit, se règle, se modifie et s’annule', () => {
     monterTableau([ligne({ id: 'cmd-1', client: { nom: 'HORSLIGNE' }, envoi: { etat: EN_ATTENTE, erreur: null } }), ligne()])
     const enAttente = rangee('HORSLIGNE')
     expect(within(enAttente).getByTestId('envoi-en-attente')).toHaveTextContent('En attente d’envoi')
     expect(within(enAttente).getByRole('button', { name: 'Encaisser' })).toBeInTheDocument()
-    expect(within(enAttente).queryByRole('button', { name: 'Modifier' })).toBeNull()
-    expect(within(enAttente).queryByTestId('supprimer-non-terminee')).toBeNull()
+    expect(within(enAttente).getByRole('button', { name: 'Modifier' })).toBeInTheDocument()
+    expect(within(enAttente).getByTestId('supprimer-non-terminee')).toBeInTheDocument()
 
     const ordinaire = rangee(/BANABA/)
     expect(within(ordinaire).queryByTestId('envoi-en-attente')).toBeNull()
@@ -91,6 +91,7 @@ describe('TC-355 — les non terminées en attente', () => {
     const r = rangee('REFUSEE')
     expect(within(r).getByTestId('envoi-refuse')).toHaveTextContent('Refusée : Stock Orange insuffisant.')
     expect(within(r).queryByRole('button', { name: 'Encaisser' })).toBeNull()
+    expect(within(r).queryByTestId('supprimer-non-terminee')).toBeNull()
 
     fireEvent.click(within(r).getByTestId('retirer-envoi'))
     expect(envois.retirer).toHaveBeenCalledWith('cmd-2')

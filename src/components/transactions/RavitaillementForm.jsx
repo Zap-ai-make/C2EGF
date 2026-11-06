@@ -1,7 +1,9 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { Check } from 'lucide-react'
-import { useToast } from '../../hooks/useToast'
-import { runStoreTransactionCommand } from '../../services/storeTransactionCommandService'
+import { useEnvois } from '../../context/envoisContexte.js'
+import { EN_ATTENTE } from '../../services/fileEnvoi.js'
+import { envoyerMouvement } from '../../services/mouvementsBoutique.js'
+import { MESSAGES } from '../../utils/constants'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { AJOUTER_UN_NOM, VASES, libelleVase, preparerRavitaillement } from '../../utils/ravitaillement.js'
 
@@ -38,8 +40,8 @@ const NOTE_MAX = 280
  * est fausse. Le serveur résout de toute façon toute saisie contre les noms
  * déjà connus — il reste le garant, la liste n'est qu'un confort.
  */
-function RavitaillementForm({ onComplete, onCancel, expediteurs = [] }) {
-  const { showToast } = useToast()
+function RavitaillementForm({ onComplete, onCancel, annoncer, expediteurs = [] }) {
+  const envois = useEnvois()
   const [montant, setMontant] = useState('')
   const [vase, setVase] = useState('stock')
   const [note, setNote] = useState('')
@@ -67,16 +69,17 @@ function RavitaillementForm({ onComplete, onCancel, expediteurs = [] }) {
     verrou.current = true
     setEnvoiEnCours(true)
     try {
-      await runStoreTransactionCommand(preparation.commande)
-      showToast(`Ravitaillement enregistré : ${formatCurrency(preparation.valeur)} en ${libelleVase(vase).toLowerCase()}.`, 'success')
+      const issue = await envoyerMouvement(envois, preparation.commande)
+      if (issue?.statut === EN_ATTENTE) annoncer(MESSAGES.EN_ATTENTE.RAVITAILLEMENT, 'info')
+      else annoncer(`Ravitaillement enregistré : ${formatCurrency(preparation.valeur)} en ${libelleVase(vase).toLowerCase()}.`, 'success')
       onComplete?.()
     } catch (err) {
-      showToast(err?.message || "Le ravitaillement n'a pas pu être enregistré.", 'error')
+      annoncer(err?.message || "Le ravitaillement n'a pas pu être enregistré.", 'error')
     } finally {
       setEnvoiEnCours(false)
       verrou.current = false
     }
-  }, [peutEnvoyer, preparation, vase, showToast, onComplete])
+  }, [peutEnvoyer, preparation, vase, annoncer, onComplete, envois])
 
   // Seul le montant parle sous le champ : un expéditeur manquant ne doit pas
   // faire passer pour faux un montant juste. Il est contrôlé en premier, donc

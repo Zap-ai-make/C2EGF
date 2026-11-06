@@ -411,11 +411,11 @@ export const FICHES = Object.freeze([
     id: 27,
     groupe: GROUPES.HORS_LIGNE,
     titre: 'Travailler sans internet',
-    texte: 'Sans internet, le logiciel continue. Tu peux saisir une opération, l’encaisser ou la payer, régler par tranche, rembourser et ajouter un client : **tout est gardé sur cet appareil et part tout seul** au retour de la connexion, même si la machine a été éteinte entre-temps.',
+    texte: 'Sans internet, le logiciel continue. Tu peux saisir une opération, la modifier, l’annuler, l’encaisser ou la payer, régler par tranche, rembourser, recevoir un ravitaillement, le rendre et ajouter un client : **tout est gardé sur cet appareil et part tout seul** au retour de la connexion, même si la machine a été éteinte entre-temps. L’opération garde le jour où tu l’as faite.',
     etapes: [
       'La ligne porte « En attente d’envoi », et le haut de l’écran affiche {{Soldes provisoires}} : ces chiffres comptent déjà ce qui attend.',
       'Le bandeau du bas dit combien d’opérations attendent. {{Voir}} les liste une par une.',
-      'Modifier ou annuler une opération demande internet : attends qu’elle soit partie.',
+      'Les collaborations et les demandes au dealer demandent internet : attends que la connexion revienne.',
     ],
     retenir: {
       titre: 'Une opération peut être refusée au retour',

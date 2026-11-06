@@ -650,6 +650,7 @@ abandonné, remplacé par G1.
 | G1 | Historique du jour courant, le reste sur demande de date — **fait le 2026-11-06** | ~101 lectures par ouverture à froid |
 | G2 | Annuaire gardé sur l'appareil, relu par différence — **fait le 2026-11-06**, sans changement côté serveur | 65 lectures et ~5 Mo → 1 lecture + tranches modifiées |
 | G3 | File d'envoi pour les quatre opérations — **fait le 2026-11-06 ; functions et front à déployer** | la saisie sans réseau |
+| G4 | Le ravitaillement, son retour, la modification, l'annulation, et la date réelle — **fait le 2026-11-06 ; functions et front à déployer** | toute la caisse sans réseau |
 
 ### G0 — fait le 2026-11-06 : l'application s'ouvre sans réseau
 
@@ -1064,8 +1065,8 @@ renforcé FE-14 et EE-10. Les toasts d'erreur en ligne gardent ce « [400] » : 
 le comportement d'avant, hors de ce lot.
 
 **Limites :**
-- **Restent en ligne** : modifier ou annuler une opération, le ravitaillement et son
-  retour, les collaborations, les demandes au dealer.
+- **Restaient en ligne** : modifier ou annuler une opération, le ravitaillement et son
+  retour. C'est levé par G4. Les collaborations et les demandes au dealer y restent.
 - **Modifier une fiche client sans réseau** n'a pas été retenu. Essayé : le formulaire
   reste sur « Enregistrement… », l'écriture arrive au retour du réseau, et il se
   referme alors. Rien n'est perdu, mais la caissière attend.
@@ -1094,6 +1095,142 @@ le comportement d'avant, hors de ce lot.
 6. Attendu : en moins d'une minute, le bandeau disparaît, la ligne passe dans
    l'historique, et les soldes sont ceux du calcul. Vérifier dans la console Firebase
    qu'il n'y a qu'une seule ligne.
+
+### G4 — fait le 2026-11-06 : toute la caisse sans réseau
+
+Demande de l'utilisateur, avant tout déploiement : **sans stock, aucune opération n'est
+possible, donc le ravitaillement doit passer sans réseau, ainsi que l'annulation et la
+modification.** Le retour au dealer suit, puisqu'il vit dans le même panneau.
+
+| # | Sous-lot | Ce qu'il apporte |
+|---|---|---|
+| G4a | Serveur : chaque geste reconnu s'il revient, la correction d'un seul geste, la date réelle | un renvoi ne double rien, et un refus laisse tout en l'état |
+| G4b | Les gestes passent par la file d'envoi | ils s'enregistrent sans réseau et partent au retour |
+| G4c | L'écran : la file rejouée dans l'ordre, sur les lignes et sur les soldes | la caissière voit le résultat de ses gestes avant leur départ |
+
+**Comment chaque geste est reconnu s'il revient :**
+
+| Geste | Commande | Ce qui le reconnaît |
+|---|---|---|
+| Ravitaillement | `replenish` | la ligne `history/{commandeId}` existe |
+| Retour | `returnReplenishment` | la ligne `history/{commandeId}` existe, testée **avant** les plafonds : sinon, renvoyé après avoir soldé la livraison, il se croirait refusé |
+| Modifier une non terminée | `updateDraft` | la marque `derniereCommande` du brouillon. La file n'envoie une modification qu'après la précédente : seule la dernière peut revenir |
+| Corriger une validée | `correctHistory` | la ligne `history/{commandeId}` existe, testée avant l'impact |
+| Annuler une non terminée | `trashDraft` | la ligne de corbeille `history/{commandeId}` existe |
+| Annuler une validée | `trashHistory` | la ligne est déjà « Supprimée » ou « Annulée » : le but est atteint, y compris si un autre poste l'a fait |
+| Annuler un retour | `trashReplenishmentReturn` | `deletedAt` déjà posé |
+
+Sans `commandeId`, tout reste comme avant : TC-357 [CAR-01] à [CAR-07] le figent.
+
+**Trois changements de fond :**
+
+1. **Corriger une validée ne passe plus par trois appels.** `reopenHistory` bougeait les
+   soldes dès le clic, ce qui est impossible sans réseau, et laissait la ligne dans les
+   non terminées si le formulaire se fermait. `correctHistory` fait tout dans une
+   transaction : un refus laisse tout en l'état, et le formulaire s'ouvre sans rien
+   changer. **Ce comportement change aussi avec internet.** `reopenHistory` reste au
+   serveur, pour les applications pas encore rechargées.
+
+   La référence est l'ancien enchaînement : TC-358 corrige huit sortes de lignes, de
+   trois façons chacune, par les deux routes, dans deux boutiques. Soldes et ligne
+   d'arrivée doivent être identiques.
+2. **L'encaissement complet garde son numéro.** La ligne d'historique prend
+   l'identifiant de la non terminée (`addTransactionPayment`). Sans cela, une annulation
+   ou une correction faite sans réseau ne pourrait pas viser cette ligne.
+3. **Une opération partie en retard garde le jour où elle a eu lieu.** Décision de
+   l'utilisateur, contre la date d'envoi. La file envoie l'**âge** de l'opération, pas
+   une date, et le serveur la situe sur sa propre horloge (`instantDeLaCaisse`). Une
+   machine à l'heure fausse donne donc le bon jour, tant que son heure n'a pas changé
+   entre la saisie et l'envoi. L'âge compte entre 1 minute et 7 jours ; hors de ces
+   bornes, c'est la date du serveur. La ligne garde aussi son heure de réception
+   (`recuLe`). Conséquence attendue : une saisie de lundi soir, partie mardi matin,
+   n'apparaît pas dans la journée de mardi. On la retrouve en choisissant lundi.
+
+**Deux défauts anciens, trouvés par l'essai dans le navigateur :**
+
+- **Modifier une ligne quand le stock est à sec était refusé.** Le formulaire comparait
+  le nouveau montant au stock restant, sans compter ce que la ligne avait déjà pris :
+  un dépôt de 30 000 qui avait vidé le stock ne pouvait pas passer à 25 000. Corrigé
+  (`stockDejaPris`, TC-362).
+- **Les messages du ravitaillement ne s'affichaient jamais, ni ses refus.** Le formulaire
+  appelait `showToast` sans jamais afficher le résultat, et celui de transaction se
+  fermait en emportant le sien après une modification. Les tests simulaient `useToast` :
+  ils ne pouvaient pas le voir. Les messages vivent maintenant dans le panneau et dans
+  la page (TC-363, avec le vrai `useToast`).
+
+**Ce que voit la caissière sans réseau :**
+- ses gestes s'appliquent aussitôt à l'écran, avec « En attente d'envoi » et « Soldes
+  provisoires » ;
+- un encaissement complet fait passer la ligne dans l'historique, où elle se corrige et
+  s'annule comme une autre ;
+- une annulation envoie la ligne à la corbeille, une correction remonte la ligne en tête ;
+- un refus après coup : la ligne reprend ses valeurs, et l'opération se lit avec sa raison
+  dans la liste des envois (« Voir »), où elle se retire.
+
+**Vérifié dans un navigateur** (build avec service worker et persistance, émulateurs,
+`VITE_FIRESTORE_PERSISTANCE_EMULATEURS=true`), en partant de 30 000 de stock et 0 d'espèces :
+
+| Étape | Résultat |
+|---|---|
+| Avec réseau : ouvrir puis fermer la correction d'une validée | soldes et ligne intacts, aucune non terminée |
+| Avec réseau : corriger 30 000 en 25 000 alors que le stock est à 0 | 5 000 / 25 000, une seule ligne |
+| Sans réseau : saisir 20 000 avec 5 000 de stock | refusé par le formulaire |
+| Ravitailler de 100 000 | 105 000 / 25 000, ligne « En attente d'envoi », total à rendre 100 000 |
+| Recharger la page | tout est encore là |
+| Saisir 20 000, modifier à 15 000 | 90 000 / 25 000 |
+| Saisir 5 000, annuler | 90 000 / 25 000, ligne à la corbeille |
+| Encaisser 15 000 en Cash | 90 000 / 40 000, ligne passée dans l'historique |
+| La corriger à 12 000 | 93 000 / 37 000 |
+| Annuler la validée de 25 000 | 118 000 / 12 000 |
+| Rendre 30 000 en stock | 88 000 / 12 000, reste à rendre 70 000 |
+| Rendre 10 000 en espèces, puis annuler ce retour | 88 000 / 12 000, reste à rendre 70 000 |
+| **Le réseau revient** | **le serveur affiche 88 000 / 12 000 : exactement le calcul de l'écran.** Une seule ligne par opération, aucune non terminée, marque locale absente |
+| Réponse perdue sur un ravitaillement | crédité une fois, une seule ligne |
+| Réponse perdue sur une annulation | stock rendu une fois, pas de faux refus |
+| Correction que le stock ne couvre plus | « Refusée : Stock insuffisant », ligne et stock intacts, retrait possible |
+| Saisie vieille de 26 heures | datée de la veille, heure de réception gardée |
+
+Console : aucune erreur, hors le bruit connu du hors-ligne et le refus attendu (400).
+
+**Tests :** TC-357 (22 cas), TC-358 (37), TC-359 (18), TC-360 (33), TC-361 (25), TC-362 (10),
+TC-363 (4). 23 mutations du serveur, toutes attrapées. 30 de l'application : 28 du premier coup,
+et les 2 autres après avoir renforcé TC-360 [GA-19] et TC-361 [GF-04].
+
+**Limites :**
+- **Restent en ligne** : les collaborations, les demandes au dealer. Une fiche client se
+  modifie toujours en attendant le réseau (voir G3c).
+- **Une correction ou une annulation sur une ligne d'un jour relu**, faite sans réseau :
+  une fois partie, la ligne d'origine reste affichée jusqu'à ce qu'on relise ces dates,
+  puisque rien n'écoute la période. Un second geste dessus serait refusé (« introuvable »),
+  sans dégât.
+- **Une saisie refusée entraîne ce qui la vise** : sa modification et son annulation sont
+  refusées aussi (« introuvable »). Chacune se retire de la liste des envois.
+- **Sur une ligne déjà appliquée dont la réponse est perdue**, les soldes provisoires la
+  comptent deux fois jusqu'au renvoi, qui part au plus tard 30 s après. Sans effet au serveur.
+- **Non vérifié** : une vraie machine, la production, plusieurs onglets ouverts.
+
+**Déploiement — décision et exécution humaines, dans cet ordre :**
+
+1. Les functions, **avant** le push, puisqu'un push passe en production quelques minutes
+   plus tard. Dans PowerShell :
+   ```powershell
+   firebase use production
+   $env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"
+   firebase deploy --only "functions:storeTransactionCommand,functions:addTransactionPayment"
+   ```
+2. Le front : push de la branche.
+
+Dans l'autre ordre, rien ne se perd : un serveur ancien refuse `commandeId` et `ageMs` comme
+champs non autorisés, et la file retente. Mais aucun geste ne part d'ici là.
+
+**Essai sur une vraie machine, après déploiement** (s'ajoute à celui de G3c) :
+1. Couper le wifi, recevoir un ravitaillement. Attendu : le message, « Soldes provisoires »,
+   le stock monte.
+2. Saisir un dépôt, le modifier, en saisir un autre et l'annuler.
+3. Encaisser le premier, puis corriger son montant depuis l'Historique.
+4. Éteindre la machine, la rallumer le lendemain sans réseau, puis remettre le wifi.
+5. Attendu : en moins d'une minute, le bandeau disparaît et les soldes sont ceux de l'écran.
+   Dans l'Historique, choisir la veille : les opérations y sont, datées de la veille.
 
 ---
 

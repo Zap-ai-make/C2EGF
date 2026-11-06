@@ -27,7 +27,7 @@ const showToast = vi.fn()
 const SOMME_DES_RESEAUX = 9_000_000
 const LIQUIDITE_DU_RESEAU = 2_000_000
 
-vi.mock('../../src/hooks/useToast', () => ({ useToast: () => ({ showToast }) }))
+vi.mock('../../src/hooks/useToast', () => ({ useToast: () => ({ showToast, toasts: [], removeToast: () => {} }) }))
 vi.mock('../../src/services/storeTransactionCommandService', () => ({
   runStoreTransactionCommand: (...args) => runStoreTransactionCommand(...args),
 }))

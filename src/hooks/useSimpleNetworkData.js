@@ -10,8 +10,9 @@ import { parseFcfaAmount } from '../utils/fcfaAmount.js'
 export const useSimpleNetworkData = () => {
   const { cardsData, getStock, getLiquidite, getNetworkLiquidite, formatAmount } = useNetworkCards()
 
-  // Interface de compatibilité pour le formulaire
-  const validateAmount = (network, amount, transactionType) => {
+  // Interface de compatibilité pour le formulaire. `margeStock` : ce que la ligne en
+  // cours de modification a déjà pris au stock (`stockDejaPris`).
+  const validateAmount = (network, amount, transactionType, margeStock = 0) => {
     const numericAmount = parseFcfaAmount(amount)
     const normalizedType = String(transactionType || '')
       .trim()
@@ -29,7 +30,7 @@ export const useSimpleNetworkData = () => {
     // Pour les dépôts, vérifier uniquement le stock du réseau.
     // Les retraits sont contrôlés avec la liquidité dans TransactionForm.
     if (normalizedType === 'depot' || normalizedType === 'credit') {
-      const networkStock = getStock(network)
+      const networkStock = getStock(network) + margeStock
 
       if (numericAmount > networkStock) {
         return {

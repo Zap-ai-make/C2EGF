@@ -5,6 +5,7 @@ import ClientSearch from './ClientSearch'
 import ClientInfoDisplay from './ClientInfoDisplay'
 import { useToast } from '../../hooks/useToast'
 import { useTransactions } from '../../context/transactions.jsx'
+import { stockDejaPris } from '../../utils/financialImpact.js'
 import { useSimpleNetworkData } from '../../hooks/useSimpleNetworkData'
 import Toast from '../Toast'
 import { NETWORK_OPTIONS, TRANSACTION_TYPES, MESSAGES } from '../../utils/constants.js'
@@ -22,7 +23,7 @@ import {
 import Dialog from '../ui/Dialog'
 import ClientForm from '../ClientForm'
 
-function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAddClient = null }) {
+function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAddClient = null, annoncer = null }) {
   const { toasts, showToast, removeToast } = useToast()
   const { addTransaction, editingTransaction, clearEditTransaction, updateTransaction, saveReopenedCorrection } = useTransactions()
   const { validateAmount, getStock, getLiquidite, getFormattedStock } = useSimpleNetworkData()
@@ -98,6 +99,16 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
     [clientDesigne, manualAgentCode, network],
   )
 
+  // En modification, la ligne a déjà pris son stock : le contrôle ne le lui redemande
+  // pas. Sans cela, corriger un dépôt à la baisse était refusé quand le stock était
+  // à sec, alors que la correction en rend. Le serveur reste le garant.
+  const controlerStock = useCallback((reseau, montant, type) => {
+    const marge = editingTransaction && reseau === editingTransaction.reseau
+      ? (editingTransaction.stockDejaPris ?? stockDejaPris(editingTransaction))
+      : 0
+    return validateAmount(reseau, montant, type, marge)
+  }, [editingTransaction, validateAmount])
+
   // Ce que les boutons permettent, et pourquoi pas. Les règles vivent dans
   // preparationTransaction.js : l'assistant prépare avec les mêmes.
   const formValidation = useMemo(() => evaluerTransaction({
@@ -106,9 +117,9 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
     montant: amount,
     type: transactionType,
     reseau: network,
-    validateAmount,
+    validateAmount: controlerStock,
     liquidite: getLiquidite(),
-  }), [transactionClient, reconnaissance, amount, transactionType, network, validateAmount, getLiquidite])
+  }), [transactionClient, reconnaissance, amount, transactionType, network, controlerStock, getLiquidite])
 
   const handleSubmit = useCallback(async (statut) => {
     const isDirectValidation = estValidationDirecte(statut)
@@ -171,13 +182,15 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
         // correction et la revalidation par le mode de règlement mémorisé, au
         // lieu de l'abandonner dans les non terminées où la caissière devrait
         // la retrouver et la revalider à la main.
-        if (editingTransaction.reopenedFromHistoryId) {
-          await saveReopenedCorrection(editingTransaction, pendingConfirmation.transactionData)
-        } else {
-          await updateTransaction(editingTransaction.id, pendingConfirmation.transactionData)
-        }
+        const issue = editingTransaction.reopenedFromHistoryId
+          ? await saveReopenedCorrection(editingTransaction, pendingConfirmation.transactionData)
+          : await updateTransaction(editingTransaction.id, pendingConfirmation.transactionData)
         clearEditTransaction()
-        showToast(
+        // Le formulaire se ferme juste après : son message partirait avec lui. La
+        // page qui le porte le garde à l'écran.
+        const dire = annoncer ?? showToast
+        if (issue?.statut === EN_ATTENTE) dire(MESSAGES.EN_ATTENTE.MODIFICATION, 'info')
+        else dire(
           editingTransaction.reopenedFromHistoryId
             ? MESSAGES.SUCCESS.TRANSACTION_CORRECTED
             : MESSAGES.SUCCESS.TRANSACTION_MODIFIED,
@@ -212,7 +225,7 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
     } finally {
       setIsSubmitting(false)
     }
-  }, [pendingConfirmation, editingTransaction, updateTransaction, saveReopenedCorrection, clearEditTransaction, showToast, addTransaction, onComplete])
+  }, [pendingConfirmation, editingTransaction, updateTransaction, saveReopenedCorrection, clearEditTransaction, showToast, annoncer, addTransaction, onComplete])
 
   const cancelPendingSubmit = useCallback(() => {
     setPendingConfirmation(null)

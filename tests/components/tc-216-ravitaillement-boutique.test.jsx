@@ -42,7 +42,7 @@ vi.mock('../../src/context/transactions.jsx', () => ({
 vi.mock('../../src/hooks/useIncomingCollaborationsCount', () => ({
   useIncomingCollaborationsCount: () => 0,
 }))
-vi.mock('../../src/hooks/useToast', () => ({ useToast: () => ({ showToast }) }))
+vi.mock('../../src/hooks/useToast', () => ({ useToast: () => ({ showToast, toasts: [], removeToast: () => {} }) }))
 vi.mock('../../src/services/storeTransactionCommandService', () => ({
   runStoreTransactionCommand: (...args) => runStoreTransactionCommand(...args),
 }))

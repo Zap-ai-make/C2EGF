@@ -496,6 +496,30 @@ export function reverseHistoryTransactionImpact(currentBalances, historyData) {
 }
 
 // ---------------------------------------------------------------------------
+// Ce qu'une ligne a déjà pris au stock
+// ---------------------------------------------------------------------------
+
+/**
+ * Ce qu'une ligne a déjà pris au stock de son réseau, et qu'une correction ne doit
+ * pas lui redemander : corriger un dépôt de 30 000 en 25 000 REND 5 000.
+ *
+ * Un règlement sur ce même réseau a remis du stock : il vient en déduction.
+ *
+ * @param {object} ligne - { type, montant, reseau, paymentMethod, effectiveNetwork, settlementSummary }
+ * @returns {number} Le stock acquis à la ligne, jamais négatif
+ */
+export function stockDejaPris({ type, montant, reseau, paymentMethod, effectiveNetwork, settlementSummary }) {
+  if (!isDepositType(type) && !isCreditType(type)) return 0
+  const pris = Number(montant) || 0
+  const net = settlementSummary?.netByNetwork
+  if (net) {
+    const { paid = 0, refunded = 0 } = net[reseau] ?? {}
+    return Math.max(0, pris - (paid - refunded))
+  }
+  return paymentMethod && effectiveNetwork === reseau ? 0 : pris
+}
+
+// ---------------------------------------------------------------------------
 // Impact du règlement d'une transaction
 // ---------------------------------------------------------------------------
 

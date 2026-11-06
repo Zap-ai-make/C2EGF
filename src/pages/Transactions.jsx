@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom'
 import { Plus, PackagePlus } from 'lucide-react'
 import { useClients } from '../hooks/useClients'
 import { useAuth } from '../context/AuthContext'
+import { useToast } from '../hooks/useToast'
+import Toast from '../components/Toast'
 import TransactionForm from '../components/transactions/TransactionForm'
 import RavitaillementPanel from '../components/transactions/RavitaillementPanel'
 import TransactionTable from '../components/transactions/TransactionTable'
@@ -64,6 +66,8 @@ function Transactions() {
   const [params, setParams] = useSearchParams()
   const [formulaireOuvert, setFormulaireOuvert] = useState(false)
   const [ravitaillementOuvert, setRavitaillementOuvert] = useState(false)
+  // Ce que le formulaire dit en se fermant, après une modification.
+  const { toasts, showToast, removeToast } = useToast()
   const storeId = userProfile?.storeId ?? null
   const compteurRecues = useIncomingCollaborationsCount(
     storeId,
@@ -245,9 +249,20 @@ function Transactions() {
             onAddClient={addClient}
             onComplete={fermerFormulaire}
             onCancel={fermerFormulaire}
+            annoncer={showToast}
           />
         </ErrorBoundary>
       </Dialog>
+
+      {toasts.map((toast) => (
+        <Toast
+          key={toast.id}
+          message={toast.message}
+          type={toast.type}
+          duration={toast.duration}
+          onClose={() => removeToast(toast.id)}
+        />
+      ))}
     </div>
   )
 }

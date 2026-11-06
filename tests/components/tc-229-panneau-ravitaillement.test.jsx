@@ -9,7 +9,7 @@ let historique = []
 // raison qui n'est pas la leur.
 let soldes = { stock: 999_000_000, liquidite: 999_000_000 }
 
-vi.mock('../../src/hooks/useToast', () => ({ useToast: () => ({ showToast }) }))
+vi.mock('../../src/hooks/useToast', () => ({ useToast: () => ({ showToast, toasts: [], removeToast: () => {} }) }))
 vi.mock('../../src/services/storeTransactionCommandService', () => ({
   runStoreTransactionCommand: (...args) => runStoreTransactionCommand(...args),
 }))
