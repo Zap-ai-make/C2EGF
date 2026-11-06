@@ -651,6 +651,40 @@ abandonné, remplacé par G1.
 | G2 | Annuaire gardé sur l'appareil, relu par version | 64 lectures et ~5 Mo → 1 lecture + tranches modifiées |
 | G3 | File d'envoi pour les quatre opérations | la saisie sans réseau |
 
+### G0 — fait le 2026-11-06 : l'application s'ouvre sans réseau
+
+- `AuthContext` n'attend plus l'écriture de `lastLogin`. Elle part au retour du
+  réseau, et son échec ne coupe plus l'accès : c'est une trace, pas un contrôle
+  (TC-346 [HL-01, HL-02]).
+- `src/config/stockagePersistant.js` demande au navigateur de ne pas vider le
+  stockage dès que la persistance est active (TC-346 [HL-03 à HL-06]).
+- La confirmation de déconnexion avertit qu'une reconnexion exige internet
+  (TC-346 [HL-07]).
+- `VITE_FIRESTORE_PERSISTANCE_EMULATEURS=true` active la persistance sur les
+  émulateurs. C'est la seule façon d'essayer le hors-ligne sur ce poste, et elle
+  est à réserver à un navigateur neuf.
+- **Vérifié dans un vrai navigateur.** Le build est servi avec son service
+  worker et la persistance active sur les émulateurs. Après connexion, on coupe
+  le réseau puis on recharge :
+  - le nouveau code s'ouvre en 1 s, soldes et non terminées compris ;
+  - l'ancien code reste sur « Chargement… » au bout de 30 s.
+
+Reste, sans bloquer :
+- `ensureNetworkBalances`, une transaction, échoue hors ligne et le note dans la
+  console ;
+- le bandeau « Hors ligne » se fie à `navigator.onLine`, qui reste vrai sur un
+  wifi sans internet. G3 aura besoin d'un signal plus sûr.
+
+**Essai sur une vraie machine, après déploiement du front (décision humaine) :**
+1. Avec internet, ouvrir https://c2egf.vercel.app, l'installer (icône
+   « Installer » de la barre d'adresse) et se connecter avec un compte boutique.
+2. Attendre que la page Transactions affiche les soldes, puis ouvrir Clients et
+   Historique une fois.
+3. Couper le wifi (ou débrancher le câble), puis éteindre la machine.
+4. Rallumer sans réseau et ouvrir l'application installée.
+5. Attendu : la page Transactions s'ouvre, avec les soldes de la veille et le
+   bandeau « Hors ligne ». Une saisie échouera encore : c'est le lot G3.
+
 ---
 
 ## Ce qui n'a pas pu être vérifié

@@ -10,6 +10,7 @@ import {
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions'
 import { setLogLevel } from 'firebase/app'
 import { lireEnvRuntime, resolveFirebaseRuntime } from './firebaseRuntime'
+import { demanderStockagePersistant } from './stockagePersistant.js'
 
 // Désactiver les logs Firebase en production pour éviter le spam dans la console
 if (import.meta.env.PROD) {
@@ -79,9 +80,23 @@ try {
 
   // Init Firestore avec persistence IndexedDB multi-onglets en prod (API Firebase v9+)
   // En dev/émulateur : client standard sans persistence pour éviter les conflits de cache
-  if (runtime.production && import.meta.env.VITE_FIRESTORE_OFFLINE_PERSISTENCE === 'true') {
+  //
+  // Sauf demande explicite (`VITE_FIRESTORE_PERSISTANCE_EMULATEURS=true`) : c'est
+  // la seule façon d'essayer le hors-ligne sur ce poste, puisque sans cache il
+  // n'y a rien à relire une fois le réseau coupé. À réserver à un navigateur
+  // neuf (Playwright) : le cache d'une session précédente garderait les
+  // données d'émulateurs qui ont redémarré vides depuis.
+  const persistance = import.meta.env.VITE_FIRESTORE_OFFLINE_PERSISTENCE === 'true' && (
+    runtime.production || import.meta.env.VITE_FIRESTORE_PERSISTANCE_EMULATEURS === 'true'
+  )
+  if (persistance) {
     db = initializeFirestore(app, {
       localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    })
+    // Un cache que le navigateur peut vider quand le disque se remplit ne
+    // garantit pas le démarrage hors ligne : voir `stockagePersistant.js`.
+    demanderStockagePersistant().then((reponse) => {
+      if (reponse === 'refuse') console.warn('Stockage persistant refusé : le navigateur pourra vider le cache hors ligne.')
     })
   } else {
     db = getFirestore(app)

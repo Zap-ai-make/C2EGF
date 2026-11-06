@@ -297,11 +297,23 @@ export const AuthProvider = ({ children }) => {
         setUserProfile(profile)
         setError('')
 
-        await setDoc(
+        // ⚠ NE PAS ATTENDRE CETTE ÉCRITURE. Une écriture Firestore ne se termine
+        //   qu'à l'accusé du serveur : hors ligne, jamais. Attendue ici, elle
+        //   gardait `loading` levé, et l'application restait sur son écran de
+        //   chargement à chaque démarrage sans internet, alors que le profil et
+        //   la boutique venaient d'être lus depuis le cache (vérifié sur
+        //   l'émulateur, docs/rester-dans-le-quota-gratuit.md §G). Elle part
+        //   d'elle-même au retour du réseau.
+        //
+        //   Son échec ne coupe pas non plus l'accès : c'est une trace, pas un
+        //   contrôle. Les règles protègent les données, pas cette date.
+        setDoc(
           doc(db, FIRESTORE_CONFIG.COLLECTIONS.USERS, user.uid),
           { lastLogin: serverTimestamp() },
           { merge: true }
-        )
+        ).catch((lastLoginError) => {
+          console.warn('lastLogin non enregistré :', lastLoginError?.code || lastLoginError?.message)
+        })
       } catch (err) {
         if (resolutionId !== authResolutionIdRef.current) return
         setError(err.message || 'Accès non autorisé')

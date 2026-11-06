@@ -229,6 +229,13 @@ function Profil() {
             <p className={`${AUTH_STYLES.text.body} ${AUTH_STYLES.spacing.modal}`}>
               Êtes-vous sûr de vouloir vous déconnecter ? Vous devrez vous reconnecter pour accéder à l'application.
             </p>
+            {/* La session est ce qui permet de démarrer sans internet : elle
+                survit à l'extinction de la machine, mais une reconnexion exige
+                le réseau (docs/rester-dans-le-quota-gratuit.md §G). */}
+            <p role="note" className="mb-4 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">
+              Sans connexion internet, vous ne pourrez pas vous reconnecter. Pour travailler hors ligne,
+              restez connecté : la session tient même machine éteinte.
+            </p>
             <div className={AUTH_STYLES.modal.footer}>
               <button
                 onClick={() => setShowLogoutConfirm(false)}
