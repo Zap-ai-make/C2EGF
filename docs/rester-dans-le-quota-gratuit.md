@@ -459,7 +459,7 @@ et exécution humaines.**
 
 | Temps | Code | Geste humain |
 |---|---|---|
-| 1 | `CALLABLE.region` vaut `['europe-west1', 'us-central1']` : les 26 callables servent les deux régions (TC-036 [WRA-08]) | `firebase deploy --only functions` |
+| 1 | `CALLABLE.region` vaut `['europe-west1', 'us-central1']` : les 26 callables servent les deux régions (TC-036 [WRA-08]) | déployer par groupes de huit au plus (`docs/deployer-les-functions.md` §5) : le 2026-11-06, le déploiement d'un coup a buté sur le quota de ~20 vCPU par région |
 | 2 | le front appelle `us-central1` (`src/config/firebase.js`) ; les tests de bout en bout aussi | demander le push, **après** le temps 1 |
 | 3 | une semaine après le push, `CALLABLE.region` revient à `'us-central1'` seul | redéployer, et accepter la suppression des functions d'`europe-west1` |
 

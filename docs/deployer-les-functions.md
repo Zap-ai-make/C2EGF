@@ -107,18 +107,46 @@ Les callables quittent europe-west1 pour us-central1, à côté de la base
 (`docs/rester-dans-le-quota-gratuit.md` §C1). Trois temps, dans cet ordre :
 
 1. **Les deux régions.** `CALLABLE.region` vaut `['europe-west1', 'us-central1']`.
-   On déploie TOUT, sans virgule à protéger :
-   ```powershell
-   firebase use production
-   $env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"
-   firebase deploy --only functions
-   ```
-   Le CLI crée les 26 callables en us-central1 et met à jour celles d'europe-west1.
    Le bucket de sources d'us-central1 existe déjà (§3) : pas de 409 attendu.
-2. **Le front**, poussé seulement une fois le temps 1 réussi.
-3. **Une semaine plus tard**, `CALLABLE.region` revient à `'us-central1'`, et on
-   redéploie de même. Le CLI voit 26 functions d'europe-west1 absentes du code et
-   demande s'il faut les supprimer : répondre oui. Elles ne servent plus personne.
+   **Ne pas tout déployer d'un coup** (§5) : par groupes de huit au plus.
+2. **Le front**, poussé seulement une fois les 26 callables en place dans les deux
+   régions.
+3. **Une semaine plus tard**, `CALLABLE.region` revient à `'us-central1'`. Les
+   functions d'europe-west1 se suppriment sans rien démarrer :
+   `firebase functions:delete <noms…> --region europe-west1 --force`.
+
+---
+
+## 5. Jamais plus de ~20 functions déployées à la fois dans une région
+
+Vécu deux fois. Au premier déploiement, 20 functions sur 23 sont passées. Le
+2026-11-06, `firebase deploy --only functions` (lot C1, temps 1) a réussi une
+vingtaine d'opérations par région, et toutes les autres ont échoué :
+
+```
+Could not create or update Cloud Run service <nom>, Container Healthcheck failed.
+Quota exceeded for total allowable CPU per project per region.
+```
+
+**Ce qu'on observe :** chaque function déployée démarre une instance de 1 vCPU
+pour se vérifier, et la garde inactive quelques minutes avant de l'éteindre. Le
+quota « Total CPU allocation, per project per region » de ce projet vaut ~20 vCPU.
+Au-delà de vingt démarrages simultanés, les suivants échouent.
+
+**Ce que ça fait en production.** Une mise à jour échouée n'éteint pas toujours la
+function : cinq ont répondu `503 Rate exceeded` pendant plusieurs minutes, une est
+revenue seule. Sonder avant de conclure (voir la mémoire du projet :
+`curl -X OPTIONS`, 204 = répond).
+
+**Comment déployer :**
+- **Par groupes de huit functions au plus**, en guillemets (§1). Le CLI saute ce qui
+  n'a pas changé (« Skipped (No changes detected) »), ce qui allège les reprises.
+- **Si un groupe échoue sur ce quota**, attendre un quart d'heure que les instances
+  inactives s'éteignent, puis relancer la même commande.
+- **La vraie réponse : relever le quota**, gratuitement. Console Google Cloud > IAM
+  et administration > Quotas et limites système, filtrer « Total CPU allocation, per
+  project per region » (Cloud Run Admin API), cocher europe-west1 et us-central1,
+  Modifier, demander 100. Décision et geste humains.
 
 ---
 
