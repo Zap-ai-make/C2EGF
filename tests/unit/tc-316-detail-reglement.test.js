@@ -157,7 +157,7 @@ describe('TC-316 — le serveur range les codes par réseau', () => {
       { db, FieldValue: { serverTimestamp: () => ({ _type: 'serverTimestamp' }) } },
     )
 
-    const historique = ecrits.find((e) => e.path === `clients/${STORE}/history/h-316`).data
+    const historique = ecrits.find((e) => e.path === `clients/${STORE}/history/d-316`).data
     expect(historique.statut).toBe('Payé par Cash')
     expect(historique.settlementSummary.netByNetwork).toEqual({
       Orange: { paid: 50000, refunded: 0 },

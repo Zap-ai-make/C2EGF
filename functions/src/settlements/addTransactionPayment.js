@@ -43,6 +43,7 @@ import {
   libelleCodesAgent,
 } from './settlementShared.js'
 import { STORE_PAYMENT_METHODS } from '../config/storeProfile.js'
+import { instantDeLaCaisse } from '../instantDeLaCaisse.js'
 
 function buildFinalStatus(type, paymentMethod) {
   const t = String(type || '').trim().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
@@ -75,10 +76,12 @@ export async function addTransactionPaymentHandler(request, { db, FieldValue, lo
   const actorUid = validateAuthUid(request.auth?.uid)
 
   // ── 2. Payload shape ──────────────────────────────────────────────────────
-  const payload = validateInputPayload(request.data, ['draftId', 'amount', 'paymentMethod', 'idempotencyKey', 'agentCode'])
+  const payload = validateInputPayload(request.data, ['draftId', 'amount', 'paymentMethod', 'idempotencyKey', 'agentCode', 'ageMs'])
   const { draftId, amount, paymentMethod, idempotencyKey } = payload
   // Facultatif : `null` quand la boutique n'a pas note de destination.
   const agentCode = cleanSettlementAgentCode(payload.agentCode)
+  // Partie en retard, la validation garde l'instant où elle a eu lieu (lot G4a).
+  const faitLe = instantDeLaCaisse(payload.ageMs)
 
   // ── 3. Field validation ───────────────────────────────────────────────────
   if (typeof draftId !== 'string' || !draftId.trim()) {
@@ -238,8 +241,10 @@ export async function addTransactionPaymentHandler(request, { db, FieldValue, lo
       t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
 
       if (fullySettled) {
-        // Déplacer vers l'historique
-        const historyRef = db.collection(`clients/${storeId}/history`).doc()
+        // Déplacer vers l'historique, sous l'identifiant de la non terminée. Hors
+        // connexion, la caissière peut annuler ou corriger un encaissement qui
+        // attend le réseau : la file doit pouvoir viser sa ligne d'avance (lot G4a).
+        const historyRef = db.doc(`clients/${storeId}/history/${draftId}`)
         const historyId  = historyRef.id
 
         const finalSummary = {
@@ -271,7 +276,8 @@ export async function addTransactionPaymentHandler(request, { db, FieldValue, lo
           settlementAgentCode: libelleCodesAgent(codesAgent),
           effectiveNetwork:    affectedNetwork,
           settlementAmount:    originalAmount,
-          validatedAt:         now,
+          validatedAt:         faitLe ?? now,
+          ...(faitLe ? { recuLe: now } : {}),
           updatedAt:           now,
         })
         t.delete(draftRef)

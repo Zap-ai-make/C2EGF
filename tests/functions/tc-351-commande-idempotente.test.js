@@ -156,7 +156,7 @@ describe('TC-351 — avec commandeId, une opération ne s’applique qu’une fo
       call({ action: 'add', transaction: tx(), commandeId: 'cmd-double' }),
     ])
     for (const i of issues.filter((x) => x.status === 'rejected')) {
-      expect(i.reason?.code).not.toMatch(/^[A-Z][A-Z0-9_]+$/)
+      expect(String(i.reason?.code)).not.toMatch(/^[A-Z][A-Z0-9_]+$/)
     }
     // Le renvoi, comme le ferait la file : il applique la saisie si les deux
     // envois sont tombés, et répond « déjà faite » sinon. Jamais un second effet.

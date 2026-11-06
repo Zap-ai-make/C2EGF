@@ -20,6 +20,7 @@ import {
   STORE_REPLENISHMENT_SENDERS,
   STORE_TIME_ZONE,
 } from '../config/storeProfile.js'
+import { instantDeLaCaisse } from '../instantDeLaCaisse.js'
 
 const SETTLEMENT_FIELDS = [
   'originalAmount', 'paidAmount', 'refundedAmount', 'remainingAmount',
@@ -92,8 +93,8 @@ function refuserSiIntouchable(history, verbe) {
  * Firestore : l'horodatage est donc une vraie date, prise sur l'horloge de la
  * fonction — jamais celle du navigateur, qui n'est pas une source de vérité.
  */
-function empilerModification(journal, { avant, apres, uid, nom }) {
-  const entree = { avant, apres, at: new Date(), by: uid, byName: nom }
+function empilerModification(journal, { avant, apres, uid, nom, faitLe }) {
+  const entree = { avant, apres, at: faitLe ?? new Date(), by: uid, byName: nom }
   return [...journal, entree].slice(-JOURNAL_MAX)
 }
 
@@ -173,8 +174,104 @@ function cleanTransaction(input) {
     statut,
   }
 }
-function dateFr() {
-  return new Intl.DateTimeFormat('fr-FR', { timeZone: STORE_TIME_ZONE }).format(new Date())
+function dateFr(instant = new Date()) {
+  return new Intl.DateTimeFormat('fr-FR', { timeZone: STORE_TIME_ZONE }).format(instant)
+}
+
+/**
+ * La ligne d'une correction attend-elle ses DEUX jambes à la revalidation ?
+ *
+ * « DIRECTE » VEUT DIRE « PORTAIT SES DEUX JAMBES », PAS « SANS RÈGLEMENT »
+ * ────────────────────────────────────────────────────────────────────────
+ * La nuance a l'air scolastique ; elle vaut de l'argent. Une ligne validée
+ * par `validateDraft` sans mode de règlement NI drapeau — TC-222-31 —
+ * n'a jamais posé de jambe de liquidité : elle porte `validatedAt` sans
+ * `directValidation`. La rouvrir puis la revalider « en direct » lui en
+ * inventerait une, et corriger un montant INCHANGÉ déplacerait les soldes.
+ *
+ * Les deux formes qui portent bien leurs deux jambes :
+ *  — `directValidation` : le bouton « Valider », depuis ce lot ;
+ *  — pas de `validatedAt` : les mêmes lignes, écrites par `add` avant lui.
+ */
+function portaitSesDeuxJambes(history) {
+  return !history.paymentMethod && (history.directValidation === true || !history.validatedAt)
+}
+
+/**
+ * Le brouillon d'une ligne rouverte.
+ *
+ * Construit par liste blanche, jamais par soustraction : un champ de règlement
+ * qui survivrait ferait croire le brouillon réglé, et `updateDraft` le
+ * refuserait — le gérant ne pourrait plus le corriger, ce qui est précisément
+ * le geste qu'il vient de demander.
+ */
+function brouillonDeLigneRouverte(history, { historyId, storeId, store, profile, uid, now, direct }) {
+  return {
+    ...(history.client && typeof history.client === 'object' ? { client: history.client } : {}),
+    clientId: history.clientId,
+    type: history.type,
+    reseau: history.reseau,
+    ...(typeof history.code === 'string' ? { code: history.code } : {}),
+    montant: history.montant,
+    statut: 'Non Terminées',
+    storeId,
+    storeName: history.storeName || store.name || profile.storeName || '',
+    operatorId: history.operatorId || uid,
+    operatorName: history.operatorName || '',
+    operatorEmail: history.operatorEmail || '',
+    // La date d'ORIGINE, pas celle du jour : une transaction de mardi
+    // corrigée jeudi reste une transaction de mardi.
+    date: history.date,
+    createdAt: history.createdAt || now,
+    ...(Array.isArray(history.modifications) ? { modifications: history.modifications } : {}),
+    reopenedFromHistoryId: historyId,
+    // Le mode de règlement d'origine, mis de côté sous un AUTRE nom.
+    //
+    // Deux raisons de ne pas le laisser s'appeler `paymentMethod` : il
+    // ferait croire le brouillon déjà réglé à qui lit le document, et
+    // surtout il permet à la correction de REPARTIR dans l'historique sans
+    // redemander « encaisser par quoi ? » à une caissière qui n'a rien
+    // changé d'autre que le montant.
+    reopenedPaymentMethod: history.paymentMethod ?? null,
+    // Validée d'un geste, sans règlement : la correction devra retrouver
+    // ce mode-là, et non en inventer un que la caissière n'a pas choisi.
+    reopenedDirect: direct,
+    reopenedAt: now,
+    reopenedBy: uid,
+    updatedAt: now,
+  }
+}
+
+/**
+ * Ce que la validation d'un brouillon donne : les soldes et la ligne d'historique.
+ *
+ * VALIDATION DIRECTE : le geste du bouton « Valider » du formulaire,
+ * rejoué sur un brouillon. Sans mode de règlement il n'y a pas de jambe
+ * de règlement à appliquer, mais il y a bien celle que la branche
+ * « validée » d'`applyInitialTransactionImpact` pose — la liquidité qui
+ * entre pour un dépôt, qui sort pour un retrait.
+ *
+ * On l'obtient en composant deux primitives éprouvées plutôt qu'en
+ * écrivant une troisième arithmétique : défaire la jambe du brouillon
+ * (au montant qu'elle avait), puis appliquer l'impact validé (au montant
+ * corrigé). Sans `direct`, un `paymentMethod` nul laisse les soldes
+ * intacts — c'est le comportement d'origine, que d'autres appels suivent.
+ */
+function validationDuBrouillon(balances, draft, { amount, paymentMethod, directDemande, storeId, now, validatedAt = now }) {
+  const direct = directDemande === true && !paymentMethod
+  const nextBalances = paymentMethod
+    ? applySettlementImpact(balances, { ...draft, montant: amount }, paymentMethod)
+    : direct
+      ? applyInitialTransactionImpact(
+        reverseInitialTransactionImpact(balances, draft),
+        { ...draft, montant: amount, statut: 'Validée' },
+      )
+      : balances
+  // `directValidation` marque la ligne pour que son annulation future
+  // défasse les DEUX jambes. Elle porte aussi `validatedAt`, dont la
+  // branche d'inversion ne rendrait que celle du brouillon.
+  const history = { ...draft, storeId, ...(direct ? { directValidation: true, ...splitLiquiditeSiRetraitDirect(reverseInitialTransactionImpact(balances, draft), { ...draft, montant: amount }) } : {}), statut: paymentMethod ? `${String(draft.type).normalize('NFD').replace(/[\u0300-\u036f]/g, '') === 'Depot' ? 'Encaissé' : 'Payé'} par ${paymentMethod}` : 'Validée', paymentMethod, effectiveNetwork: paymentMethod ? mapPaymentMethodToNetwork(paymentMethod) : null, settlementAmount: amount, originalAmount: draft.montant, paidAmount: amount, refundedAmount: 0, remainingAmount: 0, settlementStatus: 'settled', validatedAt, settlementUpdatedAt: now, updatedAt: now }
+  return { nextBalances, history }
 }
 
 async function readActor(t, db, uid) {
@@ -192,7 +289,7 @@ async function readActor(t, db, uid) {
 
 export async function storeTransactionCommandHandler(request, { db, FieldValue, logWriter = write }) {
   const uid = validateAuthUid(request.auth?.uid)
-  const payload = validateInputPayload(request.data, ['action', 'transaction', 'draftId', 'historyId', 'updates', 'paymentMethod', 'amount', 'network', 'balanceType', 'balanceAmount', 'balances', 'note', 'direct', 'expediteur', 'replenishmentId', 'returnId', 'commandeId'])
+  const payload = validateInputPayload(request.data, ['action', 'transaction', 'draftId', 'historyId', 'updates', 'paymentMethod', 'amount', 'network', 'balanceType', 'balanceAmount', 'balances', 'note', 'direct', 'expediteur', 'replenishmentId', 'returnId', 'commandeId', 'ageMs'])
   const action = String(payload.action || '')
   const now = FieldValue.serverTimestamp()
   // L'identifiant qu'une file d'envoi hors ligne donne à une saisie ou à une
@@ -201,6 +298,11 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
   // du document créé : la garde ne coûte qu'une lecture, et aucune trace à
   // part qu'il faudrait un jour effacer. Facultatif : sans lui, rien ne change.
   const commandeId = payload.commandeId == null ? null : cleanId(payload.commandeId, 'commandeId')
+  // Partie en retard, l'opération garde le jour où elle a eu lieu (lot G4a) et
+  // son heure de réception. Voir `instantDeLaCaisse`.
+  const faitLe = instantDeLaCaisse(payload.ageMs)
+  const recu = faitLe ? { recuLe: now } : {}
+  const datation = faitLe ? { date: dateFr(faitLe), createdAt: faitLe, ...recu } : { date: dateFr(), createdAt: now }
 
   const result = await db.runTransaction(async t => {
     const { profile, storeId, store } = await readActor(t, db, uid)
@@ -264,7 +366,7 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       const splitDirect = VALIDATED.includes(transaction.statut)
         ? splitLiquiditeSiRetraitDirect(balances, transaction)
         : {}
-      const data = { ...transaction, storeId, ...(VALIDATED.includes(transaction.statut) ? { directValidation: true, ...splitDirect } : {}), storeName: store.name || profile.storeName || '', operatorId: uid, operatorName: profile.name || '', operatorEmail: profile.email || '', date: dateFr(), createdAt: now, updatedAt: now }
+      const data = { ...transaction, storeId, ...(VALIDATED.includes(transaction.statut) ? { directValidation: true, ...splitDirect } : {}), storeName: store.name || profile.storeName || '', operatorId: uid, operatorName: profile.name || '', operatorEmail: profile.email || '', ...datation, updatedAt: now }
       t.set(ref, data)
       t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
       t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: ref.id, uid, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
@@ -276,6 +378,10 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
     // (STORE_NETWORKS), jamais de la charge utile — un réseau soufflé par le
     // navigateur crediterait un solde que la boutique n'opère pas.
     if (action === 'replenish') {
+      const ref = commandeId
+        ? db.doc(`clients/${storeId}/history/${commandeId}`)
+        : db.collection(`clients/${storeId}/history`).doc()
+      if (commandeId && (await t.get(ref)).exists) return { id: ref.id, idempotent: true }
       const amount = cleanAmount(payload.amount)
       if (!['stock', 'liquidite'].includes(payload.balanceType)) fail('STORE_TRANSACTION_INVALID', 'Vase de ravitaillement inconnu.')
       const note = cleanNote(payload.note)
@@ -290,7 +396,6 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       const memorises = Array.isArray(store.ravitaillementExpediteurs) ? store.ravitaillementExpediteurs : []
       const { nom: expediteur, estNouveau } = cleanExpediteur(payload.expediteur, [...STORE_REPLENISHMENT_SENDERS, ...memorises])
 
-      const ref = db.collection(`clients/${storeId}/history`).doc()
       const data = {
         type: REPLENISHMENT_TYPE,
         montant: amount,
@@ -310,10 +415,9 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
         operatorId: uid,
         operatorName: profile.name || '',
         operatorEmail: profile.email || '',
-        date: dateFr(),
-        createdAt: now,
+        ...datation,
         updatedAt: now,
-        validatedAt: now,
+        validatedAt: faitLe ?? now,
       }
       t.set(ref, data)
       if (estNouveau) {
@@ -330,6 +434,9 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       const snap = await t.get(ref)
       if (!snap.exists) fail('SETTLEMENT_DRAFT_NOT_FOUND', 'Transaction introuvable.')
       const old = snap.data()
+      // Une marque sur le brouillon, pas une trace à part : la file n'envoie une
+      // modification qu'après la précédente, donc seule la dernière peut revenir.
+      if (commandeId && old.derniereCommande === commandeId) return { id: draftId, idempotent: true }
       if (SETTLEMENT_FIELDS.some(field => Object.hasOwn(old, field))) fail('SETTLED_DRAFT_IMMUTABLE', 'Une transaction ayant engagé un règlement est figée.')
       const transaction = cleanTransaction({ ...old, ...payload.updates, statut: 'Non Terminées' })
       const restored = reverseInitialTransactionImpact(balances, old)
@@ -346,8 +453,9 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
         // Écrit seulement quand il bouge : réécrire le tableau à chaque
         // correction de code ou de réseau le ferait grossir sans rien dire.
         ...(montantChange
-          ? { modifications: empilerModification(journal, { avant: Number(old.montant), apres: Number(transaction.montant), uid, nom: profile.name || '' }) }
+          ? { modifications: empilerModification(journal, { avant: Number(old.montant), apres: Number(transaction.montant), uid, nom: profile.name || '', faitLe }) }
           : {}),
+        ...(commandeId ? { derniereCommande: commandeId } : {}),
       })
       t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
       t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: draftId, uid, before: old, after: transaction, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
@@ -389,30 +497,7 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       const amount = payload.amount == null ? draft.montant : cleanAmount(payload.amount)
       const paymentMethod = payload.paymentMethod == null ? null : String(payload.paymentMethod)
       if (paymentMethod && !STORE_PAYMENT_METHODS.includes(paymentMethod)) fail('INVALID_PAYMENT_METHOD', 'Méthode de paiement non autorisée.')
-      // VALIDATION DIRECTE : le geste du bouton « Valider » du formulaire,
-      // rejoué sur un brouillon. Sans mode de règlement il n'y a pas de jambe
-      // de règlement à appliquer, mais il y a bien celle que la branche
-      // « validée » d'`applyInitialTransactionImpact` pose — la liquidité qui
-      // entre pour un dépôt, qui sort pour un retrait.
-      //
-      // On l'obtient en composant deux primitives éprouvées plutôt qu'en
-      // écrivant une troisième arithmétique : défaire la jambe du brouillon
-      // (au montant qu'elle avait), puis appliquer l'impact validé (au montant
-      // corrigé). Sans `direct`, un `paymentMethod` nul laisse les soldes
-      // intacts — c'est le comportement d'origine, que d'autres appels suivent.
-      const direct = payload.direct === true && !paymentMethod
-      const nextBalances = paymentMethod
-        ? applySettlementImpact(balances, { ...draft, montant: amount }, paymentMethod)
-        : direct
-          ? applyInitialTransactionImpact(
-            reverseInitialTransactionImpact(balances, draft),
-            { ...draft, montant: amount, statut: 'Validée' },
-          )
-          : balances
-      // `directValidation` marque la ligne pour que son annulation future
-      // défasse les DEUX jambes. Elle porte aussi `validatedAt`, dont la
-      // branche d'inversion ne rendrait que celle du brouillon.
-      const history = { ...draft, storeId, ...(direct ? { directValidation: true, ...splitLiquiditeSiRetraitDirect(reverseInitialTransactionImpact(balances, draft), { ...draft, montant: amount }) } : {}), statut: paymentMethod ? `${String(draft.type).normalize('NFD').replace(/[\u0300-\u036f]/g, '') === 'Depot' ? 'Encaissé' : 'Payé'} par ${paymentMethod}` : 'Validée', paymentMethod, effectiveNetwork: paymentMethod ? mapPaymentMethodToNetwork(paymentMethod) : null, settlementAmount: amount, originalAmount: draft.montant, paidAmount: amount, refundedAmount: 0, remainingAmount: 0, settlementStatus: 'settled', validatedAt: now, settlementUpdatedAt: now, updatedAt: now }
+      const { nextBalances, history } = validationDuBrouillon(balances, draft, { amount, paymentMethod, directDemande: payload.direct, storeId, now })
       t.set(historyRef, history)
       t.delete(draftRef)
       t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
@@ -455,6 +540,9 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       const snap = await t.get(ref)
       if (!snap.exists) fail('STORE_TRANSACTION_NOT_FOUND', 'Transaction introuvable.')
       const history = snap.data()
+      // Renvoyée, ou annulée entre-temps depuis un autre poste : le but est atteint,
+      // et le montant n'a été rendu qu'une fois.
+      if (commandeId && [DELETED_STATUS, CANCELLED_STATUS].includes(history.statut)) return { trashed: true, historyId, idempotent: true }
       // « annulée », le mot du bouton. Ce refus remonte tel quel dans un toast :
       // le lire « ne peut pas être supprimée » sous un bouton « Annuler »
       // laisserait croire à deux gestes distincts, dont un seul aurait échoué.
@@ -463,7 +551,8 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       t.update(ref, {
         statut: DELETED_STATUS,
         origin: 'history',
-        deletedAt: now,
+        deletedAt: faitLe ?? now,
+        ...recu,
         deletedBy: uid,
         deletedByName: profile.name || '',
         updatedAt: now,
@@ -475,6 +564,10 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
 
     if (action === 'trashDraft') {
       const draftId = cleanId(payload.draftId, 'draftId')
+      const corbeilleRef = commandeId
+        ? db.doc(`clients/${storeId}/history/${commandeId}`)
+        : db.collection(`clients/${storeId}/history`).doc()
+      if (commandeId && (await t.get(corbeilleRef)).exists) return { trashed: true, historyId: corbeilleRef.id, idempotent: true }
       const ref = db.doc(`clients/${storeId}/drafts/${draftId}`)
       const snap = await t.get(ref)
       if (!snap.exists) fail('SETTLEMENT_DRAFT_NOT_FOUND', 'Transaction introuvable.')
@@ -487,12 +580,12 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       // corbeille unique, triée par date, sans se demander dans quel onglet la
       // ligne a été supprimée — et côté code, l'abonnement temps réel et la
       // pagination de l'historique resservent tels quels.
-      const corbeilleRef = db.collection(`clients/${storeId}/history`).doc()
       t.set(corbeilleRef, {
         ...old,
         statut: DELETED_STATUS,
         origin: 'draft',
-        deletedAt: now,
+        deletedAt: faitLe ?? now,
+        ...recu,
         deletedBy: uid,
         deletedByName: profile.name || '',
         updatedAt: now,
@@ -531,63 +624,13 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       // refusée tant que la revalidation ne savait pas rejouer ses deux jambes
       // faute de mode de règlement à appliquer ; `reopenedDirect` porte
       // désormais cette information jusqu'à `validateDraft`.
-      //
-      // « DIRECTE » VEUT DIRE « PORTAIT SES DEUX JAMBES », PAS « SANS RÈGLEMENT »
-      // ────────────────────────────────────────────────────────────────────────
-      // La nuance a l'air scolastique ; elle vaut de l'argent. Une ligne validée
-      // par `validateDraft` sans mode de règlement NI drapeau — TC-222-31 —
-      // n'a jamais posé de jambe de liquidité : elle porte `validatedAt` sans
-      // `directValidation`. La rouvrir puis la revalider « en direct » lui en
-      // inventerait une, et corriger un montant INCHANGÉ déplacerait les soldes.
-      //
-      // Les deux formes qui portent bien leurs deux jambes :
-      //  — `directValidation` : le bouton « Valider », depuis ce lot ;
-      //  — pas de `validatedAt` : les mêmes lignes, écrites par `add` avant lui.
-      const estDirecte = !history.paymentMethod
-        && (history.directValidation === true || !history.validatedAt)
+      const estDirecte = portaitSesDeuxJambes(history)
 
       const defait = reverseHistoryTransactionImpact(balances, history)
       const nextBalances = applyInitialTransactionImpact(defait, { ...history, statut: 'Non Terminées' })
 
-      // Brouillon construit par liste blanche, jamais par soustraction : un
-      // champ de règlement qui survivrait ferait croire le brouillon réglé, et
-      // `updateDraft` le refuserait — le gérant ne pourrait plus le corriger,
-      // ce qui est précisément le geste qu'il vient de demander.
       const draftRef = db.collection(`clients/${storeId}/drafts`).doc()
-      const draft = {
-        ...(history.client && typeof history.client === 'object' ? { client: history.client } : {}),
-        clientId: history.clientId,
-        type: history.type,
-        reseau: history.reseau,
-        ...(typeof history.code === 'string' ? { code: history.code } : {}),
-        montant: history.montant,
-        statut: 'Non Terminées',
-        storeId,
-        storeName: history.storeName || store.name || profile.storeName || '',
-        operatorId: history.operatorId || uid,
-        operatorName: history.operatorName || '',
-        operatorEmail: history.operatorEmail || '',
-        // La date d'ORIGINE, pas celle du jour : une transaction de mardi
-        // corrigée jeudi reste une transaction de mardi.
-        date: history.date,
-        createdAt: history.createdAt || now,
-        ...(Array.isArray(history.modifications) ? { modifications: history.modifications } : {}),
-        reopenedFromHistoryId: historyId,
-        // Le mode de règlement d'origine, mis de côté sous un AUTRE nom.
-        //
-        // Deux raisons de ne pas le laisser s'appeler `paymentMethod` : il
-        // ferait croire le brouillon déjà réglé à qui lit le document, et
-        // surtout il permet à la correction de REPARTIR dans l'historique sans
-        // redemander « encaisser par quoi ? » à une caissière qui n'a rien
-        // changé d'autre que le montant.
-        reopenedPaymentMethod: history.paymentMethod ?? null,
-        // Validée d'un geste, sans règlement : la correction devra retrouver
-        // ce mode-là, et non en inventer un que la caissière n'a pas choisi.
-        reopenedDirect: estDirecte,
-        reopenedAt: now,
-        reopenedBy: uid,
-        updatedAt: now,
-      }
+      const draft = brouillonDeLigneRouverte(history, { historyId, storeId, store, profile, uid, now, direct: estDirecte })
       t.set(draftRef, draft)
       t.delete(ref)
       t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
@@ -600,6 +643,67 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       return { reopened: true, draftId: draftRef.id, direct: estDirecte }
     }
 
+    // ─── La correction d'une ligne validée, d'un seul geste (lot G4a) ───────
+    //
+    // Ce que `reopenHistory`, `updateDraft` et `validateDraft` font en trois appels,
+    // dans une seule transaction. TC-358 compare les deux routes sur chaque sorte
+    // de ligne : mêmes soldes, même ligne d'arrivée.
+    //
+    // POURQUOI UNE COMMANDE DE PLUS
+    // Sans réseau, la réouverture ne peut pas précéder le formulaire. Et en trois
+    // envois, un refus au deuxième laisserait la ligne dans les non terminées, sans
+    // personne devant l'écran pour comprendre pourquoi. Ici, un refus laisse tout
+    // en l'état. `reopenHistory` reste pour les applications pas encore rechargées.
+    if (action === 'correctHistory') {
+      const historyId = cleanId(payload.historyId, 'historyId')
+      const nouvelleRef = commandeId
+        ? db.doc(`clients/${storeId}/history/${commandeId}`)
+        : db.collection(`clients/${storeId}/history`).doc()
+      // ⚠ AVANT L'IMPACT, comme pour la saisie : déjà corrigée, la ligne d'origine
+      //   n'existe plus, et le stock qu'elle demandait peut être reparti.
+      if (commandeId && (await t.get(nouvelleRef)).exists) return { corrected: true, historyId: nouvelleRef.id, idempotent: true }
+
+      const ref = db.doc(`clients/${storeId}/history/${historyId}`)
+      const snap = await t.get(ref)
+      if (!snap.exists) fail('STORE_TRANSACTION_NOT_FOUND', 'Transaction introuvable.')
+      const history = snap.data()
+      refuserSiIntouchable(history, 'corrigée')
+      const paymentMethod = history.paymentMethod ?? null
+      if (paymentMethod && !STORE_PAYMENT_METHODS.includes(paymentMethod)) fail('INVALID_PAYMENT_METHOD', 'Méthode de paiement non autorisée.')
+
+      // Rouvrir : tout défaire, puis reposer la seule jambe du brouillon.
+      const direct = portaitSesDeuxJambes(history)
+      const brouillon = brouillonDeLigneRouverte(history, { historyId, storeId, store, profile, uid, now, direct })
+      const rouverts = applyInitialTransactionImpact(reverseHistoryTransactionImpact(balances, history), { ...history, statut: 'Non Terminées' })
+
+      // Corriger : la jambe du brouillon, au nouveau montant.
+      const transaction = cleanTransaction({ ...brouillon, ...payload.updates, statut: 'Non Terminées' })
+      const corriges = applyInitialTransactionImpact(reverseInitialTransactionImpact(rouverts, brouillon), transaction)
+      const journal = Array.isArray(brouillon.modifications) ? brouillon.modifications : []
+      const corrige = {
+        ...brouillon,
+        ...transaction,
+        ...(Number(brouillon.montant) !== Number(transaction.montant)
+          ? { modifications: empilerModification(journal, { avant: Number(brouillon.montant), apres: Number(transaction.montant), uid, nom: profile.name || '', faitLe }) }
+          : {}),
+      }
+
+      // Revalider : le mode d'origine, sans le redemander.
+      const { nextBalances, history: ligne } = validationDuBrouillon(corriges, corrige, {
+        amount: corrige.montant,
+        paymentMethod,
+        directDemande: direct,
+        storeId,
+        now,
+        validatedAt: faitLe ?? now,
+      })
+      t.set(nouvelleRef, { ...ligne, ...recu })
+      t.delete(ref)
+      t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
+      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, historyId, newHistoryId: nouvelleRef.id, uid, before: history, after: transaction, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
+      return { corrected: true, historyId: nouvelleRef.id, direct }
+    }
+
     // ─── Le retour de ravitaillement ────────────────────────────────────────
     //
     // La boutique rend au dealer ce qu'il lui avait envoye. UNE SEULE RESERVE
@@ -610,6 +714,12 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
     // electronique, on rend des especes. Les deux restent comparables parce que
     // c'est la meme dette, exprimee dans deux vases.
     if (action === 'returnReplenishment') {
+      const ref = commandeId
+        ? db.doc(`clients/${storeId}/history/${commandeId}`)
+        : db.collection(`clients/${storeId}/history`).doc()
+      // ⚠ AVANT LES PLAFONDS : renvoyé après avoir soldé la livraison, le retour se
+      //   croirait refusé (« deja solde »), alors qu'il a eu lieu.
+      if (commandeId && (await t.get(ref)).exists) return { id: ref.id, idempotent: true }
       const replenishmentId = cleanId(payload.replenishmentId, 'replenishmentId')
       const amount = cleanAmount(payload.amount)
       if (!['stock', 'liquidite'].includes(payload.balanceType)) fail('STORE_TRANSACTION_INVALID', 'Vase de retour inconnu.')
@@ -639,7 +749,6 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       const nextBalances = applyReplenishmentReturnImpact(balances, network, payload.balanceType, amount)
 
       const reste = ravitaillement.remainingAmount - amount
-      const ref = db.collection(`clients/${storeId}/history`).doc()
       const data = {
         type: RETURN_TYPE,
         montant: amount,
@@ -656,10 +765,9 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
         operatorId: uid,
         operatorName: profile.name || '',
         operatorEmail: profile.email || '',
-        date: dateFr(),
-        createdAt: now,
+        ...datation,
         updatedAt: now,
-        validatedAt: now,
+        validatedAt: faitLe ?? now,
       }
 
       t.set(ref, data)
@@ -686,7 +794,10 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       if (!snap.exists) fail('STORE_TRANSACTION_NOT_FOUND', 'Retour introuvable.')
       const retour = snap.data()
       if (retour.type !== RETURN_TYPE) fail('STORE_TRANSACTION_INVALID', 'Cette ligne n\u2019est pas un retour.')
-      if (retour.deletedAt) fail('STORE_TRANSACTION_INVALID', 'Ce retour a deja ete supprime.')
+      if (retour.deletedAt) {
+        if (commandeId) return { trashed: true, returnId, idempotent: true }
+        fail('STORE_TRANSACTION_INVALID', 'Ce retour a deja ete supprime.')
+      }
 
       const ravitaillementRef = db.doc(`clients/${storeId}/history/${retour.replenishmentId}`)
       const snapRav = await t.get(ravitaillementRef)
@@ -701,7 +812,8 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       t.update(ref, {
         statut: DELETED_STATUS,
         origin: 'return',
-        deletedAt: now,
+        deletedAt: faitLe ?? now,
+        ...recu,
         deletedBy: uid,
         deletedByName: profile.name || '',
         updatedAt: now,
