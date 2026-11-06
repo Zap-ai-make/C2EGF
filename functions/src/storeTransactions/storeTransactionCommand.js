@@ -192,9 +192,15 @@ async function readActor(t, db, uid) {
 
 export async function storeTransactionCommandHandler(request, { db, FieldValue, logWriter = write }) {
   const uid = validateAuthUid(request.auth?.uid)
-  const payload = validateInputPayload(request.data, ['action', 'transaction', 'draftId', 'historyId', 'updates', 'paymentMethod', 'amount', 'network', 'balanceType', 'balanceAmount', 'balances', 'note', 'direct', 'expediteur', 'replenishmentId', 'returnId'])
+  const payload = validateInputPayload(request.data, ['action', 'transaction', 'draftId', 'historyId', 'updates', 'paymentMethod', 'amount', 'network', 'balanceType', 'balanceAmount', 'balances', 'note', 'direct', 'expediteur', 'replenishmentId', 'returnId', 'commandeId'])
   const action = String(payload.action || '')
   const now = FieldValue.serverTimestamp()
+  // L'identifiant qu'une file d'envoi hors ligne donne à une saisie ou à une
+  // validation (lot G3a). Rejouée après une réponse perdue, l'opération est
+  // reconnue à lui et ne s'applique pas deux fois. Il devient l'identifiant
+  // du document créé : la garde ne coûte qu'une lecture, et aucune trace à
+  // part qu'il faudrait un jour effacer. Facultatif : sans lui, rien ne change.
+  const commandeId = payload.commandeId == null ? null : cleanId(payload.commandeId, 'commandeId')
 
   const result = await db.runTransaction(async t => {
     const { profile, storeId, store } = await readActor(t, db, uid)
@@ -243,9 +249,15 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
 
     if (action === 'add') {
       const transaction = cleanTransaction(payload.transaction)
-      const nextBalances = applyInitialTransactionImpact(balances, transaction)
       const collection = PENDING.includes(transaction.statut) ? 'drafts' : 'history'
-      const ref = db.collection(`clients/${storeId}/${collection}`).doc()
+      const ref = commandeId
+        ? db.doc(`clients/${storeId}/${collection}/${commandeId}`)
+        : db.collection(`clients/${storeId}/${collection}`).doc()
+      // ⚠ AVANT L'IMPACT, PAS APRÈS. Une saisie déjà appliquée peut avoir vidé
+      //   le stock qu'elle demandait : recalculée, elle serait refusée pour
+      //   « solde insuffisant », et la file d'envoi la croirait perdue.
+      if (commandeId && (await t.get(ref)).exists) return { id: ref.id, idempotent: true }
+      const nextBalances = applyInitialTransactionImpact(balances, transaction)
       // Une ligne validee d un geste porte les DEUX jambes. On note d ou la
       // liquidite est venue AVANT de l appliquer : apres, l information
       // n existe plus nulle part.
@@ -360,6 +372,17 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       const draftId = cleanId(payload.draftId, 'draftId')
       const draftRef = db.doc(`clients/${storeId}/drafts/${draftId}`)
       const snap = await t.get(draftRef)
+      const historyRef = commandeId
+        ? db.doc(`clients/${storeId}/history/${commandeId}`)
+        : db.collection(`clients/${storeId}/history`).doc()
+      // Rejouée, la validation trouve sa ligne d'historique déjà écrite et le
+      // brouillon déjà parti, dans la même transaction. Si le brouillon est
+      // encore là, l'identifiant appartient à une autre ligne : l'écrire
+      // l'écraserait.
+      if (commandeId && (await t.get(historyRef)).exists) {
+        if (snap.exists) fail('IDEMPOTENCY_CONFLICT', 'Cet identifiant de commande est déjà pris par une autre ligne.')
+        return { validated: true, historyId: historyRef.id, idempotent: true }
+      }
       if (!snap.exists) return { validated: false }
       const draft = snap.data()
       if (SETTLEMENT_FIELDS.some(field => Object.hasOwn(draft, field))) fail('SETTLED_DRAFT_IMMUTABLE', 'Utilisez le règlement par tranche pour cette transaction.')
@@ -386,7 +409,6 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
             { ...draft, montant: amount, statut: 'Validée' },
           )
           : balances
-      const historyRef = db.collection(`clients/${storeId}/history`).doc()
       // `directValidation` marque la ligne pour que son annulation future
       // défasse les DEUX jambes. Elle porte aussi `validatedAt`, dont la
       // branche d'inversion ne rendrait que celle du brouillon.

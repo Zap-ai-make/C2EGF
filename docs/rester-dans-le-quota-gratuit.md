@@ -649,7 +649,7 @@ abandonné, remplacé par G1.
 | G0 | Démarrage hors ligne : ne plus attendre `lastLogin`, demander le stockage persistant (`navigator.storage.persist()`), avertir avant une déconnexion — **fait le 2026-11-06** | l'application s'ouvre sans réseau |
 | G1 | Historique du jour courant, le reste sur demande de date — **fait le 2026-11-06** | ~101 lectures par ouverture à froid |
 | G2 | Annuaire gardé sur l'appareil, relu par différence — **fait le 2026-11-06**, sans changement côté serveur | 65 lectures et ~5 Mo → 1 lecture + tranches modifiées |
-| G3 | File d'envoi pour les quatre opérations | la saisie sans réseau |
+| G3 | File d'envoi pour les quatre opérations — **G3a (serveur) fait le 2026-11-06, à déployer** ; G3b et G3c à faire | la saisie sans réseau |
 
 ### G0 — fait le 2026-11-06 : l'application s'ouvre sans réseau
 
@@ -828,6 +828,102 @@ humaine). Aucune function, aucune règle, aucun index.
   Firestore. Ce sont les mêmes fiches, déjà lisibles par tout compte connecté.
 - Une copie existante ne verrait pas des tranches supprimées à la main. Seule
   la reconstruction, qui réécrit les 64 tranches, est prévue.
+
+### G3 — la saisie sans réseau : le plan, en trois sous-lots
+
+Les quatre opérations retenues sont :
+- la saisie d'une non terminée, ou d'une validée d'un geste ;
+- la validation ou l'encaissement d'une non terminée ;
+- le règlement par tranche ;
+- l'ajout d'un client.
+
+Aujourd'hui, toutes attendent la réponse du serveur, qui ne vient pas hors
+ligne : le formulaire reste figé.
+
+| # | Sous-lot | Ce qu'il apporte |
+|---|---|---|
+| G3a | Serveur : la saisie et la validation reconnues à leur `commandeId` — **fait le 2026-11-06, à déployer** | une opération renvoyée ne s'applique jamais deux fois |
+| G3b | La file d'envoi, sur l'appareil | les quatre opérations s'enregistrent sans réseau et partent au retour |
+| G3c | L'affichage : lignes en attente, soldes provisoires, refus | la caissière voit ce qui attend, et peut valider ou régler une non terminée saisie hors ligne |
+
+**G3b, la file d'envoi :**
+- **Une base IndexedDB par compte**, `c2egf-envois-<projet>-<uid>`. Chaque
+  opération y porte son `commandeId`, tiré sur l'appareil, et sa charge utile.
+  Son état est « en attente » ou « refusée ».
+- **Les quatre opérations passent toutes par la file, réseau ou pas.** Le
+  formulaire attend la première réponse quelques secondes :
+  - si elle arrive, rien ne change pour la caissière (succès, ou refus affiché
+    avec les champs gardés) ;
+  - sinon, « Enregistrée, elle partira au retour du réseau », et les champs se
+    vident.
+- **Un seul envoi à la fois, dans l'ordre.** Un seul onglet envoie (Web
+  Locks). L'envoi part à chaque ajout, au retour de la connexion à Firestore et
+  toutes les 30 s tant qu'une opération attend.
+- **Un refus porte un code métier** (`INSUFFICIENT_STORE_BALANCE`…) : il
+  devient définitif. Tout le reste (réseau, erreur interne) se retente. Une
+  validation qui ne trouve plus sa non terminée est refusée.
+- **Le client ajouté** reçoit son identifiant sur l'appareil. Renvoyé, il est
+  reconnu s'il existe déjà. Hors ligne, le doublon de code agent se cherche dans
+  la copie locale de l'annuaire (lot G2).
+
+**G3c, l'affichage :**
+- Une non terminée en attente apparaît dans la liste avec « en attente
+  d'envoi ». Elle peut être validée ou réglée, et ces opérations partent après
+  elle. Elle ne peut être ni modifiée ni supprimée avant son envoi.
+- Une validation en attente retire la ligne des non terminées et la montre
+  dans l'historique du jour, « en attente ».
+- **Les soldes affichés deviennent provisoires** : ceux du serveur, plus
+  l'effet des opérations en attente, calculé par les mêmes fonctions que le
+  serveur. Ils portent une marque « provisoire ».
+- Un panneau « Envois » liste les opérations en attente et les refusées, avec
+  leur raison. Une refusée se retire d'un geste.
+- La déconnexion est refusée tant qu'une opération attend : sinon, elle
+  partirait sous un autre compte, ou jamais.
+
+**Ordre de déploiement, impératif :** les functions de G3a d'abord, le front
+de G3b ensuite. Le front enverra toujours un `commandeId`, qu'un serveur
+ancien refuse comme « champ non autorisé ».
+
+### G3a — fait le 2026-11-06 : le serveur reconnaît une opération renvoyée
+
+`storeTransactionCommand` accepte un `commandeId` facultatif :
+- **`add`** : il devient l'identifiant de la non terminée (ou de la ligne
+  d'historique pour une validée d'un geste). Renvoyée, la saisie trouve son
+  document et répond `{ id, idempotent: true }` sans rien réécrire.
+  - ⚠ La garde passe **avant** le calcul de l'impact. Une saisie déjà
+    appliquée a pu vider le stock qu'elle demandait : recalculée, elle serait
+    refusée pour solde insuffisant, et la file la croirait perdue (TC-351
+    [IDEM-03]).
+- **`validateDraft`** : il devient l'identifiant de la ligne d'historique.
+  Renvoyée, la validation trouve cette ligne et répond
+  `{ validated: true, historyId, idempotent: true }`. Si la non terminée
+  existe encore, l'identifiant appartient à une autre ligne :
+  `IDEMPOTENCY_CONFLICT`, sans rien écraser (IDEM-06).
+- **Sans `commandeId`, rien ne change** : TC-351 [CAR-01 à 05] le
+  caractérisent, et CAR-03 fige le trou que G3a ferme (la même saisie envoyée
+  deux fois s'appliquait deux fois).
+- **Coût** : une lecture de plus par opération envoyée avec un `commandeId`,
+  et aucune trace à part. Le document créé porte l'identifiant : rien à
+  effacer un jour, et rien à stocker en plus.
+- Le règlement par tranche avait déjà sa garde (`idempotencyKey`,
+  `addTransactionPayment`).
+
+**Tests :**
+- TC-351 : 13 cas sur émulateur, dont deux envois simultanés de la même
+  saisie, qui n'en font qu'une.
+- Trois mutations des gardes, toutes attrapées.
+- Toute la suite des functions passe.
+
+**Déploiement — décision et exécution humaines :**
+
+```powershell
+firebase use production
+$env:FUNCTIONS_DISCOVERY_TIMEOUT = 120
+firebase deploy --only "functions:storeTransactionCommand"
+```
+
+Sans effet visible tant que le front n'envoie pas de `commandeId` : le front
+d'aujourd'hui n'en envoie aucun.
 
 ---
 
