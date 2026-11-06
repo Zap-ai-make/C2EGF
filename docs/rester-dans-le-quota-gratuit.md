@@ -219,7 +219,17 @@ sans effet visible.
 - **Reste à mesurer après déploiement :** les lectures quotidiennes dans la
   console, avant et après.
 
-**Déployer le front depuis ce poste : le `.env` vise les émulateurs.**
+**Déployer le front : par GitHub, pas par le CLI.**
+
+D'habitude, le front part par GitHub. Un push de `feat/espace-patron` déclenche
+un build Vercel en **Preview**. Le même commit passe ensuite en **Production**,
+quelques minutes plus tard : c'est ce que montrent les déploiements enregistrés
+sur le dépôt depuis octobre 2026. Ce build part du dépôt et ne voit donc pas le
+`.env`, qui n'est pas commité. Sans `VITE_FIREBASE_RUNTIME_MODE`, un build Vite
+se met de lui-même en mode production.
+
+Le CLI (`vercel --prod` depuis ce poste) est l'exception, et il a un piège : le
+`.env` y vise les émulateurs depuis le lot E1.
 
 Le CLI Vercel n'exclut pas `.env` de ce qu'il envoie. Sa liste par défaut
 n'écarte que `.env.local` et `.env.*.local`, et il ignore `.gitignore`. Le build
@@ -234,8 +244,7 @@ Firebase doit commencer par demo- hors production. »), d'où une page blanche d
 toutes les boutiques. Constaté le 2026-11-06 par deux builds locaux, sans rien
 publier.
 
-Le remède est de les fixer au build. Les autres valeurs du `.env` restent celles
-des déploiements précédents, qui se faisaient avec le `.env` de production :
+Si l'on doit passer par le CLI, le remède est de fixer ces valeurs au build :
 
 ```powershell
 npx vercel --prod `
