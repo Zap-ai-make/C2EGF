@@ -596,6 +596,63 @@ sont une décision humaine.
 
 ---
 
+## Partie G — Hors connexion et jour courant (décisions du 2026-11-06)
+
+L'utilisateur fixe deux buts. Le premier : **l'application doit fonctionner sans
+connexion internet**, y compris au démarrage. Le second : **ne lire que ce qui
+sert**, c'est-à-dire la journée en cours. A3b (fenêtre à ~25 lignes) est
+abandonné, remplacé par G1.
+
+### Ce qui marche sans réseau aujourd'hui
+
+- **L'ouverture de l'application** : elle est installée (PWA) et sa coquille est
+  en cache.
+- **La session** : `browserLocalPersistence` la garde sur le disque, et elle
+  survit à l'extinction de la machine.
+- **La lecture** de ce qui a déjà été chargé : persistance Firestore en
+  production.
+- **Aucune saisie.** Toutes les opérations de caisse passent par la callable
+  `storeTransactionCommand`, même la saisie d'une non terminée, parce que le
+  serveur modifie les soldes dès la saisie (`applyInitialTransactionImpact`).
+- **Le démarrage hors ligne reste bloqué sur l'écran de chargement.**
+  `AuthContext` attend l'écriture de `lastLogin` avant de baisser `loading`, et
+  une écriture Firestore hors ligne ne se termine qu'au retour du réseau.
+  Vérifié sur l'émulateur avec le vrai SDK : le profil se lit depuis le cache en
+  5 ms, mais l'écriture attend encore au bout de 8 s.
+
+### Décisions
+
+1. **Historique** : à l'ouverture, seulement les non terminées, la journée en
+   cours, les validées du jour et **les ravitaillements encore dus, même
+   anciens**. Les jours précédents ne sont lus que sur choix d'une date ou d'une
+   période.
+2. **Clients : l'annuaire est gardé sur l'appareil**, dans un stockage local
+   propre à l'application. On ne s'appuie ni sur le cache interne de Firestore,
+   plafonné à 40 Mo et nettoyé automatiquement, ni sur une écoute, qui
+   retélécharge tout au-delà de 30 minutes. À l'ouverture, 1 lecture demande ce
+   qui a changé, puis seules les tranches modifiées sont relues. La copie n'a pas
+   de date d'expiration : elle reste jusqu'à son remplacement.
+3. **Hors connexion, une file d'envoi** pour quatre opérations : la saisie d'une
+   non terminée, la validation ou l'encaissement, le règlement par tranche et
+   l'ajout d'un client. Chaque opération porte un identifiant unique, que le
+   serveur ne rejoue jamais deux fois. **Un refus après coup est accepté**, par
+   exemple quand le stock a été épuisé entre-temps : la ligne apparaît alors
+   « refusée ».
+4. **Première connexion** : elle exige internet une fois par appareil et par
+   compte, puisque Google vérifie le mot de passe. Ensuite, on ne se déconnecte
+   pas le soir, et la session reste.
+
+### Lots, dans cet ordre
+
+| # | Lot | Ce qu'il apporte |
+|---|---|---|
+| G0 | Démarrage hors ligne : ne plus attendre `lastLogin`, demander le stockage persistant (`navigator.storage.persist()`), avertir avant une déconnexion | l'application s'ouvre sans réseau |
+| G1 | Historique du jour courant, le reste sur demande de date | ~101 lectures par ouverture à froid |
+| G2 | Annuaire gardé sur l'appareil, relu par version | 64 lectures et ~5 Mo → 1 lecture + tranches modifiées |
+| G3 | File d'envoi pour les quatre opérations | la saisie sans réseau |
+
+---
+
 ## Ce qui n'a pas pu être vérifié
 
 Ces points demandent un accès à la console, que cette analyse n'avait pas.
