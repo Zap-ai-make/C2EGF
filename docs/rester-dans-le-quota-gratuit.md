@@ -648,7 +648,7 @@ abandonné, remplacé par G1.
 |---|---|---|
 | G0 | Démarrage hors ligne : ne plus attendre `lastLogin`, demander le stockage persistant (`navigator.storage.persist()`), avertir avant une déconnexion — **fait le 2026-11-06** | l'application s'ouvre sans réseau |
 | G1 | Historique du jour courant, le reste sur demande de date — **fait le 2026-11-06** | ~101 lectures par ouverture à froid |
-| G2 | Annuaire gardé sur l'appareil, relu par version | 64 lectures et ~5 Mo → 1 lecture + tranches modifiées |
+| G2 | Annuaire gardé sur l'appareil, relu par différence — **fait le 2026-11-06**, sans changement côté serveur | 65 lectures et ~5 Mo → 1 lecture + tranches modifiées |
 | G3 | File d'envoi pour les quatre opérations | la saisie sans réseau |
 
 ### G0 — fait le 2026-11-06 : l'application s'ouvre sans réseau
@@ -744,6 +744,90 @@ que les lignes du jour.
 - Les expéditeurs proposés dans le formulaire de ravitaillement ne viennent plus
   que de la journée et des livraisons dues.
 - Les estimations d'activité du profil ne comptent plus que la journée.
+
+### G2 — fait le 2026-11-06 : l'annuaire reste sur l'appareil
+
+**Aucun changement côté serveur.** Le plan prévoyait un numéro de version par
+tranche dans `_etat`, donc un déploiement de functions. C'est inutile : chaque
+tranche porte déjà `majLe`, posé par le déclencheur et par la reconstruction.
+Une requête « `majLe` plus récent que le plus récent de la copie » rend
+exactement les tranches modifiées depuis. Le filtre porte sur un seul champ :
+il passe par l'index automatique, sans index à déployer.
+
+**Le chemin :**
+- **Première ouverture sur un appareil** : l'annuaire entier est écouté, comme
+  au lot A1 (65 lectures, ~5 Mo). Sa première réponse du serveur est enregistrée
+  dans une base IndexedDB à part, `c2egf-annuaire-<projet>`
+  (`src/services/copieAnnuaire.js`).
+- **Ouvertures suivantes** : la copie s'affiche tout de suite, réseau ou pas.
+  Une seule écoute demande ensuite les tranches modifiées depuis : 1 lecture si
+  rien n'a changé, 1 de plus par tranche modifiée.
+- **Dans la journée**, une fiche ajoutée ou corrigée ailleurs arrive par cette
+  écoute, comme avant. Au-delà de 8 tranches modifiées, l'écoute se rouvre à
+  partir de la plus récente : une reprise après 30 minutes coûte donc au plus 8
+  lectures.
+- **`_etat` n'est lu qu'au premier chargement.** Le repli sur `globalClients`
+  reste, pour un annuaire incomplet ou une lecture refusée.
+
+L'orchestration est dans `ecouterAnnuaireGarde` (`src/services/annuaireClients.js`).
+Elle rend le même `{ complet, clients }` qu'avant : `ecouterAvecRepli` et les
+écrans n'ont pas changé.
+
+**Ce qui garde la copie juste :**
+- Seules les réponses du serveur l'enregistrent ou la font avancer. Le cache de
+  Firestore peut mêler des tranches d'époques différentes (TC-350 [AG-02,
+  AG-08]).
+- Une tranche n'est jamais remplacée par une plus ancienne, même par un second
+  onglet (AG-07).
+- La copie n'est lue que complète : sa marque est posée dans la même
+  transaction que les 64 tranches.
+- Les dates (`createdAt`) redeviennent des `Timestamp` à la relecture. Sans
+  cela, le tri par date d'ajout changerait (CA-01).
+- Une base par projet : les émulateurs et la production ne se mêlent pas.
+- Une copie illisible, ou impossible à enregistrer, ramène au chargement
+  complet, jamais à une liste vide (AG-11, AG-12).
+
+**Seulement là où Firestore garde son cache** (`persistanceHorsLigne`, exporté
+par `src/config/firebase.js`) :
+- en production, avec `VITE_FIRESTORE_OFFLINE_PERSISTENCE=true`, déjà présent
+  dans les variables Vercel ;
+- sur les émulateurs, avec `VITE_FIRESTORE_PERSISTANCE_EMULATEURS=true`.
+
+Ailleurs, le chemin est le même, sans copie : sur des émulateurs repartis vides,
+une copie de la veille pourrait se croire plus récente que les données.
+
+**Gain, par appareil et par démarrage :** 65 lectures et ~5 Mo deviennent 1
+lecture, plus ~80 Ko par tranche modifiée depuis la veille. La machine est
+éteinte chaque soir : chaque matin était un chargement complet.
+
+**Tests :**
+- TC-350 : 18 cas, sur le chemin, la cohérence, les pannes et la relecture des
+  dates.
+- TC-265 [12 à 17].
+- Six mutations volontaires du code, toutes attrapées.
+
+**Vérifié dans un vrai navigateur.** Le build est servi avec son service
+worker, et la persistance est active sur les émulateurs :
+- **Première ouverture** : l'annuaire entier, puis l'écoute des changements. La
+  copie tient les 64 tranches et sa marque.
+- **Rechargement** : seule l'écoute des changements part. La liste entière
+  s'affiche en moins d'une seconde, dans le même ordre, et `globalClients` n'est
+  pas écouté.
+- **Modifications faites ailleurs** : une fiche ajoutée et une fiche renommée
+  arrivent d'elles-mêmes, et restent après un rechargement.
+- **Réseau coupé, puis rechargement** : la liste entière, renommage compris, en
+  0,5 s.
+- **Console** : aucune erreur avant la coupure. Après, seule celle
+  d'`ensureNetworkBalances`, déjà notée en G0.
+
+**Déploiement :** le front seul, par push GitHub puis promotion (décision
+humaine). Aucune function, aucune règle, aucun index.
+
+**Limites acceptées :**
+- La copie reste sur l'appareil après une déconnexion, comme le cache de
+  Firestore. Ce sont les mêmes fiches, déjà lisibles par tout compte connecté.
+- Une copie existante ne verrait pas des tranches supprimées à la main. Seule
+  la reconstruction, qui réécrit les 64 tranches, est prévue.
 
 ---
 

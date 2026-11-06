@@ -13,9 +13,10 @@ import {
   limit,
   startAfter,
   writeBatch,
-  serverTimestamp
+  serverTimestamp,
+  Timestamp
 } from 'firebase/firestore'
-import { db } from '../config/firebase'
+import { db, persistanceHorsLigne } from '../config/firebase'
 import { withErrorHandling } from '../utils/errorHandler'
 import cacheManager, { cacheUtils } from '../utils/cacheManager'
 import { FIRESTORE_CONFIG } from '../constants/firestoreConstants'
@@ -48,7 +49,8 @@ import { DraftService } from './draftService.js'
 import { HistoryService } from './historyService.js'
 import { BalanceService } from './balanceService.js'
 import { normalizeSubscriptionObserver, notifySubscriptionError } from './subscriptionObserver.js'
-import { COLLECTION_ANNUAIRE, ecouterAvecRepli, lireAnnuaire } from './annuaireClients.js'
+import { COLLECTION_ANNUAIRE, ecouterAnnuaireGarde, ecouterAvecRepli } from './annuaireClients.js'
+import { ouvrirCopieAnnuaire } from './copieAnnuaire.js'
 
 // Service Firestore modulaire avec cache, gestion d'erreurs et optimisations
 
@@ -982,6 +984,8 @@ export class FirestoreService {
    *   chargement. Le contrat ne change pas — des fiches `{ id, ...champs }`,
    *   les erreurs vers `onError` — et le repli garde une liste entière tant que
    *   l'annuaire n'est pas rempli ou pas lisible. Voir `annuaireClients.js`.
+   *   Depuis le lot G2, l'annuaire est gardé sur l'appareil : 1 lecture à
+   *   l'ouverture si rien n'a changé.
    */
   subscribeToClients(callback) {
     this.requireActiveStore()
@@ -991,13 +995,36 @@ export class FirestoreService {
     }, normalizeSubscriptionObserver(callback))
   }
 
-  /** L'annuaire des clients, lu par `lireAnnuaire` : `{ complet, clients }`. */
+  /**
+   * L'annuaire des clients, `{ complet, clients }` : gardé sur l'appareil et
+   * relu par différence (lot G2, voir `ecouterAnnuaireGarde`).
+   */
   _ecouterAnnuaireClients(callback) {
+    const annuaire = collection(db, COLLECTION_ANNUAIRE)
+    return ecouterAnnuaireGarde({
+      copie: this._copieAnnuaire(),
+      ecouterTout: (cb) => this._ecouterTranches(annuaire, cb),
+      ecouterDepuis: (depuis, cb) => this._ecouterTranches(
+        query(annuaire, where('majLe', '>', new Timestamp(depuis.seconds, depuis.nanoseconds))),
+        cb,
+      ),
+    }, normalizeSubscriptionObserver(callback))
+  }
+
+  /**
+   * Une écoute de l'annuaire, réponses du cache comprises.
+   *
+   * ⚠ `includeMetadataChanges`, SINON LA RÉPONSE DU SERVEUR PEUT NE JAMAIS
+   *   VENIR. Quand elle égale ce que le cache a déjà montré, Firestore ne
+   *   rappelle pas l'écoute. Or seule une réponse du serveur fait foi pour la
+   *   copie : sans cette option, elle attendrait la prochaine modification.
+   */
+  _ecouterTranches(cible, callback) {
     const observer = normalizeSubscriptionObserver(callback)
-    return onSnapshot(collection(db, COLLECTION_ANNUAIRE),
+    return onSnapshot(cible, { includeMetadataChanges: true },
       (snapshot) => {
         try {
-          observer.onNext(lireAnnuaire(snapshot.docs))
+          observer.onNext({ depuisServeur: snapshot.metadata?.fromCache !== true, docs: snapshot.docs })
         } catch (error) {
           notifySubscriptionError(observer, error, 'Annuaire snapshot processing error')
         }
@@ -1006,6 +1033,21 @@ export class FirestoreService {
         notifySubscriptionError(observer, error, 'Annuaire subscription error')
       }
     )
+  }
+
+  /**
+   * La copie de l'annuaire sur l'appareil, une par service.
+   *
+   * ⚠ SEULEMENT LÀ OÙ FIRESTORE GARDE AUSSI SON CACHE. Les émulateurs
+   *   repartent vides, ou d'un export ancien : une copie gardée d'une session
+   *   précédente pourrait s'y croire plus récente que les données, et la liste
+   *   resterait celle de la veille. Sans copie, le chemin est le même, avec un
+   *   chargement complet à chaque ouverture.
+   */
+  _copieAnnuaire() {
+    if (!persistanceHorsLigne) return null
+    this._copieAnnuaireLocale ??= ouvrirCopieAnnuaire({ projet: db.app.options.projectId, Timestamp })
+    return this._copieAnnuaireLocale
   }
 
   /**

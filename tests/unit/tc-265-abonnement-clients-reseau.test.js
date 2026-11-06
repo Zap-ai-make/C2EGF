@@ -20,14 +20,16 @@ const doc = vi.fn((_db, ...segments) => ({ path: segments.join('/') }))
 vi.mock('firebase/firestore', () => ({
   collection: (...a) => collection(...a),
   onSnapshot: (...a) => onSnapshot(...a),
-  doc: (...a) => doc(...a), getDoc: vi.fn(), getDocs: vi.fn(), query: vi.fn(),
-  where: vi.fn(), orderBy: vi.fn(), limit: vi.fn(), startAfter: vi.fn(),
+  doc: (...a) => doc(...a), getDoc: vi.fn(), getDocs: vi.fn(),
+  query: (ref, ...contraintes) => ({ ref, contraintes }),
+  where: (...a) => ({ where: a }), orderBy: vi.fn(), limit: vi.fn(), startAfter: vi.fn(),
   serverTimestamp: vi.fn(), addDoc: vi.fn(), setDoc: vi.fn(),
   updateDoc: vi.fn(), deleteDoc: vi.fn(), writeBatch: vi.fn(),
   getCountFromServer: vi.fn(), collectionGroup: vi.fn(), runTransaction: vi.fn(),
+  Timestamp: class { constructor(seconds, nanoseconds) { Object.assign(this, { seconds, nanoseconds }) } },
 }))
 
-vi.mock('../../src/config/firebase.js', () => ({ db: {}, auth: {}, functions: {} }))
+vi.mock('../../src/config/firebase.js', () => ({ db: {}, auth: {}, functions: {}, persistanceHorsLigne: false }))
 
 const { firestoreService } = await import('../../src/services/firestore.js')
 
@@ -74,14 +76,18 @@ describe('TC-265 — le patron s’abonne sans boutique active', () => {
   })
 })
 
-/** Fait répondre l'annuaire — toujours la PREMIÈRE écoute ouverte. */
+/**
+ * Fait répondre le serveur pour l'annuaire entier — toujours la PREMIÈRE écoute
+ * ouverte, avec `includeMetadataChanges` depuis le lot G2.
+ */
 function annuaireRepond(docs) {
-  const [ref, surSuivant] = onSnapshot.mock.calls[0]
+  const [ref, options, surSuivant] = onSnapshot.mock.calls[0]
   expect(ref).toEqual({ path: 'annuaireClients' })
-  surSuivant({ docs })
+  expect(options).toEqual({ includeMetadataChanges: true })
+  surSuivant({ docs, metadata: { fromCache: false } })
 }
 
-const tranche = (id, entrees) => ({ id, data: () => ({ entrees }) })
+const tranche = (id, entrees) => ({ id, data: () => ({ entrees, majLe: { seconds: 10, nanoseconds: 5 } }) })
 const ETAT_COMPLET = { id: '_etat', data: () => ({ complet: true, tranches: 64, fiches: 2 }) }
 
 describe('TC-265 — par l’annuaire quand il est complet (§A1)', () => {
@@ -97,7 +103,27 @@ describe('TC-265 — par l’annuaire quand il est complet (§A1)', () => {
     firestoreService.subscribeToAllClients(recu)
     annuaireRepond([ETAT_COMPLET, tranche('t00', { c1: { nom: 'OUEDRAOGO' } }), tranche('t01', { c2: { nom: 'KABORE' } })])
     expect(recu).toHaveBeenCalledWith([{ id: 'c1', nom: 'OUEDRAOGO' }, { id: 'c2', nom: 'KABORE' }])
-    expect(onSnapshot).toHaveBeenCalledTimes(1)
+    expect(collection).not.toHaveBeenCalledWith(expect.anything(), 'globalClients')
+  })
+
+  // Lot G2 : une fois l'annuaire lu, seules les tranches modifiées depuis sont
+  // demandées. L'écoute de la collection entière se ferme.
+  it('[TC-265-16] puis seules les tranches modifiées depuis la plus récente sont écoutées', () => {
+    firestoreService.subscribeToAllClients(vi.fn())
+    annuaireRepond([ETAT_COMPLET, tranche('t00', { c1: { nom: 'OUEDRAOGO' } })])
+
+    expect(onSnapshot.mock.results[0].value).toHaveBeenCalled()
+    expect(onSnapshot).toHaveBeenCalledTimes(2)
+    const [cible, options] = onSnapshot.mock.calls[1]
+    expect(options).toEqual({ includeMetadataChanges: true })
+    expect(cible).toEqual({
+      ref: { path: 'annuaireClients' },
+      contraintes: [{ where: ['majLe', '>', expect.objectContaining({ seconds: 10, nanoseconds: 5 })] }],
+    })
+  })
+
+  it('[TC-265-17] sans cache Firestore (émulateurs), aucune copie n’est gardée sur l’appareil', () => {
+    expect(firestoreService._copieAnnuaire()).toBeNull()
   })
 
   it('[TC-265-14] le chemin boutique passe par le même annuaire, précondition intacte', () => {
@@ -106,7 +132,7 @@ describe('TC-265 — par l’annuaire quand il est complet (§A1)', () => {
     firestoreService.subscribeToClients(recu)
     annuaireRepond([ETAT_COMPLET, tranche('t00', { c1: { nom: 'OUEDRAOGO' } })])
     expect(recu).toHaveBeenCalledWith([{ id: 'c1', nom: 'OUEDRAOGO' }])
-    expect(onSnapshot).toHaveBeenCalledTimes(1)
+    expect(collection).not.toHaveBeenCalledWith(expect.anything(), 'globalClients')
   })
 
   it('[TC-265-15] une erreur de l’annuaire n’atteint pas l’écran : le repli s’ouvre', () => {
@@ -114,7 +140,7 @@ describe('TC-265 — par l’annuaire quand il est complet (§A1)', () => {
     const recu = vi.fn()
     recu.onError = vi.fn()
     firestoreService.subscribeToAllClients(recu)
-    const [, , surErreur] = onSnapshot.mock.calls[0]
+    const [, , , surErreur] = onSnapshot.mock.calls[0]
     surErreur(Object.assign(new Error('refusé'), { code: 'permission-denied' }))
     expect(recu.onError).not.toHaveBeenCalled()
     expect(collection).toHaveBeenCalledWith(expect.anything(), 'globalClients')

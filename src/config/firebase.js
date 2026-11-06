@@ -69,6 +69,9 @@ let app
 let auth
 let db
 let functions
+// Vrai quand Firestore garde son cache sur le disque : l'annuaire y garde
+// alors aussi sa copie (`copieAnnuaire.js`, lot G2).
+let persistanceHorsLigne = false
 
 try {
   const firebaseConfig = createFirebaseConfig()
@@ -89,6 +92,7 @@ try {
   const persistance = import.meta.env.VITE_FIRESTORE_OFFLINE_PERSISTENCE === 'true' && (
     runtime.production || import.meta.env.VITE_FIRESTORE_PERSISTANCE_EMULATEURS === 'true'
   )
+  persistanceHorsLigne = persistance
   if (persistance) {
     db = initializeFirestore(app, {
       localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
@@ -116,5 +120,5 @@ try {
   throw error
 }
 
-export { auth, db, functions }
+export { auth, db, functions, persistanceHorsLigne }
 export default app
