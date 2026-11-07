@@ -371,6 +371,40 @@ pourrait y perdre. C'est une décision de l'utilisateur, pas un lot technique.
 - Les deux sont des `getDocs`, donc au serveur à chaque fois. La liste des
   boutiques ne change presque jamais : lire d'abord le cache
   (`getDocsFromCache`), ou passer par une écoute que la persistance reprendra.
+- Le patron paie la même chose : son écran Boutiques appelle `listNetworkCaisses`.
+- `listOutstandingDrafts` (l'argent dehors, appelée par les deux mêmes écrans) relit
+  côté serveur le profil, les 84 boutiques et **toutes** les non terminées du réseau.
+
+Une ouverture de l'accueil du dealer ou de l'écran Boutiques coûtait donc ~250
+lectures, plus les non terminées.
+
+**A4a — fait le 2026-11-07 : les boutiques, une fois par session.**
+`src/services/boutiquesActives.js` ouvre une seule écoute des boutiques actives à la
+première demande, et la garde jusqu'à la déconnexion. `listAllActiveStores` et
+`listNetworkCaisses` s'en servent.
+- **84 lectures par session** au lieu de 84 par ouverture, puis une par boutique
+  créée, renommée ou fermée. Une boutique créée apparaît sans recharger la page.
+- La première réponse servie est celle du serveur (`includeMetadataChanges`, même
+  constat qu'en A3a). Hors ligne : le cache, tout de suite si le navigateur se sait
+  hors ligne, sinon après 10 s sans serveur, comme le `getDocs` remplacé.
+- L'écoute se ferme à la déconnexion et à tout changement de compte.
+- Les soldes restent relus à chaque ouverture : ils changent à chaque opération.
+- Tests : TC-366 (BA-01 à 11), TC-030 suit le changement. Cinq mutations du module,
+  toutes tuées.
+- Vérifié dans l'application, sur les émulateurs, en comptant les cibles d'écoute
+  posées : accueil du dealer, formulaire, retour à l'accueil, formulaire de nouveau →
+  **une seule lecture des boutiques**, et une des soldes par ouverture de l'accueil.
+  Une boutique créée pendant la session apparaît dans le formulaire. Après
+  déconnexion, le patron rouvre une écoute à lui et voit la boutique neuve. Aucune
+  erreur console.
+
+**A4b — à faire : `listOutstandingDrafts` ne relit plus les boutiques.** L'application
+lui envoie les boutiques qu'elle connaît ; sans elles (anciennes versions), la function
+garde son comportement. Gain : 84 lectures de plus par ouverture. Function à déployer
+avant de pousser l'application, le soir (`docs/deployer-les-functions.md` §5).
+
+**Reste :** l'écran Boutiques du dealer (`DealerStores.jsx`, `/dealer/stores`) pagine
+20 boutiques et lit leurs soldes une par une : 40 lectures par page, à chaque ouverture.
 
 ### A5. Les petits postes, acceptables en l'état
 
@@ -657,7 +691,7 @@ sont une décision humaine.
 | 5 | C1 — région — **temps 1 et 2 prêts le 2026-11-06, à déployer puis pousser** ; C2 écarté (sans gain après C1) | temps facturé ÷ 3 à 5 | moyen : migration de région |
 | 6 | C3 — CPU | vCPU-s ÷ ~6 | à mesurer : démarrage à froid, concurrence |
 | 7 | D1 — ordre du prompt | jetons d'entrée | faible |
-| 8 | B2, C5, A4 | stockage, images, dealer | faible |
+| 8 | B2, C5, A4 — **A4a fait le 2026-11-07** ; A4b (argent dehors) à faire | stockage, images ; A4 : 84 lectures par ouverture et par lot | faible |
 
 ---
 

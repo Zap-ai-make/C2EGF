@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   limit: vi.fn(n => ({ limit: n })),
   startAfter: vi.fn(d => ({ startAfter: d })),
   httpsCallable: vi.fn(),
+  lireBoutiquesActives: vi.fn(),
 }))
 
 vi.mock('firebase/functions', () => ({ httpsCallable: mocks.httpsCallable }))
@@ -39,6 +40,12 @@ vi.mock('firebase/firestore', () => ({
   limit: mocks.limit,
   startAfter: mocks.startAfter,
   serverTimestamp: mocks.serverTimestamp,
+}))
+
+// Les boutiques actives viennent de l'écoute partagée (lot A4a), tenue par
+// TC-366 ; ici, seule compte la façon dont le service s'en sert.
+vi.mock('../../src/services/boutiquesActives.js', () => ({
+  lireBoutiquesActives: mocks.lireBoutiquesActives,
 }))
 
 vi.mock('../../src/config/firebase', () => ({
@@ -516,7 +523,7 @@ describe('TC-030-LST — listActiveStores (paginée, limit N+1)', () => {
 describe('TC-030-ALL — listAllActiveStores (sans pagination)', () => {
   it('[ALL-01] rend TOUTES les boutiques, bien au-delà de la taille de page', async () => {
     const docs = Array.from({ length: 84 }, (_, i) => ({ name: `Store ${i}`, active: true }))
-    mocks.getDocs.mockResolvedValue(makeQuerySnap(docs))
+    mocks.lireBoutiquesActives.mockResolvedValue(makeQuerySnap(docs).docs)
 
     const result = await listAllActiveStores()
 
@@ -524,22 +531,21 @@ describe('TC-030-ALL — listAllActiveStores (sans pagination)', () => {
     expect(result.stores[83].name).toBe('Store 83')
   })
 
-  it('[ALL-02] n’applique NI limite NI curseur', async () => {
-    // C'est l'assertion qui empêche la régression : le jour où quelqu'un
-    // « harmonise » les deux fonctions en ajoutant une limite ici, le
-    // formulaire redevient aveugle aux trois quarts du réseau, en silence.
-    mocks.getDocs.mockResolvedValue(makeQuerySnap([{ name: 'A', active: true }]))
+  it('[ALL-02] lit l’écoute partagée, sans requête ni curseur à elle', async () => {
+    // L'absence de limite est tenue là où la requête vit désormais :
+    // TC-366 [BA-01]. Ici, le formulaire ne doit plus lancer sa propre lecture.
+    mocks.lireBoutiquesActives.mockResolvedValue(makeQuerySnap([{ name: 'A', active: true }]).docs)
 
     await listAllActiveStores()
 
+    expect(mocks.lireBoutiquesActives).toHaveBeenCalledTimes(1)
+    expect(mocks.getDocs).not.toHaveBeenCalled()
     expect(mocks.limit).not.toHaveBeenCalled()
     expect(mocks.startAfter).not.toHaveBeenCalled()
-    expect(mocks.where).toHaveBeenCalledWith('active', '==', true)
-    expect(mocks.orderBy).toHaveBeenCalledWith('name')
   })
 
   it('[ALL-03] n’expose ni lastDoc ni hasMore : il n’y a pas de suite', async () => {
-    mocks.getDocs.mockResolvedValue(makeQuerySnap([{ name: 'A', active: true }]))
+    mocks.lireBoutiquesActives.mockResolvedValue(makeQuerySnap([{ name: 'A', active: true }]).docs)
 
     const result = await listAllActiveStores()
 
@@ -548,13 +554,13 @@ describe('TC-030-ALL — listAllActiveStores (sans pagination)', () => {
   })
 
   it('[ALL-04] réseau vide → liste vide, pas une erreur', async () => {
-    mocks.getDocs.mockResolvedValue(makeQuerySnap([]))
+    mocks.lireBoutiquesActives.mockResolvedValue([])
     await expect(listAllActiveStores()).resolves.toEqual({ stores: [] })
   })
 
   it('[ALL-05] permission-denied → message mappé, comme la version paginée', async () => {
     const fsError = Object.assign(new Error('permission denied'), { code: 'permission-denied' })
-    mocks.getDocs.mockRejectedValue(fsError)
+    mocks.lireBoutiquesActives.mockRejectedValue(fsError)
     await expect(listAllActiveStores()).rejects.toThrow('Accès refusé')
   })
 })
@@ -681,20 +687,22 @@ function makeBalancesSnap(entries) {
 const orange = (stock, liquidite) => ({ Orange: { stock, liquidite } })
 
 describe('listNetworkCaisses', () => {
-  it('[CAI-01] joint les boutiques et leurs soldes en deux requêtes, quel que soit le nombre', async () => {
-    mocks.getDocs
-      .mockResolvedValueOnce(makeStoresSnap([
+  it('[CAI-01] joint les boutiques de l’écoute partagée et les soldes, relus en une requête', async () => {
+    mocks.lireBoutiquesActives.mockResolvedValueOnce(makeStoresSnap([
         { id: 'store-a', name: 'POUYTENGA' },
         { id: 'store-b', name: 'ZORGHO' },
-      ]))
-      .mockResolvedValueOnce(makeBalancesSnap([
+      ]).docs)
+    mocks.getDocs.mockResolvedValueOnce(makeBalancesSnap([
         { storeId: 'store-a', balances: orange(180000, 2940000) },
         { storeId: 'store-b', balances: orange(4180000, 410000) },
       ]))
 
     const r = await listNetworkCaisses()
 
-    expect(mocks.getDocs).toHaveBeenCalledTimes(2)
+    expect(mocks.lireBoutiquesActives).toHaveBeenCalledTimes(1)
+    // Les soldes changent à chaque opération : eux restent lus au serveur.
+    expect(mocks.getDocs).toHaveBeenCalledTimes(1)
+    expect(mocks.collectionGroup).toHaveBeenCalledWith({}, 'networkBalances')
     expect(r.total).toBe(2)
     expect(r.caisses[0]).toMatchObject({ storeId: 'store-a', name: 'POUYTENGA', stock: 180000, liquidite: 2940000 })
     expect(r.sommeStock).toBe(4360000)
@@ -706,9 +714,8 @@ describe('listNetworkCaisses', () => {
     // La requête de groupe rend AUSSI les documents des boutiques fermées.
     // Partir des soldes plutôt que des boutiques actives gonflerait la somme
     // d'un argent qui n'est plus en service.
-    mocks.getDocs
-      .mockResolvedValueOnce(makeStoresSnap([{ id: 'store-a', name: 'POUYTENGA' }]))
-      .mockResolvedValueOnce(makeBalancesSnap([
+    mocks.lireBoutiquesActives.mockResolvedValueOnce(makeStoresSnap([{ id: 'store-a', name: 'POUYTENGA' }]).docs)
+    mocks.getDocs.mockResolvedValueOnce(makeBalancesSnap([
         { storeId: 'store-a', balances: orange(100, 200) },
         { storeId: 'store-fermee', balances: orange(999999, 999999) },
       ]))
@@ -721,12 +728,11 @@ describe('listNetworkCaisses', () => {
   })
 
   it('[CAI-03] une caisse sans document de soldes est INCONNUE, pas vide', async () => {
-    mocks.getDocs
-      .mockResolvedValueOnce(makeStoresSnap([
+    mocks.lireBoutiquesActives.mockResolvedValueOnce(makeStoresSnap([
         { id: 'store-a', name: 'POUYTENGA' },
         { id: 'store-neuve', name: 'BOUTIQUE NEUVE' },
-      ]))
-      .mockResolvedValueOnce(makeBalancesSnap([
+      ]).docs)
+    mocks.getDocs.mockResolvedValueOnce(makeBalancesSnap([
         { storeId: 'store-a', balances: orange(500, 700) },
       ]))
 
@@ -740,9 +746,8 @@ describe('listNetworkCaisses', () => {
   })
 
   it('[CAI-04] un montant non numérique est inconnu, il n’est pas lu comme zéro', async () => {
-    mocks.getDocs
-      .mockResolvedValueOnce(makeStoresSnap([{ id: 'store-a', name: 'POUYTENGA' }]))
-      .mockResolvedValueOnce(makeBalancesSnap([
+    mocks.lireBoutiquesActives.mockResolvedValueOnce(makeStoresSnap([{ id: 'store-a', name: 'POUYTENGA' }]).docs)
+    mocks.getDocs.mockResolvedValueOnce(makeBalancesSnap([
         { storeId: 'store-a', balances: { Orange: { stock: 'beaucoup', liquidite: 300 } } },
       ]))
 
@@ -754,9 +759,8 @@ describe('listNetworkCaisses', () => {
   })
 
   it('[CAI-05] un réseau absent du document rend une caisse inconnue', async () => {
-    mocks.getDocs
-      .mockResolvedValueOnce(makeStoresSnap([{ id: 'store-a', name: 'POUYTENGA' }]))
-      .mockResolvedValueOnce(makeBalancesSnap([
+    mocks.lireBoutiquesActives.mockResolvedValueOnce(makeStoresSnap([{ id: 'store-a', name: 'POUYTENGA' }]).docs)
+    mocks.getDocs.mockResolvedValueOnce(makeBalancesSnap([
         { storeId: 'store-a', balances: { Moov: { stock: 10, liquidite: 20 } } },
       ]))
 
@@ -767,9 +771,8 @@ describe('listNetworkCaisses', () => {
   })
 
   it('[CAI-06] un réseau vide ne rend aucune caisse, et aucune somme', async () => {
-    mocks.getDocs
-      .mockResolvedValueOnce(makeStoresSnap([]))
-      .mockResolvedValueOnce(makeBalancesSnap([]))
+    mocks.lireBoutiquesActives.mockResolvedValueOnce(makeStoresSnap([]).docs)
+    mocks.getDocs.mockResolvedValueOnce(makeBalancesSnap([]))
 
     const r = await listNetworkCaisses()
 
@@ -782,7 +785,17 @@ describe('listNetworkCaisses', () => {
   it('[CAI-07] une erreur Firestore remonte traduite, jamais brute', async () => {
     const err = new Error('raw')
     err.code = 'permission-denied'
+    mocks.lireBoutiquesActives.mockResolvedValue([])
     mocks.getDocs.mockRejectedValue(err)
+
+    await expect(listNetworkCaisses()).rejects.toThrow('Accès refusé')
+  })
+
+  it('[CAI-08] une écoute des boutiques refusée remonte traduite aussi', async () => {
+    const err = new Error('raw')
+    err.code = 'permission-denied'
+    mocks.lireBoutiquesActives.mockRejectedValue(err)
+    mocks.getDocs.mockResolvedValue(makeBalancesSnap([]))
 
     await expect(listNetworkCaisses()).rejects.toThrow('Accès refusé')
   })

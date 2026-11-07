@@ -37,6 +37,7 @@ import {
 } from 'firebase/firestore'
 import { httpsCallable } from 'firebase/functions'
 import { db, functions } from '../config/firebase'
+import { lireBoutiquesActives } from './boutiquesActives.js'
 import { parseStrictInteger as parseDealerAmount } from '../utils/parseStrictInteger'
 import { AUTH_ROLES } from '../constants/authMessages'
 import {
@@ -154,16 +155,15 @@ export async function listActiveStores({ lastDoc: cursor = null } = {}) {
 //   jour où ce nombre change d'ordre de grandeur, c'est le menu déroulant qui
 //   devient le mauvais dessin, pas cette requête — et on le remplacera par une
 //   recherche serveur, pas par une page de 20 muette.
+//
+// La liste vient de l'écoute partagée de `boutiquesActives.js` (lot A4a) : le
+// formulaire ne relit plus les 84 boutiques à chaque ouverture.
 // ---------------------------------------------------------------------------
 
 export async function listAllActiveStores() {
   try {
-    const snap = await getDocs(query(
-      collection(db, STORES_COLLECTION),
-      where('active', '==', true),
-      orderBy('name'),
-    ))
-    return { stores: snap.docs.map(d => ({ id: d.id, ...d.data() })) }
+    const docs = await lireBoutiquesActives()
+    return { stores: docs.map(d => ({ id: d.id, ...d.data() })) }
   } catch (err) {
     throw mapFirestoreError(err)
   }
@@ -199,7 +199,12 @@ export async function getStoreBalances(storeId) {
 //   réseau à 2 — et surtout que l'écran peut enfin montrer les 84 d'un coup,
 //   ce que la pagination à 20 lui interdisait structurellement.
 //
-// Les deux requêtes partent ensemble : la seconde n'attend pas la première.
+// Les deux lectures partent ensemble : la seconde n'attend pas la première.
+//
+// Depuis le lot A4a, les boutiques viennent de l'écoute partagée de
+// `boutiquesActives.js` : 84 lectures par session au lieu de 84 par ouverture.
+// Les soldes, eux, restent relus au serveur à chaque appel : ils changent à
+// chaque opération, et l'écran doit montrer les vrais montants.
 //
 // Droits : `stores` est lisible par le dealer (firestore.rules §Boutiques), et
 // le groupe `networkBalances` aussi (`match /{path=**}/networkBalances/{docId}`).
@@ -208,12 +213,8 @@ export async function getStoreBalances(storeId) {
 
 export async function listNetworkCaisses({ network = DEALER_NETWORK } = {}) {
   try {
-    const [storesSnap, balancesSnap] = await Promise.all([
-      getDocs(query(
-        collection(db, STORES_COLLECTION),
-        where('active', '==', true),
-        orderBy('name'),
-      )),
+    const [boutiques, balancesSnap] = await Promise.all([
+      lireBoutiquesActives(),
       getDocs(query(collectionGroup(db, NETWORK_BALANCES_COLLECTION))),
     ])
 
@@ -229,7 +230,7 @@ export async function listNetworkCaisses({ network = DEALER_NETWORK } = {}) {
     // ⚠ On part des BOUTIQUES ACTIVES, pas des soldes. Le groupe rend aussi les
     //   documents des boutiques fermées : les prendre pour base gonflerait la
     //   somme des caisses d'un argent qui n'est plus en service.
-    const caisses = storesSnap.docs.map((d) => {
+    const caisses = boutiques.map((d) => {
       const solde = soldes.get(d.id)
       return {
         storeId: d.id,
