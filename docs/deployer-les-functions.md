@@ -163,6 +163,36 @@ pleine, toute function sans instance chaude répond `503`, production comprise.
 
 ---
 
+## 6. Une callable dont la création a échoué reste fermée (403)
+
+Vécu le 2026-11-07, sur les sept callables d'us-central1 que le quota (§5) avait fait
+échouer à la création. Redéployées avec succès, elles répondaient toutes :
+
+```
+403 Forbidden — Your client does not have permission to get URL /<nom>
+```
+
+C'est le refus de Cloud Run, avant même le code : le service n'est pas ouvert au
+public. Le CLI (15.13, `lib/deploy/functions/release/fabricator.js`) n'ouvre une
+callable au public (`allUsers`, rôle `run.invoker`) **qu'à sa création**.
+`updateV2Function` n'a pas de branche pour les callables. Si la création échoue
+après que la function existe, chaque déploiement suivant est une mise à jour, et
+l'accès public n'est jamais posé.
+
+**Le remède, sans rien redéployer ni démarrer**, dans Cloud Shell (décision
+humaine). Le service Cloud Run porte le nom de la function en minuscules :
+
+```bash
+gcloud run services add-iam-policy-binding <nom-en-minuscules> \
+  --region=<region> --project=c2egf-b0b5a \
+  --member=allUsers --role=roles/run.invoker
+```
+
+C'est exactement ce que le CLI fait à la création. L'authentification reste vérifiée
+dans le code de chaque callable, comme pour toutes les autres.
+
+---
+
 ## Ce qu'il n'y a PAS à déployer
 
 - `firestore.rules` et `firestore.indexes.json` ne changent que si on les a
