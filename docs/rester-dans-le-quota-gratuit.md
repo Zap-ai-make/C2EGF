@@ -23,6 +23,20 @@
 | Cloud Run (functions) | 180 000 vCPU-s · 360 000 Gio-s · 2 M requêtes / mois, par compte de facturation | 1,06 $ de CPU (`storeTransactionCommand` 0,63 $, `addTransactionPayment` 0,44 $) |
 | Vertex AI / Agent Platform | **aucun** | 0,14 $ |
 
+**Relevé du 2026-11-07** (console Firebase, Firestore > Utilisation, 7 derniers jours ;
+chaque point est le total de la veille) : 3 M de lectures du 31 octobre au 6 novembre.
+
+| 31 oct. | 1er nov. | 2 nov. | 3 nov. | 4 nov. | 5 nov. | 6 nov. |
+|---:|---:|---:|---:|---:|---:|---:|
+| ~365 k | ~225 k | ~480 k | ~640 k | ~530 k | ~400 k | ~320 k |
+
+- 35 k écritures et 3,6 k suppressions sur la semaine : loin des quotas.
+- 12 connexions actives au plus, 85 écoutes : ~27 000 lectures par appareil et par jour,
+  la signature de la base clients entière (15 679) chargée deux fois.
+- **L'annuaire (A1) n'est en production que depuis le 2026-11-06 à 09:50 UTC** (4081650),
+  et chaque appareil ne le prend qu'au rechargement suivant. Le 6 novembre est donc une
+  demi-journée ; le 7 est le premier jour complet à comparer.
+
 Trois faits qui cadrent tout le reste :
 
 - **Le quota gratuit ne vaut que pour la base `(default)`.** Une base nommée paie
