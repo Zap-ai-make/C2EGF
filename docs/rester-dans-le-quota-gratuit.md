@@ -398,10 +398,26 @@ première demande, et la garde jusqu'à la déconnexion. `listAllActiveStores` e
   déconnexion, le patron rouvre une écoute à lui et voit la boutique neuve. Aucune
   erreur console.
 
-**A4b — à faire : `listOutstandingDrafts` ne relit plus les boutiques.** L'application
-lui envoie les boutiques qu'elle connaît ; sans elles (anciennes versions), la function
-garde son comportement. Gain : 84 lectures de plus par ouverture. Function à déployer
-avant de pousser l'application, le soir (`docs/deployer-les-functions.md` §5).
+**A4b — codé le 2026-11-07 : `listOutstandingDrafts` ne relit plus les boutiques.**
+`listArgentDehors` lui envoie `{ boutiques: [{ id, name }] }`, tirées de l'écoute
+partagée d'A4a. Sans cette liste (versions antérieures de l'application), la function
+relit `stores` comme avant.
+- **Gain : 84 lectures de plus par ouverture** de l'accueil du dealer ou de l'écran
+  Boutiques du patron.
+- La liste est bornée et vérifiée avant toute lecture (500 boutiques, textes de 200
+  caractères au plus), et le garde de rôle passe toujours en premier.
+- Deux replis côté application : écoute en échec → appel sans liste ; function
+  antérieure qui refuse le champ (`invalid-argument`) → second appel sans liste. **Le
+  push peut donc précéder le déploiement** : en attendant, chaque ouverture fait un
+  appel refusé de plus, sans aucune lecture (le refus tombe avant).
+- Tests : TC-213-C (OD-01 à 06) côté function, TC-030-OUT (OUT-01 à 05) côté
+  application. Huit mutations, toutes tuées.
+- Vérifié sur les émulateurs : la function reçoit les 2 boutiques et rend 5 000 d'argent
+  dehors ; l'accueil du dealer et l'écran Boutiques du patron l'affichent. Face à une
+  function antérieure simulée qui refuse la liste, le second appel rend le même montant.
+- **Geste humain**, le soir (`docs/deployer-les-functions.md` §5) :
+  `firebase deploy --only "functions:listOutstandingDrafts"` (deux régions jusqu'au
+  temps 3 du C1).
 
 **Reste :** l'écran Boutiques du dealer (`DealerStores.jsx`, `/dealer/stores`) pagine
 20 boutiques et lit leurs soldes une par une : 40 lectures par page, à chaque ouverture.
@@ -691,7 +707,7 @@ sont une décision humaine.
 | 5 | C1 — région — **temps 1 et 2 prêts le 2026-11-06, à déployer puis pousser** ; C2 écarté (sans gain après C1) | temps facturé ÷ 3 à 5 | moyen : migration de région |
 | 6 | C3 — CPU | vCPU-s ÷ ~6 | à mesurer : démarrage à froid, concurrence |
 | 7 | D1 — ordre du prompt | jetons d'entrée | faible |
-| 8 | B2, C5, A4 — **A4a fait le 2026-11-07** ; A4b (argent dehors) à faire | stockage, images ; A4 : 84 lectures par ouverture et par lot | faible |
+| 8 | B2, C5, A4 — **A4a en production le 2026-11-07** ; A4b codé, function à déployer | stockage, images ; A4 : 84 lectures par ouverture et par lot | faible |
 
 ---
 

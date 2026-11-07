@@ -106,16 +106,65 @@ beforeEach(() => {
 })
 
 describe('TC-030-OUT — argent dehors via agrégat serveur', () => {
-  it('[OUT-01] appelle la callable et ne lit aucun brouillon depuis le navigateur', async () => {
-    const callable = vi.fn(async () => ({
-      data: { success: true, parBoutique: [], depots: 1000, retraits: 200, dehors: 800, illisibles: 0, horsReseau: 0 },
-    }))
-    mocks.httpsCallable.mockReturnValueOnce(callable)
+  const AGREGAT = { success: true, parBoutique: [], depots: 1000, retraits: 200, dehors: 800, illisibles: 0, horsReseau: 0 }
+  const BOUTIQUES = [
+    { id: 'store-a', data: () => ({ name: 'FADA', active: true }) },
+    { id: 'store-b', data: () => ({ name: 42, active: true }) },
+  ]
+  const refus = (code) => Object.assign(new Error(code), { code: `functions/${code}` })
+
+  it('[OUT-01] envoie les boutiques de l’écoute partagée, et ne lit aucun brouillon depuis le navigateur', async () => {
+    // Lot A4b : la callable n'a plus à relire les 84 boutiques. L'argument de
+    // l'appelant reste ignoré : la liste vient toujours de l'écoute partagée.
+    mocks.lireBoutiquesActives.mockResolvedValue(BOUTIQUES)
+    const callable = vi.fn(async () => ({ data: AGREGAT }))
+    mocks.httpsCallable.mockReturnValue(callable)
 
     await expect(listArgentDehors({ boutiques: [{ storeId: 'ignoree' }] })).resolves.toMatchObject({ dehors: 800 })
     expect(mocks.httpsCallable).toHaveBeenCalledWith({}, 'listOutstandingDrafts')
-    expect(callable).toHaveBeenCalledWith({})
+    // Un nom illisible part à `null` : la callable refuserait la liste entière.
+    expect(callable).toHaveBeenCalledWith({ boutiques: [{ id: 'store-a', name: 'FADA' }, { id: 'store-b', name: null }] })
     expect(mocks.collectionGroup).not.toHaveBeenCalledWith({}, 'drafts')
+  })
+
+  it('[OUT-02] l’écoute des boutiques en échec : l’appel part sans la liste, comme avant', async () => {
+    mocks.lireBoutiquesActives.mockRejectedValue(refus('permission-denied'))
+    const callable = vi.fn(async () => ({ data: AGREGAT }))
+    mocks.httpsCallable.mockReturnValue(callable)
+
+    await expect(listArgentDehors()).resolves.toMatchObject({ dehors: 800 })
+    expect(callable).toHaveBeenCalledTimes(1)
+    expect(callable).toHaveBeenCalledWith({})
+  })
+
+  it('[OUT-03] une callable antérieure à A4b refuse la liste : second appel sans elle', async () => {
+    mocks.lireBoutiquesActives.mockResolvedValue(BOUTIQUES)
+    const callable = vi.fn()
+      .mockRejectedValueOnce(refus('invalid-argument'))
+      .mockResolvedValueOnce({ data: AGREGAT })
+    mocks.httpsCallable.mockReturnValue(callable)
+
+    await expect(listArgentDehors()).resolves.toMatchObject({ dehors: 800 })
+    expect(callable).toHaveBeenCalledTimes(2)
+    expect(callable.mock.calls[1][0]).toEqual({})
+  })
+
+  it('[OUT-04] tout autre refus remonte traduit, sans second appel', async () => {
+    mocks.lireBoutiquesActives.mockResolvedValue(BOUTIQUES)
+    const callable = vi.fn().mockRejectedValue(refus('permission-denied'))
+    mocks.httpsCallable.mockReturnValue(callable)
+
+    await expect(listArgentDehors()).rejects.toThrow('Accès refusé')
+    expect(callable).toHaveBeenCalledTimes(1)
+  })
+
+  it('[OUT-05] sans liste envoyée, un refus de format n’est pas rejoué', async () => {
+    mocks.lireBoutiquesActives.mockRejectedValue(new Error('écoute tombée'))
+    const callable = vi.fn().mockRejectedValue(refus('invalid-argument'))
+    mocks.httpsCallable.mockReturnValue(callable)
+
+    await expect(listArgentDehors()).rejects.toBeTruthy()
+    expect(callable).toHaveBeenCalledTimes(1)
   })
 })
 

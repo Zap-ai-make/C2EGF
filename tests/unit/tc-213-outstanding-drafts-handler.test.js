@@ -141,4 +141,68 @@ describe('TC-213-B — autorisation du callable', () => {
       .rejects.toMatchObject({ code: 'UNAUTHENTICATED' })
     expect(db.draftsGet).not.toHaveBeenCalled()
   })
+
+  /**
+   * Lot A4b (docs/rester-dans-le-quota-gratuit.md §A4) : l'application envoie les
+   * boutiques actives qu'elle garde pour la session. La callable ne relit plus
+   * `stores` — 84 lectures par ouverture — sauf si la liste manque (versions
+   * antérieures de l'application, tenues par les cas ci-dessus, qui envoient `{}`).
+   */
+  describe('TC-213-C — les boutiques envoyées par l’application', () => {
+    const FOURNIES = [{ id: 'store-a', name: 'FADA' }]
+
+    it('[OD-01] ne relit pas les boutiques, et rend le même agrégat', async () => {
+      const relues = await listOutstandingDraftsHandler({ auth: { uid: 'dealer-1' }, data: {} }, { db: makeDb() })
+      const db = makeDb()
+      const fournies = await listOutstandingDraftsHandler({ auth: { uid: 'dealer-1' }, data: { boutiques: FOURNIES } }, { db })
+
+      expect(db.storesGet).not.toHaveBeenCalled()
+      expect(db.draftsGet).toHaveBeenCalledOnce()
+      expect(fournies).toEqual(relues)
+    })
+
+    it('[OD-02] une non terminée d’une boutique absente de la liste reste hors réseau', async () => {
+      const db = makeDb()
+      const r = await listOutstandingDraftsHandler(
+        { auth: { uid: 'dealer-1' }, data: { boutiques: [{ id: 'store-b', name: 'POUYTENGA' }] } }, { db })
+      expect(r).toMatchObject({ dehors: 0, horsReseau: 1, parBoutique: [] })
+    })
+
+    it('[OD-03] un nom absent vaut null', async () => {
+      const r = await listOutstandingDraftsHandler(
+        { auth: { uid: 'dealer-1' }, data: { boutiques: [{ id: 'store-a' }] } }, { db: makeDb() })
+      expect(r.parBoutique).toEqual([{ storeId: 'store-a', name: null, depots: 5000, retraits: 0, dehors: 5000 }])
+    })
+
+    it.each([
+      ['pas une liste', { id: 'store-a' }],
+      ['un élément nul', [null]],
+      ['un identifiant vide', [{ id: '' }]],
+      ['un identifiant non textuel', [{ id: 7 }]],
+      ['un identifiant trop long', [{ id: 'x'.repeat(201) }]],
+      ['un nom non textuel', [{ id: 'store-a', name: 42 }]],
+      ['un nom trop long', [{ id: 'store-a', name: 'x'.repeat(201) }]],
+      ['plus de 500 boutiques', Array.from({ length: 501 }, (_, i) => ({ id: `s-${i}` }))],
+    ])('[OD-04] refuse %s, avant toute lecture', async (_cas, boutiques) => {
+      const db = makeDb()
+      await expect(listOutstandingDraftsHandler({ auth: { uid: 'dealer-1' }, data: { boutiques } }, { db }))
+        .rejects.toMatchObject({ code: 'INVALID_REQUEST_ID' })
+      expect(db.doc).not.toHaveBeenCalled()
+      expect(db.draftsGet).not.toHaveBeenCalled()
+    })
+
+    it('[OD-05] le garde de rôle tient toujours, liste ou pas', async () => {
+      const db = makeDb({ profile: { active: true, role: 'store_admin' } })
+      await expect(listOutstandingDraftsHandler({ auth: { uid: 'u1' }, data: { boutiques: FOURNIES } }, { db }))
+        .rejects.toMatchObject({ code: 'ROLE_FORBIDDEN' })
+      expect(db.draftsGet).not.toHaveBeenCalled()
+    })
+
+    it('[OD-06] tout autre champ reste refusé', async () => {
+      const db = makeDb()
+      await expect(listOutstandingDraftsHandler({ auth: { uid: 'dealer-1' }, data: { boutiques: FOURNIES, storeId: 'x' } }, { db }))
+        .rejects.toMatchObject({ code: 'INVALID_REQUEST_ID' })
+      expect(db.draftsGet).not.toHaveBeenCalled()
+    })
+  })
 })

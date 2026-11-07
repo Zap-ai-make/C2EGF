@@ -272,11 +272,32 @@ function readAmount(value) {
 //
 // Le navigateur ne lit plus les brouillons bruts. La callable vérifie le rôle,
 // agrège côté serveur et ne renvoie que les montants par boutique.
+//
+// Elle reçoit les boutiques actives de l'écoute partagée (lot A4b) : sans elles,
+// elle les relit, soit 84 lectures à chaque ouverture. Deux replis, pour que
+// l'argent dehors ne tombe jamais à cause de cette économie :
+// - l'écoute en échec → l'appel part sans la liste, comme avant ;
+// - une callable antérieure à A4b refuse le champ (`invalid-argument`) → un
+//   second appel, sans la liste. Le push peut donc précéder le déploiement.
 // ---------------------------------------------------------------------------
 
 export async function listArgentDehors() {
+  const appeler = (data) => httpsCallable(functions, 'listOutstandingDrafts')(data)
   try {
-    const response = await httpsCallable(functions, 'listOutstandingDrafts')({})
+    const boutiques = await lireBoutiquesActives().then(
+      (docs) => docs.map((d) => {
+        const name = d.data()?.name
+        return { id: d.id, name: typeof name === 'string' ? name.slice(0, 200) : null }
+      }),
+      () => null,
+    )
+    let response
+    try {
+      response = await appeler(boutiques ? { boutiques } : {})
+    } catch (err) {
+      if (!boutiques || err?.code !== 'functions/invalid-argument') throw err
+      response = await appeler({})
+    }
     const { success: _success, ...aggregate } = response.data ?? {}
     return aggregate
   } catch (err) {

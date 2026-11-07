@@ -77,14 +77,46 @@ export function aggregateOutstandingDrafts({ stores = [], drafts = [] } = {}) {
   return { parBoutique, depots, retraits, dehors: depots - retraits, illisibles, horsReseau }
 }
 
+/**
+ * ⚠ LES BOUTIQUES, L'APPLICATION LES CONNAÎT DÉJÀ (lot A4b,
+ *   docs/rester-dans-le-quota-gratuit.md §A4). Depuis le lot A4a, elle garde les
+ *   boutiques actives pour la session ; les relire ici coûtait 84 lectures à
+ *   chaque ouverture de l'accueil du dealer ou de l'écran Boutiques du patron.
+ *   Elle les envoie donc, `[{ id, name }]`, et `stores` n'est relu que si elles
+ *   manquent : c'est le cas des versions de l'application antérieures à A4b, qui
+ *   doivent continuer de marcher.
+ *
+ *   Rien ne repose sur cette liste que l'appelant puisse détourner : elle ne fait
+ *   que nommer et regrouper des sommes que son rôle a le droit de voir pour tout
+ *   le réseau. Le garde de rôle passe avant, comme avant.
+ */
+const MAX_BOUTIQUES = 500
+const MAX_TEXTE = 200
+
+const texteBorne = (valeur) => typeof valeur === 'string' && valeur.length > 0 && valeur.length <= MAX_TEXTE
+
+function lireBoutiquesFournies(boutiques) {
+  if (boutiques === undefined) return null
+  const valide = Array.isArray(boutiques)
+    && boutiques.length <= MAX_BOUTIQUES
+    && boutiques.every((b) => b !== null && typeof b === 'object'
+      && texteBorne(b.id)
+      && (b.name === null || b.name === undefined || (typeof b.name === 'string' && b.name.length <= MAX_TEXTE)))
+  if (!valide) throw new DealerRequestError('INVALID_REQUEST_ID', 'Liste de boutiques invalide.')
+  // La forme d'un document : `aggregateOutstandingDrafts` lit `id` et `data().name`.
+  return boutiques.map((b) => ({ id: b.id, data: () => ({ name: b.name ?? null }) }))
+}
+
 export async function listOutstandingDraftsHandler(request, { db }) {
   const actorUid = validateAuthUid(request.auth?.uid)
-  validateInputPayload(request.data ?? {}, [])
+  const data = request.data ?? {}
+  validateInputPayload(data, ['boutiques'])
+  const boutiquesFournies = lireBoutiquesFournies(data.boutiques)
 
   await readValidatedProfile(db, actorUid, validateCallerProfile)
 
-  const [storesSnap, draftsSnap] = await Promise.all([
-    db.collection('stores').where('active', '==', true).get(),
+  const [stores, draftsSnap] = await Promise.all([
+    boutiquesFournies ?? db.collection('stores').where('active', '==', true).get().then((snap) => snap.docs),
     db.collectionGroup('drafts').get(),
   ])
   const drafts = draftsSnap.docs.map((draft) => {
@@ -96,5 +128,5 @@ export async function listOutstandingDraftsHandler(request, { db }) {
       remainingAmount: data.remainingAmount,
     }
   })
-  return { success: true, ...aggregateOutstandingDrafts({ stores: storesSnap.docs, drafts }) }
+  return { success: true, ...aggregateOutstandingDrafts({ stores, drafts }) }
 }
