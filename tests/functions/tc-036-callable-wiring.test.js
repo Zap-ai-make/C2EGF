@@ -128,6 +128,8 @@ describe('TC-036-WRA — exports callable de index.js', () => {
       // des callables : un déclencheur Firestore et une route réservée à l'IAM.
       'majAnnuaireClients',
       'reconstruireAnnuaireClients',
+      // Création d'une boutique par le patron
+      'creerBoutique',
     ])
     for (const key of Object.keys(indexModule)) {
       expect(
@@ -162,12 +164,28 @@ describe('TC-036-WRA — exports callable de index.js', () => {
     //   l'Atlantique, en série, et Cloud Run facture ce temps d'attente. Les deux
     //   régions servent tant qu'une application pas encore rechargée appelle
     //   l'ancienne. Le jour où on la retire, ce test passe à `['us-central1']`.
+    //
+    // ⚠ SAUF LES CALLABLES NÉES APRÈS LE PASSAGE : aucune application ne les a
+    //   jamais appelées en europe-west1 (WRA-12).
+    const NEES_APRES_C1 = new Set(['creerBoutique'])
     const callables = Object.entries(indexModule).filter(([, fn]) => fn.__endpoint?.callableTrigger)
-    expect(callables.length).toBeGreaterThanOrEqual(26)
+    expect(callables.length).toBeGreaterThanOrEqual(27)
     for (const [name, fn] of callables) {
       expect(Array.isArray(fn.__endpoint?.region), `${name} : région absente`).toBe(true)
-      expect([...fn.__endpoint.region].sort(), `${name} : mauvaises régions`).toEqual(['europe-west1', 'us-central1'])
+      expect([...fn.__endpoint.region].sort(), `${name} : mauvaises régions`)
+        .toEqual(NEES_APRES_C1.has(name) ? ['us-central1'] : ['europe-west1', 'us-central1'])
     }
+  })
+
+  it('[WRA-12] la création de boutique pèse le moins possible sur le quota de la région', () => {
+    // Le quota régional compte les instances EXISTANTES, à 1 vCPU chacune par
+    // défaut (docs/deployer-les-functions.md §5). Une callable qui sert quelques
+    // fois par mois n'a besoin ni de deux instances ni d'un vCPU entier.
+    const endpoint = indexModule.creerBoutique.__endpoint
+    expect(endpoint.callableTrigger).toBeDefined()
+    expect(endpoint.region).toEqual(['us-central1'])
+    expect(endpoint.maxInstances).toBe(1)
+    expect(endpoint.cpu).toBe('gcf_gen1')
   })
 
   it('[WRA-10] l’annuaire tourne en us-central1, la région que la base nam5 impose', () => {

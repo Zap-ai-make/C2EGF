@@ -6,6 +6,7 @@ import { formatCurrency } from '../../utils/formatCurrency.js'
 import { businessDateKey, millisecondsUntilNextBusinessDay } from '../../utils/businessDate.js'
 import { DEALER_NETWORK } from '../../constants/dealerConstants.js'
 import ErrorState from '../../components/ui/ErrorState.jsx'
+import NouvelleBoutique from '../../components/patron/NouvelleBoutique.jsx'
 
 /**
  * L'état des 84 boutiques — quatre chiffres par ligne, et rien de plus.
@@ -327,6 +328,13 @@ function PatronBoutiques() {
             ))}
           </select>
         </div>
+      </div>
+
+      {/* Hors de la branche chargement/erreur/prêt des caisses : créer une
+          boutique ne dépend pas de la lecture des soldes. Une fois la boutique
+          arrivée dans l'écoute, la liste est relue par le même `charger()`. */}
+      <div className="mx-3 mt-3 flex-none">
+        <NouvelleBoutique onCreee={charger} />
       </div>
 
       {caissesErreur ? (

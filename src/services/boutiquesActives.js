@@ -47,6 +47,14 @@ function servir(e) {
   attentes.forEach(({ resolve }) => resolve(e.docs))
 }
 
+const presente = (e, id) => e.docs?.some((d) => d.id === id) ?? false
+
+function guetter(e) {
+  const trouves = e.guets.filter((g) => presente(e, g.id))
+  e.guets = e.guets.filter((g) => !trouves.includes(g))
+  trouves.forEach((g) => { clearTimeout(g.minuteur); g.resolve(true) })
+}
+
 function fermer(e, erreur) {
   clearTimeout(e.minuteur)
   e.desabonner?.()
@@ -54,6 +62,9 @@ function fermer(e, erreur) {
   const attentes = e.attentes
   e.attentes = []
   attentes.forEach(({ reject }) => reject(erreur))
+  const guets = e.guets
+  e.guets = []
+  guets.forEach((g) => { clearTimeout(g.minuteur); g.resolve(false) })
 }
 
 function surveillerCompte() {
@@ -69,7 +80,7 @@ function surveillerCompte() {
 
 function ouvrir() {
   surveillerCompte()
-  const e = { docs: null, confirme: false, delaiEcoule: false, attentes: [], minuteur: null, desabonner: null }
+  const e = { docs: null, confirme: false, delaiEcoule: false, attentes: [], guets: [], minuteur: null, desabonner: null }
 
   e.minuteur = setTimeout(() => {
     e.delaiEcoule = true
@@ -86,6 +97,7 @@ function ouvrir() {
         clearTimeout(e.minuteur)
       }
       if (servable(e)) servir(e)
+      guetter(e)
     },
     // Une écoute tombée ne se relève pas seule : on la ferme, et la demande
     // suivante en rouvre une.
@@ -104,6 +116,31 @@ export function lireBoutiquesActives() {
   const e = ecoute
   if (servable(e)) return Promise.resolve(e.docs)
   return new Promise((resolve, reject) => e.attentes.push({ resolve, reject }))
+}
+
+/**
+ * Attend qu'une boutique tout juste créée arrive dans l'écoute.
+ *
+ * ⚠ LA RÉPONSE DE LA CALLABLE ARRIVE AVANT L'ÉCOUTE. Le serveur a écrit la fiche
+ *   avant de répondre, mais le changement met encore un instant à redescendre :
+ *   relire la liste tout de suite la rendrait sans la boutique qu'on vient de
+ *   créer. Rien de plus n'est lu : on attend ce que l'écoute recevra de toute façon.
+ *
+ * @returns {Promise<boolean>} `false` si elle n'est pas arrivée dans le délai,
+ *   ou si l'écoute s'est fermée entre-temps
+ */
+export function attendreBoutiqueActive(id, delaiMs = ATTENTE_SERVEUR_MS) {
+  if (!ecoute) ecoute = ouvrir()
+  const e = ecoute
+  if (presente(e, id)) return Promise.resolve(true)
+  return new Promise((resolve) => {
+    const guet = { id, resolve, minuteur: null }
+    guet.minuteur = setTimeout(() => {
+      e.guets = e.guets.filter((g) => g !== guet)
+      resolve(false)
+    }, delaiMs)
+    e.guets.push(guet)
+  })
 }
 
 /** Ferme l'écoute ; la prochaine lecture en rouvre une. */

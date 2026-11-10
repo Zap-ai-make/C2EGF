@@ -218,3 +218,43 @@ describe('TC-366 — ce que les écrans du dealer et du patron lisent', () => {
     expect(mocks.collectionGroup).toHaveBeenCalledWith({}, 'networkBalances')
   })
 })
+
+describe('TC-366 — une boutique tout juste créée par le patron', () => {
+  it('[BA-12] attend qu’elle arrive dans l’écoute, sans rien relire', async () => {
+    const lecture = service.lireBoutiquesActives()
+    mocks.ecoutes[0].suivant(instantane([boutique('a', 'A')], false))
+    await lecture
+
+    const arrivee = service.attendreBoutiqueActive('neuve')
+    expect(await enAttente(arrivee)).toBe('en attente')
+
+    mocks.ecoutes[0].suivant(instantane([boutique('a', 'A'), boutique('neuve', 'NEUVE')], false))
+    await expect(arrivee).resolves.toBe(true)
+    expect(mocks.ecoutes).toHaveLength(1)
+    expect(mocks.getDocs).not.toHaveBeenCalled()
+  })
+
+  it('[BA-13] déjà là : répond tout de suite', async () => {
+    const lecture = service.lireBoutiquesActives()
+    mocks.ecoutes[0].suivant(instantane([boutique('neuve', 'NEUVE')], false))
+    await lecture
+
+    await expect(service.attendreBoutiqueActive('neuve')).resolves.toBe(true)
+  })
+
+  it('[BA-14] pas arrivée dans le délai : répond non, et cesse d’attendre', async () => {
+    vi.useFakeTimers()
+    const arrivee = service.attendreBoutiqueActive('neuve', 5000)
+    mocks.ecoutes[0].suivant(instantane([boutique('a', 'A')], false))
+
+    vi.advanceTimersByTime(5000)
+    await expect(arrivee).resolves.toBe(false)
+  })
+
+  it('[BA-15] la déconnexion pendant l’attente répond non', async () => {
+    const arrivee = service.attendreBoutiqueActive('neuve')
+    mocks.surCompte(null)
+
+    await expect(arrivee).resolves.toBe(false)
+  })
+})

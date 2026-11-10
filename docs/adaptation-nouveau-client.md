@@ -126,7 +126,7 @@ Scripts éprouvés lors du lancement du client actuel (`scripts/`) :
 
 | Besoin | Script |
 |---|---|
-| Créer les boutiques | `seedStores.mjs` |
+| Créer les boutiques | Une fois en service : l'écran Boutiques du patron, « Nouvelle boutique » (callable `creerBoutique`). Au lancement, en série : `seedStores.mjs` |
 | Créer les comptes (boutique / gérant / dealer) | `createTechnicalUser.mjs` (+ `verifyTechnicalUser.mjs`, `deleteTechnicalUser.mjs`) |
 | Accès temporaire à une boutique | `createTemporaryStoreAccess.mjs` |
 | Mots de passe / récupération | `updateAccountPassword.mjs`, `generatePasswordResetLink.mjs` |

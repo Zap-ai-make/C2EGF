@@ -15,6 +15,7 @@
 
 import { initializeApp, getApps } from 'firebase-admin/app'
 import { getFirestore, FieldValue, FieldPath } from 'firebase-admin/firestore'
+import { getAuth } from 'firebase-admin/auth'
 import { onCall, onRequest } from 'firebase-functions/v2/https'
 import { onDocumentWritten } from 'firebase-functions/v2/firestore'
 import { write } from 'firebase-functions/logger'
@@ -47,6 +48,7 @@ import { storeTransactionCommandHandler } from './storeTransactions/storeTransac
 import { listOutstandingDraftsHandler } from './dealerMetrics/listOutstandingDrafts.js'
 import { listClientHistoryHandler } from './clients/listClientHistory.js'
 import { majAnnuaireClientsHandler, reconstruireAnnuaireClientsHandler } from './clients/annuaireClients.js'
+import { creerBoutiqueHandler } from './boutiques/creerBoutique.js'
 
 // Garde idempotente : évite "App named '[DEFAULT]' already exists" lors des imports
 // dans les tests d'intégration (TC-036) qui s'exécutent après TC-035 dans le même processus.
@@ -256,6 +258,22 @@ export const confirmInternalDebtCompensation = onCall(
 export const rejectInternalDebtCompensation = onCall(
   CALLABLE,
   wrapCallable(rejectInternalDebtCompensationHandler, deps)
+)
+
+// ── Création d'une boutique par le patron ───────────────────────────────────
+// Le compte de connexion, la fiche et le profil en un geste, au lieu de la
+// console Firebase.
+//
+// ⚠ us-central1 SEULEMENT. Elle naît après le passage du lot C1 : aucune
+//   application ne l'a jamais appelée en europe-west1, et une création de plus
+//   dans cette région serait une chance de plus de buter sur le quota.
+// ⚠ UNE INSTANCE, ET 1/6 DE vCPU (`gcf_gen1`, 256 Mio). Le quota régional compte
+//   les instances existantes ; celle-ci sert quelques fois par mois et ne doit
+//   presque rien y peser (docs/deployer-les-functions.md §5).
+
+export const creerBoutique = onCall(
+  { ...CALLABLE, region: 'us-central1', maxInstances: 1, cpu: 'gcf_gen1' },
+  wrapCallable(creerBoutiqueHandler, { db, FieldValue, auth: getAuth() })
 )
 
 // ── Annuaire des clients ────────────────────────────────────────────────────

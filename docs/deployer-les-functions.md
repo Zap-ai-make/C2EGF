@@ -193,6 +193,29 @@ dans le code de chaque callable, comme pour toutes les autres.
 
 ---
 
+## 7. Une callable neuve : `creerBoutique` (2026-11-10)
+
+Le bouton « Nouvelle boutique » de l'écran Boutiques du patron l'appelle. Elle naît
+en us-central1 seulement, à une instance et 1/6 de vCPU (`cpu: 'gcf_gen1'`) : elle
+pèse presque rien sur le quota du §5.
+
+1. **Un soir, seule** (§1, §5) :
+   `npx firebase deploy --only "functions:creerBoutique"`.
+2. **Une sonde, sur elle seule** :
+   `curl -X OPTIONS https://us-central1-c2egf-b0b5a.cloudfunctions.net/creerBoutique -H "Origin: https://c2egf.vercel.app" -H "Access-Control-Request-Method: POST"`.
+   `204` : prête. `403` : la création a buté sur le quota, le remède est au §6,
+   avec le nom `creerboutique`.
+3. **Le front ensuite.** Dans l'autre ordre, rien ne casse : le bouton répond que la
+   création n'a pas abouti.
+
+**Si la création échoue avec la function en place**, lire ses journaux. Elle crée
+des comptes de connexion par l'Admin SDK, avec le compte de service par défaut des
+functions. Celui-ci a en principe le rôle Éditeur, qui suffit. Si le journal dit `PERMISSION_DENIED` sur `firebaseauth.users.create`, il
+faut lui donner le rôle « Administrateur Firebase Authentication ». C'est une
+décision et un geste humains.
+
+---
+
 ## Ce qu'il n'y a PAS à déployer
 
 - `firestore.rules` et `firestore.indexes.json` ne changent que si on les a

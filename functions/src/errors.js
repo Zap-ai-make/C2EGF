@@ -100,6 +100,12 @@ export const HTTP_CODES = {
   INVALID_OPPOSITE_DEBT:           'invalid-argument',
   NOT_OPPOSITE_PAIR:               'failed-precondition',
   COMPENSATION_EXCEEDS_REMAINING:  'failed-precondition',
+  // Création d'une boutique par le patron
+  INVALID_STORE_NAME:              'invalid-argument',
+  INVALID_EMAIL:                   'invalid-argument',
+  INVALID_PASSWORD:                'invalid-argument',
+  EMAIL_ALREADY_USED:              'already-exists',
+  STORE_NAME_TAKEN:                'already-exists',
 }
 
 export class DealerRequestError extends Error {
