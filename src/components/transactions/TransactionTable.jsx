@@ -29,6 +29,7 @@ import { prefereMouvementReduit } from '../../hooks/useReducedMotion.js'
 import { sommesEnAttente } from '../../utils/caisse.js'
 import { attenteDe } from '../../utils/attente.js'
 import { regrouperParClientEtType } from '../../utils/regroupement.js'
+import { placerMenu } from '../../utils/placementMenu.js'
 import { ChevronRight } from 'lucide-react'
 import { useEnvois } from '../../context/envoisContexte.js'
 import EtatEnvoi from '../ui/EtatEnvoi.jsx'
@@ -145,7 +146,7 @@ const TransactionTable = memo(function TransactionTable() {
     }
     return sortie
   }, [rangees, groupesDeplies])
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 })
+  const [dropdownPosition, setDropdownPosition] = useState({ sens: 'haut', bottom: 0, left: 0, maxHeight: 0 })
   const [currentActionType, setCurrentActionType] = useState(null)
   const [processingActions, setProcessingActions] = useState(new Set())
   const [rollbackToast, setRollbackToast] = useState({ show: false, message: '', type: 'info' })
@@ -195,13 +196,10 @@ const TransactionTable = memo(function TransactionTable() {
         // reglement du suivant, dans son historique et dans l'export.
         setCodeAgentReglement('')
       } else {
-        const button = event.currentTarget
-        const rect = button.getBoundingClientRect()
-        const position = {
-          top: rect.bottom + window.scrollY + 8,
-          left: rect.left + window.scrollX - 50
-        }
-        setDropdownPosition(position)
+        setDropdownPosition(placerMenu(event.currentTarget.getBoundingClientRect(), {
+          hauteurFenetre: window.innerHeight,
+          largeurFenetre: window.innerWidth,
+        }))
         setActiveDropdown(transactionId)
         setCurrentActionType(actionType)
         setDropdownStep(1)
@@ -659,11 +657,15 @@ const TransactionTable = memo(function TransactionTable() {
       {/* Dropdown modal — 2 étapes */}
       {activeDropdown && createPortal(
         <div
-          className="fixed bg-white border border-gray-300 rounded-lg shadow-lg dropdown-container"
+          className="fixed overflow-y-auto bg-white border border-gray-300 rounded-lg shadow-lg dropdown-container"
           onClick={(e) => e.stopPropagation()}
+          data-testid="menu-reglement"
+          data-sens={dropdownPosition.sens}
           style={{
-            top: Math.max(10, Math.min(dropdownPosition.top, window.innerHeight - 300)),
-            left: Math.max(10, Math.min(dropdownPosition.left, window.innerWidth - 240)),
+            top: dropdownPosition.top,
+            bottom: dropdownPosition.bottom,
+            left: dropdownPosition.left,
+            maxHeight: dropdownPosition.maxHeight,
             zIndex: 9999,
             minWidth: '220px'
           }}
