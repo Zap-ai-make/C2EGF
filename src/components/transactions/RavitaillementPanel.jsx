@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useToast } from '../../hooks/useToast'
 import { useTransactions } from '../../context/transactions.jsx'
 import { useSimpleNetworkData } from '../../hooks/useSimpleNetworkData'
@@ -16,7 +16,8 @@ import {
   expediteursConnus,
   VASES,
   libelleVase,
-  preparerRetour,
+  montantRetourPropose,
+  preparerRetours,
 } from '../../utils/ravitaillement.js'
 
 /**
@@ -53,11 +54,11 @@ import {
  */
 const RESEAU = NETWORK_OPTIONS[0]
 
-function FormulaireRetour({ ravitaillement, onFait, onAnnuler, annoncer }) {
+function FormulaireRetour({ livraisons, onFait, onAnnuler, annoncer }) {
   const envois = useEnvois()
   const { getStock, getNetworkLiquidite } = useSimpleNetworkData()
   const [montant, setMontant] = useState('')
-  const [vase, setVase] = useState(ravitaillement.balanceType ?? 'stock')
+  const [vase, setVase] = useState(livraisons[0]?.balanceType ?? 'stock')
   const [envoiEnCours, setEnvoiEnCours] = useState(false)
   // ⚠ VERROU SYNCHRONE, ET PAS SEULEMENT `envoiEnCours`.
   //   `setEnvoiEnCours` ne prend effet qu'au rendu suivant : deux clics dans le
@@ -67,8 +68,12 @@ function FormulaireRetour({ ravitaillement, onFait, onAnnuler, annoncer }) {
   //   deux fois et solderait une dette qui ne l'est pas. Le formulaire voisin
   //   (RavitaillementForm) porte le même verrou, pour la même raison.
   const verrou = useRef(false)
+  // Le montant proposé suit la réserve tant que la caissière ne l'a pas tapé.
+  const montantTape = useRef(false)
 
-  const reste = Number(ravitaillement.remainingAmount) || 0
+  const expediteur = livraisons[0]?.expediteur
+  const plusieurs = livraisons.length > 1
+  const reste = livraisons.reduce((somme, l) => somme + (Number(l.remainingAmount) || 0), 0)
 
   /**
    * DEUX PLAFONDS, ET IL FAUT SAVOIR LEQUEL BLOQUE.
@@ -93,10 +98,19 @@ function FormulaireRetour({ ravitaillement, onFait, onAnnuler, annoncer }) {
     ? Number(getStock(RESEAU)) || 0
     : Number(getNetworkLiquidite(RESEAU)) || 0
 
-  // La commande que l'assistant prépare aussi : même fonction, mêmes plafonds.
+  // ⚠ PRÉ-REMPLI (retour du terrain, 2026-11-10) : tout le reste dû si la
+  //   réserve le contient, sinon ce qu'elle contient. Recalculé à chaque
+  //   bascule Stock ↔ Espèce, et quand les soldes arrivent après l'ouverture ;
+  //   jamais par-dessus un montant que la caissière a tapé.
+  useEffect(() => {
+    if (!montantTape.current) setMontant(montantRetourPropose({ reste, disponible }))
+  }, [reste, disponible])
+
+  // Les mêmes plafonds que l'assistant (`preparerRetour`), appliqués au reste
+  // dû de toutes les livraisons couvertes ; une commande par livraison.
   const preparation = useMemo(
-    () => preparerRetour({ ravitaillement, montant, vase, disponible }),
-    [ravitaillement, montant, vase, disponible],
+    () => preparerRetours({ livraisons, montant, vase, disponible }),
+    [livraisons, montant, vase, disponible],
   )
   const tropGrand = preparation.motif === 'reste'
   const tropPeuEnReserve = preparation.motif === 'reserve'
@@ -107,14 +121,29 @@ function FormulaireRetour({ ravitaillement, onFait, onAnnuler, annoncer }) {
     if (!peutEnvoyer || verrou.current) return
     verrou.current = true
     setEnvoiEnCours(true)
+    const nombre = preparation.commandes.length
+    let partis = 0
     try {
-      await envoyerMouvement(envois, preparation.commande)
-      annoncer(`Retour enregistré : ${formatCurrency(preparation.valeur)} en ${libelleVase(vase).toLowerCase()}.`, 'success')
+      // L'une après l'autre, dans l'ordre de la répartition : la plus ancienne
+      // livraison d'abord, comme le serveur les recevra.
+      for (const commande of preparation.commandes) {
+        await envoyerMouvement(envois, commande)
+        partis += 1
+      }
+      annoncer(
+        `Retour enregistré : ${formatCurrency(preparation.valeur)} en ${libelleVase(vase).toLowerCase()}`
+          + (nombre > 1 ? `, sur ${nombre} livraisons.` : '.'),
+        'success',
+      )
       onFait?.()
     } catch (err) {
       // Le serveur rédige des refus lisibles — « Stock insuffisant.
       // Disponible : … » — et c'est lui qui connaît l'état réel.
-      annoncer(err?.message || "Le retour n'a pas pu être enregistré.", 'error')
+      // ⚠ Sans la file d'envoi, chaque retour part seul au serveur : ceux qui
+      //   sont passés le restent. Le dire, sinon la caissière renverrait tout.
+      const raison = err?.message || "Le retour n'a pas pu être enregistré."
+      annoncer(partis > 0 ? `${partis} retour${partis > 1 ? 's' : ''} sur ${nombre} enregistré${partis > 1 ? 's' : ''}. Le suivant : ${raison}` : raison, 'error')
+      if (partis > 0) onFait?.()
     } finally {
       setEnvoiEnCours(false)
       verrou.current = false
@@ -124,7 +153,8 @@ function FormulaireRetour({ ravitaillement, onFait, onAnnuler, annoncer }) {
   return (
     <form onSubmit={envoyer} className="space-y-4" data-testid="formulaire-retour">
       <p className="m-0 text-sm text-ink-muted">
-        Reçu de <span className="font-semibold text-ink">{ravitaillement.expediteur}</span>
+        Reçu de <span className="font-semibold text-ink">{expediteur}</span>
+        {plusieurs && ` · ${livraisons.length} livraisons`}
         {' · '}reste dû <span className="font-semibold tabular-nums text-ink">{formatCurrency(reste)}</span>
       </p>
 
@@ -140,7 +170,10 @@ function FormulaireRetour({ ravitaillement, onFait, onAnnuler, annoncer }) {
           step="1"
           autoFocus
           value={montant}
-          onChange={(event) => setMontant(event.target.value)}
+          onChange={(event) => {
+            montantTape.current = true
+            setMontant(event.target.value)
+          }}
           data-testid="retour-montant"
           aria-invalid={tropGrand || tropPeuEnReserve || undefined}
           className={`w-full rounded border-2 px-3 py-2 tabular-nums transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 ${
@@ -264,7 +297,7 @@ function RavitaillementPanel({ open, onClose }) {
 
       {vue === 'retour' && cible && (
         <FormulaireRetour
-          ravitaillement={cible}
+          livraisons={cible}
           annoncer={showToast}
           onFait={revenirALaListe}
           onAnnuler={revenirALaListe}
@@ -299,11 +332,26 @@ function RavitaillementPanel({ open, onClose }) {
 
           {groupes.map((groupe) => (
             <section key={groupe.expediteur} data-testid={`groupe-${groupe.expediteur}`}>
-              <div className="mb-2 flex items-baseline justify-between gap-3 border-b border-line pb-1.5">
+              <div className="mb-2 flex items-center justify-between gap-3 border-b border-line pb-1.5">
                 <h3 className="m-0 text-sm font-bold text-ink">{groupe.expediteur}</h3>
-                <span className="font-mono text-sm font-semibold tabular-nums text-ink">
-                  {formatCurrency(groupe.total)}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-sm font-semibold tabular-nums text-ink">
+                    {formatCurrency(groupe.total)}
+                  </span>
+                  {/* Plusieurs livraisons du même expéditeur se rendent en un
+                      geste (retour du terrain, 2026-11-10) : le montant est
+                      réparti de la plus ancienne à la plus récente. */}
+                  {groupe.lignes.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => { setCible(groupe.lignes); setVue('retour') }}
+                      data-testid={`tout-rendre-${groupe.expediteur}`}
+                      className="shrink-0 rounded border border-brand-400 bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand-600 transition-colors hover:bg-brand-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                    >
+                      Tout rendre
+                    </button>
+                  )}
+                </div>
               </div>
 
               <ul className="m-0 list-none space-y-2 p-0">
@@ -329,7 +377,7 @@ function RavitaillementPanel({ open, onClose }) {
                     <EtatEnvoi envoi={ligne.envoi} />
                     <button
                       type="button"
-                      onClick={() => { setCible(ligne); setVue('retour') }}
+                      onClick={() => { setCible([ligne]); setVue('retour') }}
                       data-testid={`retour-${ligne.id}`}
                       className="shrink-0 rounded border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink transition-colors hover:border-brand-400 hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
                     >

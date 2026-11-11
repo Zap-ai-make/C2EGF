@@ -239,8 +239,8 @@ export const FICHES = Object.freeze([
     etapes: [
       'Onglet {{Transactions}}, bouton {{Ravitaillement}}. Le chiffre à côté du bouton dit combien de livraisons tu dois encore.',
       'La liste montre ce que tu dois, **personne par personne**.',
-      'Sur la livraison concernée, clique {{Retour}}.',
-      'Tape le montant, puis choisis si tu rends en {{Stock}} ou en {{Espèce}}.',
+      'Sur la livraison concernée, clique {{Retour}}. Plusieurs livraisons de la même personne ? {{Tout rendre}} les rend en une fois, en commençant par la plus ancienne.',
+      'Choisis si tu rends en {{Stock}} ou en {{Espèce}}. Le montant est déjà rempli : tout le reste dû si la réserve le contient, sinon ce qu’elle contient. Change-le si tu rends moins.',
     ],
     texteFin: 'Il faut que la réserve choisie contienne le montant. Un retour fait par erreur s’annule depuis l’historique (fiche 17).',
     retenir: {

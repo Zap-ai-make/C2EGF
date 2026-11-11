@@ -326,3 +326,85 @@ describe('TC-229 — le disponible', () => {
     }))
   })
 })
+
+describe('TC-229 — le retour, depuis le terrain (2026-11-10)', () => {
+  it('[TC-229-20] le montant est pré-rempli au reste dû quand le stock le contient', () => {
+    historique = [rav({ remainingAmount: 3_000_000 })]
+    soldes = { stock: 23_760_000, liquidite: 0 }
+    afficher()
+    fireEvent.click(screen.getByTestId('retour-rav-1'))
+
+    expect(screen.getByTestId('retour-montant')).toHaveValue(3_000_000)
+    expect(screen.getByTestId('confirmer-retour')).toBeEnabled()
+  })
+
+  it('[TC-229-21] sinon au disponible de la réserve choisie, stock comme espèce', () => {
+    historique = [rav({ remainingAmount: 3_000_000 })]
+    soldes = { stock: 1_200_000, liquidite: 800_000 }
+    afficher()
+    fireEvent.click(screen.getByTestId('retour-rav-1'))
+    expect(screen.getByTestId('retour-montant')).toHaveValue(1_200_000)
+
+    fireEvent.click(screen.getByRole('radio', { name: /Espèce/ }))
+    expect(screen.getByTestId('retour-montant')).toHaveValue(800_000)
+  })
+
+  it('[TC-229-22] un montant tapé n’est jamais remplacé par la bascule de réserve', () => {
+    historique = [rav({ remainingAmount: 3_000_000 })]
+    soldes = { stock: 1_200_000, liquidite: 800_000 }
+    afficher()
+    fireEvent.click(screen.getByTestId('retour-rav-1'))
+    fireEvent.change(screen.getByTestId('retour-montant'), { target: { value: '50000' } })
+    fireEvent.click(screen.getByRole('radio', { name: /Espèce/ }))
+
+    expect(screen.getByTestId('retour-montant')).toHaveValue(50_000)
+  })
+
+  it('[TC-229-23] « Tout rendre » n’apparaît que pour plusieurs livraisons du même expéditeur', () => {
+    historique = [
+      rav({ id: 'a', expediteur: 'Maï', remainingAmount: 100_000 }),
+      rav({ id: 'b', expediteur: 'Maï', remainingAmount: 50_000 }),
+      rav({ id: 'c', expediteur: 'Patron', remainingAmount: 20_000 }),
+    ]
+    afficher()
+
+    expect(screen.getByTestId('tout-rendre-Maï')).toBeInTheDocument()
+    expect(screen.queryByTestId('tout-rendre-Patron')).not.toBeInTheDocument()
+  })
+
+  it('[TC-229-24] « Tout rendre » propose le total et le répartit, de la plus ancienne à la plus récente', async () => {
+    historique = [
+      rav({ id: 'recente', expediteur: 'Maï', remainingAmount: 50_000, createdAt: new Date('2026-11-10T12:00:00Z') }),
+      rav({ id: 'ancienne', expediteur: 'Maï', remainingAmount: 100_000, createdAt: new Date('2026-11-10T08:00:00Z') }),
+    ]
+    afficher()
+    fireEvent.click(screen.getByTestId('tout-rendre-Maï'))
+
+    const formulaire = within(screen.getByTestId('formulaire-retour'))
+    expect(formulaire.getByText(/2 livraisons/)).toBeInTheDocument()
+    expect(screen.getByTestId('retour-montant')).toHaveValue(150_000)
+    fireEvent.click(screen.getByTestId('confirmer-retour'))
+
+    await waitFor(() => expect(runStoreTransactionCommand).toHaveBeenCalledTimes(2))
+    expect(runStoreTransactionCommand.mock.calls.map(([c]) => [c.replenishmentId, c.amount])).toEqual([
+      ['ancienne', 100_000],
+      ['recente', 50_000],
+    ])
+    expect(showToast).toHaveBeenCalledWith(expect.stringContaining('sur 2 livraisons'), 'success')
+  })
+
+  it('[TC-229-25] un retour groupé arrêté en route dit combien sont passés', async () => {
+    runStoreTransactionCommand
+      .mockResolvedValueOnce({ id: 'ret-1' })
+      .mockRejectedValueOnce(new Error('Stock insuffisant.'))
+    historique = [
+      rav({ id: 'a', expediteur: 'Maï', remainingAmount: 100_000, createdAt: new Date('2026-11-10T08:00:00Z') }),
+      rav({ id: 'b', expediteur: 'Maï', remainingAmount: 50_000, createdAt: new Date('2026-11-10T09:00:00Z') }),
+    ]
+    afficher()
+    fireEvent.click(screen.getByTestId('tout-rendre-Maï'))
+    fireEvent.click(screen.getByTestId('confirmer-retour'))
+
+    await waitFor(() => expect(showToast).toHaveBeenCalledWith('1 retour sur 2 enregistré. Le suivant : Stock insuffisant.', 'error'))
+  })
+})

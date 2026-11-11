@@ -218,3 +218,45 @@ export function preparerRetour({ ravitaillement, montant, vase, disponible }) {
     },
   }
 }
+
+/**
+ * Le montant que le formulaire de retour propose d'office (retour du terrain,
+ * 2026-11-10) : tout le reste dû si la réserve choisie le contient, sinon ce
+ * qu'elle contient. Vide quand elle est à zéro : rien à proposer.
+ */
+export function montantRetourPropose({ reste, disponible }) {
+  const montant = Math.min(Math.max(0, Math.floor(Number(reste) || 0)), Math.max(0, Math.floor(Number(disponible) || 0)))
+  return montant > 0 ? String(montant) : ''
+}
+
+/**
+ * Un retour qui couvre UNE OU PLUSIEURS livraisons du même expéditeur, en un
+ * seul geste (retour du terrain, 2026-11-10).
+ *
+ * ⚠ UNE COMMANDE PAR LIVRAISON COUVERTE, PAS UNE SEULE. Chaque livraison porte
+ *   son reste dû, et le serveur impute un retour à UNE livraison
+ *   (`returnReplenishment`). Répartir ici garde juste le reste de chacune, sans
+ *   rien changer au serveur, et chaque retour s'annule seul. Le montant va
+ *   d'abord à la plus ancienne : l'ordre de `livraisons` est celui de
+ *   `ravitaillementsEnCours`.
+ *
+ * Les plafonds sont ceux de `preparerRetour`, appliqués au reste dû TOTAL.
+ *
+ * @returns {{ok: true, valeur: number, commandes: object[]} | {ok: false, motif: string, raison: string}}
+ */
+export function preparerRetours({ livraisons, montant, vase, disponible }) {
+  const dues = (livraisons ?? []).filter((l) => (Number(l?.remainingAmount) || 0) > 0)
+  const reste = dues.reduce((somme, l) => somme + Number(l.remainingAmount), 0)
+  const controle = preparerRetour({ ravitaillement: { id: null, remainingAmount: reste }, montant, vase, disponible })
+  if (!controle.ok) return controle
+
+  const commandes = []
+  let aRepartir = controle.valeur
+  for (const livraison of dues) {
+    if (aRepartir <= 0) break
+    const part = Math.min(aRepartir, Number(livraison.remainingAmount))
+    commandes.push({ action: 'returnReplenishment', replenishmentId: livraison.id, amount: part, balanceType: vase })
+    aRepartir -= part
+  }
+  return { ok: true, valeur: controle.valeur, commandes }
+}
