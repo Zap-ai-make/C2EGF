@@ -19,7 +19,7 @@ export const EXPEDITEURS_PROFIL = Object.freeze([...(activeProfile.replenishment
 /** Le choix qui ouvre une saisie libre. Doit rester distinct de tout nom réel. */
 export const AJOUTER_UN_NOM = '__ajouter__'
 
-/** Les deux réserves qu'un ravitaillement remplit et qu'un retour vide. */
+/** Les deux réserves qu'un retour peut vider. Un ravitaillement ne remplit que le stock. */
 export const VASES = Object.freeze([
   { cle: 'stock', libelle: 'Stock' },
   { cle: 'liquidite', libelle: 'Espèce' },
@@ -139,6 +139,19 @@ export function retoursDe(transactions = [], replenishmentId) {
 const estUnVase = (cle) => VASES.some((v) => v.cle === cle)
 
 /**
+ * La réserve qu'un ravitaillement remplit : toujours le stock.
+ *
+ * ⚠ DÉCISION DU TERRAIN, 2026-11-10. Le dealer envoie du stock électronique ;
+ *   le choix « Stock / Espèce » à la saisie n'apportait qu'une occasion de se
+ *   tromper. Le formulaire et l'assistant n'envoient plus que celui-ci.
+ *   Le serveur accepte encore les espèces : une version antérieure de
+ *   l'application peut en garder un dans sa file hors ligne, et le refuser le
+ *   ferait perdre. Les anciennes livraisons en espèces restent affichées telles.
+ *   Le RETOUR, lui, garde les deux réserves : on rend souvent en espèces.
+ */
+export const VASE_RAVITAILLEMENT = 'stock'
+
+/**
  * La livraison prête à partir au serveur, ou la raison du refus.
  *
  * Le formulaire et l'assistant envoient la même commande : celle-ci. Le
@@ -148,10 +161,9 @@ const estUnVase = (cle) => VASES.some((v) => v.cle === cle)
  *
  * @returns {{ok: true, valeur: number, commande: object} | {ok: false, motif: string, raison: string}}
  */
-export function preparerRavitaillement({ montant, vase, expediteur, note }) {
+export function preparerRavitaillement({ montant, expediteur, note }) {
   const valeur = parseFcfaAmount(montant)
   if (valeur === null) return { ok: false, motif: 'montant', raison: 'Montant invalide (entier supérieur à 0).' }
-  if (!estUnVase(vase)) return { ok: false, motif: 'vase', raison: 'Réserve inconnue : Stock ou Espèce.' }
   const nom = String(expediteur ?? '').trim()
   if (!nom) return { ok: false, motif: 'expediteur', raison: 'Indiquez de qui vient le ravitaillement.' }
 
@@ -161,7 +173,7 @@ export function preparerRavitaillement({ montant, vase, expediteur, note }) {
     commande: {
       action: 'replenish',
       amount: valeur,
-      balanceType: vase,
+      balanceType: VASE_RAVITAILLEMENT,
       expediteur: nom,
       note: String(note ?? '').trim() || undefined,
     },

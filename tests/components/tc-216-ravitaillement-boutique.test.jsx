@@ -135,7 +135,8 @@ describe('TC-216 — ravitaillement depuis l’écran Transactions', () => {
 
     ouvrirModal()
     expect(screen.getByLabelText('Montant (FCFA)')).toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'Réserve ravitaillée' })).toBeInTheDocument()
+    // Toujours du stock (retour du terrain, 2026-11-10) : plus de choix de réserve.
+    expect(screen.queryByRole('group', { name: 'Réserve ravitaillée' })).not.toBeInTheDocument()
     // L'expéditeur est demandé : sans lui la livraison serait une dette envers
     // personne, et n'entrerait dans aucun total du soir.
     expect(screen.getByTestId('ravitaillement-expediteur')).toBeInTheDocument()
@@ -180,17 +181,17 @@ describe('TC-216 — ravitaillement depuis l’écran Transactions', () => {
     expect(showToast).toHaveBeenCalledWith(expect.stringContaining('Ravitaillement enregistré'), 'success')
   })
 
-  it('crédite la liquidité quand elle est choisie, sans note', async () => {
+  it('ne propose pas les espèces : un ravitaillement crédite toujours le stock', async () => {
     afficher()
     ouvrirModal()
     saisirMontant('900')
-    fireEvent.click(screen.getByRole('radio', { name: /Espèce/ }))
+    expect(screen.queryByRole('radio', { name: /Espèce/ })).not.toBeInTheDocument()
     fireEvent.click(screen.getByTestId('valider-ravitaillement'))
 
     await waitFor(() => expect(runStoreTransactionCommand).toHaveBeenCalledWith({
       action: 'replenish',
       amount: 900,
-      balanceType: 'liquidite',
+      balanceType: 'stock',
       expediteur: 'Patron',
       note: undefined,
     }))

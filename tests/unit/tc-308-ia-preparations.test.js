@@ -342,9 +342,10 @@ describe('TC-308 — preparer_ravitaillement', () => {
     const { carte } = preparerOperation('preparer_ravitaillement', {
       expediteur: 'patron', montant: 200000, reserve: 'Espèce',
     }, etat())
+    // Toujours du stock (2026-11-10) : une réserve dite par le modèle est ignorée.
     expect(carte.execution).toEqual({
       genre: 'commande',
-      commande: { action: 'replenish', amount: 200000, balanceType: 'liquidite', expediteur: 'Patron', note: undefined },
+      commande: { action: 'replenish', amount: 200000, balanceType: 'stock', expediteur: 'Patron', note: undefined },
     })
     expect(carte.avertissement).toBeUndefined()
   })
@@ -354,9 +355,10 @@ describe('TC-308 — preparer_ravitaillement', () => {
     expect(carte.avertissement).toMatch(/« Issa » n'a encore rien envoyé/)
   })
 
-  it('[IP-26] sans expéditeur ni réserve, on demande', () => {
-    expect(preparerOperation('preparer_ravitaillement', { montant: 1000, reserve: 'Stock' }, etat()).reponse.a_preciser).toBe(true)
-    expect(preparerOperation('preparer_ravitaillement', { expediteur: 'Patron', montant: 1000 }, etat()).reponse.a_preciser).toBe(true)
+  it('[IP-26] sans expéditeur, on demande ; sans réserve, plus rien à demander', () => {
+    expect(preparerOperation('preparer_ravitaillement', { montant: 1000 }, etat()).reponse.a_preciser).toBe(true)
+    const { carte } = preparerOperation('preparer_ravitaillement', { expediteur: 'Patron', montant: 1000 }, etat())
+    expect(carte.execution.commande.balanceType).toBe('stock')
   })
 })
 

@@ -159,8 +159,8 @@ opération est possible. Ne réponds jamais de mémoire sur un solde.
 - « Annuler » un dépôt non terminé rend son stock ; annuler un retrait non
   terminé reprend le sien, qui doit donc y être encore. Une opération qui a
   déjà reçu un règlement ne s'annule plus : elle se termine en réglant le reste.
-- Un ravitaillement remplit la réserve choisie ; un retour la vide, et elle
-  doit contenir le montant.
+- Un ravitaillement remplit toujours le stock ; un retour vide la réserve
+  choisie (stock ou espèces), et elle doit contenir le montant.
 Les outils de préparation font ces contrôles eux-mêmes, sur les soldes de
 l'instant. Quand l'un refuse faute de réserve, dis combien il y a et ce qui
 manque, puis propose ce qu'il propose : un autre moyen, un règlement partiel,

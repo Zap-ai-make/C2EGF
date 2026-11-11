@@ -220,12 +220,11 @@ export const FICHES = Object.freeze([
   {
     id: 10,
     groupe: GROUPES.RESERVES,
-    titre: 'Le dealer t’a envoyé du stock ou des espèces',
+    titre: 'Le dealer t’a envoyé du stock',
     etapes: [
       'Onglet {{Transactions}}, bouton {{Ravitaillement}}, puis {{Nouveau ravitaillement}}.',
       'Dans {{Reçu de}}, choisis qui te l’a envoyé. Si le nom n’y est pas, prends {{Ajouter un nom}}.',
-      'Tape ce que tu as reçu dans {{Montant (FCFA)}}.',
-      'Sous {{Réserve ravitaillée}}, choisis {{Stock}} si c’est du stock électronique, {{Espèce}} si c’est de l’argent liquide.',
+      'Tape ce que tu as reçu dans {{Montant (FCFA)}}. Un ravitaillement remplit toujours le stock.',
       'La {{Note}} est facultative : elle sert à retrouver l’envoi plus tard.',
     ],
     retenir: {

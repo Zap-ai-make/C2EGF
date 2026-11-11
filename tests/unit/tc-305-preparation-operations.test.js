@@ -165,19 +165,21 @@ describe('TC-305 — preparerRavitaillement', () => {
       valeur: 200000,
       commande: { action: 'replenish', amount: 200000, balanceType: 'stock', expediteur: 'Patron', note: undefined },
     })
+    // Toujours du stock (2026-11-10) : une réserve passée par erreur est ignorée.
     expect(preparerRavitaillement({ montant: '1000', vase: 'liquidite', expediteur: ' Maï ', note: ' matin ' }).commande)
-      .toMatchObject({ balanceType: 'liquidite', expediteur: 'Maï', note: 'matin' })
+      .toMatchObject({ balanceType: 'stock', expediteur: 'Maï', note: 'matin' })
   })
 
-  it('[RV-02] refuse un montant invalide, un expéditeur absent, une réserve inconnue', () => {
+  it('[RV-02] refuse un montant invalide, un expéditeur absent', () => {
     expect(preparerRavitaillement({ montant: '0', vase: 'stock', expediteur: 'Patron' })).toEqual({
       ok: false, motif: 'montant', raison: 'Montant invalide (entier supérieur à 0).',
     })
     expect(preparerRavitaillement({ montant: '1000', vase: 'stock', expediteur: '  ' })).toMatchObject({
       ok: false, motif: 'expediteur',
     })
+    // La réserve n'est plus un choix : rien à refuser de ce côté.
     expect(preparerRavitaillement({ montant: '1000', vase: 'coffre', expediteur: 'Patron' })).toMatchObject({
-      ok: false, motif: 'vase',
+      ok: true, commande: { balanceType: 'stock' },
     })
   })
 })

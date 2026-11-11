@@ -157,17 +157,16 @@ export const DECLARATIONS_DE_PREPARATION = Object.freeze([
   {
     name: 'preparer_ravitaillement',
     description:
-      'PRÉPARE un ravitaillement : de l\'argent reçu, en stock ou en espèce, de quelqu\'un qu\'il faudra ' +
-      "rembourser le soir. La caissière confirme sur une carte. Demande de qui il vient si ce n'est pas dit.",
+      'PRÉPARE un ravitaillement : du stock reçu de quelqu\'un qu\'il faudra rembourser le soir. ' +
+      "Toujours du stock, jamais d'espèces. La caissière confirme sur une carte. Demande de qui il vient si ce n'est pas dit.",
     parameters: {
       type: 'OBJECT',
       properties: {
-        expediteur: { type: 'STRING', description: "La personne qui a envoyé l'argent" },
+        expediteur: { type: 'STRING', description: "La personne qui a envoyé le stock" },
         montant: { type: 'INTEGER', description: 'En FCFA' },
-        reserve: PARAM_RESERVE,
         note: { type: 'STRING', description: 'Facultative' },
       },
-      required: ['expediteur', 'montant', 'reserve'],
+      required: ['expediteur', 'montant'],
     },
   },
   {
@@ -590,18 +589,17 @@ function preparerAnnulation({ client, type, operation } = {}, etat) {
   })
 }
 
-function preparerRavitaillementDit({ expediteur, montant, reserve, note } = {}, etat) {
+// Toujours du stock (`VASE_RAVITAILLEMENT`) : une réserve dite par le modèle
+// est ignorée, et on ne la demande plus.
+function preparerRavitaillementDit({ expediteur, montant, note } = {}, etat) {
   const connus = Array.isArray(etat.expediteurs) ? etat.expediteurs : []
   if (!String(expediteur ?? '').trim()) {
     return demander(`De qui vient ce ravitaillement ?${connus.length ? ` (${connus.join(', ')})` : ''}`, [...connus])
   }
-  const vase = lireVase(reserve)
-  if (!vase) return demander('Dans quelle réserve : Stock ou Espèce ?', [...RESERVES])
 
   const { nom, nouveau } = resoudreExpediteur(connus, expediteur)
   const preparation = preparerRavitaillement({
     montant: montant === undefined || montant === null ? '' : String(montant),
-    vase,
     expediteur: nom,
     note,
   })
@@ -614,13 +612,13 @@ function preparerRavitaillementDit({ expediteur, montant, reserve, note } = {}, 
     lignes: [
       { libelle: 'Reçu de', valeur: commande.expediteur },
       { libelle: 'Montant', valeur: formatCurrency(valeur) },
-      { libelle: 'Réserve', valeur: libelleVase(vase) },
+      { libelle: 'Réserve', valeur: libelleVase(commande.balanceType) },
       ...(commande.note ? [{ libelle: 'Note', valeur: commande.note }] : []),
     ],
     ...(nouveau ? { avertissement: `« ${commande.expediteur} » n'a encore rien envoyé : ce nom s'ajoutera à la liste.` } : {}),
     execution: { genre: 'commande', commande },
-    resume: `Ravitaillement de ${formatCurrency(valeur)} en ${libelleVase(vase).toLowerCase()}, reçu de ${commande.expediteur}`,
-    succes: `Ravitaillement enregistré : ${formatCurrency(valeur)} en ${libelleVase(vase).toLowerCase()}.`,
+    resume: `Ravitaillement de ${formatCurrency(valeur)} en stock, reçu de ${commande.expediteur}`,
+    succes: `Ravitaillement enregistré : ${formatCurrency(valeur)} en stock.`,
   })
 }
 

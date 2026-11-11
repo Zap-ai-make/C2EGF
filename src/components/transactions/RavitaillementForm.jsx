@@ -1,21 +1,16 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { Check } from 'lucide-react'
 import { useEnvois } from '../../context/envoisContexte.js'
 import { envoyerMouvement } from '../../services/mouvementsBoutique.js'
 import { formatCurrency } from '../../utils/formatCurrency'
-import { AJOUTER_UN_NOM, VASES, libelleVase, preparerRavitaillement } from '../../utils/ravitaillement.js'
+import { AJOUTER_UN_NOM, preparerRavitaillement } from '../../utils/ravitaillement.js'
 
 /**
  * Ravitaillement — le dealer réapprovisionne la boutique.
  *
- * POURQUOI DEUX VASES ET PAS UN MONTANT SEUL
- * ──────────────────────────────────────────
- * Stock électronique et liquidité sont deux réserves distinctes, et une
- * transaction client ne fait que déplacer de l'une vers l'autre. Le
- * ravitaillement est la seule opération qui en remplit une : dire laquelle
- * n'est pas un détail de saisie, c'est l'information principale. D'où deux
- * grandes cibles plutôt qu'un menu déroulant — le geste est binaire et
- * fréquent, il mérite d'être visible et atteignable au pouce.
+ * ⚠ TOUJOURS DU STOCK (retour du terrain, 2026-11-10). Le choix « Stock /
+ *   Espèce » qui se trouvait ici a disparu : le dealer envoie du stock, et ce
+ *   choix n'apportait qu'une occasion de se tromper. La règle est écrite une
+ *   seule fois, dans `preparerRavitaillement` (`VASE_RAVITAILLEMENT`).
  *
  * Le réseau n'est pas demandé : le serveur le résout depuis le profil de la
  * boutique. Un champ de plus ici n'apporterait rien tant que C2EGF n'opère
@@ -41,7 +36,6 @@ const NOTE_MAX = 280
 function RavitaillementForm({ onComplete, onCancel, annoncer, expediteurs = [] }) {
   const envois = useEnvois()
   const [montant, setMontant] = useState('')
-  const [vase, setVase] = useState('stock')
   const [note, setNote] = useState('')
   const [expediteur, setExpediteur] = useState(expediteurs[0] ?? AJOUTER_UN_NOM)
   const [nouveauNom, setNouveauNom] = useState('')
@@ -55,8 +49,8 @@ function RavitaillementForm({ onComplete, onCancel, annoncer, expediteurs = [] }
 
   // La commande que l'assistant prépare aussi : même fonction, même refus.
   const preparation = useMemo(
-    () => preparerRavitaillement({ montant, vase, expediteur: expediteurChoisi, note }),
-    [montant, vase, expediteurChoisi, note],
+    () => preparerRavitaillement({ montant, expediteur: expediteurChoisi, note }),
+    [montant, expediteurChoisi, note],
   )
 
   const peutEnvoyer = preparation.ok
@@ -68,7 +62,7 @@ function RavitaillementForm({ onComplete, onCancel, annoncer, expediteurs = [] }
     setEnvoiEnCours(true)
     try {
       await envoyerMouvement(envois, preparation.commande)
-      annoncer(`Ravitaillement enregistré : ${formatCurrency(preparation.valeur)} en ${libelleVase(vase).toLowerCase()}.`, 'success')
+      annoncer(`Ravitaillement enregistré : ${formatCurrency(preparation.valeur)} en stock.`, 'success')
       onComplete?.()
     } catch (err) {
       annoncer(err?.message || "Le ravitaillement n'a pas pu être enregistré.", 'error')
@@ -76,7 +70,7 @@ function RavitaillementForm({ onComplete, onCancel, annoncer, expediteurs = [] }
       setEnvoiEnCours(false)
       verrou.current = false
     }
-  }, [peutEnvoyer, preparation, vase, annoncer, onComplete, envois])
+  }, [peutEnvoyer, preparation, annoncer, onComplete, envois])
 
   // Seul le montant parle sous le champ : un expéditeur manquant ne doit pas
   // faire passer pour faux un montant juste. Il est contrôlé en premier, donc
@@ -159,36 +153,6 @@ function RavitaillementForm({ onComplete, onCancel, annoncer, expediteurs = [] }
           className="w-full rounded border-2 border-line px-3 py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         />
       </div>
-
-      <fieldset>
-        <legend className="mb-2 text-sm font-semibold text-ink">Réserve ravitaillée</legend>
-        <div className="flex flex-wrap gap-3">
-          {VASES.map((option) => (
-            <label
-              key={option.cle}
-              className={`flex-1 min-w-36 cursor-pointer rounded-xl border-2 px-4 py-3 transition-colors focus-within:ring-2 focus-within:ring-brand-400 ${
-                vase === option.cle ? 'border-brand-400 bg-brand-50' : 'border-line hover:border-brand-200'
-              }`}
-            >
-              <input
-                type="radio"
-                name="ravitaillement-vase"
-                value={option.cle}
-                checked={vase === option.cle}
-                onChange={() => setVase(option.cle)}
-                className="sr-only"
-              />
-              {/* La sélection ne peut pas tenir à la seule teinte (DESIGN.md §5) :
-                  le radio natif est en sr-only, donc l'œil n'aurait que la
-                  couleur. La pastille cochée porte la même information en forme. */}
-              <span className="flex items-center justify-between gap-2">
-                <span className="block text-sm font-semibold text-ink">{option.libelle}</span>
-                {vase === option.cle && <Check className="h-4 w-4 shrink-0 text-brand-600" aria-hidden="true" />}
-              </span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
 
       <div className="flex justify-end gap-3 border-t border-line pt-4">
         <button
