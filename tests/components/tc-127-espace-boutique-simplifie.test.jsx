@@ -25,7 +25,7 @@ vi.mock('../../src/hooks/useIncomingCollaborationsCount', () => ({
 vi.mock('../../src/hooks/useHistoriqueFilters', () => ({
   useHistoriqueFilters: () => ({
     filteredTransactions: [],
-    allTransactions: [],
+    transactionsClients: [],
     applyDateFilter: vi.fn(),
     applySearchFilter: vi.fn(),
     handleSearchChange: vi.fn(),

@@ -90,7 +90,7 @@ describe('TC-347 — à l\'ouverture, la journée seulement', () => {
 
     await attendreAffichage(3)
     expect(affichees()).toEqual(DU_JOUR.map((l) => l.id))
-    expect(faux.api.getHistoryBetween).not.toHaveBeenCalled()
+    expect(faux.api.lirePeriode).not.toHaveBeenCalled()
     expect(faux.api.subscribeToHistory).toHaveBeenCalledOnce()
     expect(faux.api.subscribeToHistory.mock.calls[0][1]).toEqual({
       dateRange: { start: minuit('2026-11-06'), endExclusive: minuit('2026-11-07') },
@@ -168,14 +168,14 @@ describe('TC-347 — les jours passés, à la demande', () => {
     await charger({ from: '2026-11-04', to: '2026-11-05' })
 
     await attendreAffichage(153)
-    expect(faux.api.getHistoryBetween).toHaveBeenCalledOnce()
-    expect(faux.api.getHistoryBetween).toHaveBeenCalledWith({ start: minuit('2026-11-04'), endExclusive: minuit('2026-11-06') })
+    expect(faux.api.lirePeriode).toHaveBeenCalledOnce()
+    expect(faux.api.lirePeriode).toHaveBeenCalledWith({ start: minuit('2026-11-04'), endExclusive: minuit('2026-11-06') })
     expect(ctx.periode).toEqual({ from: '2026-11-04', to: '2026-11-05' })
     expect(ctx.periodeEnChargement).toBe(false)
 
     // La même période, redemandée : rien de plus à payer.
     await charger({ from: '2026-11-04', to: '2026-11-05' })
-    expect(faux.api.getHistoryBetween).toHaveBeenCalledOnce()
+    expect(faux.api.lirePeriode).toHaveBeenCalledOnce()
   })
 
   it('[JC-09] la journée en cours n\'est jamais relue : son écoute la tient déjà', async () => {
@@ -184,10 +184,10 @@ describe('TC-347 — les jours passés, à la demande', () => {
     await attendreAffichage(3)
 
     await charger({ from: '2026-11-05', to: '2026-11-06' })
-    expect(faux.api.getHistoryBetween).toHaveBeenCalledWith({ start: minuit('2026-11-05'), endExclusive: minuit('2026-11-06') })
+    expect(faux.api.lirePeriode).toHaveBeenCalledWith({ start: minuit('2026-11-05'), endExclusive: minuit('2026-11-06') })
 
     await charger({ from: '2026-11-06', to: '2026-11-06' })
-    expect(faux.api.getHistoryBetween).toHaveBeenCalledOnce()
+    expect(faux.api.lirePeriode).toHaveBeenCalledOnce()
     expect(ctx.periode).toEqual({ from: '2026-11-06', to: '2026-11-06' })
   })
 
@@ -199,7 +199,7 @@ describe('TC-347 — les jours passés, à la demande', () => {
     await charger({ from: '2026-11-01', to: '' })
 
     expect(ctx.periode).toEqual({ from: '2026-11-01', to: '2026-11-06' })
-    expect(faux.api.getHistoryBetween).toHaveBeenCalledWith({ start: minuit('2026-11-01'), endExclusive: minuit('2026-11-06') })
+    expect(faux.api.lirePeriode).toHaveBeenCalledWith({ start: minuit('2026-11-01'), endExclusive: minuit('2026-11-06') })
   })
 
   it('[JC-11] plus de 31 jours : refusé, sans lecture, et la raison est dite', async () => {
@@ -209,7 +209,7 @@ describe('TC-347 — les jours passés, à la demande', () => {
 
     await charger({ from: '2026-09-01', to: '2026-11-05' })
 
-    expect(faux.api.getHistoryBetween).not.toHaveBeenCalled()
+    expect(faux.api.lirePeriode).not.toHaveBeenCalled()
     expect(ctx.erreurPeriode).toBe('Choisissez une période de 31 jours au plus.')
     expect(ctx.periode).toBeNull()
   })
@@ -230,14 +230,14 @@ describe('TC-347 — les jours passés, à la demande', () => {
   it('[JC-13] une réponse arrivée après qu\'on est revenu au jour est ignorée', async () => {
     const faux = fauxHistorique([...DU_JOUR, ...ANCIENNES])
     let livrer
-    monter({ ...faux.api, getHistoryBetween: () => new Promise((resoudre) => { livrer = resoudre }) })
+    monter({ ...faux.api, lirePeriode: () => new Promise((resoudre) => { livrer = resoudre }) })
     await attendreAffichage(3)
 
     let lecture
     act(() => { lecture = ctx.chargerPeriode({ from: '2026-11-04', to: '2026-11-05' }) })
     await waitFor(() => expect(ctx.periodeEnChargement).toBe(true))
     act(() => ctx.revenirAuJour())
-    await act(async () => { livrer(ANCIENNES); await lecture })
+    await act(async () => { livrer({ lignes: ANCIENNES, depuisServeur: true }); await lecture })
 
     expect(affichees()).toHaveLength(3)
     expect(ctx.periode).toBeNull()
@@ -246,7 +246,7 @@ describe('TC-347 — les jours passés, à la demande', () => {
 
   it('[JC-14] une lecture en échec le dit, et l\'écran garde la journée', async () => {
     const faux = fauxHistorique([...DU_JOUR, ...ANCIENNES])
-    monter({ ...faux.api, getHistoryBetween: async () => { throw new Error('Hors ligne : période non disponible.') } })
+    monter({ ...faux.api, lirePeriode: async () => { throw new Error('Hors ligne : période non disponible.') } })
     await attendreAffichage(3)
 
     await charger({ from: '2026-11-04', to: '2026-11-05' })

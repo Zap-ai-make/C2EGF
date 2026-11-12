@@ -14,6 +14,20 @@ const instantSuppression = (transaction) => {
   return Number.isNaN(date.getTime()) ? 0 : date.getTime()
 }
 
+/**
+ * Une transaction client, que l'onglet « Transactions clients » peut afficher.
+ *
+ * Ravitaillements, retours et clôtures sont des mouvements de la boutique, pas
+ * des transactions d'agents : ils ont leur onglet. Les laisser ici les affichait
+ * sous « Client inconnu », code vide, au milieu des dépôts.
+ *
+ * Une ligne supprimée a rendu son montant aux soldes : la laisser ici la ferait
+ * relire comme une opération vivante, et le total de la journée compterait un
+ * dépôt que la boutique n'a plus.
+ */
+const estTransactionClient = (transaction) =>
+  !STORE_MOVEMENT_TYPES.includes(transaction.type) && !estSupprimee(transaction)
+
 export const useHistoriqueFilters = () => {
   const { completedTransactions, chargerPeriode, revenirAuJour } = useTransactions()
   const [dateFilter, setDateFilter] = useState({ from: '', to: '' })
@@ -23,21 +37,26 @@ export const useHistoriqueFilters = () => {
   const [showTodayOnly, setShowTodayOnly] = useState(false)
 
 
+  /**
+   * Les transactions clients, avant le filtre de date et la recherche.
+   *
+   * ⚠ LES CARTES DE JOUR LES COMPTENT, ET NON TOUT L'HISTORIQUE. Elles comptaient
+   *   aussi les mouvements et les lignes supprimées, que le tableau écarte : le
+   *   11/11/2026, la carte annonçait 18 transactions pour 3 lignes au tableau
+   *   (TC-374). Une seule règle, `estTransactionClient`, pour les deux.
+   */
+  const transactionsClients = useMemo(
+    () => completedTransactions.filter(estTransactionClient),
+    [completedTransactions],
+  )
+
   // Transactions filtrées avec useMemo pour optimiser les performances
   const filteredTransactions = useMemo(() => {
-    return completedTransactions.filter(transaction => {
-      // Ravitaillements, retours et clôtures sont des mouvements de la boutique,
-      // pas des transactions d'agents : ils ont leur onglet. Les laisser ici les
-      // affichait sous « Client inconnu », code vide, au milieu des dépôts.
-      if (STORE_MOVEMENT_TYPES.includes(transaction.type)) return false
-      // Une ligne supprimée a rendu son montant aux soldes : la laisser ici la
-      // ferait relire comme une opération vivante, et le total de la journée
-      // compterait un dépôt que la boutique n'a plus.
-      if (estSupprimee(transaction)) return false
-      return matchesDateFilter(transaction, appliedDateFilter, showTodayOnly) &&
-             matchesSearchTerm(transaction, appliedSearchTerm || searchTerm)
-    })
-  }, [completedTransactions, appliedDateFilter, appliedSearchTerm, searchTerm, showTodayOnly])
+    return transactionsClients.filter(transaction =>
+      matchesDateFilter(transaction, appliedDateFilter, showTodayOnly) &&
+      matchesSearchTerm(transaction, appliedSearchTerm || searchTerm)
+    )
+  }, [transactionsClients, appliedDateFilter, appliedSearchTerm, searchTerm, showTodayOnly])
 
   /**
    * La corbeille : tout ce qui a été supprimé, des deux provenances, du plus
@@ -113,7 +132,7 @@ export const useHistoriqueFilters = () => {
     // Données filtrées
     filteredTransactions,
     corbeille,
-    allTransactions: completedTransactions,
+    transactionsClients,
     
     // Actions
     setDateFilter,

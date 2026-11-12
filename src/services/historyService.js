@@ -20,6 +20,7 @@
  *   docRef(name, id)                            → DocumentReference
  *   addDocument(name, data)                     → Promise<doc>
  *   getCollection(name, opts?)                  → Promise<docs[]>
+ *   lireCollection(name, opts)                  → Promise<{ documents, depuisServeur }>
  *   subscribeToCollection(name, cb, opts)       → unsubscribe fn
  *   normalizeTransactionLabel(value)            → string
  *   normalizeNetworkBalances(data)              → object
@@ -57,7 +58,6 @@ export class HistoryService {
   _docRef(name, id) { return this._ctx.docRef(name, id) }
   async _addDocument(name, data) { return this._ctx.addDocument(name, data) }
   async _getCollection(name, opts) { return this._ctx.getCollection(name, opts) }
-  async _getCollectionFresh(name, opts) { return this._ctx.getCollection(name, opts, false) }
   _collectionRef(name) { return this._ctx.collectionRef(name) }
   _subscribeToCollection(name, cb, opts) { return this._ctx.subscribeToCollection(name, cb, opts) }
   _normalizeTransactionLabel(value) { return this._ctx.normalizeTransactionLabel(value) }
@@ -83,9 +83,23 @@ export class HistoryService {
    * vient d'être encaissé. Bornée, parce que relire toute la boutique à chaque
    * question coûterait ce que coûte tout l'historique.
    */
-  async getHistoryBetween({ start, endExclusive }) {
+  async getHistoryBetween(fenetre) {
+    return (await this.lirePeriode(fenetre)).lignes
+  }
+
+  /**
+   * La même lecture, en disant si elle vient du serveur.
+   *
+   * ⚠ SANS RÉSEAU, LA LECTURE NE LÈVE PAS : Firestore répond avec ce que
+   *   l'appareil a gardé, sans prévenir. Pour un jour passé, c'est une liste qui
+   *   paraît complète et ne l'est peut-être pas. L'historique le dit à l'écran
+   *   (`periodeHorsLigne`, TC-373).
+   *
+   * @returns {Promise<{ lignes: object[], depuisServeur: boolean }>}
+   */
+  async lirePeriode({ start, endExclusive }) {
     this._requireActiveStore()
-    return this._getCollectionFresh(FIRESTORE_CONFIG.COLLECTIONS.HISTORY, {
+    const { documents, depuisServeur } = await this._ctx.lireCollection(FIRESTORE_CONFIG.COLLECTIONS.HISTORY, {
       where: [
         { field: 'createdAt', operator: '>=', value: start },
         { field: 'createdAt', operator: '<', value: endExclusive },
@@ -93,6 +107,7 @@ export class HistoryService {
       orderByField: 'createdAt',
       orderDirection: 'desc',
     })
+    return { lignes: documents, depuisServeur }
   }
 
   // ---------------------------------------------------------------------------

@@ -90,11 +90,23 @@ const PHRASES_PAR_ONGLET = {
   },
 }
 
-function PeriodeAffichee({ onglet, periode, enChargement, erreur }) {
+/**
+ * Ce que l'historique ne montre pas (TC-373, TC-374) : une phrase chacun, et
+ * rien quand tout va bien.
+ *
+ * Une écoute arrêtée pour de bon (refus des règles, index manquant) laisse
+ * l'historique figé ; une coupure, elle, se relève seule et ne dit rien. Une
+ * période lue sans réseau vient de ce que l'appareil a gardé.
+ */
+const HISTORIQUE_ARRETE = 'L’historique ne se met plus à jour. Rechargez la page.'
+const PERIODE_HORS_LIGNE = 'Hors ligne : liste peut-être incomplète.'
+
+function PeriodeAffichee({ onglet, periode, enChargement, erreur, horsLigne = false, arrete = false }) {
   const phrases = PHRASES_PAR_ONGLET[onglet]
   if (!phrases) return null
   return (
     <div className="space-y-1 text-sm" data-testid="periode-affichee">
+      {arrete && <p role="alert" className="text-danger">{HISTORIQUE_ARRETE}</p>}
       {erreur && <p role="alert" className="text-danger">{erreur}</p>}
       <p role="status" className="text-ink-muted">
         {enChargement
@@ -103,6 +115,7 @@ function PeriodeAffichee({ onglet, periode, enChargement, erreur }) {
             ? phrases.periode(jourAffiche(periode.from), jourAffiche(periode.to))
             : phrases.jour}
       </p>
+      {horsLigne && !enChargement && <p className="text-warn">{PERIODE_HORS_LIGNE}</p>}
     </div>
   )
 }
@@ -117,6 +130,8 @@ function Historique() {
     periode = null,
     periodeEnChargement = false,
     erreurPeriode = null,
+    periodeHorsLigne = false,
+    historiqueArrete = false,
     chargerPeriode,
     revenirAuJour,
   } = useTransactions()
@@ -127,7 +142,7 @@ function Historique() {
   const {
     filteredTransactions,
     corbeille,
-    allTransactions,
+    transactionsClients,
     applyDateFilter,
     applySearchFilter,
     handleSearchChange,
@@ -205,11 +220,13 @@ function Historique() {
             periode={periode}
             enChargement={periodeEnChargement}
             erreur={erreurPeriode}
+            horsLigne={periodeHorsLigne}
+            arrete={historiqueArrete}
           />
 
-          {/* Navigation par jour */}
+          {/* Navigation par jour : ses cartes comptent ce que le tableau peut montrer. */}
           <DailyPagination
-            transactions={allTransactions}
+            transactions={transactionsClients}
             onDateSelect={applyDateFilter}
           />
 
@@ -252,6 +269,8 @@ function Historique() {
               periode={periode}
               enChargement={periodeEnChargement}
               erreur={erreurPeriode}
+              horsLigne={periodeHorsLigne}
+              arrete={historiqueArrete}
             />
           </div>
         </div>

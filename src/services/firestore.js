@@ -51,6 +51,7 @@ import { DraftService } from './draftService.js'
 import { HistoryService } from './historyService.js'
 import { BalanceService } from './balanceService.js'
 import { normalizeSubscriptionObserver, notifySubscriptionError } from './subscriptionObserver.js'
+import { resilientOnSnapshot, isPermanentSnapshotError } from './resilientOnSnapshot.js'
 import { COLLECTION_ANNUAIRE, ecouterAnnuaireGarde, ecouterAvecRepli } from './annuaireClients.js'
 import { ouvrirCopieAnnuaire } from './copieAnnuaire.js'
 
@@ -462,6 +463,26 @@ export class FirestoreService {
   }
 
   /**
+   * Une lecture unique, sans le cache de `getCollection`, qui dit d'où vient
+   * sa réponse.
+   *
+   * ⚠ SANS RÉSEAU, `getDocs` NE LÈVE PAS : il répond avec ce que l'appareil a
+   *   gardé, sans prévenir. `depuisServeur` le dit à l'appelant.
+   *
+   * @returns {Promise<{ documents: object[], depuisServeur: boolean }>}
+   */
+  async lireCollection(collectionName, options = {}) {
+    return await withErrorHandling(async () => {
+      const snapshot = await getDocs(this.buildQuery(collectionName, options))
+      this.metrics.operations++
+      return {
+        documents: snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+        depuisServeur: snapshot.metadata?.fromCache !== true,
+      }
+    }, `lireCollection(${collectionName})`)
+  }
+
+  /**
    * Opérations en batch pour de meilleures performances
    */
   async batchWrite(operations) {
@@ -529,6 +550,19 @@ export class FirestoreService {
 
   /**
    * Écouter les changements d'une collection en temps réel avec optimisations
+   *
+   * ⚠ UNE ÉCOUTE NE MEURT PAS D'UNE ATTENTE NI D'UNE ERREUR PASSAGÈRE.
+   *   Elle se fermait pour de bon au bout de 30 s sans réponse, et à la moindre
+   *   erreur, sans que rien ne la rouvre. Depuis que l'historique s'en tient à la
+   *   journée (lot G1), sa requête est neuve chaque matin et sa première réponse
+   *   dépend du serveur : sur une connexion lente, l'historique du jour restait
+   *   figé jusqu'au rechargement, et une saisie envoyée disparaissait de l'écran
+   *   en quittant la file d'envoi (TC-372).
+   *
+   *   L'écoute passe donc par `resilientOnSnapshot`, qui se rouvre seule. Seuls
+   *   un refus des règles et un index manquant l'arrêtent : ils exigent un
+   *   déploiement, et l'écoute quitte alors le pool, pour qu'un abonné suivant en
+   *   rouvre une neuve au lieu de rejoindre une écoute morte.
    */
   subscribeToCollection(collectionName, callback, queryOptions = {}) {
     let observer
@@ -549,21 +583,19 @@ export class FirestoreService {
         // Pas de limite par défaut - uniquement si explicitement demandée
       })
 
-      // Timeout pour éviter les listeners bloqués
-      const timeoutId = setTimeout(() => {
-        console.warn('Firestore listener timeout for subscription:', subscriptionKey)
-        const error = new Error('Le chargement temps réel Firestore a expiré.')
-        const listenerInfo = this.connectionPool.get(subscriptionKey)
-        listenerInfo?.callbacks.forEach(item => notifySubscriptionError(item, error, 'Firestore listener timeout'))
-        listenerInfo?.unsubscribe()
-        this.connectionPool.delete(subscriptionKey)
-      }, FIRESTORE_CONFIG.LIMITS.LISTENER_TIMEOUT)
+      // Au pool AVANT l'ouverture : une erreur levée dès l'ouverture doit
+      // trouver ses abonnés pour les prévenir.
+      const listenerInfo = {
+        unsubscribe: () => {},
+        callbacks: new Set([observer]),
+        createdAt: Date.now(),
+        collection: collectionName
+      }
+      this.connectionPool.set(subscriptionKey, listenerInfo)
 
-      const unsubscribe = onSnapshot(q,
-        (snapshot) => {
+      listenerInfo.unsubscribe = resilientOnSnapshot(q, {
+        onNext: (snapshot) => {
           try {
-            clearTimeout(timeoutId)
-
             // Obtenir tous les documents du snapshot
             const changes = snapshot.docChanges()
             // Traiter même s'il n'y a pas de changements (important pour chargement initial)
@@ -578,44 +610,31 @@ export class FirestoreService {
             cacheManager.set(cacheKey, documents, FIRESTORE_CONFIG.CACHE.TTL * 2) // TTL plus long pour real-time
 
             // Notifier tous les callbacks enregistrés
-            const listenerInfo = this.connectionPool.get(subscriptionKey)
-            if (listenerInfo) {
-              listenerInfo.callbacks.forEach(item => {
-                try {
-                  item.onNext(documents, changes) // Passer aussi les changements pour optimisation
-                } catch (error) {
-                  console.error('Firestore subscription callback error:', error)
-                }
-              })
-            }
+            listenerInfo.callbacks.forEach(item => {
+              try {
+                item.onNext(documents, changes) // Passer aussi les changements pour optimisation
+              } catch (error) {
+                console.error('Firestore subscription callback error:', error)
+              }
+            })
 
           } catch (error) {
             console.error('Firestore snapshot processing error:', error)
-            const listenerInfo = this.connectionPool.get(subscriptionKey)
-            listenerInfo?.callbacks.forEach(item => notifySubscriptionError(item, error, 'Firestore snapshot processing error'))
+            listenerInfo.callbacks.forEach(item => notifySubscriptionError(item, error, 'Firestore snapshot processing error'))
           }
         },
-        (error) => {
-          clearTimeout(timeoutId)
+        onError: (error) => {
           this.metrics.errors++
           console.error('Firestore listener error:', error)
 
-          // Notifier les callbacks de l'erreur
-          const listenerInfo = this.connectionPool.get(subscriptionKey)
-          if (listenerInfo) {
-            listenerInfo.callbacks.forEach(item => notifySubscriptionError(item, error, 'Firestore listener error'))
+          // Les abonnés sont prévenus à chaque erreur ; c'est à eux de dire si
+          // elle mérite un mot à l'écran (`isPermanentSnapshotError`).
+          listenerInfo.callbacks.forEach(item => notifySubscriptionError(item, error, 'Firestore listener error'))
+          if (isPermanentSnapshotError(error) && this.connectionPool.get(subscriptionKey) === listenerInfo) {
             listenerInfo.unsubscribe()
             this.connectionPool.delete(subscriptionKey)
           }
         }
-      )
-
-      // Enregistrer dans le pool de connexions
-      this.connectionPool.set(subscriptionKey, {
-        unsubscribe,
-        callbacks: new Set([observer]),
-        createdAt: Date.now(),
-        collection: collectionName
       })
 
       // Retourner une fonction pour se désabonner
@@ -1241,6 +1260,10 @@ export class FirestoreService {
 
   async getHistoryBetween(fenetre) {
     return this._historyService.getHistoryBetween(fenetre)
+  }
+
+  async lirePeriode(fenetre) {
+    return this._historyService.lirePeriode(fenetre)
   }
 
   async addToHistory(transactionData) {

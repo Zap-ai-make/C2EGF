@@ -9,9 +9,9 @@
  * dise qu'il regarde des données mortes. Sur des écrans qui portent de l'argent,
  * c'est le pire mode de défaillance : silencieux et crédible.
  *
- * ⚠ Ne PAS confondre avec FirestoreService.subscribeToCollection, qui coupe ses
- *   listeners au bout de 30 s (LISTENER_TIMEOUT). Les abonnements de ce module
- *   passent en direct par `onSnapshot`, comme le fait déjà storeTransferService.
+ * FirestoreService.subscribeToCollection, qui sert l'historique, passe aussi par
+ * ici depuis le 2026-11-12. Elle coupait ses écoutes au bout de 30 s sans réponse
+ * et à la première erreur, et ne les rouvrait jamais (TC-372).
  *
  * LES CODES PERMANENTS NE SE RÉESSAIENT PAS
  * ─────────────────────────────────────────

@@ -4,7 +4,7 @@
  * Il sert les sources du lot G1 (docs/rester-dans-le-quota-gratuit.md §G) à
  * partir des mêmes lignes : la journée (`subscribeToHistory` avec une plage),
  * les validées et les supprimées depuis un instant, les ravitaillements dus, et
- * la lecture unique d'une période (`getHistoryBetween`).
+ * la lecture unique d'une période (`lirePeriode`), qui répond du serveur.
  *
  * Il trie comme Firestore (`createdAt` décroissant, puis identifiant
  * décroissant) et rejoue chaque écoute à chaque changement, comme le ferait un
@@ -59,8 +59,10 @@ export function fauxHistorique(lignes) {
       () => trier(serveur).filter((l) => l.replenishmentStatus === 'open'),
       cb,
     )),
-    getHistoryBetween: vi.fn(async ({ start, endExclusive }) => trier(serveur)
-      .filter((l) => ms(l) >= start.getTime() && ms(l) < endExclusive.getTime())),
+    lirePeriode: vi.fn(async ({ start, endExclusive }) => ({
+      lignes: trier(serveur).filter((l) => ms(l) >= start.getTime() && ms(l) < endExclusive.getTime()),
+      depuisServeur: true,
+    })),
   }
 
   return {

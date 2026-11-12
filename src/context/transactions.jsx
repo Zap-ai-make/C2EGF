@@ -28,6 +28,18 @@ import {
 import { TYPE_RETOUR } from '../utils/ravitaillement.js'
 import { stockDejaPris } from '../utils/financialImpact.js'
 import { bornerPeriode, bornesServeur } from '../utils/periodeHistorique.js'
+import { isPermanentSnapshotError } from '../services/resilientOnSnapshot.js'
+
+/**
+ * Au-delà, l'écran cesse d'attendre la première réponse de la journée.
+ *
+ * `loading` tient les non terminées en squelettes : sur une connexion lente, la
+ * caissière ne les verrait pas tant que le serveur n'a pas répondu. L'écoute,
+ * elle, continue (TC-372) : la journée s'affiche dès qu'elle arrive. Même délai
+ * qu'avant, quand l'écoute mourait au bout de 30 s et libérait l'écran du même
+ * coup (TC-373 [HA-05]).
+ */
+const ATTENTE_MAX_PREMIERE_REPONSE_MS = 30_000
 
 // Exporté comme ClientsContext : permet de fournir une valeur sans monter le
 // provider réel (bancs d'essai, tests de rendu) — cf. src/preview.jsx.
@@ -135,6 +147,12 @@ export const TransactionsProvider = ({ children }) => {
   const [periode, setPeriode] = useState(null)
   const [periodeEnChargement, setPeriodeEnChargement] = useState(false)
   const [erreurPeriode, setErreurPeriode] = useState(null)
+  // La période vient de l'appareil, pas du serveur : sans réseau, Firestore
+  // répond avec ce qu'il a gardé, sans prévenir. Elle est peut-être incomplète.
+  const [periodeHorsLigne, setPeriodeHorsLigne] = useState(false)
+  // Une écoute de l'historique s'est arrêtée pour de bon (TC-373) : refus des
+  // règles ou index manquant. Une coupure, elle, se relève seule (TC-372).
+  const [historiqueArrete, setHistoriqueArrete] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -188,6 +206,8 @@ export const TransactionsProvider = ({ children }) => {
     setPeriode(null)
     setPeriodeEnChargement(false)
     setErreurPeriode(null)
+    setPeriodeHorsLigne(false)
+    setHistoriqueArrete(false)
 
     // Ne pas initialiser si l'auth est encore en cours de chargement
     if (authLoading) {
@@ -203,7 +223,7 @@ export const TransactionsProvider = ({ children }) => {
     }
 
     let isMounted = true
-    let unsubscribeDrafts, unsubscribeToday, unsubscribeDettes, unsubscribeValidees, unsubscribeSupprimees, rolloverTimeout
+    let unsubscribeDrafts, unsubscribeToday, unsubscribeDettes, unsubscribeValidees, unsubscribeSupprimees, rolloverTimeout, attenteMaxTimeout
 
     const initializeTransactions = async () => {
       try {
@@ -248,6 +268,15 @@ export const TransactionsProvider = ({ children }) => {
         onDrafts.onError = onSubscriptionError
         unsubscribeDrafts = firestoreService.subscribeToDrafts(onDrafts)
 
+        // Les écoutes de l'historique se rouvrent seules après une coupure
+        // (`subscribeToCollection`, TC-372) : rien à dire, le bandeau du bas dit
+        // déjà quand le réseau manque. Seul un arrêt définitif se signale.
+        const onHistoryError = (subscriptionError) => {
+          if (!isMounted) return
+          setLoading(false)
+          if (isPermanentSnapshotError(subscriptionError)) setHistoriqueArrete(true)
+        }
+
         // La journée en cours, en entier et en temps réel : c'est tout
         // l'historique qu'on lit à l'ouverture. Sa première réponse baisse
         // `loading`.
@@ -261,7 +290,7 @@ export const TransactionsProvider = ({ children }) => {
             publishHistory()
             setLoading(false)
           }
-          onToday.onError = onSubscriptionError
+          onToday.onError = onHistoryError
           unsubscribeToday = firestoreService.subscribeToHistory(onToday, {
             dateRange: { start, endExclusive: end },
             limitCount: null,
@@ -277,7 +306,7 @@ export const TransactionsProvider = ({ children }) => {
             valideesRecemmentRef.current = historyData
             publishHistory()
           }
-          onValidees.onError = onSubscriptionError
+          onValidees.onError = onHistoryError
           unsubscribeValidees = firestoreService.subscribeToValidatedSince(onValidees, start)
 
           // Ce qui a été SUPPRIMÉ aujourd'hui, quelle que soit sa date de saisie :
@@ -288,12 +317,15 @@ export const TransactionsProvider = ({ children }) => {
             supprimeesRecemmentRef.current = historyData
             publishHistory()
           }
-          onSupprimees.onError = onSubscriptionError
+          onSupprimees.onError = onHistoryError
           unsubscribeSupprimees = firestoreService.subscribeToDeletedSince(onSupprimees, start)
 
           rolloverTimeout = setTimeout(subscribeToday, millisecondsUntilNextBusinessDay(now) + 25)
         }
         subscribeToday()
+        attenteMaxTimeout = setTimeout(() => {
+          if (isMounted) setLoading(false)
+        }, ATTENTE_MAX_PREMIERE_REPONSE_MS)
 
         // Ce que la boutique doit encore au dealer, quelle que soit son
         // ancienneté. Sans cette écoute, une livraison d'avant aujourd'hui
@@ -304,10 +336,11 @@ export const TransactionsProvider = ({ children }) => {
           dettesRavitaillementRef.current = historyData
           publishHistory()
         }
-        onDettes.onError = onSubscriptionError
+        onDettes.onError = onHistoryError
         unsubscribeDettes = firestoreService.subscribeToOpenReplenishments(onDettes)
-        // `loading` retombe à la première réponse de la journée (`onToday`) ou
-        // à la première erreur : pas ici, où aucune ligne n'est encore arrivée.
+        // `loading` retombe à la première réponse de la journée (`onToday`), à
+        // la première erreur, ou au bout de ATTENTE_MAX_PREMIERE_REPONSE_MS :
+        // pas ici, où aucune ligne n'est encore arrivée.
       } catch (error) {
         console.error('Erreur lors de l\'initialisation des transactions:', error)
         if (isMounted) {
@@ -340,13 +373,14 @@ export const TransactionsProvider = ({ children }) => {
       if (unsubscribeValidees && typeof unsubscribeValidees === 'function') unsubscribeValidees()
       if (unsubscribeSupprimees && typeof unsubscribeSupprimees === 'function') unsubscribeSupprimees()
       if (rolloverTimeout) clearTimeout(rolloverTimeout)
+      if (attenteMaxTimeout) clearTimeout(attenteMaxTimeout)
     }
   }, [user, userProfile?.storeId, activeStore?.id, authLoading, publishHistory])
 
   /**
    * Relit une période passée, une fois, quand on choisit des dates.
    *
-   * Lecture unique (`getHistoryBetween`, sans cache) et non écoute : les jours
+   * Lecture unique (`lirePeriode`, sans cache) et non écoute : les jours
    * passés ne bougent presque plus, et une écoute de période se refacturerait
    * en entier à chaque réouverture tardive. Les gestes faits ici sur une ligne
    * de la période (suppression, réouverture) la corrigent localement, et les
@@ -370,6 +404,7 @@ export const TransactionsProvider = ({ children }) => {
     periodeDemandeeRef.current = bornee
     setPeriode(bornee)
     setErreurPeriode(null)
+    setPeriodeHorsLigne(false)
     const bornes = bornesServeur(bornee)
     if (!bornes) {
       periodeHistoryRef.current = []
@@ -378,9 +413,10 @@ export const TransactionsProvider = ({ children }) => {
     }
     try {
       setPeriodeEnChargement(true)
-      const lignes = await firestoreService.getHistoryBetween(bornes)
+      const { lignes, depuisServeur } = await firestoreService.lirePeriode(bornes)
       if (periodeDemandeeRef.current !== bornee) return false
       periodeHistoryRef.current = lignes
+      setPeriodeHorsLigne(!depuisServeur)
       publishHistory()
       return true
     } catch (lectureError) {
@@ -398,6 +434,7 @@ export const TransactionsProvider = ({ children }) => {
     setPeriode(null)
     setPeriodeEnChargement(false)
     setErreurPeriode(null)
+    setPeriodeHorsLigne(false)
     publishHistory()
   }, [publishHistory])
 
@@ -714,6 +751,8 @@ export const TransactionsProvider = ({ children }) => {
     periode,
     periodeEnChargement,
     erreurPeriode,
+    periodeHorsLigne,
+    historiqueArrete,
     chargerPeriode,
     revenirAuJour,
     editingTransaction,

@@ -312,7 +312,7 @@ describe('TC-361 — quand le serveur a accepté (lot H)', () => {
 
   beforeEach(async () => {
     ecouteur = null
-    service.getHistoryBetween = vi.fn(async () => [ancienne])
+    service.lirePeriode = vi.fn(async () => ({ lignes: [ancienne], depuisServeur: true }))
   })
   const relirePeriode = async () => {
     await act(async () => { await tx.chargerPeriode({ from: '2026-10-05', to: '2026-10-05' }) })
