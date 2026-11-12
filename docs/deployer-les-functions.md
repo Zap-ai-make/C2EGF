@@ -216,6 +216,77 @@ décision et un geste humains.
 
 ---
 
+## 8. La liaison Oxygen : `genererCodeLiaison` et `pointEntreeOxygen` (2026-11-12)
+
+Contrat : `C:\dev\oxygen\docs\contrats\liaison-agent.md`, version 3. Deux services,
+tous deux en us-central1 seulement, à une instance et 1/6 de vCPU (§5, §7) :
+
+- `genererCodeLiaison`, une callable. C'est le bouton « Code de liaison Oxygen »
+  du panneau de l'agent ;
+- `pointEntreeOxygen`, une route HTTP que seul le compte de service
+  `oxygen-appel` peut appeler. Le serveur Oxygen (Supabase) l'appelle.
+
+Chaque geste ci-dessous est humain, et l'ordre compte.
+
+1. **Créer le compte de service AVANT le déploiement.** Dans la console Google Cloud
+   de `c2egf-b0b5a`, ouvrir IAM, puis Comptes de service, et créer `oxygen-appel`
+   **sans aucun rôle**. Le déploiement lui donne le droit d'appeler
+   `pointEntreeOxygen`, et rien d'autre. S'il n'existe pas encore, le
+   déploiement de cette function échoue.
+   Vérifier au passage que l'onglet « Clés » de ce compte permet
+   « Ajouter une clé ». Si une règle d'organisation l'interdit, s'arrêter : le
+   contrat prévoit alors une signature HMAC, qu'il faudra coder.
+2. **Les règles et l'index, d'abord :**
+   `npx firebase deploy --only "firestore:rules,firestore:indexes" --project production`.
+   - Les règles ferment les trois collections `liaisonsOxygen`,
+     `codesLiaisonOxygen` et `journalLiaisonsOxygen`. Seul le patron lit le
+     journal.
+   - L'index ajouté est `history` : `clientId` + `updatedAt` (TC-379). Sa
+     construction prend quelques minutes.
+   - Si le CLI propose de SUPPRIMER des index absents du fichier, répondre non et
+     s'arrêter.
+3. **Les deux functions, un soir, seules** (§1, §2, §5) :
+   ```
+   $env:FUNCTIONS_DISCOVERY_TIMEOUT = "120"
+   npx firebase deploy --only "functions:genererCodeLiaison,functions:pointEntreeOxygen" --project production
+   ```
+4. **Deux sondes, pas plus** (chaque sonde occupe une instance) :
+   - `curl -X OPTIONS https://us-central1-c2egf-b0b5a.cloudfunctions.net/genererCodeLiaison -H "Origin: https://c2egf.vercel.app" -H "Access-Control-Request-Method: POST"`
+     doit répondre `204`. Un `403` renvoie au §6, avec le service `generercodeliaison`.
+   - `curl -s -o /dev/null -w "%{http_code}" -X POST https://us-central1-c2egf-b0b5a.cloudfunctions.net/pointEntreeOxygen -H "Content-Type: application/json" -d "{\"action\":\"rechercher\",\"identifiant\":\"0000000\"}"`
+     doit répondre **`403`**. Ici, 403 est la bonne réponse : sans jeton, Google
+     refuse. Un `200` voudrait dire que la route est publique, et il faudrait la
+     supprimer aussitôt.
+   - Dans Cloud Shell, `gcloud run services get-iam-policy pointentreeoxygen --region=us-central1`
+     ne doit montrer qu'un seul membre :
+     `serviceAccount:oxygen-appel@c2egf-b0b5a.iam.gserviceaccount.com`, avec le
+     rôle `roles/run.invoker`. S'il manque, l'ajouter avec la commande ci-dessous :
+     ```
+     gcloud run services add-iam-policy-binding pointentreeoxygen --region=us-central1 --member=serviceAccount:oxygen-appel@c2egf-b0b5a.iam.gserviceaccount.com --role=roles/run.invoker
+     ```
+5. **La clé, et l'adresse pour Oxygen.**
+   - Créer la clé JSON depuis l'onglet « Clés » du compte `oxygen-appel`. La
+     coller dans le coffre Supabase sous le nom `CLE_SERVICE_C2EGF`, puis
+     effacer le fichier téléchargé.
+   - La clé ne passe par aucune conversation, avec aucun agent.
+   - La renouveler tous les 90 jours : créer la nouvelle, la poser, puis
+     supprimer l'ancienne.
+   - L'adresse à donner à la session Oxygen s'obtient avec
+     `gcloud run services describe pointentreeoxygen --region=us-central1 --format="value(status.url)"`.
+     Elle se termine par `.run.app` et sert aussi d'audience du jeton.
+   - Le premier appel avec jeton (`200`) se fait avec la session Oxygen.
+6. **Le front en dernier.** Si on pousse le front avant, rien ne casse : le bouton
+   répond « Code non obtenu ».
+
+**Ce que coûte la liaison** :
+- générer un code : environ 3 lectures ;
+- `rechercher` : 1 à 3 lectures ;
+- `relier` : environ 6 lectures ;
+- une page d'activité : environ 5 lectures, plus les lignes rendues.
+Aucune écoute permanente.
+
+---
+
 ## Ce qu'il n'y a PAS à déployer
 
 - `firestore.rules` et `firestore.indexes.json` ne changent que si on les a

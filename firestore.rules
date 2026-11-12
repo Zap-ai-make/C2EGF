@@ -402,6 +402,33 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────────────────────────
+    // Liaison à l'app agent Oxygen
+    // Contrat : C:\dev\oxygen\docs\contrats\liaison-agent.md (version 3).
+    // Toutes les écritures via Cloud Functions (genererCodeLiaison,
+    // pointEntreeOxygen).
+    //
+    // ⚠ LES CODES ET LES LIAISONS NE SE LISENT PAS, MÊME PAR LE PATRON. Le
+    //   refus par défaut les couvrirait déjà ; ils sont écrits ici pour qu'on
+    //   ne les « ouvre » pas par mégarde. Une boutique qui lirait un code
+    //   pourrait relier n'importe quel compte à n'importe quel agent.
+    // ⚠ LE JOURNAL SE LIT PAR LE PATRON SEUL, et personne ne l'écrit : une
+    //   trace que son auteur pourrait effacer n'en serait pas une.
+    // ─────────────────────────────────────────────────────────────
+
+    match /liaisonsOxygen/{liaisonId} {
+      allow read, write: if false;
+    }
+
+    match /codesLiaisonOxygen/{clientId} {
+      allow read, write: if false;
+    }
+
+    match /journalLiaisonsOxygen/{ligneId} {
+      allow read: if isSystemManager();
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────
     // Demandes Dealer
     // update/delete réservés aux Cloud Functions (Admin SDK)
     //

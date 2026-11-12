@@ -54,6 +54,15 @@ export const taoficProfile = Object.freeze({
     networks: ['Orange'],
   }),
 
+  // ── Oxygen : DÉSACTIVÉ ──────────────────────────────────────────────────────
+  // TAOFIC n'a rien demandé : la liaison née chez C2EGF ne doit ni ajouter un
+  // bouton chez lui, ni ouvrir un point d'entrée (docs/client-profiles.md §8).
+  oxygen: Object.freeze({
+    enabled: false,
+    distributeurId: 'taofic',
+    nomDistributeur: 'TAOFIC',
+  }),
+
   // regional : hérité du pilote (Africa/Ouagadougou) — même fuseau pour TAOFIC.
 })
 

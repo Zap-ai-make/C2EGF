@@ -14,7 +14,7 @@
  */
 
 import { initializeApp, getApps } from 'firebase-admin/app'
-import { getFirestore, FieldValue, FieldPath } from 'firebase-admin/firestore'
+import { getFirestore, FieldValue, FieldPath, Timestamp } from 'firebase-admin/firestore'
 import { getAuth } from 'firebase-admin/auth'
 import { onCall, onRequest } from 'firebase-functions/v2/https'
 import { onDocumentWritten } from 'firebase-functions/v2/firestore'
@@ -49,6 +49,8 @@ import { listOutstandingDraftsHandler } from './dealerMetrics/listOutstandingDra
 import { listClientHistoryHandler } from './clients/listClientHistory.js'
 import { majAnnuaireClientsHandler, reconstruireAnnuaireClientsHandler } from './clients/annuaireClients.js'
 import { creerBoutiqueHandler } from './boutiques/creerBoutique.js'
+import { genererCodeLiaisonHandler } from './oxygen/genererCodeLiaison.js'
+import { invokerOxygen, traiterDemandeOxygen } from './oxygen/pointEntreeOxygen.js'
 
 // Garde idempotente : évite "App named '[DEFAULT]' already exists" lors des imports
 // dans les tests d'intégration (TC-036) qui s'exécutent après TC-035 dans le même processus.
@@ -274,6 +276,50 @@ export const rejectInternalDebtCompensation = onCall(
 export const creerBoutique = onCall(
   { ...CALLABLE, region: 'us-central1', maxInstances: 1, cpu: 'gcf_gen1' },
   wrapCallable(creerBoutiqueHandler, { db, FieldValue, auth: getAuth() })
+)
+
+// ── Liaison à l'app agent Oxygen ────────────────────────────────────────────
+// Contrat : C:\dev\oxygen\docs\contrats\liaison-agent.md (version 3). Deux
+// services seulement, nés après le lot C1 : us-central1, une instance, 1/6 de
+// vCPU, pour la même raison que creerBoutique — quelques appels par jour ne
+// doivent presque rien peser sur le quota régional.
+
+const depsOxygen = { db, Timestamp }
+
+// Le code que la caissière dicte à l'agent, depuis le panneau de sa fiche.
+export const genererCodeLiaison = onCall(
+  { ...CALLABLE, region: 'us-central1', maxInstances: 1, cpu: 'gcf_gen1' },
+  wrapCallable(genererCodeLiaisonHandler, depsOxygen)
+)
+
+// Le point d'entrée du serveur Oxygen : rechercher, relier,
+// consommerPourCodeSecret, lireActivite.
+// ⚠ `invoker` = le compte de service `oxygen-appel` du projet, et lui seul
+//   (TC-036 [WRA-14]). Google refuse toute autre requête avant ce code. Le
+//   compte doit EXISTER avant le déploiement (docs/deployer-les-functions.md §8).
+// ⚠ 60 s : le serveur Oxygen attend 30 s, un démarrage à froid charge tout ce
+//   fichier. Le plafond ne doit pas couper une transaction en cours.
+export const pointEntreeOxygen = onRequest(
+  { region: 'us-central1', maxInstances: 1, cpu: 'gcf_gen1', invoker: invokerOxygen(), timeoutSeconds: 60 },
+  async (req, res) => {
+    if (req.method !== 'POST') {
+      res.status(405).json({ erreur: 'POST attendu.' })
+      return
+    }
+    try {
+      const { statut, corps } = await traiterDemandeOxygen(req.body, depsOxygen)
+      res.status(statut).json(corps)
+    } catch (err) {
+      try {
+        writeSafeErrorLog(write, buildSafeUnexpectedErrorLog({ action: 'pointEntreeOxygen', error: err }))
+      } catch {
+        // Le journal ne doit jamais remplacer la réponse.
+      }
+      // Une panne, que le serveur Oxygen présente comme « injoignable », jamais
+      // comme « absent » (contrat §5.2).
+      res.status(500).json({ erreur: 'Le distributeur n’a pas pu répondre.' })
+    }
+  }
 )
 
 // ── Annuaire des clients ────────────────────────────────────────────────────

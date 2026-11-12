@@ -121,6 +121,14 @@ export const c2egfProfile = Object.freeze({
     seuilBas: 500000,
   }),
 
+  // ── Oxygen : C2EGF répond pour lui-même (confirmé le 2026-11-12) ───────────
+  // Le serveur Oxygen interroge ce CRM sous l'identifiant « c2egf ».
+  oxygen: Object.freeze({
+    enabled: true,
+    distributeurId: 'c2egf',
+    nomDistributeur: 'C2EGF',
+  }),
+
   // regional : hérité du pilote (Africa/Ouagadougou) — C2EGF est au Burkina Faso.
 })
 

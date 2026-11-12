@@ -8,6 +8,8 @@ import LigneHistorique from './LigneHistorique'
 import { useHistoriqueClient } from '../../hooks/useHistoriqueClient.js'
 import { useWindowedRows } from '../../hooks/useWindowedRows.js'
 import { champsAgent } from '../../utils/agentFields.js'
+import CodeLiaisonOxygen from './CodeLiaisonOxygen'
+import { LIAISON_OXYGEN_ACTIVE } from '../../services/liaisonOxygenService.js'
 
 /**
  * Tout ce qu'un agent a fait, quelle que soit la boutique.
@@ -70,6 +72,16 @@ function HistoriqueClientPanel({ client, onClose }) {
       largeur="max-w-2xl"
       testId="historique-client-panel"
     >
+      {/* En tête du panneau : c'est ici que la caissière a la fiche ouverte quand
+          l'agent demande à relier son app. `key` : un autre agent, un autre code. */}
+      {LIAISON_OXYGEN_ACTIVE && (
+        <CodeLiaisonOxygen
+          key={clientId}
+          clientId={clientId}
+          aIdentifiant={Boolean(agent.codeAgent || agent.numeroAgent)}
+        />
+      )}
+
       {/*
         ⚠ CE RÉSUMÉ ÉTAIT DEUX PHRASES EMPILÉES, DE MÊME TAILLE ET DE MÊME TON.
           « 3 opérations enregistrées » puis « C2EGF SIEGE — 2 op. · C2EGF

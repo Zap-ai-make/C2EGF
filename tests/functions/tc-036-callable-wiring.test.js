@@ -130,6 +130,10 @@ describe('TC-036-WRA — exports callable de index.js', () => {
       'reconstruireAnnuaireClients',
       // Création d'une boutique par le patron
       'creerBoutique',
+      // Liaison à l'app agent Oxygen : le code de la caissière, et le point
+      // d'entrée réservé au serveur Oxygen (WRA-13, WRA-14).
+      'genererCodeLiaison',
+      'pointEntreeOxygen',
     ])
     for (const key of Object.keys(indexModule)) {
       expect(
@@ -167,7 +171,7 @@ describe('TC-036-WRA — exports callable de index.js', () => {
     //
     // ⚠ SAUF LES CALLABLES NÉES APRÈS LE PASSAGE : aucune application ne les a
     //   jamais appelées en europe-west1 (WRA-12).
-    const NEES_APRES_C1 = new Set(['creerBoutique'])
+    const NEES_APRES_C1 = new Set(['creerBoutique', 'genererCodeLiaison'])
     const callables = Object.entries(indexModule).filter(([, fn]) => fn.__endpoint?.callableTrigger)
     expect(callables.length).toBeGreaterThanOrEqual(27)
     for (const [name, fn] of callables) {
@@ -186,6 +190,27 @@ describe('TC-036-WRA — exports callable de index.js', () => {
     expect(endpoint.region).toEqual(['us-central1'])
     expect(endpoint.maxInstances).toBe(1)
     expect(endpoint.cpu).toBe('gcf_gen1')
+  })
+
+  it('[WRA-13] le code de liaison Oxygen pèse le moins possible sur le quota de la région', () => {
+    // Même raison que WRA-12 : quelques appels par jour, nés après le lot C1.
+    const endpoint = indexModule.genererCodeLiaison.__endpoint
+    expect(endpoint.callableTrigger).toBeDefined()
+    expect(endpoint.region).toEqual(['us-central1'])
+    expect(endpoint.maxInstances).toBe(1)
+    expect(endpoint.cpu).toBe('gcf_gen1')
+  })
+
+  it('[WRA-14] le point d’entrée Oxygen n’est appelable que par son compte de service, jamais par le public', () => {
+    // Google refuse toute requête sans le jeton de ce compte AVANT le code :
+    // aucune instance ne démarre, aucune lecture n'est facturée. Ouvert au
+    // public, n'importe qui pourrait sonder quels agents travaillent ici.
+    const route = indexModule.pointEntreeOxygen.__endpoint
+    expect(route.httpsTrigger).toBeDefined()
+    expect(route.httpsTrigger.invoker).toEqual([`oxygen-appel@${process.env.GCLOUD_PROJECT}.iam.gserviceaccount.com`])
+    expect(route.region).toEqual(['us-central1'])
+    expect(route.maxInstances).toBe(1)
+    expect(route.cpu).toBe('gcf_gen1')
   })
 
   it('[WRA-10] l’annuaire tourne en us-central1, la région que la base nam5 impose', () => {

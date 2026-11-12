@@ -106,6 +106,9 @@ export const HTTP_CODES = {
   INVALID_PASSWORD:                'invalid-argument',
   EMAIL_ALREADY_USED:              'already-exists',
   STORE_NAME_TAKEN:                'already-exists',
+  // Liaison à l'app agent Oxygen
+  OXYGEN_DISABLED:                 'failed-precondition',
+  AGENT_SANS_IDENTIFIANT:          'failed-precondition',
 }
 
 export class DealerRequestError extends Error {

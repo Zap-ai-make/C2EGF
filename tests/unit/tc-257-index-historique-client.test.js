@@ -136,6 +136,12 @@ describe('TC-257 — une requête, un index', () => {
         { fieldPath: 'clientId', order: 'ASCENDING' },
         { fieldPath: 'createdAt', order: 'DESCENDING' },
       ]),
+      // La synchronisation de l'activité d'un agent dans son app Oxygen, sur la
+      // date de MODIFICATION (pointEntreeOxygen.js, `lirePage`) — TC-379-02.
+      JSON.stringify([
+        { fieldPath: 'clientId', order: 'ASCENDING' },
+        { fieldPath: 'updatedAt', order: 'ASCENDING' },
+      ]),
       JSON.stringify([
         { fieldPath: 'statut', order: 'ASCENDING' },
         { fieldPath: 'createdAt', order: 'ASCENDING' },

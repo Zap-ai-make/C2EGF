@@ -49,6 +49,7 @@ la résolution **stricte** (qui lève) est réservée à la génération de règ
 | `collaborations.enabled` | collaborations inter-boutiques + dettes internes on/off | Front + **Functions** |
 | `storeWorkspace` | visibilité progressive des entrées boutique pendant l'accompagnement | Front |
 | `regional.timezone` | fuseau horaire d'affichage des dates | Front |
+| `oxygen` | liaison à l'app agent Oxygen : activée ou non, `distributeurId`, nom annoncé | Front + **Functions** (`oxygenProfile.js`) |
 
 > `collaborations.enabled` est **indépendant du nombre de réseaux** : une boutique sollicite une
 > consœur parce qu'elle est à court de **stock**, pas parce qu'il lui manque une SIM. Un client

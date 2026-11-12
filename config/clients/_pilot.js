@@ -157,6 +157,23 @@ export const pilotProfile = Object.freeze({
     enabled: true,
   }),
 
+  // ── Liaison à l'app agent Oxygen ───────────────────────────────────────────
+  // Un agent relie son compte Oxygen à sa fiche grâce à un code de liaison que
+  // la caissière génère depuis le panneau de l'agent. Contrat :
+  // C:\dev\oxygen\docs\contrats\liaison-agent.md (version 3).
+  //   enabled         → bouton « Code de liaison Oxygen » et point d'entrée privé.
+  //                     false = ni bouton, et le serveur refuse ou répond « absent ».
+  //   distributeurId  → l'identifiant sous lequel CE CRM répond à Oxygen. Constant
+  //                     pour une instance : minuscules, chiffres, « _ » ou « - ».
+  //                     ⚠ Rien à voir avec `dealerUid` : ici « dealer » désigne le
+  //                     fournisseur des boutiques, « distributeur » l'entreprise.
+  //   nomDistributeur → le nom que l'agent lit dans son app.
+  oxygen: Object.freeze({
+    enabled: true,
+    distributeurId: 'akayis',
+    nomDistributeur: 'AKAYIS',
+  }),
+
   // ── Régional ────────────────────────────────────────────────────────────────
   // Fuseau horaire de référence pour l'affichage/formatage des dates : fixe le
   // rendu quel que soit le fuseau du navigateur de l'utilisateur.

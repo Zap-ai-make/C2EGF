@@ -17,6 +17,7 @@ import { dirname, resolve } from 'node:path'
 import { resolveProfile } from '../config/clients/index.js'
 import { generateDealerProfileFile } from './lib/generateDealerProfile.mjs'
 import { generateStoreProfileFile } from './lib/generateStoreProfile.mjs'
+import { generateOxygenProfileFile } from './lib/generateOxygenProfile.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -31,6 +32,11 @@ const TARGETS = [
     label: 'functions/src/config/storeProfile.js',
     path: resolve(__dirname, '../functions/src/config/storeProfile.js'),
     generate: generateStoreProfileFile,
+  },
+  {
+    label: 'functions/src/config/oxygenProfile.js',
+    path: resolve(__dirname, '../functions/src/config/oxygenProfile.js'),
+    generate: generateOxygenProfileFile,
   },
 ]
 
