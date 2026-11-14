@@ -140,6 +140,24 @@ describe('TC-386 — avec la file', () => {
   })
 })
 
+describe('TC-388 — les boutons de la ligne en attente', () => {
+  /**
+   * Comme un dépôt entamé : une tranche partie, la ligne ne se modifie plus.
+   * « Annuler » reste : c'est le seul chemin pour corriger une tranche mal
+   * tapée (spec, décision 5).
+   */
+  it('[TC-388-2] « Modifier » disparaît après une tranche, « Envoyer au siège » et « Annuler » restent', async () => {
+    monter(fileSimulee())
+    await pret()
+    expect(tx.getActionButtons(enAttente)).toMatchObject({ modifier: true, envoyerSiege: true, encaisser: false, payerPar: false, rembourser: false })
+    const entamee = { ...enAttente, envoyeAuSiege: 60_000, resteAuSiege: 40_000 }
+    const actions = tx.getActionButtons(entamee)
+    expect(actions.modifier).toBe(false)
+    expect(actions.envoyerSiege).toBe(true)
+    expect(actions.annuler).not.toBe(false)
+  })
+})
+
 describe('TC-386 — sans file', () => {
   it('[TC-386-C5] les gestes appellent la commande directement', async () => {
     monter()

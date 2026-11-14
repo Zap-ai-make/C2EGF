@@ -804,6 +804,11 @@ export const TransactionsProvider = ({ children }) => {
     if (isDraftSettling(transaction)) {
       return { ...actions, modifier: false, annuler: false }
     }
+    // Un remboursement au siège dont une tranche est partie ne se modifie plus
+    // (le serveur le refuse). « Annuler » reste : il défait aussi les tranches.
+    if (estRembSiege(transaction) && (Number(transaction.envoyeAuSiege) || 0) > 0) {
+      return { ...actions, modifier: false }
+    }
     return actions
   }, [])
 
