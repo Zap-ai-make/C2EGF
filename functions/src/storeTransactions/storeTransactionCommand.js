@@ -19,8 +19,18 @@ import {
   CASHIER_CAN_EDIT_BALANCES,
   STORE_REPLENISHMENT_SENDERS,
   STORE_TIME_ZONE,
+  SIEGE_REPAYMENT_ENABLED,
 } from '../config/storeProfile.js'
 import { instantDeLaCaisse } from '../instantDeLaCaisse.js'
+import {
+  TYPE_REMB_SIEGE,
+  ENVOIS_MAX,
+  estRembSiege,
+  impactSaisie,
+  impactEnvoi,
+  impactAnnulation,
+  impactModification,
+} from './rembSiege.js'
 
 const SETTLEMENT_FIELDS = [
   'originalAmount', 'paidAmount', 'refundedAmount', 'remainingAmount',
@@ -174,6 +184,32 @@ function cleanTransaction(input) {
     statut,
   }
 }
+// Les commandes du remboursement au siège, éteintes avec leur drapeau de profil.
+const ACTIONS_REMB_SIEGE = ['addSiegeRepayment', 'sendToSiege', 'updateSiegeRepayment', 'trashSiegeRepayment']
+// Ce qu'une modification peut changer : ni le type, ni le statut, ni le suivi des envois.
+const CHAMPS_REMB_SIEGE_MODIFIABLES = ['client', 'clientId', 'code', 'montant', 'balanceType']
+
+/**
+ * Un remboursement au siège tel que le navigateur l'envoie : l'agent, le
+ * montant, la réserve où il l'a mis (« reçu en ») et le statut. Le type et le
+ * réseau ne viennent jamais de la charge utile : le serveur les pose.
+ */
+function cleanRembSiege(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) fail('STORE_TRANSACTION_INVALID', 'Remboursement invalide.')
+  if (JSON.stringify(input).length > 20_000) fail('STORE_TRANSACTION_INVALID', 'Remboursement trop volumineux.')
+  if (!['stock', 'liquidite'].includes(input.balanceType)) fail('STORE_TRANSACTION_INVALID', 'Reçu en : Stock ou Espèce.')
+  const statut = String(input.statut || '').trim()
+  if (![...PENDING, ...VALIDATED].includes(statut)) fail('STORE_TRANSACTION_INVALID', 'Statut initial non autorisé.')
+  return {
+    ...(input.client && typeof input.client === 'object' && !Array.isArray(input.client) ? { client: input.client } : {}),
+    clientId: cleanId(input.clientId, 'clientId'),
+    ...(typeof input.code === 'string' ? { code: input.code.slice(0, 160) } : {}),
+    montant: cleanAmount(input.montant),
+    balanceType: input.balanceType,
+    statut: PENDING.includes(statut) ? 'Non Terminées' : 'Validée',
+  }
+}
+
 function dateFr(instant = new Date()) {
   return new Intl.DateTimeFormat('fr-FR', { timeZone: STORE_TIME_ZONE }).format(instant)
 }
@@ -303,6 +339,9 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
   const faitLe = instantDeLaCaisse(payload.ageMs)
   const recu = faitLe ? { recuLe: now } : {}
   const datation = faitLe ? { date: dateFr(faitLe), createdAt: faitLe, ...recu } : { date: dateFr(), createdAt: now }
+  if (ACTIONS_REMB_SIEGE.includes(action) && !SIEGE_REPAYMENT_ENABLED) {
+    fail('STORE_TRANSACTION_INVALID', 'Le remboursement au siège est désactivé.')
+  }
 
   const result = await db.runTransaction(async t => {
     const { profile, storeId, store } = await readActor(t, db, uid)
@@ -827,6 +866,177 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
       t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: returnId, replenishmentId: retour.replenishmentId, uid, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
       return { trashed: true, returnId }
+    }
+
+    // ─── Le remboursement au siège ──────────────────────────────────────────
+    //
+    // Le siège donne du stock à crédit aux agents la nuit ; l'agent rembourse
+    // le lendemain à la boutique, qui envoie l'argent au siège. Une seule
+    // réserve bouge par jambe, comme le ravitaillement (rembSiege.js). La ligne
+    // attend dans `drafts` tant que tout n'est pas envoyé, puis passe dans
+    // `history` sous le même identifiant, comme une non terminée réglée.
+    //
+    // Les commandes génériques (updateDraft, trashDraft, règlements…) refusent
+    // ces lignes : elles ne savent pas en défaire les jambes.
+
+    if (action === 'addSiegeRepayment') {
+      const remb = cleanRembSiege(payload.transaction)
+      const enAttente = remb.statut === 'Non Terminées'
+      const collection = enAttente ? 'drafts' : 'history'
+      const ref = commandeId
+        ? db.doc(`clients/${storeId}/${collection}/${commandeId}`)
+        : db.collection(`clients/${storeId}/${collection}`).doc()
+      // ⚠ AVANT L'IMPACT, comme `add` : déjà appliquée, la saisie a peut-être
+      //   vidé le stock qu'elle demandait.
+      if (commandeId && (await t.get(ref)).exists) return { id: ref.id, idempotent: true }
+      const network = STORE_NETWORKS[0]
+      const nextBalances = impactSaisie(balances, network, remb)
+      const data = {
+        ...remb,
+        type: TYPE_REMB_SIEGE,
+        reseau: network,
+        // Validée d'un geste : la caissière a envoyé tout de suite.
+        envoyeAuSiege: enAttente ? 0 : remb.montant,
+        resteAuSiege: enAttente ? remb.montant : 0,
+        envoisSiege: [],
+        ...(enAttente ? {} : { directValidation: true, validatedAt: faitLe ?? now }),
+        storeId,
+        storeName: store.name || profile.storeName || '',
+        operatorId: uid,
+        operatorName: profile.name || '',
+        operatorEmail: profile.email || '',
+        ...datation,
+        updatedAt: now,
+      }
+      t.set(ref, data)
+      t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
+      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: ref.id, uid, balanceType: remb.balanceType, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
+      return { id: ref.id }
+    }
+
+    if (action === 'sendToSiege') {
+      const draftId = cleanId(payload.draftId, 'draftId')
+      const amount = cleanAmount(payload.amount)
+      const draftRef = db.doc(`clients/${storeId}/drafts/${draftId}`)
+      const historyRef = db.doc(`clients/${storeId}/history/${draftId}`)
+      const snap = await t.get(draftRef)
+      if (!snap.exists) {
+        // Renvoyée après la tranche qui a soldé la ligne : elle est dans
+        // l'historique, et sa tranche avec elle.
+        const partie = commandeId ? await t.get(historyRef) : null
+        if (partie?.exists && (partie.data().envoisSiege ?? []).some(e => e.id === commandeId)) {
+          return { sent: true, resteAuSiege: 0, historyId: draftId, idempotent: true }
+        }
+        fail('SETTLEMENT_DRAFT_NOT_FOUND', 'Transaction introuvable.')
+      }
+      const draft = snap.data()
+      if (!estRembSiege(draft)) fail('STORE_TRANSACTION_INVALID', 'Cette ligne n’est pas un remboursement au siège.')
+      const envois = Array.isArray(draft.envoisSiege) ? draft.envoisSiege : []
+      if (commandeId && envois.some(e => e.id === commandeId)) return { sent: true, resteAuSiege: draft.resteAuSiege, idempotent: true }
+      const resteAvant = Number(draft.resteAuSiege) || 0
+      if (amount > resteAvant) {
+        fail('STORE_TRANSACTION_INVALID', `Montant supérieur au reste à envoyer. Reste : ${resteAvant.toLocaleString('fr-FR')} FCFA`)
+      }
+      const reste = resteAvant - amount
+      // ⚠ LU AVANT TOUTE ÉCRITURE, et seulement quand la ligne part : comme
+      //   `addTransactionPayment`, on n'écrase pas une autre ligne d'historique.
+      if (reste === 0 && (await t.get(historyRef)).exists) {
+        fail('IDEMPOTENCY_CONFLICT', 'Ce numéro de transaction est déjà pris par une autre ligne.')
+      }
+      const nextBalances = impactEnvoi(balances, draft.reseau || STORE_NETWORKS[0], amount)
+      const tranche = { id: commandeId ?? db.collection(`clients/${storeId}/drafts`).doc().id, montant: amount, at: faitLe ?? new Date(), by: uid, byName: profile.name || '' }
+      const suivi = {
+        envoyeAuSiege: (Number(draft.envoyeAuSiege) || 0) + amount,
+        resteAuSiege: reste,
+        envoisSiege: [...envois, tranche].slice(-ENVOIS_MAX),
+        updatedAt: now,
+      }
+      if (reste > 0) {
+        t.update(draftRef, suivi)
+      } else {
+        t.set(historyRef, { ...draft, ...suivi, statut: 'Validée', validatedAt: faitLe ?? now, ...recu })
+        t.delete(draftRef)
+      }
+      t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
+      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: draftId, uid, amount, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
+      return { sent: true, resteAuSiege: reste, ...(reste === 0 ? { historyId: draftId } : {}) }
+    }
+
+    if (action === 'updateSiegeRepayment') {
+      const draftId = cleanId(payload.draftId, 'draftId')
+      const ref = db.doc(`clients/${storeId}/drafts/${draftId}`)
+      const snap = await t.get(ref)
+      if (!snap.exists) fail('SETTLEMENT_DRAFT_NOT_FOUND', 'Transaction introuvable.')
+      const old = snap.data()
+      if (!estRembSiege(old)) fail('STORE_TRANSACTION_INVALID', 'Cette ligne n’est pas un remboursement au siège.')
+      if (commandeId && old.derniereCommande === commandeId) return { id: draftId, idempotent: true }
+      // Comme un dépôt entamé : une tranche est partie, la ligne est figée.
+      if ((Number(old.envoyeAuSiege) || 0) > 0) fail('SETTLED_DRAFT_IMMUTABLE', 'Un remboursement déjà envoyé en partie ne se modifie plus.')
+      const updates = payload.updates
+      if (!updates || typeof updates !== 'object' || Array.isArray(updates)) fail('STORE_TRANSACTION_INVALID', 'Modification invalide.')
+      const retenus = Object.fromEntries(CHAMPS_REMB_SIEGE_MODIFIABLES.filter(champ => updates[champ] !== undefined).map(champ => [champ, updates[champ]]))
+      const apres = cleanRembSiege({
+        client: old.client, clientId: old.clientId, code: old.code, montant: old.montant, balanceType: old.balanceType,
+        ...retenus,
+        statut: 'Non Terminées',
+      })
+      const nextBalances = impactModification(balances, old.reseau || STORE_NETWORKS[0], old, apres)
+      const journal = Array.isArray(old.modifications) ? old.modifications : []
+      const montantChange = Number(old.montant) !== apres.montant
+      t.update(ref, {
+        ...apres,
+        resteAuSiege: apres.montant,
+        updatedAt: now,
+        ...(montantChange ? { modifications: empilerModification(journal, { avant: Number(old.montant), apres: apres.montant, uid, nom: profile.name || '', faitLe }) } : {}),
+        ...(commandeId ? { derniereCommande: commandeId } : {}),
+      })
+      t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
+      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: draftId, uid, before: old, after: apres, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
+      return { id: draftId }
+    }
+
+    // « Ce remboursement n'a pas eu lieu » : TOUTES les jambes sont défaites, à
+    // tout moment, y compris les tranches déjà envoyées. C'est aussi le seul
+    // chemin pour corriger une tranche mal tapée : annuler, ressaisir, renvoyer.
+    if (action === 'trashSiegeRepayment') {
+      const surBrouillon = payload.draftId != null
+      if (surBrouillon === (payload.historyId != null)) fail('STORE_TRANSACTION_INVALID', 'Indiquez la ligne à annuler.')
+      const corbeille = { statut: DELETED_STATUS, deletedAt: faitLe ?? now, ...recu, deletedBy: uid, deletedByName: profile.name || '', updatedAt: now }
+
+      if (surBrouillon) {
+        const draftId = cleanId(payload.draftId, 'draftId')
+        const corbeilleRef = commandeId
+          ? db.doc(`clients/${storeId}/history/${commandeId}`)
+          : db.collection(`clients/${storeId}/history`).doc()
+        if (commandeId && (await t.get(corbeilleRef)).exists) return { trashed: true, historyId: corbeilleRef.id, idempotent: true }
+        const ref = db.doc(`clients/${storeId}/drafts/${draftId}`)
+        const snap = await t.get(ref)
+        if (!snap.exists) fail('SETTLEMENT_DRAFT_NOT_FOUND', 'Transaction introuvable.')
+        const old = snap.data()
+        if (!estRembSiege(old)) fail('STORE_TRANSACTION_INVALID', 'Cette ligne n’est pas un remboursement au siège.')
+        const nextBalances = impactAnnulation(balances, old.reseau || STORE_NETWORKS[0], old)
+        t.set(corbeilleRef, { ...old, ...corbeille, origin: 'draft' })
+        t.delete(ref)
+        t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
+        t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: draftId, historyId: corbeilleRef.id, uid, before: old, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
+        return { trashed: true, historyId: corbeilleRef.id }
+      }
+
+      const historyId = cleanId(payload.historyId, 'historyId')
+      const ref = db.doc(`clients/${storeId}/history/${historyId}`)
+      const snap = await t.get(ref)
+      if (!snap.exists) fail('STORE_TRANSACTION_NOT_FOUND', 'Transaction introuvable.')
+      const ligne = snap.data()
+      if (!estRembSiege(ligne)) fail('STORE_TRANSACTION_INVALID', 'Cette ligne n’est pas un remboursement au siège.')
+      if (ligne.statut === DELETED_STATUS) {
+        if (commandeId) return { trashed: true, historyId, idempotent: true }
+        fail('STORE_TRANSACTION_INVALID', 'Ce remboursement a déjà été annulé.')
+      }
+      const nextBalances = impactAnnulation(balances, ligne.reseau || STORE_NETWORKS[0], ligne)
+      t.update(ref, { ...corbeille, origin: 'history' })
+      t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
+      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, historyId, uid, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
+      return { trashed: true, historyId }
     }
 
     fail('STORE_TRANSACTION_INVALID', 'Commande inconnue.')
