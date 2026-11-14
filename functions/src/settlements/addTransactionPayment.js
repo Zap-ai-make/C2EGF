@@ -20,6 +20,7 @@
 import { write } from 'firebase-functions/logger'
 import { DealerRequestError } from '../errors.js'
 import { writeSafeAuditLog } from '../logging.js'
+import { estRembSiege, MESSAGE_GESTE_GENERIQUE } from '../storeTransactions/rembSiege.js'
 import {
   readValidatedProfile,
   validateAuthUid,
@@ -155,6 +156,9 @@ export async function addTransactionPaymentHandler(request, { db, FieldValue, lo
       }
 
       const draft = draftSnap.data()
+      // Un remboursement au siège ne se règle pas par tranche client : son envoi
+      // sort du stock, quand une tranche de dépôt y entre (TC-381).
+      if (estRembSiege(draft)) throw new DealerRequestError('STORE_TRANSACTION_INVALID', MESSAGE_GESTE_GENERIQUE)
 
       // ── Type métier ÉPINGLÉ (défense en profondeur, cf. C1) ────────────────
       // Le signe de l'impact réseau dépend du type (Retrait ⇒ débit). Les règles

@@ -3,6 +3,8 @@ import { initializeApp, getApps, deleteApp } from 'firebase-admin/app'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { storeTransactionCommandHandler } from '../../functions/src/storeTransactions/storeTransactionCommand.js'
 import { addTransactionPaymentHandler } from '../../functions/src/settlements/addTransactionPayment.js'
+import { addTransactionRefundHandler } from '../../functions/src/settlements/addTransactionRefund.js'
+import { MESSAGE_GESTE_GENERIQUE } from '../../functions/src/storeTransactions/rembSiege.js'
 
 /**
  * TC-381 — les gestes GÉNÉRIQUES face à une ligne « Remb. siège ».
@@ -12,13 +14,15 @@ import { addTransactionPaymentHandler } from '../../functions/src/settlements/ad
  * `history`, à côté des dépôts : une application pas encore rechargée peut lui
  * proposer « Modifier », « Annuler » ou « Encaisser » génériques.
  *
- * CE FICHIER FIGE CE QUE CES GESTES FONT AUJOURD'HUI (AGENTS.md : pas de règle
- * métier modifiée sans caractérisation). Trois défauts y sont visibles :
- *   - `deleteDraft`, `trashDraft`, `trashHistory`, `cancelHistory` lèvent un
- *     `Error` nu : la file d'envoi le prend pour une panne et le renvoie toutes
- *     les 30 s, en bloquant les opérations suivantes ;
- *   - `validateDraft` valide la ligne sans toucher aux soldes ;
- *   - `addTransactionPayment` crédite le stock d'une tranche.
+ * AVANT LES GARDES (caractérisation, commit f5a699d), trois défauts :
+ *   - `deleteDraft`, `trashDraft`, `trashHistory`, `cancelHistory` levaient un
+ *     `Error` nu : la file d'envoi le prenait pour une panne et le renvoyait
+ *     toutes les 30 s, en bloquant les opérations suivantes ;
+ *   - `validateDraft` validait la ligne sans toucher aux soldes ;
+ *   - `addTransactionPayment` créditait le stock d'une tranche.
+ *
+ * DEPUIS LES GARDES, chacun refuse par un code métier — un refus DÉFINITIF pour
+ * la file — sans toucher aux soldes ni aux lignes.
  */
 
 let app
@@ -84,7 +88,28 @@ const erreurNue = async (promesse) => {
   return erreur
 }
 
-describe('TC-381 — avant les gardes : ce que les gestes génériques font d’une ligne « Remb. siège »', () => {
+const rembourser = data => addTransactionRefundHandler({ auth: { uid: UID }, data }, { db, FieldValue, logWriter: () => {} })
+
+/** Un refus métier : le code dit à la file de ne pas renvoyer. */
+const refusMetier = async (promesse) => {
+  const erreur = await erreurNue(promesse)
+  expect(erreur.code).toBe('STORE_TRANSACTION_INVALID')
+  return erreur
+}
+
+/** Le brouillon et les soldes n'ont pas bougé. */
+const brouillonIntact = async () => {
+  expect((await doc('drafts', 'rs-1')).data()).toMatchObject({ statut: 'Non Terminées', montant: 100_000, resteAuSiege: 100_000 })
+  expect(await soldes()).toEqual(DEPART)
+}
+
+/** La ligne validée et les soldes n'ont pas bougé. */
+const ligneIntacte = async () => {
+  expect((await doc('history', 'rs-2')).data().statut).toBe('Validée')
+  expect(await soldes()).toEqual(DEPART)
+}
+
+describe('TC-381 — les gestes génériques refusent une ligne « Remb. siège »', () => {
   it('[TC-381-C1] `add` refuse le type « Remb. siège » : il n’est pas dans le profil', async () => {
     const erreur = await erreurNue(call({
       action: 'add',
@@ -94,57 +119,74 @@ describe('TC-381 — avant les gardes : ce que les gestes génériques font d’
     expect(await soldes()).toEqual(DEPART)
   })
 
-  it('[TC-381-C2] `updateDraft` refuse, par le contrôle du type du profil', async () => {
+  it('[TC-381-G2] `updateDraft` refuse par le message de la garde', async () => {
     await poserBrouillonRembSiege()
-    const erreur = await erreurNue(call({ action: 'updateDraft', draftId: 'rs-1', updates: { montant: 90_000 } }))
-    expect(erreur.code).toBe('STORE_TRANSACTION_INVALID')
-    expect(await soldes()).toEqual(DEPART)
+    const erreur = await refusMetier(call({ action: 'updateDraft', draftId: 'rs-1', updates: { montant: 90_000 } }))
+    expect(erreur.message).toBe(MESSAGE_GESTE_GENERIQUE)
+    await brouillonIntact()
   })
 
-  it('[TC-381-C3] `deleteDraft` lève une erreur NUE', async () => {
+  it('[TC-381-G3] `deleteDraft` refuse par un code métier', async () => {
     await poserBrouillonRembSiege()
-    const erreur = await erreurNue(call({ action: 'deleteDraft', draftId: 'rs-1' }))
-    expect(erreur.message).toBe('Type de transaction non reconnu.')
-    expect(erreur.code).toBeUndefined()
-    expect((await doc('drafts', 'rs-1')).exists).toBe(true)
+    const erreur = await refusMetier(call({ action: 'deleteDraft', draftId: 'rs-1' }))
+    expect(erreur.message).toBe(MESSAGE_GESTE_GENERIQUE)
+    await brouillonIntact()
   })
 
-  it('[TC-381-C4] `trashDraft` lève une erreur NUE', async () => {
+  it('[TC-381-G4] `trashDraft` refuse par un code métier', async () => {
     await poserBrouillonRembSiege()
-    const erreur = await erreurNue(call({ action: 'trashDraft', draftId: 'rs-1' }))
-    expect(erreur.message).toBe('Type de transaction non reconnu.')
-    expect(erreur.code).toBeUndefined()
-    expect((await doc('drafts', 'rs-1')).exists).toBe(true)
+    const erreur = await refusMetier(call({ action: 'trashDraft', draftId: 'rs-1' }))
+    expect(erreur.message).toBe(MESSAGE_GESTE_GENERIQUE)
+    await brouillonIntact()
   })
 
-  it('[TC-381-C5] `validateDraft` sans mode valide la ligne SANS toucher aux soldes', async () => {
+  it('[TC-381-G5] `validateDraft` refuse, et la ligne ne part pas dans l’historique', async () => {
     await poserBrouillonRembSiege()
-    const r = await call({ action: 'validateDraft', draftId: 'rs-1' })
-    expect(r.validated).toBe(true)
-    expect(await soldes()).toEqual(DEPART)
-    expect((await doc('drafts', 'rs-1')).exists).toBe(false)
-    expect((await doc('history', r.historyId)).data().statut).toBe('Validée')
+    const erreur = await refusMetier(call({ action: 'validateDraft', draftId: 'rs-1' }))
+    expect(erreur.message).toBe(MESSAGE_GESTE_GENERIQUE)
+    await brouillonIntact()
+    expect((await db.collection(`clients/${STORE}/history`).get()).size).toBe(0)
   })
 
-  it('[TC-381-C6] `addTransactionPayment` crédite le stock d’une tranche', async () => {
+  it('[TC-381-G6] `addTransactionPayment` refuse, le stock ne bouge pas', async () => {
     await poserBrouillonRembSiege()
-    await payer({ draftId: 'rs-1', amount: 10_000, paymentMethod: 'Orange Money', idempotencyKey: 'k-1' })
-    expect(await soldes()).toEqual({ stock: STOCK_INITIAL + 10_000, liquidite: LIQUIDITE_INITIALE })
+    const erreur = await refusMetier(payer({ draftId: 'rs-1', amount: 10_000, paymentMethod: 'Orange Money', idempotencyKey: 'k-1' }))
+    expect(erreur.message).toBe(MESSAGE_GESTE_GENERIQUE)
+    await brouillonIntact()
   })
 
-  it('[TC-381-C7] `trashHistory` lève une erreur NUE', async () => {
+  it('[TC-381-G7] `trashHistory` refuse par un code métier', async () => {
     await poserLigneRembSiegeValidee()
-    const erreur = await erreurNue(call({ action: 'trashHistory', historyId: 'rs-2' }))
-    expect(erreur.message).toBe('Type de transaction non reconnu.')
-    expect(erreur.code).toBeUndefined()
-    expect((await doc('history', 'rs-2')).data().statut).toBe('Validée')
+    const erreur = await refusMetier(call({ action: 'trashHistory', historyId: 'rs-2' }))
+    expect(erreur.message).toContain('« Remb. siège »')
+    await ligneIntacte()
   })
 
-  it('[TC-381-C8] `cancelHistory` lève une erreur NUE', async () => {
+  it('[TC-381-G8] `cancelHistory` refuse par un code métier', async () => {
     await poserLigneRembSiegeValidee()
-    const erreur = await erreurNue(call({ action: 'cancelHistory', historyId: 'rs-2' }))
-    expect(erreur.message).toBe('Type de transaction non reconnu.')
-    expect(erreur.code).toBeUndefined()
-    expect((await doc('history', 'rs-2')).data().statut).toBe('Validée')
+    const erreur = await refusMetier(call({ action: 'cancelHistory', historyId: 'rs-2' }))
+    expect(erreur.message).toContain('« Remb. siège »')
+    await ligneIntacte()
+  })
+
+  it('[TC-381-G9] `addTransactionRefund` refuse par le message de la garde', async () => {
+    await poserBrouillonRembSiege()
+    const erreur = await refusMetier(rembourser({ draftId: 'rs-1', amount: 10_000, paymentMethod: 'Orange Money', idempotencyKey: 'k-2' }))
+    expect(erreur.message).toBe(MESSAGE_GESTE_GENERIQUE)
+    await brouillonIntact()
+  })
+
+  it('[TC-381-G10] `reopenHistory` refuse par un code métier', async () => {
+    await poserLigneRembSiegeValidee()
+    const erreur = await refusMetier(call({ action: 'reopenHistory', historyId: 'rs-2' }))
+    expect(erreur.message).toContain('« Remb. siège »')
+    await ligneIntacte()
+  })
+
+  it('[TC-381-G11] `correctHistory` refuse par un code métier', async () => {
+    await poserLigneRembSiegeValidee()
+    const erreur = await refusMetier(call({ action: 'correctHistory', historyId: 'rs-2', updates: { montant: 90_000 } }))
+    expect(erreur.message).toContain('« Remb. siège »')
+    await ligneIntacte()
   })
 })

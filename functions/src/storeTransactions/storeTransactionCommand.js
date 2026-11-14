@@ -24,6 +24,7 @@ import {
 import { instantDeLaCaisse } from '../instantDeLaCaisse.js'
 import {
   TYPE_REMB_SIEGE,
+  MESSAGE_GESTE_GENERIQUE,
   ENVOIS_MAX,
   estRembSiege,
   impactSaisie,
@@ -59,7 +60,9 @@ const SENDERS_MAX = 50
 // il se defait par `trashReplenishmentReturn`, qui sait AUSSI remonter le reste
 // du de sa livraison. L'inversion generique ne rendrait que le solde, et la
 // livraison resterait soldee a tort.
-const UNCANCELLABLE_TYPES = [REPLENISHMENT_TYPE, CLOSURE_TYPE, RETURN_TYPE]
+// Le remboursement au siège aussi : il se défait par `trashSiegeRepayment`, qui
+// sait rendre ses deux jambes. L'inversion générique lèverait une erreur nue.
+const UNCANCELLABLE_TYPES = [REPLENISHMENT_TYPE, CLOSURE_TYPE, RETURN_TYPE, TYPE_REMB_SIEGE]
 const NOTE_MAX = 280
 // La corbeille. Un statut à part, et pas « Annulée » : une annulation est une
 // décision métier, une suppression est un geste de correction. Les confondre
@@ -149,6 +152,16 @@ function cleanExpediteur(value, connus) {
 }
 
 function fail(code, message) { throw new DealerRequestError(code, message) }
+
+/**
+ * Les commandes de brouillon génériques ne savent pas défaire les jambes d'un
+ * remboursement au siège : `reverseInitialTransactionImpact` lève une erreur
+ * NUE sur ce type, que la file d'envoi prendrait pour une panne et renverrait
+ * sans fin. Un refus métier, lui, est définitif (TC-381).
+ */
+function refuserSiRembSiege(doc) {
+  if (estRembSiege(doc)) fail('STORE_TRANSACTION_INVALID', MESSAGE_GESTE_GENERIQUE)
+}
 function cleanId(value, field) {
   if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(value.trim())) fail('STORE_TRANSACTION_INVALID', `${field} invalide.`)
   return value.trim()
@@ -473,6 +486,7 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       const snap = await t.get(ref)
       if (!snap.exists) fail('SETTLEMENT_DRAFT_NOT_FOUND', 'Transaction introuvable.')
       const old = snap.data()
+      refuserSiRembSiege(old)
       // Une marque sur le brouillon, pas une trace à part : la file n'envoie une
       // modification qu'après la précédente, donc seule la dernière peut revenir.
       if (commandeId && old.derniereCommande === commandeId) return { id: draftId, idempotent: true }
@@ -507,6 +521,7 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       const snap = await t.get(ref)
       if (!snap.exists) return { deleted: false }
       const old = snap.data()
+      refuserSiRembSiege(old)
       if (SETTLEMENT_FIELDS.some(field => Object.hasOwn(old, field))) fail('SETTLED_DRAFT_IMMUTABLE', 'Une transaction ayant engagé un règlement ne peut pas être supprimée.')
       const nextBalances = reverseInitialTransactionImpact(balances, old)
       t.delete(ref)
@@ -532,6 +547,7 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       }
       if (!snap.exists) return { validated: false }
       const draft = snap.data()
+      refuserSiRembSiege(draft)
       if (SETTLEMENT_FIELDS.some(field => Object.hasOwn(draft, field))) fail('SETTLED_DRAFT_IMMUTABLE', 'Utilisez le règlement par tranche pour cette transaction.')
       const amount = payload.amount == null ? draft.montant : cleanAmount(payload.amount)
       const paymentMethod = payload.paymentMethod == null ? null : String(payload.paymentMethod)
@@ -611,6 +627,7 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       const snap = await t.get(ref)
       if (!snap.exists) fail('SETTLEMENT_DRAFT_NOT_FOUND', 'Transaction introuvable.')
       const old = snap.data()
+      refuserSiRembSiege(old)
       // Ici le garde-fou large EST le bon : sur un brouillon, ces champs
       // n'apparaissent que si des tranches ont réellement été engagées.
       if (SETTLEMENT_FIELDS.some(field => Object.hasOwn(old, field))) fail('SETTLED_DRAFT_IMMUTABLE', 'Une transaction ayant engagé un règlement ne peut pas être supprimée.')
