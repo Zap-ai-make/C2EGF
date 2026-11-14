@@ -97,9 +97,19 @@ import { getBusinessDayBounds } from '../utils/businessDate.js'
  *   de documents chacune) reste négligeable sur un écran que seul le patron
  *   ouvre ; le prix est en lisibilité, payé pour ne dépendre d'aucune promesse
  *   sur qui écrit quoi.
+ *
+ * ⚠ A N'EST PLUS « LES TROIS TYPES DEALER » DEPUIS LE 2026-11-14. Le
+ *   remboursement au siège y entre (`TYPES_HORS_CA`) : l'agent rembourse à la
+ *   boutique le stock que le siège lui a donné à crédit, et la boutique l'envoie
+ *   au siège. Ce n'est pas une vente de la boutique ; le compter gonflerait
+ *   celles qui encaissent beaucoup d'agents (spec 2026-11-14, décision 3).
+ *   L'arithmétique ne change pas — elle vaut pour tout ensemble A de types :
+ *   quinze agrégations, quatre types × deux statuts d'intersections.
  */
 
 const TYPES_DEALER = Object.freeze(['Ravitaillement', 'Retour', 'Clôture'])
+// Le rétablir dans le CA = retirer « Remb. siège » de cette liste.
+const TYPES_HORS_CA = Object.freeze([...TYPES_DEALER, 'Remb. siège'])
 const STATUTS_DEFAITS = Object.freeze(['Annulée', 'Supprimée'])
 
 /**
@@ -207,31 +217,31 @@ export async function chiffreAffaires({ type, cle }) {
   const { debut, fin } = bornesPeriode({ type, cle })
 
   const [total, parType, parStatut, intersections] = await Promise.all([
-    // Le total brut de la plage, SANS AUCUN FILTRE : c'est la seule des douze
+    // Le total brut de la plage, SANS AUCUN FILTRE : c'est la seule des quinze
     // qui n'a besoin d'aucun index nouveau (`createdAt` porte déjà sa
     // surcharge COLLECTION_GROUP dans les deux sens).
     agregerMontant({ debut, fin }),
-    // Σ(A) — décomposée par type (3 agrégations indépendantes), jamais un
+    // Σ(A) — décomposée par type (4 agrégations indépendantes), jamais un
     // `type in [...]` unique (voir le commentaire d'en-tête).
-    Promise.all(TYPES_DEALER.map((t) => agregerMontant({ debut, fin, type: t }))),
+    Promise.all(TYPES_HORS_CA.map((t) => agregerMontant({ debut, fin, type: t }))),
     // Σ(B) + Σ(C) — annulée et supprimée, qui ne se recoupent jamais entre
     // elles (`statut` est un champ unique, voir le commentaire d'en-tête).
     Promise.all(STATUTS_DEFAITS.map((s) => agregerMontant({ debut, fin, statut: s }))),
     // ⚠ RONDE DE CORRECTION 2 (R52) — Σ(A∩B) ET Σ(A∩C), EN BOUCLE SUR LES DEUX
-    //   LISTES, PAS À LA MAIN. Six intersections type × statut : copiées-collées
+    //   LISTES, PAS À LA MAIN. Huit intersections type × statut : copiées-collées
     //   une par une, elles auraient fini par diverger (un type oublié, un
     //   statut mal orthographié) sans qu'aucun test ne le voie passer avant
     //   l'émulateur. La boucle les fait toutes exister par construction dès
     //   qu'un type ou un statut s'ajoute aux deux listes ci-dessus.
     Promise.all(
-      TYPES_DEALER.flatMap((t) => STATUTS_DEFAITS.map((s) => agregerMontant({ debut, fin, type: t, statut: s }))),
+      TYPES_HORS_CA.flatMap((t) => STATUTS_DEFAITS.map((s) => agregerMontant({ debut, fin, type: t, statut: s }))),
     ),
   ])
 
   const termes = [total, ...parType, ...parStatut, ...intersections]
 
-  // Une panne prime sur tout le reste : si l'un des douze termes n'a pas pu
-  // être lu, la soustraction entière est invalide, que les onze autres soient
+  // Une panne prime sur tout le reste : si l'un des quinze termes n'a pas pu
+  // être lu, la soustraction entière est invalide, que les quatorze autres soient
   // lisibles ou non — y compris un terme du MILIEU (`tc-272` le verrouille).
   if (termes.some((t) => t.echec)) {
     return { total: null, incomplet: false }

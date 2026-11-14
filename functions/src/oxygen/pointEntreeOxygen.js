@@ -28,6 +28,7 @@
  */
 
 import { ligneDeDocument } from '../clients/historiqueClient.js'
+import { estRembSiege } from '../storeTransactions/rembSiege.js'
 import {
   COLLECTION_CODES,
   COLLECTION_JOURNAL,
@@ -422,6 +423,9 @@ async function lireActivite(corps, { db, Timestamp, maintenant, oxygen }) {
 
   const enLigne = (doc, source) => {
     const donnees = doc.data() ?? {}
+    // Le contrat validé avec Oxygen ne connaît pas ce type : il n'entre pas dans
+    // le flux avant que l'utilisateur rouvre ce contrat (TC-377-RS).
+    if (estRembSiege(donnees)) return null
     const ligne = ligneDeDocument({ id: doc.id, chemin: doc.ref.path, donnees, source, nomsDeBoutique: new Map() })
     if (!ligne || !dansLesPeriodes(ligne.createdAt, periodes)) return null
     return {

@@ -154,6 +154,7 @@ describe('TC-272 — la somme', () => {
       .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // type: Ravitaillement
       .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // type: Retour
       .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // type: Clôture
+      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // type: Remb. siège
       .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // statut: Annulée
       .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // statut: Supprimée
       .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // Ravitaillement∩Annulée
@@ -162,6 +163,8 @@ describe('TC-272 — la somme', () => {
       .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // Retour∩Supprimée
       .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // Clôture∩Annulée
       .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // Clôture∩Supprimée
+      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // Remb. siège∩Annulée
+      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // Remb. siège∩Supprimée
     const r = await chiffreAffaires({ type: 'jour', cle: '2026-10-15' })
     expect(r).toEqual({ total: 847300000, incomplet: false })
     expect(sum).toHaveBeenCalledWith('montant')
@@ -273,7 +276,31 @@ describe('TC-272 — la somme', () => {
       'Clôture×Annulée', 'Clôture×Supprimée',
       'Ravitaillement×Annulée', 'Ravitaillement×Supprimée',
       'Retour×Annulée', 'Retour×Supprimée',
+      // Le remboursement au siège (2026-11-14) : hors CA, comme les types dealer.
+      'Remb. siège×Annulée', 'Remb. siège×Supprimée',
     ].sort())
+  })
+
+  /**
+   * ⚠ LE REMBOURSEMENT AU SIÈGE N'EST PAS UNE VENTE DE LA BOUTIQUE (spec
+   *   2026-11-14, décision 3) : l'argent est au siège. Jeu : 350 000 d'activité
+   *   cliente, un « Remb. siège » validé de 200 000 et un supprimé de 50 000.
+   *   Les réponses suivent les clauses de chaque requête, pas leur ordre.
+   */
+  it('[TC-272-RS] un remboursement au siège n’entre pas dans le chiffre d’affaires', async () => {
+    getAggregateFromServer.mockImplementation(async ({ c }) => {
+      const type = c.find((clause) => clause.f === 'type')?.v
+      const statut = c.find((clause) => clause.f === 'statut')?.v
+      const total = (() => {
+        if (!type && !statut) return 600000
+        if (type === 'Remb. siège' && !statut) return 250000
+        if (!type && statut === 'Supprimée') return 50000
+        if (type === 'Remb. siège' && statut === 'Supprimée') return 50000
+        return 0
+      })()
+      return { data: () => ({ total }) }
+    })
+    expect(await chiffreAffaires({ type: 'jour', cle: '2026-10-15' })).toEqual({ total: 350000, incomplet: false })
   })
 
   /**
@@ -281,16 +308,18 @@ describe('TC-272 — la somme', () => {
    *   EXCLUSION (ronde de correction 2, R52) : total − Σ(A) − Σ(B∪C) +
    *   Σ(intersections), JAMAIS la simple soustraction à six termes de la
    *   ronde 1 (qui double-comptait — voir `tc-273-05`). Dans l'ORDRE
-   *   d'émission : total, 3× type, 2× statut, 6× intersection.
-   *   100000 − (1000+2000+3000) − (4000+5000) + (100+200+300+400+500+600)
-   *   = 100000 − 6000 − 9000 + 2100 = 87100.
+   *   d'émission : total, 4× type, 2× statut, 8× intersection — quinze depuis
+   *   le remboursement au siège (2026-11-14), quatrième type hors CA.
+   *   100000 − (1000+2000+3000+7000) − (4000+5000)
+   *   + (100+200+300+400+500+600+700+800) = 100000 − 13000 − 9000 + 3600 = 81600.
    */
-  it('[TC-272-14] douze agrégations sont émises, et le résultat suit l’inclusion-exclusion complète', async () => {
+  it('[TC-272-14] quinze agrégations sont émises, et le résultat suit l’inclusion-exclusion complète', async () => {
     getAggregateFromServer
       .mockResolvedValueOnce({ data: () => ({ total: 100000 }) }) // total
       .mockResolvedValueOnce({ data: () => ({ total: 1000 }) })   // type: Ravitaillement
       .mockResolvedValueOnce({ data: () => ({ total: 2000 }) })   // type: Retour
       .mockResolvedValueOnce({ data: () => ({ total: 3000 }) })   // type: Clôture
+      .mockResolvedValueOnce({ data: () => ({ total: 7000 }) })   // type: Remb. siège
       .mockResolvedValueOnce({ data: () => ({ total: 4000 }) })   // statut: Annulée
       .mockResolvedValueOnce({ data: () => ({ total: 5000 }) })   // statut: Supprimée
       .mockResolvedValueOnce({ data: () => ({ total: 100 }) })    // Ravitaillement∩Annulée
@@ -299,9 +328,11 @@ describe('TC-272 — la somme', () => {
       .mockResolvedValueOnce({ data: () => ({ total: 400 }) })    // Retour∩Supprimée
       .mockResolvedValueOnce({ data: () => ({ total: 500 }) })    // Clôture∩Annulée
       .mockResolvedValueOnce({ data: () => ({ total: 600 }) })    // Clôture∩Supprimée
+      .mockResolvedValueOnce({ data: () => ({ total: 700 }) })    // Remb. siège∩Annulée
+      .mockResolvedValueOnce({ data: () => ({ total: 800 }) })    // Remb. siège∩Supprimée
     const r = await chiffreAffaires({ type: 'jour', cle: '2026-10-15' })
-    expect(getAggregateFromServer).toHaveBeenCalledTimes(12)
-    expect(r).toEqual({ total: 87100, incomplet: false })
+    expect(getAggregateFromServer).toHaveBeenCalledTimes(15)
+    expect(r).toEqual({ total: 81600, incomplet: false })
   })
 
   /**

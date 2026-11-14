@@ -300,3 +300,21 @@ describe('TC-255 — les deux sources réunies', () => {
     })
   })
 })
+
+describe('TC-255 — le remboursement au siège', () => {
+  /**
+   * La ligne est rattachée à l'agent : elle figure dans son historique. Mais
+   * l'agent a payé — c'est la boutique qui doit encore l'envoyer au siège. Un
+   * « reste » non nul la lirait comme une dette de l'agent.
+   */
+  it('[TC-255-RS] un remboursement au siège en attente apparaît, avec un reste nul', () => {
+    const ligne = ligneDeDocument({
+      ...doc({ type: 'Remb. siège', statut: 'Non Terminées', montant: 100000, balanceType: 'liquidite', envoyeAuSiege: 0, resteAuSiege: 100000 }),
+      source: 'draft',
+      nomsDeBoutique: NOMS,
+    })
+    expect(ligne).not.toBeNull()
+    expect(ligne.type).toBe('Remb. siège')
+    expect(ligne.reste).toBe(0)
+  })
+})

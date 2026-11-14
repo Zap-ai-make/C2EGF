@@ -1,4 +1,5 @@
 import { DealerRequestError } from '../errors.js'
+import { estRembSiege } from '../storeTransactions/rembSiege.js'
 import {
   readValidatedProfile,
   validateAuthUid,
@@ -54,6 +55,9 @@ export function aggregateOutstandingDrafts({ stores = [], drafts = [] } = {}) {
   let horsReseau = 0
 
   for (const draft of drafts) {
+    // Un remboursement au siège en attente est de l'argent que la boutique doit
+    // au siège, pas un dépôt dû par un client : ni dehors, ni illisible (TC-213).
+    if (estRembSiege(draft)) continue
     const row = byStore.get(draft?.storeId)
     if (!row) { horsReseau += 1; continue }
     const amount = remainingAmount(draft)
