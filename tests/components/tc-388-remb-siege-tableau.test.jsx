@@ -28,6 +28,7 @@ vi.mock('../../src/hooks/useSimpleNetworkData', () => ({
 }))
 
 import TransactionTable from '../../src/components/transactions/TransactionTable.jsx'
+import HistoriqueTable from '../../src/components/historique/HistoriqueTable.jsx'
 import { getAvailableActions, getTransactionStyles } from '../../src/utils/helpers.js'
 
 const A = {
@@ -127,5 +128,31 @@ describe('TC-388 — annuler', () => {
     fireEvent.click(within(rangee('Issa KABORE')).getByRole('button', { name: 'Annuler' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Annuler la transaction' }))
     await waitFor(() => expect(contextValue.trashTransaction).toHaveBeenCalledWith('A'))
+  })
+})
+
+describe('TC-388 — la ligne validée dans l’historique', () => {
+  const V = {
+    id: 'V', clientId: 'agent-1', client: { nom: 'KABORE', prenom: 'Issa' }, type: 'Remb. siège', code: '1234567',
+    montant: 100000, balanceType: 'liquidite', envoyeAuSiege: 100000, resteAuSiege: 0, envoisSiege: [],
+    statut: 'Validée', directValidation: true, date: '14/11/2026 10:05',
+  }
+
+  it('[TC-388-7] elle dit sa réserve, et ne se modifie pas : on l’annule puis on la ressaisit', () => {
+    render(<HistoriqueTable transactions={[V]} />)
+    const ligne = rangee('Issa KABORE')
+    expect(ligne).toHaveTextContent('Remb. siège')
+    expect(ligne).toHaveTextContent('· espèce')
+    const modifier = within(ligne).getByTestId('modifier-historique')
+    expect(modifier).toBeDisabled()
+    expect(modifier).toHaveAttribute('title', 'Un remboursement au siège ne se modifie pas : annulez-le puis ressaisissez-le.')
+    expect(within(ligne).getByTestId('supprimer-historique')).toBeEnabled()
+  })
+
+  it('[TC-388-8] « Annuler » puis confirmation part par trashTransaction', async () => {
+    render(<HistoriqueTable transactions={[V]} />)
+    fireEvent.click(within(rangee('Issa KABORE')).getByTestId('supprimer-historique'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Annuler la transaction' }))
+    await waitFor(() => expect(contextValue.trashTransaction).toHaveBeenCalledWith('V'))
   })
 })

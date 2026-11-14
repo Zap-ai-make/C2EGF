@@ -12,6 +12,7 @@ import Dialog from '../ui/Dialog.jsx'
 import ModificationsDialog from './ModificationsDialog.jsx'
 import { STORE_HISTORY_CONFIG } from '../../constants/storeWorkspace.js'
 import { TYPE_RAVITAILLEMENT, TYPE_RETOUR } from '../../utils/ravitaillement.js'
+import { estRembSiege } from '../../utils/rembSiege.js'
 import { regrouperParClientEtType } from '../../utils/regroupement.js'
 import { dureeDe, formaterHeure } from '../../utils/attente.js'
 import { detailDuReglement, statutDuReglement } from '../../utils/detailReglement.js'
@@ -103,8 +104,14 @@ const RAISON_REFUSEE = 'Refusée par le serveur : retirez-la, ou ressaisissez-la
 const raisonNonSupprimable = (transaction) =>
   transaction.envoi?.etat === REFUSEE ? RAISON_REFUSEE : reglementInacheve(transaction) ? RAISON_PARTIEL : null
 
+// Le serveur refuse la correction d'un remboursement au siège : ses deux jambes
+// et ses tranches se défont par l'annulation, puis la caissière ressaisit.
+const RAISON_REMB_SIEGE = 'Un remboursement au siège ne se modifie pas : annulez-le puis ressaisissez-le.'
+
 const raisonNonModifiable = (transaction) =>
-  transaction.envoi?.etat === REFUSEE ? RAISON_REFUSEE : reglementInacheve(transaction) ? RAISON_PARTIEL : null
+  transaction.envoi?.etat === REFUSEE ? RAISON_REFUSEE
+    : estRembSiege(transaction) ? RAISON_REMB_SIEGE
+    : reglementInacheve(transaction) ? RAISON_PARTIEL : null
 
 /**
  * `onReopen` est une PROP, alors que la suppression passe par le contexte.
@@ -317,7 +324,7 @@ function HistoriqueTable({ transactions = [], onReopen }) {
         </td>
         <td className={`whitespace-nowrap px-4 py-3 text-base font-medium ${styles.textColor}`}>
           {transaction.type || '-'}
-          {estLigneDealer(transaction.type) && libelleReserve(transaction.balanceType) && (
+          {(estLigneDealer(transaction.type) || estRembSiege(transaction)) && libelleReserve(transaction.balanceType) && (
             <span className="ml-1 text-xs font-normal text-ink-muted">
               · {libelleReserve(transaction.balanceType)}
             </span>
