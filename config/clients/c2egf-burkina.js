@@ -73,6 +73,14 @@ export const c2egfProfile = Object.freeze({
     senders: ['Patron', 'Mme Sawadogo', 'Mohamed', 'DG', 'Maï', 'Yasmine'],
   }),
 
+  // ── Remboursement au siège : allumé (demande du 2026-11-14) ───────────────
+  // Le siège C2EGF travaille la nuit et donne du stock à crédit aux agents ;
+  // les caissières encaissent leur remboursement le lendemain et l'envoient au
+  // siège. Le siège n'a pas de compte dans le logiciel.
+  siegeRepayment: Object.freeze({
+    enabled: true,
+  }),
+
   // ── Édition directe des soldes réseau par la boutique ──────────────────────
   // false = affordance masquée dans l'UI. Option la moins exposante entre les
   // deux (SECURITY.md §0) : l'édition directe est une exception V1 sans piste

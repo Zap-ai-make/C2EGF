@@ -81,6 +81,13 @@ export function generateStoreProfileFile(profile) {
     throw new Error('Profil invalide : regional.timezone doit être une chaîne non vide.')
   }
 
+  // Absent vaut éteint : un profil d'avant ce drapeau ne doit pas se voir
+  // proposer une nature qu'il n'a pas demandée.
+  const siegeRepaymentEnabled = profile?.siegeRepayment?.enabled ?? false
+  if (typeof siegeRepaymentEnabled !== 'boolean') {
+    throw new Error('Profil invalide : siegeRepayment.enabled doit être un booléen.')
+  }
+
   return `/**
  * storeProfile.js — axes BOUTIQUE du profil client, côté Cloud Functions.
  * ─────────────────────────────────────────────────────────────────────────────
@@ -108,6 +115,10 @@ export function generateStoreProfileFile(profile) {
  *     clôture à la journée en cours — jamais le fuseau de la machine qui
  *     exécute la fonction, qui n'est celui de personne.
  *
+ *   • SIEGE_REPAYMENT_ENABLED  — false ⇒ les quatre commandes du remboursement au
+ *     siège (addSiegeRepayment, sendToSiege, updateSiegeRepayment,
+ *     trashSiegeRepayment) refusent.
+ *
  * ⚠ Ces méthodes ne sont validées qu'à la DÉCLARATION d'une tranche, jamais à sa
  * confirmation : une tranche portant un ancien code doit rester confirmable.
  */
@@ -126,5 +137,7 @@ export const DEBT_SETTLEMENT_METHODS = [${quoteList(settlementMethods)}]
 export const STORE_REPLENISHMENT_SENDERS = [${quoteList(senders)}]
 
 export const STORE_TIME_ZONE = '${timezone}'
+
+export const SIEGE_REPAYMENT_ENABLED = ${siegeRepaymentEnabled}
 `
 }

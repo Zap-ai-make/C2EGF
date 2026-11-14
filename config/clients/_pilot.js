@@ -72,6 +72,18 @@ export const pilotProfile = Object.freeze({
     senders: [],
   }),
 
+  // ── Remboursement au siège ─────────────────────────────────────────────────
+  // Le siège donne du stock à crédit aux agents la nuit ; le lendemain, l'agent
+  // rembourse dans une boutique, qui envoie l'argent au siège. Cet argent n'est
+  // pas à la boutique : « Remb. siège » est une troisième nature du formulaire,
+  // à côté de Dépôt et Retrait, avec ses propres commandes et son bouton
+  // « Envoyer au siège » (docs/superpowers/specs/2026-11-14-remboursement-siege-design.md).
+  //   enabled → true : la nature est proposée et le serveur accepte ses commandes.
+  //             false : ni l'une ni les autres.
+  siegeRepayment: Object.freeze({
+    enabled: false,
+  }),
+
   // ── Édition directe des soldes réseau par la boutique (caissière) ──────────
   // true  = la boutique saisit ses soldes en direct (règle Firestore permissive,
   //         exception V1 assumée, sans piste d'audit serveur).
