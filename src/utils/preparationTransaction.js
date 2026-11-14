@@ -56,13 +56,13 @@ export function reseauxDisponibles(client) {
   return NETWORK_OPTIONS.filter((option) => client[option.toLowerCase()]?.trim())
 }
 
-function aUnCompteSur(client, reseau) {
+export function aUnCompteSur(client, reseau) {
   if (client?.isManual) return Boolean(client.orange?.trim())
   if (!client || !reseau) return false
   return Boolean(client[reseau.toLowerCase()]?.trim())
 }
 
-const toutBloque = (raison, networkValidation = { isValid: true, message: '' }) => ({
+export const toutBloque = (raison, networkValidation = { isValid: true, message: '' }) => ({
   isFormValid: false,
   stockValidation: { isValid: true, message: '' },
   networkValidation,
