@@ -130,8 +130,22 @@ describe('TC-314 — la caisse lue par le modèle', () => {
       depots_non_termines: { nombre: 1, montant: 40000 },
       // Le reste dû, une seule fois même livré en double.
       retraits_non_termines: { nombre: 1, montant: 10000 },
+      remboursements_siege_non_envoyes: { nombre: 0, montant: 0 },
       total_caisse: 200000 + 35000 + 40000 - 10000,
     })
+  })
+
+  it('[CR-13] l’argent qui part au siège est dit à part et sort du total caisse', () => {
+    const caisse = lireLaCaisse({
+      soldes: { Orange: { stock: 200000, liquidite: 30000 } },
+      enAttente: [
+        { id: 's', type: 'Remb. siège', statut: 'Non Terminées', montant: 100000, envoyeAuSiege: 30000, resteAuSiege: 70000 },
+      ],
+    })
+    expect(caisse.remboursements_siege_non_envoyes).toEqual({ nombre: 1, montant: 70000 })
+    expect(caisse.total_caisse).toBe(200000 + 30000 - 70000)
+    expect(DECLARATION_CAISSE.description).toMatch(/siège/)
+    expect(construirePrompt({ date: new Date('2026-10-30T12:00:00Z') })).toMatch(/remboursement au siège/i)
   })
 
   it('[CR-11] sans soldes, un refus — jamais un zéro inventé', () => {

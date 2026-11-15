@@ -23,7 +23,9 @@ export const DECLARATION_CAISSE = Object.freeze({
   name: 'etat_de_la_caisse',
   description:
     "Ce que la boutique a EN CE MOMENT : le stock électronique par réseau, les espèces en caisse, " +
-    'les dépôts et retraits non terminés, et le total caisse — les chiffres de la barre des soldes. ' +
+    'les dépôts et retraits non terminés, ce qui reste à envoyer au siège sur les remboursements au ' +
+    "siège non terminés (cet argent n'est pas à la boutique : le total caisse le retire), et le total " +
+    'caisse — les chiffres de la barre des soldes. ' +
     "À EMPLOYER pour « combien j'ai en espèces », « il me reste combien de stock », « le total " +
     'caisse », « est-ce que je peux payer ce retrait », et avec bilan_du_jour pour tout point de la ' +
     "situation. Les montants sont en FCFA. Ne les additionne pas toi-même : `total_caisse` est le total.",
@@ -51,6 +53,9 @@ export function lireLaCaisse({ soldes, enAttente = [] } = {}) {
     especes,
     depots_non_termines: { nombre: attente.nbDepots, montant: attente.depots },
     retraits_non_termines: { nombre: attente.nbRetraits, montant: attente.retraits },
-    total_caisse: totalCaisse({ stock, liquidite: especes, depots: attente.depots, retraits: attente.retraits }),
+    remboursements_siege_non_envoyes: { nombre: attente.nbSiege, montant: attente.siege },
+    total_caisse: totalCaisse({
+      stock, liquidite: especes, depots: attente.depots, retraits: attente.retraits, siege: attente.siege,
+    }),
   }
 }
