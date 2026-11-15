@@ -40,6 +40,7 @@ import {
 } from '../../utils/businessDate.js'
 import { FICHES, TITRES_GROUPES, groupesOrdonnes } from '../../content/aideFiches.js'
 import { TYPES_DEALER } from '../../utils/helpers.js'
+import { estRembSiege } from '../../utils/rembSiege.js'
 import { CLES_DESTINATIONS } from './destinations.js'
 import { DECLARATIONS_DE_PREPARATION } from './preparations.js'
 import { DECLARATION_CAISSE } from './caisse.js'
@@ -158,10 +159,16 @@ async function historiqueDeLaPeriode(periode) {
  *   l'erreur que chiffreAffairesService.js avait déjà corrigée ; la même liste
  *   (`TYPES_DEALER`) les sort ici des totaux, et ils sont rendus à part.
  *   Demandés explicitement (`type`), ils redeviennent le sujet et se totalisent.
+ *
+ * ⚠ LE REMBOURSEMENT AU SIÈGE NON PLUS (spec 2026-11-14). L'agent rend à la
+ *   boutique le stock que le siège lui a donné à crédit, et la boutique l'envoie
+ *   au siège : ce n'est pas une encaisse. Rendu à part, sous son nom.
  */
+const horsTotal = (ligne) => TYPES_DEALER.includes(ligne?.type) || estRembSiege(ligne)
+
 function totaliser(lignes, { inclureDealer = false } = {}) {
   const valides = lignes.filter((l) => !estDefait(l))
-  const retenues = inclureDealer ? valides : valides.filter((l) => !TYPES_DEALER.includes(l?.type))
+  const retenues = inclureDealer ? valides : valides.filter((l) => !horsTotal(l))
   const total = retenues.reduce((somme, l) => somme + montantDe(l), 0)
   const parType = {}
   for (const ligne of retenues) {
@@ -174,12 +181,16 @@ function totaliser(lignes, { inclureDealer = false } = {}) {
       mouvementsDealer[ligne.type] = (mouvementsDealer[ligne.type] ?? 0) + montantDe(ligne)
     }
   }
-  return { nombre: retenues.length, total, parType, retenues, mouvementsDealer }
+  const remboursementsSiege = inclureDealer ? 0 : valides.filter(estRembSiege).reduce((somme, l) => somme + montantDe(l), 0)
+  return { nombre: retenues.length, total, parType, retenues, mouvementsDealer, remboursementsSiege }
 }
 
-/** Les mouvements du dealer, dits à part — seulement s'il y en a. */
-function aPart(mouvementsDealer) {
-  return Object.keys(mouvementsDealer).length > 0 ? { mouvements_dealer: mouvementsDealer } : {}
+/** Les mouvements du dealer et les remboursements au siège, dits à part — seulement s'il y en a. */
+function aPart(mouvementsDealer, remboursementsSiege = 0) {
+  return {
+    ...(Object.keys(mouvementsDealer).length > 0 ? { mouvements_dealer: mouvementsDealer } : {}),
+    ...(remboursementsSiege > 0 ? { remboursements_siege: remboursementsSiege } : {}),
+  }
 }
 
 function nomComplet(client) {
@@ -222,6 +233,8 @@ export const DECLARATIONS = Object.freeze([
       'Les totaux ne portent que sur les opérations CLIENTS (dépôts, retraits). ' +
       'Ravitaillements, retours et clôtures arrivent à part dans `mouvements_dealer` : ' +
       'présente-les dans leur propre rubrique, et ne les additionne JAMAIS aux totaux clients. ' +
+      "Les remboursements au siège (l'agent rend le stock que le siège lui a donné la nuit) " +
+      'arrivent à part dans `remboursements_siege` : ni encaisse, ni créance. ' +
       "Les soldes (stock, espèces, total caisse) n'y sont pas : demande-les EN MÊME TEMPS à etat_de_la_caisse.",
     parameters: { type: 'OBJECT', properties: { jours: PARAM_JOURS } },
   },
@@ -246,7 +259,9 @@ export const DECLARATIONS = Object.freeze([
     description:
       "Les opérations non terminées de la boutique : ce que les clients doivent " +
       'encore. À employer pour « qui me doit de l\'argent », « les créances », ' +
-      '« ce qui reste à régler ». Rend le total dû et le détail par client.',
+      '« ce qui reste à régler ». Rend le total dû et le détail par client. ' +
+      "Un remboursement au siège en attente n'y figure pas : l'agent a payé, c'est la " +
+      "boutique qui doit encore l'envoyer au siège.",
     parameters: {
       type: 'OBJECT',
       properties: {
@@ -263,7 +278,8 @@ export const DECLARATIONS = Object.freeze([
       "chiffres. À employer pour « qu'est-ce qu'on a fait », « retrouve l'opération " +
       'de X », « les retraits du mois », « les ravitaillements de la semaine ». Sans ' +
       '`type`, les totaux ne comptent que les opérations clients, et les mouvements du ' +
-      'dealer arrivent à part dans `mouvements_dealer`.',
+      'dealer arrivent à part dans `mouvements_dealer`, les remboursements au siège dans ' +
+      '`remboursements_siege`.',
     parameters: {
       type: 'OBJECT',
       properties: {
@@ -357,10 +373,11 @@ async function bilanDuJour({ jours } = {}) {
 
   if (historique.status === 'rejected') return traduirePanne(historique.reason, "l'historique")
 
-  const { nombre, total, parType, mouvementsDealer } = totaliser(historique.value)
+  const { nombre, total, parType, mouvementsDealer, remboursementsSiege } = totaliser(historique.value)
 
   const creances = brouillons.status === 'fulfilled' && Array.isArray(brouillons.value) ? brouillons.value : []
-  const creancesRetenues = creances.filter((c) => !estDefait(c))
+  // Un remboursement au siège en attente n'est pas une dette de l'agent : il a payé.
+  const creancesRetenues = creances.filter((c) => !estDefait(c) && !estRembSiege(c))
   const totalCreances = creancesRetenues.reduce((somme, c) => somme + montantDe(c), 0)
 
   return {
@@ -370,7 +387,7 @@ async function bilanDuJour({ jours } = {}) {
     operations_terminees: nombre,
     total_encaisse: total,
     par_type: parType,
-    ...aPart(mouvementsDealer),
+    ...aPart(mouvementsDealer, remboursementsSiege),
     creances_en_cours: creancesRetenues.length,
     total_des_creances: totalCreances,
     clients_enregistres:
@@ -419,7 +436,9 @@ async function creancesEnCours({ client } = {}) {
     return traduirePanne(cause, 'les créances')
   }
 
-  let lignes = (Array.isArray(brouillons) ? brouillons : []).filter((l) => !estDefait(l))
+  // Un remboursement au siège en attente n'est pas une créance : l'agent a payé,
+  // c'est la boutique qui doit encore l'envoyer au siège.
+  let lignes = (Array.isArray(brouillons) ? brouillons : []).filter((l) => !estDefait(l) && !estRembSiege(l))
   if (typeof client === 'string' && client.trim()) {
     const aiguille = client.trim().toLowerCase()
     lignes = lignes.filter((l) =>
@@ -473,9 +492,9 @@ async function operationsRecentes({ client, type, jours } = {}) {
     lignes = lignes.filter((l) => String(l?.type ?? '').toLowerCase() === voulu)
   }
 
-  const { nombre, total, parType, retenues, mouvementsDealer } = totaliser(lignes, { inclureDealer: filtreParType })
+  const { nombre, total, parType, retenues, mouvementsDealer, remboursementsSiege } = totaliser(lignes, { inclureDealer: filtreParType })
   if (nombre === 0) {
-    return { ...cadre, nombre: 0, total: 0, operations: [], ...aPart(mouvementsDealer), message: 'Aucune opération ne correspond.' }
+    return { ...cadre, nombre: 0, total: 0, operations: [], ...aPart(mouvementsDealer, remboursementsSiege), message: 'Aucune opération ne correspond.' }
   }
 
   return {
@@ -483,7 +502,7 @@ async function operationsRecentes({ client, type, jours } = {}) {
     nombre,
     total,
     par_type: parType,
-    ...aPart(mouvementsDealer),
+    ...aPart(mouvementsDealer, remboursementsSiege),
     tronque: retenues.length > EXTRAIT_MAX,
     operations: retenues.slice(0, EXTRAIT_MAX).map((l) =>
       nettoyer(l, ['clientNom', 'nom', 'codeAgent', 'type', 'montant', 'reseau', 'statut', 'date']),
