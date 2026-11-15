@@ -533,12 +533,12 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
               const nature = normaliserLibelle(type.value)
               const figee = natureFigee(type.value)
               // Le remboursement au siège n'est ni une entrée ni une sortie de
-              // client : la teinte de marque, pas inflow/outflow.
+              // client : son propre bleu ciel, pas inflow/outflow.
               const teinte = !actif
                 ? `border-line bg-surface ${figee ? '' : 'hover:border-brand-200'}`
                 : nature === 'depot' ? 'border-inflow bg-inflow-soft'
                 : nature === 'retrait' ? 'border-outflow bg-outflow-soft'
-                : type.value === TYPE_REMB_SIEGE ? 'border-brand-500 bg-brand-50'
+                : type.value === TYPE_REMB_SIEGE ? 'border-siege bg-siege-soft'
                 : 'border-pending bg-pending-soft'
 
               return (

@@ -93,6 +93,14 @@ describe('TC-387 — la nature et la réserve', () => {
   })
 })
 
+describe('TC-387 — la teinte', () => {
+  it('[TC-387-9] la nature « Remb. siège » choisie se teinte en bleu ciel', () => {
+    renderForm()
+    fireEvent.click(radio('Remb. siège'))
+    expect(radio('Remb. siège').closest('label')).toHaveClass('border-siege', 'bg-siege-soft')
+  })
+})
+
 describe('TC-387 — les deux voies', () => {
   it('[TC-387-3] reçu en Stock, stock à zéro : « Valider » passe, la confirmation dit la réserve', async () => {
     stockValue = 0

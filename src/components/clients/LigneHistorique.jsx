@@ -67,9 +67,9 @@ const LigneHistorique = memo(function LigneHistorique({ ligne, maintenant }) {
   const supprimee = Boolean(ligne.deletedAt)
   const entrant = ligne.typePlie === 'depot'
   // L'agent a payé son remboursement au siège : ni entrée ni sortie de client,
-  // et rien qu'il doive encore. La teinte de marque, et pas de « reste ».
+  // et rien qu'il doive encore. Son bleu ciel, et pas de « reste ».
   const rembSiege = estRembSiege(ligne)
-  const teinteType = rembSiege ? 'text-brand-600' : entrant ? 'text-inflow' : 'text-outflow'
+  const teinteType = rembSiege ? 'text-siege' : entrant ? 'text-inflow' : 'text-outflow'
   const attente = ligne.source === 'draft' ? depuisQuand(ligne.createdAt, maintenant) : ''
 
   // Le chronomètre des non terminées, arrêté — exactement celui du tableau.

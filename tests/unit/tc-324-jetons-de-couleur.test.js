@@ -26,7 +26,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { describe, it, expect } from 'vitest'
 
-const FAMILLES_C2EGF = ['brand', 'canvas', 'surface', 'line', 'ink', 'inflow', 'outflow', 'success', 'warn', 'danger', 'pending', 'net']
+const FAMILLES_C2EGF = ['brand', 'canvas', 'surface', 'line', 'ink', 'inflow', 'outflow', 'success', 'warn', 'danger', 'pending', 'net', 'siege']
 
 const PROPRIETE = String.raw`(?:bg|text|border(?:-[trblxy])?|ring(?:-offset)?|outline|decoration|divide|placeholder|from|via|to|fill|stroke|accent|caret|shadow)`
 
