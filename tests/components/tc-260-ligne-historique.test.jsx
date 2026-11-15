@@ -210,3 +210,24 @@ describe('TC-260 — le code et la destination du règlement', () => {
     expect(container.querySelector('.bg-success-soft')).toBeNull()
   })
 })
+
+/**
+ * Le remboursement au siège dans l'historique de l'agent (spec 2026-11-14,
+ * « Les lecteurs à adapter » : un libellé et une teinte). L'agent a payé : la
+ * ligne n'est ni une sortie vers lui, ni une somme qu'il doit encore.
+ */
+describe('TC-260 — le remboursement au siège', () => {
+  const remb = (over) => ({ type: 'Remb. siège', typePlie: 'remb. siege', montant: 100000, ...over })
+
+  it('[TC-260-RS1] sa teinte n’est pas celle d’un retrait', () => {
+    afficher(remb())
+    const type = screen.getByText('Remb. siège')
+    expect(type.className).not.toMatch(/text-outflow|text-inflow/)
+  })
+
+  it('[TC-260-RS2] en attente, elle dit l’envoi au siège, jamais « reste 0 FCFA »', () => {
+    afficher(remb({ source: 'draft', reste: 0, createdAt: Date.UTC(2026, 9, 13, 12, 0) }))
+    expect(screen.queryByText(/reste/)).toBeNull()
+    expect(screen.getByText(/envoi au siège en attente depuis/)).toBeInTheDocument()
+  })
+})
