@@ -6,7 +6,7 @@ import { estRembSiege } from './rembSiege.js'
  * La caisse : ce que la boutique tient, et ce qui est encore en route.
  *
  * Deux écrans lisent ces mêmes chiffres — la barre des soldes, collée en haut
- * de chaque page, et les deux cases au-dessus des non terminées. Les calculer
+ * de chaque page, et les cases au-dessus des non terminées. Les calculer
  * séparément les ferait diverger au premier libellé mal accentué, et deux
  * totaux contradictoires sur le même écran valent moins qu'aucun des deux.
  */

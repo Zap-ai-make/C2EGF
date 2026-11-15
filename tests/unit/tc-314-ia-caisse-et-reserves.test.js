@@ -148,6 +148,11 @@ describe('TC-314 — la caisse lue par le modèle', () => {
     expect(construirePrompt({ date: new Date('2026-10-30T12:00:00Z') })).toMatch(/remboursement au siège/i)
   })
 
+  it('[CR-15] la formule du total caisse que récite le modèle retranche le siège', () => {
+    const prompt = construirePrompt({ date: new Date('2026-10-30T12:00:00Z') })
+    expect(prompt).toMatch(/TOTAL CAISSE vaut[^.]*− ce qui reste à envoyer\s+au siège\./)
+  })
+
   it('[CR-11] sans soldes, un refus — jamais un zéro inventé', () => {
     expect(lireLaCaisse({})).toMatchObject({ erreur: true })
   })

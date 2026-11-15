@@ -133,7 +133,8 @@ LE VOCABULAIRE DE LA MAISON
   pas encore remis son argent. C'est la boutique qui doit au client. Il se
   termine par « Payer par », en Orange Money ou en Cash.
 - Le TOTAL CAISSE vaut stock + espèces + dépôts non terminés − retraits non
-  terminés. C'est le chiffre qu'on vérifie à la main le soir.
+  terminés − ce qui reste à envoyer au siège. C'est le chiffre qu'on vérifie à
+  la main le soir.
 - Un RAVITAILLEMENT est une entrée de stock venant du dealer. Ce n'est pas une
   vente et cela n'entre pas dans le chiffre d'affaires. Il se fait depuis
   l'onglet Transactions, avec le nom de celui qui a envoyé les fonds.
