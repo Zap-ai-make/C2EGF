@@ -4,7 +4,8 @@
  *
  * Y passent, réseau ou pas : la saisie, sa modification et son annulation, le
  * règlement (par tranche ou en entier), le remboursement, la correction d'une
- * ligne validée, le ravitaillement et son retour, et l'ajout d'un client. Chacune
+ * ligne validée, le ravitaillement et son retour, le remboursement au siège, et
+ * l'ajout d'un client. Chacune
  * est d'abord ÉCRITE sur l'appareil, puis envoyée. Une coupure ne la perd pas :
  * elle repart au retour du réseau, même après l'extinction de la machine.
  *
@@ -40,6 +41,9 @@ export const RETOUR = 'retour'
 export const MODIFICATION = 'modification'
 export const CORRECTION = 'correction'
 export const ANNULATION = 'annulation'
+// Le remboursement au siège : ses quatre commandes (saisie, envoi, modification,
+// annulation) partent par ce seul type, la charge portant la commande telle quelle.
+export const REMB_SIEGE = 'remb_siege'
 
 // Ce qu'une annulation vise : chacune de ces lignes a sa commande au serveur.
 export const CIBLE_NON_TERMINEE = 'non_terminee'

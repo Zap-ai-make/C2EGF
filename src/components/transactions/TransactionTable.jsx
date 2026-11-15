@@ -33,6 +33,9 @@ import { placerMenu } from '../../utils/placementMenu.js'
 import { ChevronRight } from 'lucide-react'
 import { useEnvois } from '../../context/envoisContexte.js'
 import EtatEnvoi from '../ui/EtatEnvoi.jsx'
+import EnvoiSiegeMenu from './EnvoiSiegeMenu.jsx'
+import { consequenceAnnulation, estRembSiege } from '../../utils/rembSiege.js'
+import { libelleVase } from '../../utils/ravitaillement.js'
 
 /** Les règlements d'une ligne qui attendent le réseau, et ceux qu'il a refusés. */
 function ReglementsEnAttente({ reglements, onRetirer }) {
@@ -55,7 +58,7 @@ function ReglementsEnAttente({ reglements, onRetirer }) {
 }
 
 const TransactionTable = memo(function TransactionTable() {
-  const { pendingTransactions, getActionButtons, getTransactionStyles, addPaymentTranche, addRefundTranche, startEditTransaction, trashTransaction, loading } = useTransactions()
+  const { pendingTransactions, getActionButtons, getTransactionStyles, addPaymentTranche, addRefundTranche, startEditTransaction, trashTransaction, envoyerAuSiege, loading } = useTransactions()
   const envois = useEnvois()
   const retirerEnvoi = useCallback((id) => { envois?.retirer(id) }, [envois])
   const { themeClasses } = useTheme()
@@ -183,7 +186,7 @@ const TransactionTable = memo(function TransactionTable() {
           behavior: prefereMouvementReduit() ? 'auto' : 'smooth',
         })
       }
-    } else if (actionType === 'payerPar' || actionType === 'rembourser' || actionType === 'encaisser') {
+    } else if (actionType === 'payerPar' || actionType === 'rembourser' || actionType === 'encaisser' || actionType === 'envoyerSiege') {
       if (activeDropdown === transactionId) {
         setActiveDropdown(null)
         setCurrentActionType(null)
@@ -262,6 +265,32 @@ const TransactionTable = memo(function TransactionTable() {
     }
   }, [processingActions, pendingTransactions, addPaymentTranche, addRefundTranche, setActiveDropdown, setCurrentActionType])
 
+
+  /**
+   * Une tranche d'un remboursement au siège. Le menu se ferme d'abord : la
+   * tranche est écrite sur l'appareil et part derrière (lot H), et le bandeau
+   * du bas dit si elle tarde.
+   */
+  const handleEnvoiSiege = useCallback(async (transactionId, montant) => {
+    const actionKey = `${transactionId}-envoyerSiege`
+    setProcessingActions(prev => new Set(prev).add(actionKey))
+    setActiveDropdown(null)
+    setCurrentActionType(null)
+    setDropdownStep(1)
+    try {
+      await envoyerAuSiege(transactionId, montant)
+    } catch (error) {
+      logger.user.error('Envoi au siège', error)
+      setRollbackToast({ show: true, message: error?.message || 'Envoi au siège non enregistré', type: 'rollback' })
+      setTimeout(() => setRollbackToast({ show: false, message: '', type: 'info' }), 4000)
+    } finally {
+      setProcessingActions(prev => {
+        const suivant = new Set(prev)
+        suivant.delete(actionKey)
+        return suivant
+      })
+    }
+  }, [envoyerAuSiege])
 
   const handleMethodChosen = useCallback((method) => {
     const transaction = pendingTransactions.find(t => t.id === activeDropdown)
@@ -570,6 +599,18 @@ const TransactionTable = memo(function TransactionTable() {
                             Reste : {Number(transaction.remainingAmount).toLocaleString('fr-FR')} FCFA
                           </div>
                         )}
+                        {estRembSiege(transaction) && (
+                          <div className="mt-0.5 text-xs font-normal tabular-nums text-ink-muted">
+                            <div>Reçu en {libelleVase(transaction.balanceType)}</div>
+                            {(Number(transaction.envoyeAuSiege) || 0) > 0 && (
+                              <div>
+                                Envoyé : {Number(transaction.envoyeAuSiege).toLocaleString('fr-FR')} FCFA
+                                {' · '}
+                                <span className="text-warn">Reste : {(Number(transaction.resteAuSiege) || 0).toLocaleString('fr-FR')} FCFA</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                         <ReglementsEnAttente reglements={transaction.reglementsEnAttente} onRetirer={retirerEnvoi} />
                       </td>
                       <td className="px-4 py-3 text-base">
@@ -611,6 +652,18 @@ const TransactionTable = memo(function TransactionTable() {
                               className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 dropdown-trigger"
                             >
                               Rembourser
+                            </button>
+                          )}
+
+                          {/* « Envoyer au siège », pas « Rembourser » : ce mot
+                              rend déjà l'argent au client sur un dépôt réglé. */}
+                          {actions.envoyerSiege && (
+                            <button
+                              onClick={(e) => handleActionClick(transaction.id, 'envoyerSiege', e)}
+                              disabled={isProcessingTransaction}
+                              className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 dropdown-trigger"
+                            >
+                              Envoyer au siège
                             </button>
                           )}
 
@@ -670,7 +723,12 @@ const TransactionTable = memo(function TransactionTable() {
             minWidth: '220px'
           }}
         >
-          {dropdownStep === 1 ? (
+          {currentActionType === 'envoyerSiege' ? (
+            <EnvoiSiegeMenu
+              ligne={pendingTransactions.find(tx => tx.id === activeDropdown)}
+              onEnvoyer={(montant) => handleEnvoiSiege(activeDropdown, montant)}
+            />
+          ) : dropdownStep === 1 ? (
             <>
               {/* Étape 1 : sélection de la méthode */}
               <div className="bg-gray-100 px-4 py-2 rounded-t-lg border-b border-gray-200">
@@ -886,8 +944,9 @@ const TransactionTable = memo(function TransactionTable() {
               </span>
             </p>
             <p className="text-ink-muted">
-              Le stock engagé sera rendu et la ligne ira dans la corbeille, où
-              elle restera lisible. Elle ne pourra pas être restaurée.
+              {estRembSiege(aSupprimer)
+                ? `${consequenceAnnulation(aSupprimer)} La ligne ira dans la corbeille, où elle restera lisible. Elle ne pourra pas être restaurée.`
+                : 'Le stock engagé sera rendu et la ligne ira dans la corbeille, où elle restera lisible. Elle ne pourra pas être restaurée.'}
             </p>
           </div>
         )}

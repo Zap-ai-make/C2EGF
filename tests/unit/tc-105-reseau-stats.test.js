@@ -406,3 +406,55 @@ describe('TC-105 — flux', () => {
     expect(f.reduce((s, p) => s + p.depots, 0)).toBe(0)
   })
 })
+
+/**
+ * Le remboursement au siège : l'agent rend au siège le stock que celui-ci lui a
+ * avancé la nuit, la boutique ne fait que transmettre. Ce n'est pas du volume de
+ * l'agent (décision de l'utilisateur, 15 novembre 2026) — mais l'agent est bien
+ * venu au comptoir : c'est une visite.
+ */
+describe('TC-105 RS — le remboursement au siège est une visite, pas du volume', () => {
+  const remb = (over = {}) => tx({ type: 'Remb. siège', balanceType: 'liquidite', ...over })
+
+  it('RS1 — validé ou non, il prouve la visite sans compter comme volume', () => {
+    expect(compteCommeVisite(remb())).toBe(true)
+    expect(compteCommeVolume(remb())).toBe(false)
+    expect(compteCommeVolume(remb({ statut: 'Non Terminées' }))).toBe(false)
+  })
+
+  it('RS2 — la concentration ne compte que le dépôt de l’agent', () => {
+    const transactions = [
+      tx({ clientId: 'a-1', montant: 100000, date: ilYA(1) }),
+      remb({ clientId: 'a-1', montant: 500000, date: ilYA(1) }),
+    ]
+    const c = calculerConcentration(transactions, [agent('a-1')], { maintenant: MAINTENANT })
+    expect(c.volumeTotal).toBe(100000)
+    expect(c.tete[0].volume).toBe(100000)
+  })
+
+  it('RS3 — chez le commercial, l’agent est actif mais n’apporte pas de volume', () => {
+    const clients = [agent('a-1', { agentCommercial: 'OUEDRAOGO S.' })]
+    const [ouedraogo] = calculerCommerciaux(clients, [remb({ montant: 400000, date: ilYA(1) })], {
+      maintenant: MAINTENANT,
+    })
+    expect(ouedraogo.actifs).toBe(1)
+    expect(ouedraogo.volume).toBe(0)
+  })
+
+  it('RS4 — la couverture compte l’agent venu rembourser', () => {
+    const c = calculerCouverture([agent('a-1')], [remb({ date: ilYA(1) })], { maintenant: MAINTENANT })
+    expect(c.actifs).toBe(1)
+  })
+
+  it('RS5 — la projection de rupture ne le compte pas dans la cadence du jour', () => {
+    // Quatre dépôts : sous le seuil de cinq opérations. Le remboursement ne
+    // doit pas le franchir à leur place.
+    const soldes = { Orange: { stock: 1000000 }, Liquidite: { liquidite: 5000000 } }
+    const transactions = [
+      ...['06:00', '07:00', '08:00', '09:00'].map((h) => tx({ montant: 100000, date: ilYA(0, h) })),
+      remb({ montant: 300000, date: ilYA(0, '09:30') }),
+    ]
+    const b = calculerBalance(soldes, transactions, { maintenant: MAINTENANT })
+    expect(projeterRupture(b, transactions, { maintenant: MAINTENANT })).toBeNull()
+  })
+})

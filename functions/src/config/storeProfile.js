@@ -25,6 +25,10 @@
  *     clôture à la journée en cours — jamais le fuseau de la machine qui
  *     exécute la fonction, qui n'est celui de personne.
  *
+ *   • SIEGE_REPAYMENT_ENABLED  — false ⇒ les quatre commandes du remboursement au
+ *     siège (addSiegeRepayment, sendToSiege, updateSiegeRepayment,
+ *     trashSiegeRepayment) refusent.
+ *
  * ⚠ Ces méthodes ne sont validées qu'à la DÉCLARATION d'une tranche, jamais à sa
  * confirmation : une tranche portant un ancien code doit rester confirmable.
  */
@@ -43,3 +47,5 @@ export const DEBT_SETTLEMENT_METHODS = ['Orange Money', 'Cash', 'Banque']
 export const STORE_REPLENISHMENT_SENDERS = ['Patron', 'Mme Sawadogo', 'Mohamed', 'DG', 'Maï', 'Yasmine']
 
 export const STORE_TIME_ZONE = 'Africa/Ouagadougou'
+
+export const SIEGE_REPAYMENT_ENABLED = true

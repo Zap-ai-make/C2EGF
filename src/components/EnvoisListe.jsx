@@ -8,11 +8,25 @@ import {
   REFUSEE,
   REGLEMENT,
   REMBOURSEMENT,
+  REMB_SIEGE,
   RETOUR,
   SAISIE,
 } from '../services/fileEnvoi.js'
 import { getClientName } from '../utils/helpers.js'
 import { libelleVase } from '../utils/ravitaillement.js'
+import { TYPE_REMB_SIEGE } from '../utils/rembSiege.js'
+
+/** Les quatre commandes du remboursement au siège, dans les mêmes mots que les autres. */
+function decrireRembSiege({ commande = {}, avant = {} }) {
+  if (commande.action === 'addSiegeRepayment') {
+    const { montant, balanceType, client } = commande.transaction ?? {}
+    return `${TYPE_REMB_SIEGE} de ${fcfa(montant)} en ${libelleVase(balanceType).toLowerCase()}${client ? ` — ${getClientName(client)}` : ''}`
+  }
+  if (commande.action === 'sendToSiege') return `Envoi au siège de ${fcfa(commande.amount)}`
+  if (commande.action === 'updateSiegeRepayment') return `Correction : ${TYPE_REMB_SIEGE} de ${fcfa({ ...avant, ...commande.updates }.montant)}`
+  if (commande.action === 'trashSiegeRepayment') return `Annulation : ${TYPE_REMB_SIEGE} de ${fcfa(avant.montant)}`
+  return 'Opération inconnue'
+}
 
 const fcfa = (montant) => `${(Number(montant) || 0).toLocaleString('fr-FR')} FCFA`
 
@@ -44,6 +58,7 @@ export function decrireOperation({ type, charge = {} }) {
     const { type: nature, montant } = charge.avant ?? {}
     return `Annulation : ${nature ?? 'opération'} de ${fcfa(montant)}`
   }
+  if (type === REMB_SIEGE) return decrireRembSiege(charge)
   return 'Opération inconnue'
 }
 

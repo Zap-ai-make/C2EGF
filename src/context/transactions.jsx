@@ -17,8 +17,12 @@ import {
   REFUSEE,
   REGLEMENT,
   REMBOURSEMENT,
+  REMB_SIEGE,
   SAISIE,
 } from '../services/fileEnvoi.js'
+import { runStoreTransactionCommand } from '../services/storeTransactionCommandService.js'
+import { estRembSiege } from '../utils/rembSiege.js'
+import { NETWORK_OPTIONS } from '../utils/constants.js'
 import { appliquerFile, resumeLigne } from '../utils/envoisEnAttente.js'
 import {
   businessDateKey,
@@ -122,6 +126,13 @@ const sansMarqueLocale = (transactionData) => {
   const { enAttente: _marqueLocale, ...client } = transactionData.client
   return { ...transactionData, client }
 }
+
+/** Ce qu'un remboursement au siège a laissé dans les soldes : de quoi le défaire, sans réseau. */
+const resumeRembSiege = (ligne) => ({
+  montant: ligne?.montant,
+  balanceType: ligne?.balanceType,
+  envoyeAuSiege: Number(ligne?.envoyeAuSiege) || 0,
+})
 
 export const useTransactions = () => {
   const context = useContext(TransactionsContext)
@@ -505,6 +516,48 @@ export const TransactionsProvider = ({ children }) => {
     }
   }, [parLaFile, soumettre])
 
+  /**
+   * Le remboursement au siège : ses quatre commandes partent par la file sous un
+   * seul type, la charge portant la commande telle que le serveur l'attend. Sans
+   * file, la commande part directement, comme le ravitaillement
+   * (`envoyerMouvement`).
+   *
+   * @returns {Promise<{ statut: string }>} « en_attente » ou « envoyee »
+   */
+  const envoyerRembSiege = useCallback(async (commande, { avant, id } = {}) => {
+    try {
+      setError(null)
+      if (!parLaFile) {
+        await runStoreTransactionCommand(commande)
+        return { statut: ENVOYEE }
+      }
+      const charge = { commande, reseau: NETWORK_OPTIONS[0], ...(avant ? { avant } : {}) }
+      return await (id ? soumettre(REMB_SIEGE, charge, { id }) : soumettre(REMB_SIEGE, charge))
+    } catch (error) {
+      console.error('Erreur lors du remboursement au siège:', error)
+      setError(error.message)
+      throw error
+    }
+  }, [parLaFile, soumettre])
+
+  const ajouterRembSiege = useCallback(
+    (transaction) => envoyerRembSiege({ action: 'addSiegeRepayment', transaction: sansMarqueLocale(transaction) }),
+    [envoyerRembSiege],
+  )
+
+  const envoyerAuSiege = useCallback(
+    (draftId, montant) => envoyerRembSiege({ action: 'sendToSiege', draftId, amount: montant }),
+    [envoyerRembSiege],
+  )
+
+  const modifierRembSiege = useCallback((draftId, updates) => {
+    const ligne = lignesAfficheesRef.current.nonTerminees.find((t) => t.id === draftId)
+    return envoyerRembSiege(
+      { action: 'updateSiegeRepayment', draftId, updates: sansMarqueLocale(updates) },
+      { avant: resumeRembSiege(ligne) },
+    )
+  }, [envoyerRembSiege])
+
   const validateTransaction = useCallback(async (id, customStatus = 'Validée', selectedPaymentMethod = null, amountOverride = null) => {
     try {
       setError(null)
@@ -600,6 +653,9 @@ export const TransactionsProvider = ({ children }) => {
     return apresEnvoi((operation) => {
       if (operation.type === CORRECTION) remplacerCorrigee(operation.charge.historyId, operation)
       else if (operation.type === ANNULATION && operation.charge.cible !== CIBLE_NON_TERMINEE) marquerAnnulee(operation.charge.cibleId)
+      else if (operation.type === REMB_SIEGE && operation.charge.commande?.action === 'trashSiegeRepayment' && operation.charge.commande.historyId) {
+        marquerAnnulee(operation.charge.commande.historyId)
+      }
     })
   }, [apresEnvoi, remplacerCorrigee, marquerAnnulee])
 
@@ -623,6 +679,16 @@ export const TransactionsProvider = ({ children }) => {
       setError(null)
       const { nonTerminees, historique } = lignesAfficheesRef.current
       const brouillon = nonTerminees.find((t) => t.id === id)
+
+      // Un remboursement au siège se défait par SA commande, qui rend ses deux
+      // jambes : `trashDraft` et `trashHistory` le refuseraient (TC-381).
+      const visee = brouillon ?? historique.find((item) => item?.id === id)
+      if (estRembSiege(visee)) {
+        const commande = { action: 'trashSiegeRepayment', ...(brouillon ? { draftId: id } : { historyId: id }) }
+        const issue = await envoyerRembSiege(commande, { avant: resumeRembSiege(visee), id: `${REMB_SIEGE}-annulation-${id}` })
+        if (!brouillon && !parLaFile) marquerAnnulee(id)
+        return issue
+      }
       const annuler = (cible, ligne) => soumettre(
         ANNULATION,
         { cible, cibleId: id, avant: resumeLigne(ligne) },
@@ -654,7 +720,7 @@ export const TransactionsProvider = ({ children }) => {
       setError(error.message)
       throw error
     }
-  }, [parLaFile, soumettre, marquerAnnulee])
+  }, [parLaFile, soumettre, marquerAnnulee, envoyerRembSiege])
 
   /**
    * Ouvre le formulaire sur une transaction validée, pour correction.
@@ -738,6 +804,11 @@ export const TransactionsProvider = ({ children }) => {
     if (isDraftSettling(transaction)) {
       return { ...actions, modifier: false, annuler: false }
     }
+    // Un remboursement au siège dont une tranche est partie ne se modifie plus
+    // (le serveur le refuse). « Annuler » reste : il défait aussi les tranches.
+    if (estRembSiege(transaction) && (Number(transaction.envoyeAuSiege) || 0) > 0) {
+      return { ...actions, modifier: false }
+    }
     return actions
   }, [])
 
@@ -760,6 +831,9 @@ export const TransactionsProvider = ({ children }) => {
     error,
     addTransaction,
     updateTransaction,
+    ajouterRembSiege,
+    envoyerAuSiege,
+    modifierRembSiege,
     validateTransaction,
     addPaymentTranche,
     addRefundTranche,

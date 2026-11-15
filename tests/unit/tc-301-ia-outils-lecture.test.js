@@ -440,3 +440,56 @@ describe('[ME] mode_d_emploi : les fiches de l\'onglet Aide', () => {
     expect(declaration.parameters.required ?? []).toEqual([])
   })
 })
+
+/**
+ * Le remboursement au siège (spec 2026-11-14) : l'agent rembourse à la boutique
+ * le stock que le siège lui a donné à crédit, et la boutique l'envoie au siège.
+ * Ce n'est ni une créance sur l'agent — il a payé —, ni une encaisse de la
+ * boutique. Anti-objectif de la spec : « une ligne Remb. siège lue comme une
+ * dette de l'agent envers la boutique ».
+ */
+describe('[OL-RS] l’assistant et le remboursement au siège', () => {
+  const REMB_EN_ATTENTE = { id: 'rs1', clientNom: 'KABORE Issa', type: 'Remb. siège', montant: 200000, balanceType: 'liquidite', resteAuSiege: 200000, statut: 'Non Terminées', date: '29/10/2026 10:00:00' }
+  const REMB_VALIDE = { id: 'rs2', clientNom: 'KABORE Issa', type: 'Remb. siège', montant: 100000, balanceType: 'stock', resteAuSiege: 0, statut: 'Validée', date: '29/10/2026 10:30:00' }
+
+  beforeEach(() => {
+    base.collections['clients/boutique-a/drafts'] = [...BROUILLONS_A, REMB_EN_ATTENTE]
+    base.collections['clients/boutique-a/history'] = [...HISTORIQUE_A, REMB_VALIDE]
+  })
+
+  it('[OL-RS1] creances_en_cours : un remboursement au siège n’est pas une dette de l’agent', async () => {
+    const reponse = await executerOutil('creances_en_cours')
+    expect(reponse.nombre).toBe(1)
+    expect(reponse.total_du).toBe(15000)
+    expect(reponse.creances.map((c) => c.type)).toEqual(['Dépôt'])
+  })
+
+  it('[OL-RS2] operations_recentes : hors du total, dit à part', async () => {
+    const reponse = await executerOutil('operations_recentes')
+    expect(reponse.total).toBe(70000)
+    expect(reponse.par_type['Remb. siège']).toBeUndefined()
+    expect(reponse.remboursements_siege).toBe(100000)
+  })
+
+  it('[OL-RS3] operations_recentes demandé sur « Remb. siège » : ils redeviennent le sujet', async () => {
+    const reponse = await executerOutil('operations_recentes', { type: 'Remb. siège' })
+    expect(reponse.nombre).toBe(1)
+    expect(reponse.total).toBe(100000)
+  })
+
+  it('[OL-RS4] bilan_du_jour : ni dans les créances, ni dans l’encaisse', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-29T12:00:00Z') })
+    try {
+      const jour = (ligne) => ({ ...ligne, createdAt: new Date('2026-10-29T10:00:00Z') })
+      base.collections['clients/boutique-a/history'] = [...HISTORIQUE_A, REMB_VALIDE].map(jour)
+      const reponse = await executerOutil('bilan_du_jour')
+      expect(reponse.creances_en_cours).toBe(1)
+      expect(reponse.total_des_creances).toBe(15000)
+      expect(reponse.total_encaisse).toBe(70000)
+      expect(reponse.par_type['Remb. siège']).toBeUndefined()
+      expect(reponse.remboursements_siege).toBe(100000)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

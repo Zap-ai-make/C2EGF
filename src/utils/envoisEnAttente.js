@@ -31,6 +31,7 @@ import {
   RAVITAILLEMENT,
   REGLEMENT,
   REMBOURSEMENT,
+  REMB_SIEGE,
   RETOUR,
   SAISIE,
 } from '../services/fileEnvoi.js'
@@ -47,6 +48,7 @@ import {
   reverseInitialTransactionImpact,
 } from './financialImpact.js'
 import { TYPE_RAVITAILLEMENT, TYPE_RETOUR } from './ravitaillement.js'
+import { TYPE_REMB_SIEGE, effetRembSiegeSurLesSoldes } from './rembSiege.js'
 
 const FUSEAU = 'Africa/Ouagadougou'
 const { PENDING, VALIDATED, DELETED } = FIRESTORE_CONFIG.STATUS
@@ -289,10 +291,89 @@ const EFFETS_SUR_LES_LIGNES = {
       validatedAt: Timestamp.fromMillis(op.creeLe),
     }, op))
   },
+  // Défini plus bas, avec ses quatre commandes ; lu à l'appel, pas au chargement.
+  [REMB_SIEGE](op, nonTerminees, historique) {
+    EFFETS_REMB_SIEGE[op.charge?.commande?.action]?.(op, nonTerminees, historique)
+  },
+}
+
+// Ce qu'une modification de remboursement au siège peut changer : la liste
+// blanche de `updateSiegeRepayment`.
+const CHAMPS_REMB_SIEGE = ['client', 'clientId', 'code', 'montant', 'balanceType']
+
+/**
+ * Ce que chaque commande du remboursement au siège fait aux deux listes, sous la
+ * forme que le serveur leur donnera. Seule la saisie se montre refusée : un
+ * envoi, une modification ou une annulation refusés ne changent aucune ligne.
+ */
+const EFFETS_REMB_SIEGE = {
+  addSiegeRepayment(op, nonTerminees, historique) {
+    if (nonTerminees.has(op.id) || historique.has(op.id)) return
+    const { transaction } = op.charge.commande
+    const validee = !isPendingStatus(transaction.statut)
+    const liste = validee ? historique : nonTerminees
+    liste.set(op.id, {
+      ...transaction,
+      id: op.id,
+      type: TYPE_REMB_SIEGE,
+      reseau: op.charge.reseau,
+      envoyeAuSiege: validee ? transaction.montant : 0,
+      resteAuSiege: validee ? 0 : transaction.montant,
+      envoisSiege: [],
+      date: jourFr(op.creeLe),
+      createdAt: Timestamp.fromMillis(op.creeLe),
+      ...(validee ? { directValidation: true, validatedAt: Timestamp.fromMillis(op.creeLe) } : {}),
+      envoi: etatEnvoi(op),
+    })
+  },
+  sendToSiege(op, nonTerminees, historique) {
+    if (op.etat !== EN_ATTENTE) return
+    const { draftId, amount } = op.charge.commande
+    const ligne = nonTerminees.get(draftId)
+    if (!ligne || (ligne.envoisSiege ?? []).some((e) => e.id === op.id)) return
+    const montant = Number(amount) || 0
+    const reste = Math.max(0, (Number(ligne.resteAuSiege) || 0) - montant)
+    const envoyee = marquee({
+      ...ligne,
+      envoyeAuSiege: (Number(ligne.envoyeAuSiege) || 0) + montant,
+      resteAuSiege: reste,
+      envoisSiege: [...(ligne.envoisSiege ?? []), { id: op.id, montant }],
+    }, op)
+    if (reste > 0) {
+      nonTerminees.set(draftId, envoyee)
+      return
+    }
+    nonTerminees.delete(draftId)
+    historique.set(draftId, { ...envoyee, statut: VALIDATED, validatedAt: Timestamp.fromMillis(op.creeLe) })
+  },
+  updateSiegeRepayment(op, nonTerminees) {
+    if (op.etat !== EN_ATTENTE) return
+    const { draftId, updates = {} } = op.charge.commande
+    const ligne = nonTerminees.get(draftId)
+    if (!ligne || ligne.derniereCommande === op.id) return
+    const retenus = Object.fromEntries(CHAMPS_REMB_SIEGE.filter((champ) => updates[champ] !== undefined).map((champ) => [champ, updates[champ]]))
+    const modifiee = { ...ligne, ...retenus }
+    nonTerminees.set(draftId, marquee({ ...modifiee, resteAuSiege: Number(modifiee.montant) || 0 }, op))
+  },
+  trashSiegeRepayment(op, nonTerminees, historique) {
+    if (op.etat !== EN_ATTENTE) return
+    const { draftId, historyId } = op.charge.commande
+    const deletedAt = new Date(op.creeLe)
+    if (draftId) {
+      const ligne = nonTerminees.get(draftId)
+      if (!ligne || historique.has(op.id)) return
+      nonTerminees.delete(draftId)
+      historique.set(op.id, marquee({ ...ligne, id: op.id, statut: DELETED, origin: 'draft', deletedAt }, op))
+      return
+    }
+    const ligne = historique.get(historyId)
+    if (!ligne || ligne.deletedAt) return
+    historique.set(historyId, marquee({ ...ligne, statut: DELETED, origin: 'history', deletedAt }, op))
+  },
 }
 
 /** Refusées, elles se lisent encore sur leur ligne, avec leur raison. */
-const VISIBLES_REFUSEES = [SAISIE, REGLEMENT, REMBOURSEMENT]
+const VISIBLES_REFUSEES = [SAISIE, REGLEMENT, REMBOURSEMENT, REMB_SIEGE]
 
 /**
  * Les lignes du serveur, après tout ce qui attend le réseau.
@@ -373,6 +454,8 @@ function effetSurLesSoldes(soldes, op, brouillons) {
       if (cible === CIBLE_RETOUR) return adjustBalanceValue(soldes, avant.reseau, avant.balanceType, avant.montant)
       return reverseHistoryTransactionImpact(soldes, avant)
     }
+    case REMB_SIEGE:
+      return effetRembSiegeSurLesSoldes(soldes, charge.reseau, charge.commande, charge.avant ?? null)
     default:
       return null
   }

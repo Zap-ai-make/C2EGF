@@ -12,6 +12,8 @@
  *   `src/utils/argentDehors.js`. `listOutstandingDrafts.js` fait de même.
  */
 
+import { estRembSiege } from '../storeTransactions/rembSiege.js'
+
 /** Les mouvements de la BOUTIQUE, qui ne sont pas des opérations d'agent. */
 export const TYPES_MOUVEMENT_BOUTIQUE = Object.freeze(['ravitaillement', 'cloture'])
 
@@ -147,7 +149,9 @@ export function ligneDeDocument({ id, chemin, donnees = {}, source, nomsDeBoutiq
     type: donnees.type ?? '',
     typePlie: type,
     montant: estNombre(donnees.montant) ? donnees.montant : null,
-    reste: montantRestant(donnees),
+    // L'agent a payé son remboursement au siège : ce qui reste est à la
+    // boutique d'envoyer, pas à lui (TC-255).
+    reste: estRembSiege(donnees) ? 0 : montantRestant(donnees),
     statut: donnees.statut ?? '',
     reseau: donnees.reseau ?? '',
     code: donnees.code ?? '',

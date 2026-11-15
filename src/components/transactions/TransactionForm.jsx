@@ -1,5 +1,5 @@
 import { repartirValeurAgent } from '../../utils/agentFields.js'
-import { useState, useEffect, useMemo, useCallback, useId } from 'react'
+import { useState, useEffect, useMemo, useCallback, useId, useRef } from 'react'
 import { Lightbulb, AlertTriangle } from 'lucide-react'
 import ClientSearch from './ClientSearch'
 import ClientInfoDisplay from './ClientInfoDisplay'
@@ -19,12 +19,20 @@ import {
   reseauxDisponibles,
   normaliserLibelle,
 } from '../../utils/preparationTransaction.js'
+import {
+  REMB_SIEGE_ACTIF,
+  TYPE_REMB_SIEGE,
+  estRembSiege,
+  evaluerRembSiege,
+  preparerRembSiege,
+} from '../../utils/rembSiege.js'
+import { VASES } from '../../utils/ravitaillement.js'
 import Dialog from '../ui/Dialog'
 import ClientForm from '../ClientForm'
 
 function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAddClient = null, annoncer = null }) {
   const { toasts, showToast, removeToast } = useToast()
-  const { addTransaction, editingTransaction, clearEditTransaction, updateTransaction, saveReopenedCorrection } = useTransactions()
+  const { addTransaction, editingTransaction, clearEditTransaction, updateTransaction, saveReopenedCorrection, ajouterRembSiege, modifierRembSiege } = useTransactions()
   const { validateAmount, getStock, getLiquidite, getFormattedStock } = useSimpleNetworkData()
   const [selectedClient, setSelectedClient] = useState(null)
   const [manualAgentCode, setManualAgentCode] = useState('')
@@ -36,7 +44,15 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
   const idMontant = useId()
   const idReseau = useId()
   const [transactionType, setTransactionType] = useState('')
+  // « Reçu en » d'un remboursement au siège : où l'agent a mis l'argent. Vide
+  // tant que la caissière n'a pas choisi — un défaut serait une erreur de
+  // réserve que personne ne verrait.
+  const [balanceType, setBalanceType] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  // ⚠ VERROU SYNCHRONE : `setIsSubmitting` ne prend effet qu'au rendu suivant.
+  //   Deux clics sur « Confirmer » dans le même instant partiraient tous deux,
+  //   chacun avec son identifiant de file : deux opérations d'argent.
+  const verrouConfirmation = useRef(false)
   const [pendingConfirmation, setPendingConfirmation] = useState(null)
   // Le code tapé pour lequel on enregistre une fiche, ou null : la fenêtre est fermée.
   const [clientACreer, setClientACreer] = useState(null)
@@ -49,8 +65,19 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
       setAmount(editingTransaction.montant.toString())
       setNetwork(editingTransaction.reseau)
       setTransactionType(editingTransaction.type)
+      setBalanceType(editingTransaction.balanceType ?? '')
     }
   }, [editingTransaction])
+
+  const estRemb = transactionType === TYPE_REMB_SIEGE
+  // Le profil décide si la troisième nature existe ; lu au rendu, pas au chargement.
+  const natures = REMB_SIEGE_ACTIF
+    ? [...TRANSACTION_TYPES, { value: TYPE_REMB_SIEGE, label: TYPE_REMB_SIEGE }]
+    : TRANSACTION_TYPES
+  // En modification, une ligne ne change pas de famille : un remboursement au
+  // siège a ses propres commandes, un dépôt les siennes (TC-387-7).
+  const natureFigee = (valeur) => Boolean(editingTransaction)
+    && (estRembSiege(editingTransaction) ? valeur !== TYPE_REMB_SIEGE : valeur === TYPE_REMB_SIEGE)
 
   // Auto-sélectionner un réseau disponible quand un client est sélectionné
   useEffect(() => {
@@ -110,15 +137,24 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
 
   // Ce que les boutons permettent, et pourquoi pas. Les règles vivent dans
   // preparationTransaction.js : l'assistant prépare avec les mêmes.
-  const formValidation = useMemo(() => evaluerTransaction({
-    client: transactionClient,
-    ambigus: reconnaissance?.ambigus,
-    montant: amount,
-    type: transactionType,
-    reseau: network,
-    validateAmount: controlerStock,
-    liquidite: getLiquidite(),
-  }), [transactionClient, reconnaissance, amount, transactionType, network, controlerStock, getLiquidite])
+  const formValidation = useMemo(() => (estRemb
+    ? evaluerRembSiege({
+      client: transactionClient,
+      ambigus: reconnaissance?.ambigus,
+      montant: amount,
+      reseau: network,
+      balanceType,
+      stock: Number(getStock(network)) || 0,
+    })
+    : evaluerTransaction({
+      client: transactionClient,
+      ambigus: reconnaissance?.ambigus,
+      montant: amount,
+      type: transactionType,
+      reseau: network,
+      validateAmount: controlerStock,
+      liquidite: getLiquidite(),
+    })), [estRemb, transactionClient, reconnaissance, amount, transactionType, network, balanceType, getStock, controlerStock, getLiquidite])
 
   const handleSubmit = useCallback(async (statut) => {
     const isDirectValidation = estValidationDirecte(statut)
@@ -136,13 +172,15 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
 
     setIsSubmitting(true)
 
-    const preparation = preparerTransaction({
-      client: transactionClient,
-      reseau: network,
-      montant: amount,
-      type: transactionType,
-      statut,
-    })
+    const preparation = estRemb
+      ? preparerRembSiege({ client: transactionClient, reseau: network, montant: amount, balanceType, statut })
+      : preparerTransaction({
+        client: transactionClient,
+        reseau: network,
+        montant: amount,
+        type: transactionType,
+        statut,
+      })
     if (!preparation.ok) {
       showToast(preparation.raison, 'error')
       setIsSubmitting(false)
@@ -150,12 +188,16 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
     }
 
     setPendingConfirmation({
-      transactionData: preparation.transactionData,
+      // Un remboursement au siège part par ses propres commandes, jamais par
+      // `addTransaction` : le serveur refuserait son type.
+      ...(estRemb ? { rembSiege: preparation.transaction } : { transactionData: preparation.transactionData }),
       isDirectValidation,
       details: preparation.details,
     })
     setIsSubmitting(false)
   }, [
+    estRemb,
+    balanceType,
     formValidation.isFormValid,
     formValidation.stockValidation.message,
     formValidation.networkValidation.message,
@@ -171,12 +213,28 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
   ])
 
   const confirmPendingSubmit = useCallback(async () => {
-    if (!pendingConfirmation) return
+    if (!pendingConfirmation || verrouConfirmation.current) return
+    verrouConfirmation.current = true
 
     setIsSubmitting(true)
 
     try {
-      if (editingTransaction) {
+      if (pendingConfirmation.rembSiege) {
+        const dire = annoncer ?? showToast
+        if (editingTransaction) {
+          // Le statut ne se modifie pas : la ligne reste en attente d'envoi.
+          const { statut: _statut, ...updates } = pendingConfirmation.rembSiege
+          await modifierRembSiege(editingTransaction.id, updates)
+          clearEditTransaction()
+          dire(MESSAGES.SUCCESS.TRANSACTION_MODIFIED, 'success')
+        } else {
+          await ajouterRembSiege(pendingConfirmation.rembSiege)
+          showToast(
+            pendingConfirmation.isDirectValidation ? MESSAGES.SUCCESS.TRANSACTION_VALIDATED : MESSAGES.SUCCESS.TRANSACTION_SAVED,
+            'success'
+          )
+        }
+      } else if (editingTransaction) {
         // Une ligne venue de l'historique y RETOURNE : on enchaîne la
         // correction et la revalidation par le mode de règlement mémorisé, au
         // lieu de l'abandonner dans les non terminées où la caissière devrait
@@ -207,6 +265,7 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
       setAmount('')
       setNetwork(NETWORK_OPTIONS[0])
       setTransactionType('')
+      setBalanceType('')
       setPendingConfirmation(null)
 
       // La caisse reste ouverte entre deux clients : les champs sont vidés, pas
@@ -219,9 +278,10 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
       showToast(error?.message || 'Erreur lors de la sauvegarde de la transaction', 'error')
       logger.user.error('Transaction save', error)
     } finally {
+      verrouConfirmation.current = false
       setIsSubmitting(false)
     }
-  }, [pendingConfirmation, editingTransaction, updateTransaction, saveReopenedCorrection, clearEditTransaction, showToast, annoncer, addTransaction, onComplete])
+  }, [pendingConfirmation, editingTransaction, updateTransaction, saveReopenedCorrection, clearEditTransaction, showToast, annoncer, addTransaction, ajouterRembSiege, modifierRembSiege, onComplete])
 
   const cancelPendingSubmit = useCallback(() => {
     setPendingConfirmation(null)
@@ -267,6 +327,7 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
     setAmount('')
     setNetwork('Orange')
     setTransactionType('')
+    setBalanceType('')
     showToast(MESSAGES.SUCCESS.MODIFICATION_CANCELLED, 'info')
     onCancel?.()
   }, [clearEditTransaction, showToast, onCancel])
@@ -338,7 +399,9 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
           />
 
           {/* Indicateur de stock disponible avec alertes */}
-          {network && ['depot', 'credit'].includes(normaliserLibelle(transactionType)) && (
+          {/* Le remboursement reçu en Espèce, validé d'un geste, sort du stock :
+              la caissière doit le voir avant de cliquer. */}
+          {network && (['depot', 'credit'].includes(normaliserLibelle(transactionType)) || (estRemb && balanceType === 'liquidite')) && (
             <div className="mt-2 space-y-1">
               <div className="text-sm text-gray-600">
                 Stock disponible pour {network}: <span className="font-semibold">{getFormattedStock(network)} FCFA</span>
@@ -465,25 +528,30 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
               porte jamais seule l'information — le radio natif reste visible et
               coché (DESIGN.md §5). */}
           <div className="flex flex-col gap-3 md:flex-row">
-            {TRANSACTION_TYPES.map((type) => {
+            {natures.map((type) => {
               const actif = transactionType === type.value
               const nature = normaliserLibelle(type.value)
+              const figee = natureFigee(type.value)
+              // Le remboursement au siège n'est ni une entrée ni une sortie de
+              // client : la teinte de marque, pas inflow/outflow.
               const teinte = !actif
-                ? 'border-line bg-surface hover:border-brand-200'
+                ? `border-line bg-surface ${figee ? '' : 'hover:border-brand-200'}`
                 : nature === 'depot' ? 'border-inflow bg-inflow-soft'
                 : nature === 'retrait' ? 'border-outflow bg-outflow-soft'
+                : type.value === TYPE_REMB_SIEGE ? 'border-brand-500 bg-brand-50'
                 : 'border-pending bg-pending-soft'
 
               return (
                 <label
                   key={type.value}
-                  className={`flex flex-1 cursor-pointer items-center gap-3 rounded border-2 px-4 py-3 transition-colors focus-within:ring-2 focus-within:ring-brand-400 ${teinte}`}
+                  className={`flex flex-1 items-center gap-3 rounded border-2 px-4 py-3 transition-colors focus-within:ring-2 focus-within:ring-brand-400 ${figee ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${teinte}`}
                 >
                   <input
                     type="radio"
                     name="transactionType"
                     value={type.value}
                     checked={actif}
+                    disabled={figee}
                     onChange={(e) => setTransactionType(e.target.value)}
                     className="h-4 w-4 accent-brand-500 focus:outline-none"
                   />
@@ -493,6 +561,36 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
             })}
           </div>
         </div>
+
+        {/* « Reçu en » : où l'agent a mis l'argent qu'il rembourse au siège. */}
+        {estRemb && (
+          <fieldset>
+            <legend className="block text-lg font-semibold text-gray-700 mb-1">Reçu en :</legend>
+            <div className="flex flex-col gap-3 md:flex-row">
+              {VASES.map((vase) => {
+                const actif = balanceType === vase.cle
+                return (
+                  <label
+                    key={vase.cle}
+                    className={`flex flex-1 cursor-pointer items-center gap-3 rounded border-2 px-4 py-3 transition-colors focus-within:ring-2 focus-within:ring-brand-400 ${
+                      actif ? 'border-brand-500 bg-brand-50' : 'border-line bg-surface hover:border-brand-200'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="recuEn"
+                      value={vase.cle}
+                      checked={actif}
+                      onChange={(e) => setBalanceType(e.target.value)}
+                      className="h-4 w-4 accent-brand-500 focus:outline-none"
+                    />
+                    <span className={`font-semibold ${actif ? 'text-ink' : 'text-gray-700'}`}>{vase.libelle}</span>
+                  </label>
+                )
+              })}
+            </div>
+          </fieldset>
+        )}
 
         {/* Boutons d'action */}
         {(nonTermineeDisabledReason || validateDisabledReason) && (
@@ -578,6 +676,9 @@ function TransactionForm({ clients, embedded = false, onComplete, onCancel, onAd
               <p><span className="font-semibold">Client:</span> {pendingConfirmation.details.clientName}</p>
               <p><span className="font-semibold">Nature:</span> {pendingConfirmation.details.type}</p>
               <p><span className="font-semibold">Montant:</span> {pendingConfirmation.details.amount} FCFA</p>
+              {pendingConfirmation.details.recuEn && (
+                <p><span className="font-semibold">Reçu en:</span> {pendingConfirmation.details.recuEn}</p>
+              )}
               <p><span className="font-semibold">Réseau:</span> {pendingConfirmation.details.network}</p>
               <p><span className="font-semibold">Statut:</span> {pendingConfirmation.details.statut}</p>
             </div>

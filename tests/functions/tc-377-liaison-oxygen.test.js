@@ -407,6 +407,24 @@ describe('TC-377 — lireActivite', () => {
     expect(corps.curseur).toEqual({ mode: 'modification', depuisMs: T0 + 10 * H - 2 * 60_000 })
   })
 
+  /**
+   * Le remboursement au siège est rattaché à l'agent, mais le contrat validé
+   * avec Oxygen ne connaît pas ce type : il n'entre pas dans le flux tant que
+   * l'utilisateur n'a pas rouvert ce contrat (spec 2026-11-14, décision 4).
+   */
+  it('[TC-377-RS] le remboursement au siège n’entre pas dans le flux Oxygen', async () => {
+    const liaison = await relie()
+    maintenantMs = T0 + 10 * H
+    await Promise.all([
+      db.doc('clients/store-a/history/depot').set(ligne()),
+      db.doc('clients/store-a/history/rs-valide').set(ligne({ type: 'Remb. siège', balanceType: 'stock', envoyeAuSiege: 100, resteAuSiege: 0 })),
+      db.doc('clients/store-a/drafts/rs-attente').set(ligne({ type: 'Remb. siège', statut: 'Non Terminées', balanceType: 'liquidite', envoyeAuSiege: 0, resteAuSiege: 100 })),
+    ])
+    const { corps } = await lire(liaison)
+    expect(corps.lignes.map((l) => l.id)).toEqual(['depot'])
+    expect(corps.nonTerminees).toEqual([])
+  })
+
   it('[TC-377-36] pages de 50, reprises sans perte ni doublon', async () => {
     const liaison = await relie()
     maintenantMs = T0 + 10 * H

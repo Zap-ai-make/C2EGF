@@ -2,6 +2,7 @@ import { memo } from 'react'
 import StatusBadge from '../ui/StatusBadge.jsx'
 import { tonStatut } from '../../utils/helpers.js'
 import { dureeDe, formaterHeure } from '../../utils/attente.js'
+import { estRembSiege } from '../../utils/rembSiege.js'
 
 /**
  * Une opération d'agent, telle qu'elle se lit dans son historique.
@@ -65,6 +66,10 @@ const texte = (valeur) => (
 const LigneHistorique = memo(function LigneHistorique({ ligne, maintenant }) {
   const supprimee = Boolean(ligne.deletedAt)
   const entrant = ligne.typePlie === 'depot'
+  // L'agent a payé son remboursement au siège : ni entrée ni sortie de client,
+  // et rien qu'il doive encore. La teinte de marque, et pas de « reste ».
+  const rembSiege = estRembSiege(ligne)
+  const teinteType = rembSiege ? 'text-brand-600' : entrant ? 'text-inflow' : 'text-outflow'
   const attente = ligne.source === 'draft' ? depuisQuand(ligne.createdAt, maintenant) : ''
 
   // Le chronomètre des non terminées, arrêté — exactement celui du tableau.
@@ -88,7 +93,7 @@ const LigneHistorique = memo(function LigneHistorique({ ligne, maintenant }) {
     <div className={`border-b border-line px-4 py-3 ${supprimee ? 'opacity-60' : ''}`}>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span className="text-sm tabular-nums text-ink-muted">{texte(ligne.date) || '—'}</span>
-        <span className={`text-sm font-medium ${entrant ? 'text-inflow' : 'text-outflow'}`}>
+        <span className={`text-sm font-medium ${teinteType}`}>
           {texte(ligne.type) || '—'}
         </span>
         <span className={`text-base font-semibold tabular-nums ${supprimee ? 'line-through' : ''}`}>
@@ -146,7 +151,13 @@ const LigneHistorique = memo(function LigneHistorique({ ligne, maintenant }) {
         </div>
       )}
 
-      {ligne.source === 'draft' && typeof ligne.reste === 'number' && (
+      {ligne.source === 'draft' && rembSiege && (
+        <p className="mt-1 text-sm text-warn">
+          envoi au siège en attente{attente && <> depuis {attente}</>}
+        </p>
+      )}
+
+      {ligne.source === 'draft' && !rembSiege && typeof ligne.reste === 'number' && (
         <p className="mt-1 text-sm text-warn">
           reste {francs(ligne.reste) ?? '—'} FCFA
           {attente && <> — en attente depuis {attente}</>}

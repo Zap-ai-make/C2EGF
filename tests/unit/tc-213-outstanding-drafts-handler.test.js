@@ -206,3 +206,24 @@ describe('TC-213-B — autorisation du callable', () => {
     })
   })
 })
+
+describe('TC-213 — le remboursement au siège', () => {
+  /**
+   * Une ligne « Remb. siège » en attente est de l'argent que la boutique doit
+   * au siège, pas un dépôt que l'agent doit à la boutique : elle n'entre ni
+   * dans « dehors », ni parmi les illisibles, qui feraient croire le total
+   * incomplet (spec 2026-11-14, « Les lecteurs à adapter »).
+   */
+  it('[TC-213-RS] un remboursement au siège en attente ne compte nulle part', () => {
+    const result = aggregateOutstandingDrafts({
+      stores: [doc('store-a', { name: 'FADA' })],
+      drafts: [
+        { storeId: 'store-a', type: 'Dépôt', montant: 100000 },
+        { storeId: 'store-a', type: 'Remb. siège', montant: 70000, balanceType: 'liquidite', resteAuSiege: 70000 },
+      ],
+    })
+    expect(result.depots).toBe(100000)
+    expect(result.retraits).toBe(0)
+    expect(result.illisibles).toBe(0)
+  })
+})

@@ -78,6 +78,12 @@ export const TRANSACTION_STYLES = {
     textColor: 'text-pending',
     bgColor: 'bg-pending-soft'
   },
+  // Ni entrée ni sortie d'un client : l'argent de l'agent transite vers le
+  // siège. La teinte de marque, pas inflow/outflow.
+  'Remb. siège': {
+    textColor: 'text-brand-600',
+    bgColor: 'bg-brand-50'
+  },
   default: {
     textColor: 'text-ink-muted',
     bgColor: 'bg-canvas'

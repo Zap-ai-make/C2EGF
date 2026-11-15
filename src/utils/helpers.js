@@ -192,7 +192,8 @@ export const getAvailableActions = (transactionType) => {
     modifier: true,
     payerPar: false,
     rembourser: false,
-    encaisser: false
+    encaisser: false,
+    envoyerSiege: false
   }
 
   // Logique claire par type de transaction
@@ -208,6 +209,11 @@ export const getAvailableActions = (transactionType) => {
     case 'Dépôt':
       // Un dépôt peut être encaissé par une méthode de paiement
       actions.encaisser = true
+      break
+    case 'Remb. siège':
+      // L'agent a déjà payé : la ligne attend que la boutique envoie au siège,
+      // par tranches, toujours depuis le stock.
+      actions.envoyerSiege = true
       break
     default:
       // Pas d'actions spéciales pour les autres types
