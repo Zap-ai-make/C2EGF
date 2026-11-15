@@ -12,7 +12,7 @@ import Dialog from '../ui/Dialog.jsx'
 import ModificationsDialog from './ModificationsDialog.jsx'
 import { STORE_HISTORY_CONFIG } from '../../constants/storeWorkspace.js'
 import { TYPE_RAVITAILLEMENT, TYPE_RETOUR } from '../../utils/ravitaillement.js'
-import { estRembSiege } from '../../utils/rembSiege.js'
+import { consequenceAnnulation, estRembSiege } from '../../utils/rembSiege.js'
 import { regrouperParClientEtType } from '../../utils/regroupement.js'
 import { dureeDe, formaterHeure } from '../../utils/attente.js'
 import { detailDuReglement, statutDuReglement } from '../../utils/detailReglement.js'
@@ -594,6 +594,11 @@ function HistoriqueTable({ transactions = [], onReopen }) {
               <p className="text-ink-muted">
                 Le montant reviendra dans la réserve {libelleReserve(aSupprimer.balanceType) || 'concernée'},
                 et la livraison de {aSupprimer.expediteur || 'cet expéditeur'} redeviendra due d'autant.
+              </p>
+            ) : estRembSiege(aSupprimer) ? (
+              <p className="text-ink-muted">
+                {consequenceAnnulation(aSupprimer)} La ligne ira dans la corbeille,
+                où elle restera lisible. Elle ne pourra pas être restaurée.
               </p>
             ) : (
               <p className="text-ink-muted">

@@ -156,3 +156,32 @@ describe('TC-388 — la ligne validée dans l’historique', () => {
     await waitFor(() => expect(contextValue.trashTransaction).toHaveBeenCalledWith('V'))
   })
 })
+
+/**
+ * Ce que dit la fenêtre « Annuler » d'un remboursement au siège. La phrase
+ * générique (« Le stock engagé sera rendu ») dirait l'inverse : l'argent reçu
+ * de l'agent RESSORT de la caisse, et seules les tranches déjà parties au siège
+ * reviennent au stock. La caissière doit le lire avant de confirmer.
+ */
+describe('TC-388 — la conséquence d’une annulation, dite avant de confirmer', () => {
+  it('[TC-388-10] la ligne en attente : l’espèce reçue ressort, les envois reviennent au stock', async () => {
+    render(<TransactionTable />)
+    fireEvent.click(within(rangee('Issa KABORE')).getByRole('button', { name: 'Annuler' }))
+    await screen.findByRole('button', { name: 'Annuler la transaction' })
+    expect(document.body.textContent).toMatch(/Les 200\s000 FCFA reçus sortiront de l’espèce ; les 50\s000 FCFA déjà envoyés au siège reviendront au stock\./)
+    expect(document.body.textContent).not.toMatch(/Le stock engagé sera rendu/)
+  })
+
+  it('[TC-388-11] la ligne validée dans l’historique : même conséquence, sans la phrase générique', async () => {
+    const V = {
+      id: 'V', clientId: 'agent-1', client: { nom: 'KABORE', prenom: 'Issa' }, type: 'Remb. siège', code: '1234567',
+      montant: 100000, balanceType: 'stock', envoyeAuSiege: 100000, resteAuSiege: 0, envoisSiege: [],
+      statut: 'Validée', directValidation: true, date: '14/11/2026 10:05',
+    }
+    render(<HistoriqueTable transactions={[V]} />)
+    fireEvent.click(within(rangee('Issa KABORE')).getByTestId('supprimer-historique'))
+    await screen.findByRole('button', { name: 'Annuler la transaction' })
+    expect(document.body.textContent).toMatch(/Les 100\s000 FCFA reçus sortiront du stock ; les 100\s000 FCFA déjà envoyés au siège reviendront au stock\./)
+    expect(document.body.textContent).not.toMatch(/Le montant sera rendu aux soldes/)
+  })
+})

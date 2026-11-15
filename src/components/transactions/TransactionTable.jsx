@@ -34,7 +34,7 @@ import { ChevronRight } from 'lucide-react'
 import { useEnvois } from '../../context/envoisContexte.js'
 import EtatEnvoi from '../ui/EtatEnvoi.jsx'
 import EnvoiSiegeMenu from './EnvoiSiegeMenu.jsx'
-import { estRembSiege } from '../../utils/rembSiege.js'
+import { consequenceAnnulation, estRembSiege } from '../../utils/rembSiege.js'
 import { libelleVase } from '../../utils/ravitaillement.js'
 
 /** Les règlements d'une ligne qui attendent le réseau, et ceux qu'il a refusés. */
@@ -944,8 +944,9 @@ const TransactionTable = memo(function TransactionTable() {
               </span>
             </p>
             <p className="text-ink-muted">
-              Le stock engagé sera rendu et la ligne ira dans la corbeille, où
-              elle restera lisible. Elle ne pourra pas être restaurée.
+              {estRembSiege(aSupprimer)
+                ? `${consequenceAnnulation(aSupprimer)} La ligne ira dans la corbeille, où elle restera lisible. Elle ne pourra pas être restaurée.`
+                : 'Le stock engagé sera rendu et la ligne ira dans la corbeille, où elle restera lisible. Elle ne pourra pas être restaurée.'}
             </p>
           </div>
         )}

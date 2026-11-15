@@ -111,6 +111,20 @@ export function verifierEnvoiSiege({ ligne, montant, stock }) {
   return { ok: true, valeur }
 }
 
+const fcfa = (montant) => `${(Number(montant) || 0).toLocaleString('fr-FR')} FCFA`
+
+/**
+ * Ce qu'une annulation fera à la caisse, dit avant de confirmer. La phrase
+ * générique (« le stock engagé sera rendu ») dirait l'inverse : l'argent reçu
+ * de l'agent ressort, et seules les tranches déjà parties reviennent au stock.
+ */
+export function consequenceAnnulation(ligne) {
+  const reserve = ligne?.balanceType === 'stock' ? 'du stock' : 'de l’espèce'
+  const envoye = Number(ligne?.envoyeAuSiege) || 0
+  const retour = envoye > 0 ? ` ; les ${fcfa(envoye)} déjà envoyés au siège reviendront au stock` : ''
+  return `Les ${fcfa(ligne?.montant)} reçus sortiront ${reserve}${retour}.`
+}
+
 const entre = (soldes, reseau, reserve, montant) => adjustBalanceValue(soldes, reseau, reserve, montant)
 const sort = (soldes, reseau, reserve, montant) => adjustBalanceValue(soldes, reseau, reserve, -montant)
 
