@@ -14,8 +14,9 @@
  *             bien présenté. Sert à la couverture et aux décrochages.
  *
  *   VOLUME    « l'argent a-t-il bougé ? » On exclut en plus les opérations en
- *             attente, qui ne sont pas encore réglées. Sert au volume traité
- *             et à la concentration.
+ *             attente, qui ne sont pas encore réglées, et les remboursements
+ *             au siège, qui ne sont pas l'affaire de l'agent. Sert au volume
+ *             traité et à la concentration.
  *
  * Les confondre donnerait une couverture trop basse ou un volume gonflé.
  * ───────────────────────────────────────────────────────────────────────────
@@ -23,6 +24,7 @@
 
 import { parsefrenchDate } from './helpers.js'
 import { isDepositType, isWithdrawalType } from './financialImpact.js'
+import { estRembSiege } from './rembSiege.js'
 
 /**
  * Seuil de décrochage, en jours. Décidé avec C2EGF : un seuil unique, le même
@@ -53,9 +55,13 @@ export const compteCommeVisite = (tx) => Boolean(tx) && !estAnnulee(tx)
  * L'argent a bougé : ni annulée, ni encore en attente de règlement.
  * Les statuts de règlement (« Payé par… », « Encaissé par… ») comptent — c'est
  * précisément le moment où les soldes sont impactés.
+ *
+ * Un remboursement au siège reste une visite, mais n'est jamais du volume :
+ * l'agent rend au siège le stock que celui-ci lui a avancé, la boutique ne fait
+ * que transmettre.
  */
 export const compteCommeVolume = (tx) =>
-  compteCommeVisite(tx) && sansAccent(tx.statut) !== 'non terminees'
+  compteCommeVisite(tx) && sansAccent(tx.statut) !== 'non terminees' && !estRembSiege(tx)
 
 /**
  * Date d'une opération. Le champ `date` porte « JJ/MM/AAAA HH:mm » ; on retombe
