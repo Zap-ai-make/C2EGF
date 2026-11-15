@@ -216,3 +216,23 @@ describe('TC-225 — le vocabulaire est celui du comptoir', () => {
     }
   })
 })
+
+/**
+ * Le Total caisse retranche ce qui reste à envoyer au siège (15 novembre
+ * 2026). La fiche est servie mot pour mot par l'assistant (`mode_d_emploi`) et
+ * sert au calcul du soir : une formule restée à l'ancienne ferait chercher à la
+ * caissière un écart égal au reste, dans sa caisse.
+ */
+describe('TC-225 — l’argent du siège dans l’aide', () => {
+  const fiche = (id) => FICHES.find((f) => f.id === id)
+
+  it('[TC-225-RS1] la formule du Total caisse retranche le reste à envoyer au siège', () => {
+    expect(fiche(9).formule).toMatch(/− Reste à envoyer au siège$/)
+    expect(fiche(9).retenir.texte).toMatch(/siège/)
+  })
+
+  it('[TC-225-RS2] les cases au-dessus de la liste sont trois, la troisième pour le siège', () => {
+    expect(fiche(8).titre).not.toMatch(/deux/i)
+    expect(fiche(8).etapes.some((e) => e.startsWith('{{Remb. siège}}'))).toBe(true)
+  })
+})

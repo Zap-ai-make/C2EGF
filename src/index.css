@@ -32,7 +32,7 @@
    Contrastes calculés sur la surface indiquée, tous ≥ AA texte normal :
      brand-500 11,78:1 · brand-400 6,36:1 · brand-600 15,04:1
      ink 15,55:1 · ink-muted 5,63:1
-     inflow 5,35:1 · outflow 8,14:1 · warn 5,93:1 · danger 7,87:1
+     inflow 5,35:1 · outflow 8,14:1 · warn 5,93:1 · danger 7,87:1 · siege 5,32:1
    ═══════════════════════════════════════════════════════════════════════════ */
 
 @theme {
@@ -64,6 +64,11 @@
   /* Retrait : l'agent repart avec des espèces, la liquidité sort. */
   --color-outflow:      #8a3324;
   --color-outflow-soft: #fbecea;
+  /* Remboursement au siège : ni entrée ni sortie d'un client, l'argent de
+     l'agent transite vers le siège. Bleu ciel, choisi par l'utilisateur ; le
+     plus clair qui tienne AA sur sa propre teinte douce (4,64:1). */
+  --color-siege:        #0270b0;
+  --color-siege-soft:   #e0f2fe;
 
   /* ── Signaux ───────────────────────────────────────────────────────────── */
   /* `success` partage aujourd'hui la teinte de `inflow`, et ce n'est pas un

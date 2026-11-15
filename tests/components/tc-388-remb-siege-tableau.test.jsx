@@ -14,6 +14,7 @@ import { render, screen, fireEvent, waitFor, act, within } from '@testing-librar
 
 let contextValue
 let stockValue = 400000
+let rembSiegeActif = true
 
 vi.mock('../../src/context/ThemeContext.jsx', () => ({
   useTheme: () => ({
@@ -26,6 +27,13 @@ vi.mock('../../src/context/transactions.jsx', () => ({
 vi.mock('../../src/hooks/useSimpleNetworkData', () => ({
   useSimpleNetworkData: () => ({ getStock: () => stockValue }),
 }))
+vi.mock('../../src/utils/rembSiege.js', async (original) => {
+  const module = await original()
+  return {
+    ...module,
+    get REMB_SIEGE_ACTIF() { return rembSiegeActif },
+  }
+})
 
 import TransactionTable from '../../src/components/transactions/TransactionTable.jsx'
 import HistoriqueTable from '../../src/components/historique/HistoriqueTable.jsx'
@@ -44,6 +52,7 @@ const B = {
 
 beforeEach(() => {
   stockValue = 400000
+  rembSiegeActif = true
   contextValue = {
     pendingTransactions: [A, B],
     loading: false,
@@ -183,5 +192,35 @@ describe('TC-388 — la conséquence d’une annulation, dite avant de confirmer
     await screen.findByRole('button', { name: 'Annuler la transaction' })
     expect(document.body.textContent).toMatch(/Les 100\s000 FCFA reçus sortiront du stock ; les 100\s000 FCFA déjà envoyés au siège reviendront au stock\./)
     expect(document.body.textContent).not.toMatch(/Le montant sera rendu aux soldes/)
+  })
+})
+
+/**
+ * Le bleu ciel et la case (spec 2026-11-15-remb-siege-bleu-ciel, décidé par
+ * l'utilisateur) : la ligne se repère comme le vert d'un dépôt ou le rouge d'un
+ * retrait, et la case du haut dit ce qui reste à envoyer au siège.
+ */
+describe('TC-388 — la case et la teinte bleu ciel', () => {
+  it('[TC-388-12] la case du haut compte les remboursements et ce qui reste à envoyer', () => {
+    render(<TransactionTable />)
+    expect(screen.getByTestId('nombre-siege-non-terminees')).toHaveTextContent('2')
+    const total = screen.getByTestId('total-siege-non-terminees')
+    expect(total).toHaveTextContent('Remb. siège')
+    // A : 150 000 restent après sa tranche ; B : 100 000.
+    expect(total.textContent.replace(/\s/g, '')).toContain('250000')
+  })
+
+  it('[TC-388-13] le type de la ligne est en bleu ciel', () => {
+    render(<TransactionTable />)
+    const cellules = screen.getAllByText('Remb. siège').filter((el) => el.tagName === 'TD')
+    expect(cellules).toHaveLength(2)
+    for (const cellule of cellules) expect(cellule).toHaveClass('text-siege')
+  })
+
+  it('[TC-388-14] sans le drapeau du profil, pas de case', () => {
+    rembSiegeActif = false
+    render(<TransactionTable />)
+    expect(screen.queryByTestId('case-siege-non-terminees')).toBeNull()
+    expect(screen.getByTestId('case-retraits-non-terminees')).toBeInTheDocument()
   })
 })

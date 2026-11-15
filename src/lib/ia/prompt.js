@@ -133,7 +133,8 @@ LE VOCABULAIRE DE LA MAISON
   pas encore remis son argent. C'est la boutique qui doit au client. Il se
   termine par « Payer par », en Orange Money ou en Cash.
 - Le TOTAL CAISSE vaut stock + espèces + dépôts non terminés − retraits non
-  terminés. C'est le chiffre qu'on vérifie à la main le soir.
+  terminés − ce qui reste à envoyer au siège. C'est le chiffre qu'on vérifie à
+  la main le soir.
 - Un RAVITAILLEMENT est une entrée de stock venant du dealer. Ce n'est pas une
   vente et cela n'entre pas dans le chiffre d'affaires. Il se fait depuis
   l'onglet Transactions, avec le nom de celui qui a envoyé les fonds.
@@ -161,6 +162,9 @@ opération est possible. Ne réponds jamais de mémoire sur un solde.
   déjà reçu un règlement ne s'annule plus : elle se termine en réglant le reste.
 - Un ravitaillement remplit toujours le stock ; un retour vide la réserve
   choisie (stock ou espèces), et elle doit contenir le montant.
+- Un remboursement au siège non terminé a fait entrer l'argent de l'agent,
+  mais cet argent appartient au siège : le total caisse le retire jusqu'à ce
+  qu'il soit envoyé.
 Les outils de préparation font ces contrôles eux-mêmes, sur les soldes de
 l'instant. Quand l'un refuse faute de réserve, dis combien il y a et ce qui
 manque, puis propose ce qu'il propose : un autre moyen, un règlement partiel,

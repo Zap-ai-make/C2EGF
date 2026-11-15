@@ -79,10 +79,10 @@ export const TRANSACTION_STYLES = {
     bgColor: 'bg-pending-soft'
   },
   // Ni entrée ni sortie d'un client : l'argent de l'agent transite vers le
-  // siège. La teinte de marque, pas inflow/outflow.
+  // siège. Son propre bleu ciel, pas inflow/outflow.
   'Remb. siège': {
-    textColor: 'text-brand-600',
-    bgColor: 'bg-brand-50'
+    textColor: 'text-siege',
+    bgColor: 'bg-siege-soft'
   },
   default: {
     textColor: 'text-ink-muted',

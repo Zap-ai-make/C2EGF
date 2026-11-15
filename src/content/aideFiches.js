@@ -198,10 +198,11 @@ export const FICHES = Object.freeze([
   {
     id: 8,
     groupe: GROUPES.TRANSACTIONS,
-    titre: 'Les deux cases au-dessus de la liste',
+    titre: 'Les cases au-dessus de la liste',
     etapes: [
       "{{Dépôts}} — tout ce qu'il te reste à **encaisser**.",
       "{{Retraits}} — tout ce qu'il te reste à **payer**.",
+      "{{Remb. siège}} — tout ce qu'il te reste à **envoyer au siège**.",
       'Le petit chiffre au-dessus de chaque case dit **combien d’opérations** composent ce total.',
     ],
   },
@@ -210,10 +211,10 @@ export const FICHES = Object.freeze([
     groupe: GROUPES.TRANSACTIONS,
     titre: '{{Total caisse}}, en haut de l’écran',
     texte: "C'est le chiffre à comparer avec ce que tu as réellement en main le soir.",
-    formule: 'Total = Stock + Liquidité + Dépôts en attente − Retraits en attente',
+    formule: 'Total = Stock + Liquidité + Dépôts en attente − Retraits en attente − Reste à envoyer au siège',
     retenir: {
       titre: 'Pourquoi les opérations en attente comptent',
-      texte: "Un dépôt en attente est sorti du stock mais l'argent est à toi : il s'ajoute. Un retrait en attente est rentré au stock mais l'argent revient au client : il se retranche.",
+      texte: "Un dépôt en attente est sorti du stock mais l'argent est à toi : il s'ajoute. Un retrait en attente est rentré au stock mais l'argent revient au client : il se retranche. Un remboursement au siège en attente est entré en caisse mais l'argent part au siège : ce qui reste à envoyer se retranche aussi.",
     },
   },
 

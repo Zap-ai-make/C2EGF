@@ -34,7 +34,7 @@ import { ChevronRight } from 'lucide-react'
 import { useEnvois } from '../../context/envoisContexte.js'
 import EtatEnvoi from '../ui/EtatEnvoi.jsx'
 import EnvoiSiegeMenu from './EnvoiSiegeMenu.jsx'
-import { consequenceAnnulation, estRembSiege } from '../../utils/rembSiege.js'
+import { consequenceAnnulation, estRembSiege, REMB_SIEGE_ACTIF } from '../../utils/rembSiege.js'
 import { libelleVase } from '../../utils/ravitaillement.js'
 
 /** Les règlements d'une ligne qui attendent le réseau, et ceux qu'il a refusés. */
@@ -445,7 +445,7 @@ const TransactionTable = memo(function TransactionTable() {
           Non Terminées
         </h2>
 
-        {/* Deux totaux, pas un tableau de bord.
+        {/* Trois totaux, pas un tableau de bord.
             Ce qu'ils répondent tient en une question que la caissière se pose
             dix fois par jour : « combien reste-t-il à encaisser, combien à
             payer ? ». Volontairement petits et posés à côté du titre plutôt
@@ -460,7 +460,12 @@ const TransactionTable = memo(function TransactionTable() {
             récitait « 3 transactions non terminées · 2 dépôts, 1 retrait »,
             à l'autre bout de l'écran des montants qu'il dénombrait : il
             fallait lire une phrase pour apprendre ce qu'un chiffre posé au
-            bon endroit dit d'un coup d'œil. */}
+            bon endroit dit d'un coup d'œil.
+
+            La troisième, en bleu ciel, est l'argent qui part au siège : ce qui
+            RESTE à envoyer sur les remboursements en attente, le chiffre même
+            que le Total caisse retire. Elle n'existe que là où le profil
+            propose le remboursement au siège. */}
         <span className="inline-flex flex-col items-center gap-0.5" data-testid="case-depots-non-terminees">
           <span className="font-mono text-xs font-bold leading-none tabular-nums text-inflow" data-testid="nombre-depots-non-terminees">
             {totauxEnAttente.nbDepots}
@@ -490,6 +495,23 @@ const TransactionTable = memo(function TransactionTable() {
             </span>
           </span>
         </span>
+
+        {REMB_SIEGE_ACTIF && (
+          <span className="inline-flex flex-col items-center gap-0.5" data-testid="case-siege-non-terminees">
+            <span className="font-mono text-xs font-bold leading-none tabular-nums text-siege" data-testid="nombre-siege-non-terminees">
+              {totauxEnAttente.nbSiege}
+            </span>
+            <span
+              className="inline-flex items-baseline gap-1.5 rounded-md border border-siege/30 bg-siege-soft px-2.5 py-1"
+              data-testid="total-siege-non-terminees"
+            >
+              <span className="text-xs font-medium text-siege">Remb. siège</span>
+              <span className="font-mono text-sm font-semibold tabular-nums text-siege">
+                {totauxEnAttente.siege.toLocaleString('fr-FR')}
+              </span>
+            </span>
+          </span>
+        )}
       </div>
 
       <div className={`bg-white rounded-lg border ${themeClasses.tableBorder}`}>

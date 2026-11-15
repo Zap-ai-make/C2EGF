@@ -225,6 +225,11 @@ describe('TC-260 — le remboursement au siège', () => {
     expect(type.className).not.toMatch(/text-outflow|text-inflow/)
   })
 
+  it('[TC-260-RS3] sa teinte est le bleu ciel du remboursement au siège', () => {
+    afficher(remb())
+    expect(screen.getByText('Remb. siège')).toHaveClass('text-siege')
+  })
+
   it('[TC-260-RS2] en attente, elle dit l’envoi au siège, jamais « reste 0 FCFA »', () => {
     afficher(remb({ source: 'draft', reste: 0, createdAt: Date.UTC(2026, 9, 13, 12, 0) }))
     expect(screen.queryByText(/reste/)).toBeNull()
