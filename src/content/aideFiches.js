@@ -203,6 +203,7 @@ export const FICHES = Object.freeze([
       "{{Dépôts}} — tout ce qu'il te reste à **encaisser**.",
       "{{Retraits}} — tout ce qu'il te reste à **payer**.",
       "{{Remb. siège}} — tout ce qu'il te reste à **envoyer au siège**.",
+      'Touche une case pour **ne voir que cette nature** dans la liste ; {{Tout}} remet toute la liste.',
       'Le petit chiffre au-dessus de chaque case dit **combien d’opérations** composent ce total.',
     ],
   },
