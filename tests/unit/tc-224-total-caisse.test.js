@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { sommesEnAttente, totalCaisse } from '../../src/utils/caisse.js'
+import { natureEnAttente, sommesEnAttente, totalCaisse } from '../../src/utils/caisse.js'
 import { REFUSEE } from '../../src/services/fileEnvoi.js'
 
 /**
@@ -131,5 +131,21 @@ describe('TC-224 — l argent qui part au siege', () => {
     const avant = totalCaisse({ stock: 1_000_000, liquidite: 500_000 })
     expect(totalCaisse({ stock: 1_100_000, liquidite: 500_000, siege: 100_000 })).toBe(avant)
     expect(avant).toBe(1_500_000)
+  })
+})
+
+/**
+ * Une seule lecture de la nature d'une ligne (16 novembre 2026) : les cases
+ * au-dessus des non terminées la comptent, et le filtre du tableau la trie.
+ * Deux lectures finiraient par montrer une case à 2 et un filtre à 1.
+ */
+describe('TC-224 — la nature d une non terminee', () => {
+  it('[TC-224-15] depot, retrait, siege, ou rien', () => {
+    for (const type of ['Dépôt', 'Depot', 'DEPOT']) expect(natureEnAttente({ type })).toBe('depot')
+    expect(natureEnAttente({ type: 'retrait' })).toBe('retrait')
+    expect(natureEnAttente({ type: 'Remb. siège' })).toBe('siege')
+    expect(natureEnAttente({ type: 'Ravitaillement' })).toBeNull()
+    expect(natureEnAttente(null)).toBeNull()
+    expect(natureEnAttente({})).toBeNull()
   })
 })

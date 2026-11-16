@@ -26,7 +26,7 @@ import logger from '../../utils/logger.js'
 import { generateIdempotencyKey } from '../../services/settlementService.js'
 import { montantProposeDuReglement, verifierMontantReglement } from '../../utils/reglement.js'
 import { prefereMouvementReduit } from '../../hooks/useReducedMotion.js'
-import { sommesEnAttente } from '../../utils/caisse.js'
+import { natureEnAttente, sommesEnAttente } from '../../utils/caisse.js'
 import { attenteDe } from '../../utils/attente.js'
 import { regrouperParClientEtType } from '../../utils/regroupement.js'
 import { placerMenu } from '../../utils/placementMenu.js'
@@ -54,6 +54,55 @@ function ReglementsEnAttente({ reglements, onRetirer }) {
         )
       })}
     </ul>
+  )
+}
+
+// Les teintes des cases, en classes ENTIÈRES : Tailwind ne produit que celles
+// qu'il lit telles quelles dans les sources.
+const TEINTES_CASES = {
+  tout: { texte: 'text-ink', cadre: 'border-line bg-surface', anneau: 'ring-ink/40' },
+  depot: { texte: 'text-inflow', cadre: 'border-inflow/30 bg-inflow-soft', anneau: 'ring-inflow' },
+  retrait: { texte: 'text-danger', cadre: 'border-danger/30 bg-danger-soft', anneau: 'ring-danger' },
+  siege: { texte: 'text-siege', cadre: 'border-siege/30 bg-siege-soft', anneau: 'ring-siege' },
+}
+
+/**
+ * Une case au-dessus des non terminées : son compte, son libellé, son total,
+ * et le filtre qu'elle pose sur le tableau. Sans `total`, pas de montant —
+ * c'est la case « Tout », où additionner l'argent qui entre et celui qui sort
+ * ne dirait rien.
+ *
+ * ⚠ ESTOMPÉE PAR LE FOND, JAMAIS PAR L'OPACITÉ. Une case non choisie garde ses
+ *   chiffres de caisse, qu'on doit pouvoir lire : à 60 % d'opacité ils
+ *   tombaient vers 2,4:1. Fond blanc et filet neutre, le texte garde sa teinte
+ *   (≥ 5,3:1 sur blanc).
+ */
+function CaseFiltre({ teinte, libelle, nombre, total, choisie, estompee, desactivee, onChoisir, testIds }) {
+  const couleurs = TEINTES_CASES[teinte]
+  return (
+    <button
+      type="button"
+      onClick={onChoisir}
+      disabled={desactivee}
+      aria-pressed={choisie}
+      data-testid={testIds.caseId}
+      className="inline-flex flex-col items-center gap-0.5 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:cursor-default"
+    >
+      <span className={`font-mono text-xs font-bold leading-none tabular-nums ${couleurs.texte}`} data-testid={testIds.nombreId}>
+        {nombre}
+      </span>
+      <span
+        className={`inline-flex items-baseline gap-1.5 rounded-md border px-2.5 py-1 ${estompee ? TEINTES_CASES.tout.cadre : couleurs.cadre} ${choisie ? `ring-2 ring-offset-1 ${couleurs.anneau}` : ''}`}
+        data-testid={testIds.totalId}
+      >
+        <span className={`text-xs font-medium ${couleurs.texte}`}>{libelle}</span>
+        {total != null && (
+          <span className={`font-mono text-sm font-semibold tabular-nums ${couleurs.texte}`}>
+            {total.toLocaleString('fr-FR')}
+          </span>
+        )}
+      </span>
+    </button>
   )
 }
 
@@ -108,6 +157,37 @@ const TransactionTable = memo(function TransactionTable() {
     [uniquePendingTransactions],
   )
 
+  /**
+   * Le filtre des cases : « tout », ou une nature. Il vit dans l'écran et
+   * s'efface quand on le quitte — la caissière ne revient jamais sur un
+   * tableau qui cache des lignes sans qu'elle le sache.
+   *
+   * Une nature retombée à zéro (sa dernière ligne réglée) vaut « tout » : le
+   * tableau ne reste pas vide. L'effet remet l'état lui-même à « tout », pour
+   * que le filtre ne se rallume pas en silence à la ligne suivante.
+   */
+  const [filtre, setFiltre] = useState('tout')
+  const comptesParNature = {
+    depot: totauxEnAttente.nbDepots,
+    retrait: totauxEnAttente.nbRetraits,
+    siege: totauxEnAttente.nbSiege,
+  }
+  const filtreActif = filtre !== 'tout' && comptesParNature[filtre] > 0 ? filtre : 'tout'
+  useEffect(() => {
+    if (filtre !== filtreActif) setFiltre('tout')
+  }, [filtre, filtreActif])
+  const choisirFiltre = useCallback(
+    (nature) => setFiltre((courant) => (courant === nature ? 'tout' : nature)),
+    [],
+  )
+  const lignesDuFiltre = useMemo(
+    () => (filtreActif === 'tout'
+      ? uniquePendingTransactions
+      : uniquePendingTransactions.filter((transaction) => natureEnAttente(transaction) === filtreActif)),
+    [uniquePendingTransactions, filtreActif],
+  )
+  const lignesCachees = uniquePendingTransactions.length - lignesDuFiltre.length
+
   const [activeDropdown, setActiveDropdown] = useState(null)
   // Le code agent SUR LEQUEL l'argent part, quand il ne passe pas de la main a
   // la main. Facultatif de bout en bout : vide, il n'est pas transmis.
@@ -134,8 +214,8 @@ const TransactionTable = memo(function TransactionTable() {
   }, [])
 
   const rangees = useMemo(
-    () => regrouperParClientEtType(uniquePendingTransactions),
-    [uniquePendingTransactions],
+    () => regrouperParClientEtType(lignesDuFiltre),
+    [lignesDuFiltre],
   )
 
   const lignesAffichees = useMemo(() => {
@@ -465,53 +545,59 @@ const TransactionTable = memo(function TransactionTable() {
             La troisième, en bleu ciel, est l'argent qui part au siège : ce qui
             RESTE à envoyer sur les remboursements en attente, le chiffre même
             que le Total caisse retire. Elle n'existe que là où le profil
-            propose le remboursement au siège. */}
-        <span className="inline-flex flex-col items-center gap-0.5" data-testid="case-depots-non-terminees">
-          <span className="font-mono text-xs font-bold leading-none tabular-nums text-inflow" data-testid="nombre-depots-non-terminees">
-            {totauxEnAttente.nbDepots}
-          </span>
-          <span
-            className="inline-flex items-baseline gap-1.5 rounded-md border border-inflow/30 bg-inflow-soft px-2.5 py-1"
-            data-testid="total-depots-non-terminees"
-          >
-            <span className="text-xs font-medium text-inflow">Dépôts</span>
-            <span className="font-mono text-sm font-semibold tabular-nums text-inflow">
-              {totauxEnAttente.depots.toLocaleString('fr-FR')}
-            </span>
-          </span>
-        </span>
+            propose le remboursement au siège.
 
-        <span className="inline-flex flex-col items-center gap-0.5" data-testid="case-retraits-non-terminees">
-          <span className="font-mono text-xs font-bold leading-none tabular-nums text-danger" data-testid="nombre-retraits-non-terminees">
-            {totauxEnAttente.nbRetraits}
-          </span>
-          <span
-            className="inline-flex items-baseline gap-1.5 rounded-md border border-danger/30 bg-danger-soft px-2.5 py-1"
-            data-testid="total-retraits-non-terminees"
-          >
-            <span className="text-xs font-medium text-danger">Retraits</span>
-            <span className="font-mono text-sm font-semibold tabular-nums text-danger">
-              {totauxEnAttente.retraits.toLocaleString('fr-FR')}
-            </span>
-          </span>
-        </span>
-
-        {REMB_SIEGE_ACTIF && (
-          <span className="inline-flex flex-col items-center gap-0.5" data-testid="case-siege-non-terminees">
-            <span className="font-mono text-xs font-bold leading-none tabular-nums text-siege" data-testid="nombre-siege-non-terminees">
-              {totauxEnAttente.nbSiege}
-            </span>
-            <span
-              className="inline-flex items-baseline gap-1.5 rounded-md border border-siege/30 bg-siege-soft px-2.5 py-1"
-              data-testid="total-siege-non-terminees"
-            >
-              <span className="text-xs font-medium text-siege">Remb. siège</span>
-              <span className="font-mono text-sm font-semibold tabular-nums text-siege">
-                {totauxEnAttente.siege.toLocaleString('fr-FR')}
-              </span>
-            </span>
-          </span>
-        )}
+            Les cases FILTRENT le tableau (16 novembre, décidé par
+            l'utilisateur) : « Tout » en premier, choisie par défaut, puis une
+            nature à la fois. Leurs chiffres, eux, ne bougent pas : elles
+            comptent toujours toutes les non terminées. */}
+        <div role="group" aria-label="Filtrer par nature" className="flex flex-wrap items-center gap-3">
+          <CaseFiltre
+            teinte="tout"
+            libelle="Tout"
+            nombre={totauxEnAttente.nbDepots + totauxEnAttente.nbRetraits + totauxEnAttente.nbSiege}
+            choisie={filtreActif === 'tout'}
+            estompee={filtreActif !== 'tout'}
+            desactivee={false}
+            onChoisir={() => setFiltre('tout')}
+            testIds={{ caseId: 'filtre-tout', nombreId: 'nombre-tout-non-terminees', totalId: 'total-tout-non-terminees' }}
+          />
+          <CaseFiltre
+            teinte="depot"
+            libelle="Dépôts"
+            nombre={totauxEnAttente.nbDepots}
+            total={totauxEnAttente.depots}
+            choisie={filtreActif === 'depot'}
+            estompee={filtreActif !== 'tout' && filtreActif !== 'depot'}
+            desactivee={totauxEnAttente.nbDepots === 0}
+            onChoisir={() => choisirFiltre('depot')}
+            testIds={{ caseId: 'case-depots-non-terminees', nombreId: 'nombre-depots-non-terminees', totalId: 'total-depots-non-terminees' }}
+          />
+          <CaseFiltre
+            teinte="retrait"
+            libelle="Retraits"
+            nombre={totauxEnAttente.nbRetraits}
+            total={totauxEnAttente.retraits}
+            choisie={filtreActif === 'retrait'}
+            estompee={filtreActif !== 'tout' && filtreActif !== 'retrait'}
+            desactivee={totauxEnAttente.nbRetraits === 0}
+            onChoisir={() => choisirFiltre('retrait')}
+            testIds={{ caseId: 'case-retraits-non-terminees', nombreId: 'nombre-retraits-non-terminees', totalId: 'total-retraits-non-terminees' }}
+          />
+          {REMB_SIEGE_ACTIF && (
+            <CaseFiltre
+              teinte="siege"
+              libelle="Remb. siège"
+              nombre={totauxEnAttente.nbSiege}
+              total={totauxEnAttente.siege}
+              choisie={filtreActif === 'siege'}
+              estompee={filtreActif !== 'tout' && filtreActif !== 'siege'}
+              desactivee={totauxEnAttente.nbSiege === 0}
+              onChoisir={() => choisirFiltre('siege')}
+              testIds={{ caseId: 'case-siege-non-terminees', nombreId: 'nombre-siege-non-terminees', totalId: 'total-siege-non-terminees' }}
+            />
+          )}
+        </div>
       </div>
 
       <div className={`bg-white rounded-lg border ${themeClasses.tableBorder}`}>
@@ -722,6 +808,24 @@ const TransactionTable = memo(function TransactionTable() {
                     </tr>
                   )
                 })
+              )}
+              {/* SOUS UN FILTRE, LA LISTE DIT CE QU'ELLE CACHE. Une opération
+                  qu'on vient d'enregistrer, d'une autre nature, n'apparaîtrait
+                  pas : la caissière la croirait perdue et la ressaisirait. */}
+              {!loading && lignesCachees > 0 && (
+                <tr data-testid="lignes-cachees">
+                  <td colSpan="6" className="px-4 py-2 text-center text-sm text-ink-muted">
+                    {lignesCachees === 1 ? '1 autre opération cachée' : `${lignesCachees} autres opérations cachées`}
+                    {' · '}
+                    <button
+                      type="button"
+                      onClick={() => setFiltre('tout')}
+                      className="font-medium text-brand-400 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                    >
+                      Tout afficher
+                    </button>
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>

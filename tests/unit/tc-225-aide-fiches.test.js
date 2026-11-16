@@ -235,4 +235,8 @@ describe('TC-225 — l’argent du siège dans l’aide', () => {
     expect(fiche(8).titre).not.toMatch(/deux/i)
     expect(fiche(8).etapes.some((e) => e.startsWith('{{Remb. siège}}'))).toBe(true)
   })
+
+  it('[TC-225-RS3] la fiche des cases dit qu’elles filtrent, et comment revenir à tout', () => {
+    expect(fiche(8).etapes.some((e) => /ne voir que cette nature/.test(e) && e.includes('{{Tout}}'))).toBe(true)
+  })
 })
