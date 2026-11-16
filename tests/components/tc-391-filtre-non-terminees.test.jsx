@@ -154,6 +154,26 @@ describe('TC-391 — les cases filtrent le tableau', () => {
     expect(visibles()).toEqual(['KABORE'])
   })
 
+  it('[TC-391-11] sous un filtre, la liste dit combien de lignes elle cache, et rend tout d’un geste', () => {
+    // Une opération qu'on vient d'enregistrer ne doit pas sembler perdue : la
+    // caissière la ressaisirait.
+    render(<TransactionTable />)
+    fireEvent.click(screen.getByTestId('case-retraits-non-terminees'))
+    expect(screen.getByText(/3 autres opérations cachées/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Tout afficher' }))
+    expect(visibles()).toEqual(['KABORE', 'SANOU', 'OUEDRAOGO', 'ZONGO'])
+    expect(screen.queryByText(/cachée/)).toBeNull()
+  })
+
+  it('[TC-391-12] les cases non choisies restent lisibles : fond blanc, jamais transparentes', () => {
+    render(<TransactionTable />)
+    fireEvent.click(screen.getByTestId('case-retraits-non-terminees'))
+    for (const nature of ['depots', 'siege']) {
+      expect(screen.getByTestId(`case-${nature}-non-terminees`).className).not.toMatch(/opacity-/)
+      expect(screen.getByTestId(`total-${nature}-non-terminees`)).toHaveClass('bg-surface')
+    }
+  })
+
   it('[TC-391-10] sans le drapeau du profil, trois boutons', () => {
     rembSiegeActif = false
     render(<TransactionTable />)

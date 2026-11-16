@@ -71,6 +71,11 @@ const TEINTES_CASES = {
  * et le filtre qu'elle pose sur le tableau. Sans `total`, pas de montant —
  * c'est la case « Tout », où additionner l'argent qui entre et celui qui sort
  * ne dirait rien.
+ *
+ * ⚠ ESTOMPÉE PAR LE FOND, JAMAIS PAR L'OPACITÉ. Une case non choisie garde ses
+ *   chiffres de caisse, qu'on doit pouvoir lire : à 60 % d'opacité ils
+ *   tombaient vers 2,4:1. Fond blanc et filet neutre, le texte garde sa teinte
+ *   (≥ 5,3:1 sur blanc).
  */
 function CaseFiltre({ teinte, libelle, nombre, total, choisie, estompee, desactivee, onChoisir, testIds }) {
   const couleurs = TEINTES_CASES[teinte]
@@ -81,13 +86,13 @@ function CaseFiltre({ teinte, libelle, nombre, total, choisie, estompee, desacti
       disabled={desactivee}
       aria-pressed={choisie}
       data-testid={testIds.caseId}
-      className={`inline-flex flex-col items-center gap-0.5 rounded-md transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:cursor-default ${estompee ? 'opacity-60 hover:opacity-100' : ''}`}
+      className="inline-flex flex-col items-center gap-0.5 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:cursor-default"
     >
       <span className={`font-mono text-xs font-bold leading-none tabular-nums ${couleurs.texte}`} data-testid={testIds.nombreId}>
         {nombre}
       </span>
       <span
-        className={`inline-flex items-baseline gap-1.5 rounded-md border px-2.5 py-1 ${couleurs.cadre} ${choisie ? `ring-2 ring-offset-1 ${couleurs.anneau}` : ''}`}
+        className={`inline-flex items-baseline gap-1.5 rounded-md border px-2.5 py-1 ${estompee ? TEINTES_CASES.tout.cadre : couleurs.cadre} ${choisie ? `ring-2 ring-offset-1 ${couleurs.anneau}` : ''}`}
         data-testid={testIds.totalId}
       >
         <span className={`text-xs font-medium ${couleurs.texte}`}>{libelle}</span>
@@ -181,6 +186,7 @@ const TransactionTable = memo(function TransactionTable() {
       : uniquePendingTransactions.filter((transaction) => natureEnAttente(transaction) === filtreActif)),
     [uniquePendingTransactions, filtreActif],
   )
+  const lignesCachees = uniquePendingTransactions.length - lignesDuFiltre.length
 
   const [activeDropdown, setActiveDropdown] = useState(null)
   // Le code agent SUR LEQUEL l'argent part, quand il ne passe pas de la main a
@@ -802,6 +808,24 @@ const TransactionTable = memo(function TransactionTable() {
                     </tr>
                   )
                 })
+              )}
+              {/* SOUS UN FILTRE, LA LISTE DIT CE QU'ELLE CACHE. Une opération
+                  qu'on vient d'enregistrer, d'une autre nature, n'apparaîtrait
+                  pas : la caissière la croirait perdue et la ressaisirait. */}
+              {!loading && lignesCachees > 0 && (
+                <tr data-testid="lignes-cachees">
+                  <td colSpan="6" className="px-4 py-2 text-center text-sm text-ink-muted">
+                    {lignesCachees === 1 ? '1 autre opération cachée' : `${lignesCachees} autres opérations cachées`}
+                    {' · '}
+                    <button
+                      type="button"
+                      onClick={() => setFiltre('tout')}
+                      className="font-medium text-brand-400 underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+                    >
+                      Tout afficher
+                    </button>
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
