@@ -18,6 +18,19 @@ const normaliser = (valeur) => String(valeur || '')
   .toLowerCase()
 
 /**
+ * La nature d'une non terminée : ce que comptent les cases au-dessus de la
+ * liste, et ce que trie leur filtre. Une seule lecture pour les deux.
+ *
+ * @returns {'depot'|'retrait'|'siege'|null}
+ */
+export function natureEnAttente(transaction) {
+  if (!transaction) return null
+  if (estRembSiege(transaction)) return 'siege'
+  const type = normaliser(transaction.type)
+  return type === 'depot' || type === 'retrait' ? type : null
+}
+
+/**
  * Ce qui reste à envoyer au siège. Une ligne sans reste lisible vaut son
  * montant moins ce qui est déjà parti : un zéro ferait passer l'argent du
  * siège pour celui de la boutique.
@@ -51,7 +64,8 @@ export function sommesEnAttente(transactions = []) {
     // la retire, mais elle n'a jamais existé : aucune somme n'est en route.
     if (transaction.envoi?.etat === REFUSEE) continue
 
-    if (estRembSiege(transaction)) {
+    const nature = natureEnAttente(transaction)
+    if (nature === 'siege') {
       somme.siege += resteAuSiege(transaction)
       somme.nbSiege += 1
       continue
@@ -65,9 +79,8 @@ export function sommesEnAttente(transactions = []) {
     //   cette lecture pour « l'argent dehors » du dealer ; deux lectures
     //   différentes du même argent finiraient par donner deux chiffres.
     const montant = Number(montantRestant(transaction)) || 0
-    const type = normaliser(transaction.type)
-    if (type === 'depot') { somme.depots += montant; somme.nbDepots += 1 }
-    else if (type === 'retrait') { somme.retraits += montant; somme.nbRetraits += 1 }
+    if (nature === 'depot') { somme.depots += montant; somme.nbDepots += 1 }
+    else if (nature === 'retrait') { somme.retraits += montant; somme.nbRetraits += 1 }
   }
 
   return somme
