@@ -35,7 +35,7 @@
 
 ---
 
-### Tâche 1 : le module des numéros (pur)
+### Task 1: le module des numéros (pur)
 
 **Fichiers** :
 - Créer : `functions/src/boutiques/numeros.js`
@@ -62,7 +62,7 @@
 - [ ] **Étape 4** : relancer le même test. Attendu : 4/4 au vert.
 - [ ] **Étape 5** : commit `feat: le module des numeros de la boutique (flotte, dealer)`.
 
-### Tâche 2 : l'action `updateStoreNumbers`
+### Task 2: l'action `updateStoreNumbers`
 
 **Fichiers** :
 - Modifier : `functions/src/storeTransactions/storeTransactionCommand.js`. Ajouter `'flotte', 'dealer'` à la liste blanche de `validateInputPayload`, et le nouveau bloc avant `fail('STORE_TRANSACTION_INVALID', 'Commande inconnue.')`.
@@ -97,7 +97,7 @@
 - [ ] **Étape 4** : relancer TC-399, puis TC-394, qui partage le gestionnaire. Attendu : tout au vert.
 - [ ] **Étape 5** : commit `feat: la boutique enregistre ses numeros flotte et dealer`.
 
-### Tâche 3 : le point d'entrée Oxygen
+### Task 3: le point d'entrée Oxygen
 
 **Fichiers** :
 - Modifier : `functions/src/oxygen/pointEntreeOxygen.js`, dans `listerBoutiques` et `demander`.
@@ -127,7 +127,7 @@
 - [ ] **Étape 4** : relancer TC-393. Attendu : 22/22 au vert.
 - [ ] **Étape 5** : commit `feat: le point d'entree Oxygen rend le numero flotte et, au retrait, le numero dealer`.
 
-### Tâche 4 : la carte du Profil
+### Task 4: la carte du Profil
 
 **Fichiers** :
 - Créer : `src/services/numerosBoutiqueService.js` et `src/components/profil/NumerosBoutique.jsx`.
@@ -161,7 +161,7 @@
 - [ ] **Étape 4** : relancer TC-400, puis les tests du Profil (TC-355, TC-027, TC-028, TC-346). Attendu : au vert. Ajouter un mock du service si un test monte le Profil sans Firestore.
 - [ ] **Étape 5** : commit `feat: la carte des numeros de la boutique dans le Profil`.
 
-### Tâche 5 : vérifier, documenter, prévenir
+### Task 5: vérifier, documenter, prévenir
 
 - [ ] Suites complètes : `test:unit`, `test:components`, `test:functions`, puis `lint`, `build` et `check:generated`.
 - [ ] Essai réel sur les émulateurs `demo-c2egf-local` :
