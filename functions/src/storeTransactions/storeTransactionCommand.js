@@ -32,6 +32,13 @@ import {
   impactAnnulation,
   impactModification,
 } from './rembSiege.js'
+import {
+  COLLECTION_DEMANDES,
+  ETATS_DEMANDE,
+  TYPE_DU_SENS,
+  clientDeFiche,
+  codeReseauDeFiche,
+} from '../oxygen/demande.js'
 
 const SETTLEMENT_FIELDS = [
   'originalAmount', 'paidAmount', 'refundedAmount', 'remainingAmount',
@@ -162,6 +169,22 @@ function fail(code, message) { throw new DealerRequestError(code, message) }
 function refuserSiRembSiege(doc) {
   if (estRembSiege(doc)) fail('STORE_TRANSACTION_INVALID', MESSAGE_GESTE_GENERIQUE)
 }
+/** Ce que la caissière lit quand la demande s'est fermée sous ses yeux. */
+const MESSAGES_DEMANDE_CLOSE = Object.freeze({
+  [ETATS_DEMANDE.ANNULEE_AGENT]: 'L’agent a annulé cette demande.',
+  [ETATS_DEMANDE.REJETEE]: 'Cette demande a déjà été rejetée.',
+  [ETATS_DEMANDE.VALIDEE]: 'Cette demande a déjà été acceptée.',
+})
+
+/**
+ * Seule une demande en attente reçoit une réponse. Un refus métier, en
+ * majuscules : la caissière lit pourquoi, et rien n'est réessayé.
+ */
+function refuserSiDemandeClose(demande) {
+  if (demande.etat === ETATS_DEMANDE.EN_ATTENTE) return
+  fail('DEMANDE_CLOSE', MESSAGES_DEMANDE_CLOSE[demande.etat] ?? 'Cette demande est close.')
+}
+
 function cleanId(value, field) {
   if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(value.trim())) fail('STORE_TRANSACTION_INVALID', `${field} invalide.`)
   return value.trim()
@@ -338,7 +361,7 @@ async function readActor(t, db, uid) {
 
 export async function storeTransactionCommandHandler(request, { db, FieldValue, logWriter = write }) {
   const uid = validateAuthUid(request.auth?.uid)
-  const payload = validateInputPayload(request.data, ['action', 'transaction', 'draftId', 'historyId', 'updates', 'paymentMethod', 'amount', 'network', 'balanceType', 'balanceAmount', 'balances', 'note', 'direct', 'expediteur', 'replenishmentId', 'returnId', 'commandeId', 'ageMs'])
+  const payload = validateInputPayload(request.data, ['action', 'transaction', 'draftId', 'historyId', 'updates', 'paymentMethod', 'amount', 'network', 'balanceType', 'balanceAmount', 'balances', 'note', 'direct', 'expediteur', 'replenishmentId', 'returnId', 'commandeId', 'ageMs', 'demandeId', 'statut'])
   const action = String(payload.action || '')
   const now = FieldValue.serverTimestamp()
   // L'identifiant qu'une file d'envoi hors ligne donne à une saisie ou à une
@@ -1054,6 +1077,81 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
       t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, historyId, uid, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
       return { trashed: true, historyId }
+    }
+
+    // ─── Les demandes des agents (contrat Oxygen v4) ─────────────────────────
+    //
+    // L'agent demande depuis l'app Oxygen ; la caissière répond ici, avec SA
+    // session, et jamais par la file d'envoi : une acceptation mise en file
+    // pendant que l'agent annule serait refusée après coup, une fois l'argent
+    // remis. Accepter crée l'opération SOUS L'IDENTIFIANT DE LA DEMANDE, dans la
+    // transaction qui ferme la demande : la trace et l'idempotence d'un coup.
+    if (action === 'acceptAgentRequest' || action === 'rejectAgentRequest') {
+      const demandeId = cleanId(payload.demandeId, 'demandeId')
+      const demandeRef = db.doc(`clients/${storeId}/${COLLECTION_DEMANDES}/${demandeId}`)
+      const snap = await t.get(demandeRef)
+      if (!snap.exists) fail('STORE_TRANSACTION_NOT_FOUND', 'Demande introuvable.')
+      const demande = snap.data()
+      const fermeture = { reponduLe: now, reponduPar: uid }
+
+      if (action === 'rejectAgentRequest') {
+        if (demande.etat === ETATS_DEMANDE.REJETEE) return { rejected: true, idempotent: true }
+        refuserSiDemandeClose(demande)
+        t.update(demandeRef, { etat: ETATS_DEMANDE.REJETEE, ...fermeture })
+        t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, demandeId, uid, createdAt: now })
+        return { rejected: true }
+      }
+
+      const statut = String(payload.statut || '').trim()
+      if (![...PENDING, ...VALIDATED].includes(statut)) fail('STORE_TRANSACTION_INVALID', 'Statut initial non autorisé.')
+      if (demande.etat === ETATS_DEMANDE.VALIDEE) {
+        return { accepted: true, operationId: demande.operationId ?? demandeId, idempotent: true }
+      }
+      refuserSiDemandeClose(demande)
+
+      // La fiche fait foi, pas la copie gardée sur la demande : la caissière
+      // valide ce que le CRM sait de l'agent au moment où l'argent bouge.
+      const ficheSnap = await t.get(db.doc(`globalClients/${demande.clientId}`))
+      if (!ficheSnap.exists) fail('STORE_TRANSACTION_NOT_FOUND', 'Fiche de l’agent introuvable.')
+      const fiche = ficheSnap.data()
+      const code = codeReseauDeFiche(fiche, demande.reseau)
+      if (!code) fail('STORE_TRANSACTION_INVALID', `La fiche de cet agent n’a pas de code ${demande.reseau}.`)
+
+      const transaction = cleanTransaction({
+        client: clientDeFiche(demande.clientId, fiche),
+        clientId: demande.clientId,
+        type: TYPE_DU_SENS[demande.sens],
+        reseau: demande.reseau,
+        code,
+        montant: demande.montant,
+        statut,
+      })
+      const ref = db.doc(`clients/${storeId}/${PENDING.includes(statut) ? 'drafts' : 'history'}/${demandeId}`)
+      if ((await t.get(ref)).exists) fail('IDEMPOTENCY_CONFLICT', 'Ce numéro de transaction est déjà pris par une autre ligne.')
+
+      // Un solde insuffisant lève ici : la transaction entière est annulée, et
+      // la demande reste en attente (contrat §8, point 2).
+      const nextBalances = applyInitialTransactionImpact(balances, transaction)
+      const valideeDunGeste = VALIDATED.includes(statut)
+      // Datée de sa validation, côté serveur : jamais l'heure du téléphone, ni
+      // l'`ageMs` d'une file d'envoi par laquelle ce geste ne passe pas.
+      const data = {
+        ...transaction,
+        storeId,
+        ...(valideeDunGeste ? { directValidation: true, ...splitLiquiditeSiRetraitDirect(balances, transaction) } : {}),
+        storeName: store.name || profile.storeName || '',
+        operatorId: uid,
+        operatorName: profile.name || '',
+        operatorEmail: profile.email || '',
+        date: dateFr(),
+        createdAt: now,
+        updatedAt: now,
+      }
+      t.set(ref, data)
+      t.update(demandeRef, { etat: ETATS_DEMANDE.VALIDEE, operationId: demandeId, ...fermeture })
+      t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
+      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: demandeId, demandeId, uid, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
+      return { accepted: true, operationId: demandeId, statut }
     }
 
     fail('STORE_TRANSACTION_INVALID', 'Commande inconnue.')

@@ -53,6 +53,8 @@ export const HTTP_CODES = {
   TRANSFER_NOT_PENDING:         'failed-precondition',
   TRANSFER_DEALER_MISMATCH:     'permission-denied',
   INSUFFICIENT_STORE_BALANCE:   'failed-precondition',
+  // Demande d'agent déjà fermée : annulée par l'agent, rejetée ou acceptée.
+  DEMANDE_CLOSE:                'failed-precondition',
   DEALER_NOT_FOUND:             'failed-precondition',
   MULTIPLE_DEALERS_ACTIVE:      'failed-precondition',
   // Approvisionnement de l'inventaire dealer
