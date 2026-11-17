@@ -57,7 +57,7 @@ Toutes ont été tranchées par l'utilisateur et par la relecture du contrat (§
 | Comment valider | Une action nouvelle, `acceptAgentRequest`, qui écrit l'opération sous `id = demandeId` dans la même transaction que la demande. | L'action `add` : elle ne garde pas la trace, ne touche pas la demande et n'empêche pas de valider une demande annulée. |
 | Où la caissière la voit | Dans le tableau des non terminées. | Un bandeau au-dessus, refusé par l'utilisateur. |
 | Comment rafraîchir chez l'agent | `etatDemande`, une seule lecture, appelée toutes les 10 s pendant 5 min au plus. | `lireDemandes` répété : une requête de groupe à chaque appel. |
-| Une seule demande en cours | Le verrou `verrousDemandes/{clientId}`. | Une requête de groupe en transaction : plus chère, moins sûre. |
+| Combien de demandes en attente | **Sans limite**, décidé par l'utilisateur le 2026-11-17. La règle 11 du contrat tombe, avec la raison `demande_en_cours` et le verrou. | Une seule par agent, avec un verrou par fiche : c'était la proposition du contrat, refusée. |
 
 ## 5. Conception
 
@@ -81,12 +81,7 @@ operationId                        = id de la demande une fois validée, sinon n
 
 `agent.code` est le code réseau de la fiche (`fiche.orange`). C'est celui que porte le champ `code` d'une opération saisie au formulaire (`preparerTransaction`).
 
-`verrousDemandes/{clientId}` contient `{ demandeId, boutiqueId, compteOxygen, creeLe }`. Le verrou est **libre** dans trois cas :
-- il n'existe pas ;
-- la demande qu'il désigne n'existe plus ;
-- cette demande n'est plus en attente.
-
-Toute fermeture d'une demande retire son verrou dans la même transaction : annulation, acceptation et rejet.
+Un agent peut avoir autant de demandes en attente qu'il veut, dans une ou plusieurs boutiques. Il n'y a aucun verrou.
 
 L'objet `demande` rendu à Oxygen, partout :
 `{ id, boutiqueId, boutiqueNom, sens, reseau, montant, etat, creeLe, reponduLe, operationId }`. Les dates sont en millisecondes, et `null` quand elles manquent.
@@ -121,19 +116,20 @@ Une liaison **fermée** a deux effets :
   2. **La liaison est fermée** : refus `liaison_fermee`.
   3. **La boutique** est absente ou inactive : refus `boutique_indisponible`.
   4. **La fiche** `globalClients/{clientId}` n'a pas de code pour ce réseau : refus `reseau_invalide`. Sans ce code, la caissière ne pourrait jamais valider la demande.
-  5. **Le verrou est pris** par une demande encore en attente : refus `demande_en_cours`, qui joint cette demande.
-  6. Sinon, on écrit la demande `en_attente` et on pose le verrou. La réponse est `{ ok:true, demande }`.
+  5. Sinon, on écrit la demande `en_attente`. La réponse est `{ ok:true, demande }`. Une autre demande en attente du même agent n'empêche rien.
 
 **`annuler`** prend `{ ..., boutiqueId, demandeId }`.
 - Une demande absente, ou qui appartient à un autre compte, donne le refus `demande_inconnue`.
-- Une demande en attente passe à `annulee_agent`, avec `reponduLe`, et son verrou est retiré.
+- Une demande en attente passe à `annulee_agent`, avec `reponduLe`.
 - Dans tous les cas, la réponse est `{ ok:true, demande }`, avec l'état réel de la demande.
 
 **`lireDemandes`** prend `{ ... }` et rend `{ ok:true, demandes }`. Il fait deux requêtes sur `collectionGroup('demandesAgent')` :
-- les demandes de ce compte en attente, limite 20 ;
-- celles fermées depuis moins de 7 jours (`reponduLe` ≥ maintenant − 7 j), limite 50.
+- les demandes de ce compte en attente, limite 200 ;
+- celles fermées depuis moins de 7 jours (`reponduLe` ≥ maintenant − 7 j), limite 200.
 
 Les deux résultats sont fusionnés sans doublon, la plus récente demande d'abord (`creeLe`).
+
+Ces limites bornent la lecture, comme le veut le quota. Ce ne sont pas des limites métier : elles sont très au-dessus de l'usage réel.
 
 **`etatDemande`** prend `{ ..., boutiqueId, demandeId }` et rend `{ ok:true, demande }`. Si la demande est absente ou appartient à un autre compte, le refus est `demande_inconnue`. L'action coûte 2 lectures : la liaison et la demande.
 
@@ -149,7 +145,6 @@ Ce qu'elle lit :
 1. La demande, dans `clients/{storeId}/demandesAgent/{demandeId}`. La boutique est celle du profil de la caissière.
 2. La fiche `globalClients/{clientId}`.
 3. Le document cible, dans `drafts` ou `history`.
-4. Le verrou.
 
 Ce qu'elle refuse, et comment :
 
@@ -173,27 +168,25 @@ Ce qu'elle écrit : l'opération, construite comme le fait `add`.
 
 Dans la même transaction :
 - la demande passe à `validee`, avec `reponduLe`, `reponduPar` et `operationId` ;
-- le verrou est retiré s'il désigne cette demande ;
 - les soldes sont mis à jour ;
 - le journal d'audit reçoit une ligne `{ action, transactionId, demandeId, … }`.
 
 Elle rend `{ accepted:true, operationId, statut }`.
 
-**`rejectAgentRequest { demandeId }`** lit la demande et le verrou.
+**`rejectAgentRequest { demandeId }`** lit la demande.
 
 | Situation | Réponse |
 |---|---|
 | Demande absente | `STORE_TRANSACTION_NOT_FOUND` |
 | Déjà rejetée | Rejeu |
 | Validée ou annulée par l'agent | `DEMANDE_CLOSE` |
-| En attente | Passe à `rejetee`, avec `reponduLe` et `reponduPar` ; le verrou est retiré ; une ligne d'audit est écrite |
+| En attente | Passe à `rejetee`, avec `reponduLe` et `reponduPar` ; une ligne d'audit est écrite |
 
 Elle rend `{ rejected:true }`.
 
 ### 5.4 Règles et index
 
 - `firestore.rules`, dans `match /clients/{storeId}`, reçoit le bloc `match /demandesAgent/{demandeId} { allow read: if isStoreMember(storeId); allow create, update, delete: if false; }`.
-- `verrousDemandes` n'a aucune règle : le refus par défaut le ferme à tout client.
 - `firestore.indexes.json` reçoit deux index `COLLECTION_GROUP` sur `demandesAgent` :
   - `compteOxygen ASC, etat ASC` ;
   - `compteOxygen ASC, reponduLe DESC`.
@@ -203,7 +196,7 @@ Elle rend `{ rejected:true }`.
 
 - **Activation** : derrière `LIAISON_OXYGEN_ACTIVE`, le drapeau du profil qui montre déjà la liaison.
 - **Écoute** :
-  - une seule par session de caisse, sur `clients/{boutique}/demandesAgent` avec `etat == 'en_attente'`, limite 50 ;
+  - une seule par session de caisse, sur `clients/{boutique}/demandesAgent` avec `etat == 'en_attente'`, limite 200 (une borne de lecture, pas une limite métier) ;
   - un refus de la règle (déploiement pas encore fait) se tait : la caisse n'affiche simplement aucune demande.
 - **Hors ligne** (`useEnLigne()` faux) : les demandes ne s'affichent pas, conformément au contrat §4.2.
 - **Place** :
