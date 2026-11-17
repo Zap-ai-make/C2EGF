@@ -36,12 +36,26 @@ vi.mock('../../src/context/transactions.jsx', () => ({
   }),
 }))
 
+// Une demande d'agent en attente, de 50 000 : elle n'est pas encore une
+// opération, et l'argent n'a pas bougé (TC-390-2).
+vi.mock('../../src/hooks/useDemandesAgent.js', () => ({
+  useDemandesAgent: () => ({
+    demandes: [{ id: 'dem1', estDemandeAgent: true, sens: 'depot', type: 'Dépôt', reseau: 'Orange', montant: 50_000 }],
+  }),
+}))
+
 import NetworkCardsDrawer from '../../src/components/network/NetworkCardsDrawer.jsx'
 
 describe('TC-390 — le Total caisse et l’argent du siège', () => {
   it('[TC-390-1] la barre retranche le reste à envoyer au siège', () => {
     render(<NetworkCardsDrawer />)
     // 1 100 000 + 500 000 + 20 000 (dépôt) − 70 000 (reste au siège)
+    expect(screen.getByTestId('total-caisse').textContent.replace(/\s/g, '')).toContain('1550000')
+  })
+
+  it('[TC-390-2] une demande d’agent en attente ne compte pas : l’argent n’a pas encore bougé', () => {
+    // Elle compte une fois acceptée, comme l'opération qu'elle devient.
+    render(<NetworkCardsDrawer />)
     expect(screen.getByTestId('total-caisse').textContent.replace(/\s/g, '')).toContain('1550000')
   })
 })
