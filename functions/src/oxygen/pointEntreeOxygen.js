@@ -33,6 +33,8 @@ import { estRembSiege } from '../storeTransactions/rembSiege.js'
 import {
   COLLECTION_DEMANDES,
   ETATS_DEMANDE,
+  LIMITE_DEMANDES,
+  RETENUE_DEMANDES_MS,
   TYPE_DU_SENS,
   codeReseauDeFiche,
   demandeRendue,
@@ -603,9 +605,94 @@ async function annuler(corps, { db, Timestamp, maintenant, oxygen }) {
   }))
 }
 
+/** Les dernières opérations de la fiche, d'où l'on tire les boutiques qui ont servi l'agent. */
+const LIGNES_SERVIES = 50
+
+const validerDrapeau = (valeur, message) => {
+  if (valeur !== undefined && typeof valeur !== 'boolean') invalide(message)
+  return valeur === true
+}
+
+/**
+ * Les boutiques à proposer à l'agent : celles qui l'ont déjà servi, et, quand
+ * Oxygen le demande (son cache de 24 h est périmé), toutes les actives.
+ *
+ * Toute boutique active accepte des demandes (première version, contrat §8).
+ * Ni solde ni montant : des identifiants et des noms.
+ */
+async function listerBoutiques(corps, { db, oxygen }) {
+  const ids = validerCommun(corps, ['avecToutes'], oxygen)
+  const avecToutes = validerDrapeau(corps.avecToutes, 'avecToutes invalide.')
+  if (!oxygen.actif) return fermee()
+
+  const liaison = liaisonDuCompte(await db.doc(`${COLLECTION_LIAISONS}/${ids.liaisonId}`).get(), ids, oxygen)
+  if (!liaison) return repondre(refus('liaison_inconnue'))
+  if (liaison.finLe) return repondre(refus('liaison_fermee'))
+
+  // La requête de `lireActivite`, et son index : au plus 50 lectures.
+  const historique = await db.collectionGroup('history')
+    .where('clientId', '==', liaison.clientId)
+    .orderBy('createdAt', 'desc')
+    .limit(LIGNES_SERVIES)
+    .get()
+  // La boutique se lit sur le CHEMIN de la ligne, qui ne ment jamais : un
+  // `storeId` recopié pourrait manquer sur une ligne ancienne.
+  const derniere = new Map()
+  for (const ligne of historique.docs) {
+    const boutiqueId = ligne.ref.parent.parent?.id
+    if (boutiqueId && !derniere.has(boutiqueId)) derniere.set(boutiqueId, enMs(ligne.get('createdAt')))
+  }
+  // Le nom du jour, et une boutique fermée depuis retirée.
+  const boutiques = derniere.size ? await db.getAll(...[...derniere.keys()].map((id) => db.doc(`stores/${id}`))) : []
+  const servies = boutiques
+    .filter((b) => b.exists && b.get('active') === true)
+    .map((b) => ({ id: b.id, nom: b.get('name') ?? '', derniereLe: derniere.get(b.id) }))
+
+  const reponse = { ok: true, servies, reseaux: [...STORE_NETWORKS] }
+  if (avecToutes) {
+    const actives = await db.collection('stores').where('active', '==', true).orderBy('name').get()
+    reponse.boutiques = actives.docs.map((b) => ({ id: b.id, nom: b.get('name') ?? '' }))
+  }
+  return repondre(reponse)
+}
+
+/**
+ * Les demandes de ce compte : en attente, et fermées depuis moins de sept jours.
+ *
+ * `enAttente` (demandé par Oxygen le 2026-11-17) ne garde que la première
+ * requête : l'Accueil de l'agent la relit toutes les 10 s tant qu'une demande
+ * attend, et n'a que faire du fil de la semaine à chaque tour.
+ */
+async function lireDemandes(corps, { db, Timestamp, maintenant, oxygen }) {
+  const ids = validerCommun(corps, ['enAttente'], oxygen)
+  const seulementEnAttente = validerDrapeau(corps.enAttente, 'enAttente invalide.')
+  if (!oxygen.actif) return fermee()
+
+  if (!liaisonDuCompte(await db.doc(`${COLLECTION_LIAISONS}/${ids.liaisonId}`).get(), ids, oxygen)) {
+    return repondre(refus('liaison_inconnue'))
+  }
+
+  const duCompte = db.collectionGroup(COLLECTION_DEMANDES).where('compteOxygen', '==', ids.compteOxygen)
+  const [enAttente, fermees] = await Promise.all([
+    duCompte.where('etat', '==', ETATS_DEMANDE.EN_ATTENTE).limit(LIMITE_DEMANDES).get(),
+    seulementEnAttente
+      ? null
+      : duCompte
+        .where('reponduLe', '>=', Timestamp.fromMillis(maintenant() - RETENUE_DEMANDES_MS))
+        .orderBy('reponduLe', 'desc')
+        .limit(LIMITE_DEMANDES)
+        .get(),
+  ])
+
+  const parChemin = new Map()
+  for (const doc of [...enAttente.docs, ...(fermees?.docs ?? [])]) parChemin.set(doc.ref.path, demandeRendue(doc.id, doc.data()))
+  const demandes = [...parChemin.values()].sort((a, b) => (b.creeLe ?? 0) - (a.creeLe ?? 0))
+  return repondre({ ok: true, demandes })
+}
+
 const ACTIONS = Object.freeze({
   rechercher, relier, consommerPourCodeSecret, lireActivite,
-  demander, etatDemande, annuler,
+  listerBoutiques, demander, annuler, lireDemandes, etatDemande,
 })
 
 /**

@@ -183,3 +183,82 @@ describe('TC-393 — etatDemande et annuler', () => {
     expect((await appel(viser('annuler', 'k-1'))).corps).toMatchObject({ ok: true, demande: { etat: 'annulee_agent' } })
   })
 })
+
+describe('TC-393 — listerBoutiques', () => {
+  const lister = (over = {}) => appel({ action: 'listerBoutiques', ...commun, ...over })
+  const ligne = (boutique, id, ms) => db.doc(`clients/${boutique}/history/${id}`)
+    .set({ clientId: 'c1', type: 'Dépôt', montant: 1000, createdAt: Timestamp.fromMillis(ms) })
+
+  beforeEach(async () => {
+    await db.doc('stores/b3').set({ active: true, name: 'Atelier 3' })
+    await Promise.all([
+      ligne('b1', 'h1', T0 - 9000),
+      ligne('b1', 'h2', T0 - 5000),
+      ligne('b3', 'h3', T0 - 1000),
+      ligne('b2', 'h4', T0 - 500),
+      db.doc('clients/b1/history/h5').set({ clientId: 'c2', type: 'Dépôt', montant: 1, createdAt: Timestamp.fromMillis(T0) }),
+    ])
+  })
+
+  it('[TC-393-14] servies : les boutiques distinctes de l’historique de la fiche, la plus récente d’abord, sans les désactivées', async () => {
+    const r = await lister()
+    expect(r.statut).toBe(200)
+    expect(r.corps.servies).toEqual([
+      { id: 'b3', nom: 'Atelier 3', derniereLe: T0 - 1000 },
+      { id: 'b1', nom: 'Boutique 1', derniereLe: T0 - 5000 },
+    ])
+  })
+
+  it('[TC-393-15] toutes les boutiques actives seulement sur demande, triées par nom ; les réseaux du profil', async () => {
+    const sans = await lister()
+    expect(sans.corps).not.toHaveProperty('boutiques')
+    expect(sans.corps.reseaux).toEqual(['Orange'])
+    const avec = await lister({ avecToutes: true })
+    expect(avec.corps.boutiques).toEqual([{ id: 'b3', nom: 'Atelier 3' }, { id: 'b1', nom: 'Boutique 1' }])
+    expect((await lister({ avecToutes: 'oui' })).statut).toBe(400)
+  })
+
+  it('[TC-393-16] une liaison fermée ne liste plus rien', async () => {
+    await db.doc('liaisonsOxygen/L1').update({ finLe: Timestamp.fromMillis(T0 - 10) })
+    expect((await lister()).corps).toEqual({ ok: false, raison: 'liaison_fermee' })
+  })
+})
+
+describe('TC-393 — lireDemandes', () => {
+  const lire = (over = {}) => appel({ action: 'lireDemandes', ...commun, ...over })
+  const JOUR = 24 * 60 * 60 * 1000
+
+  beforeEach(async () => {
+    await appel(base())
+    maintenantMs = T0 + 500
+    await appel(base({ cle: 'k-2', sens: 'retrait' }))
+    maintenantMs = T0 + 1000
+    await appel(viser('annuler', 'k-2'))
+    await Promise.all([
+      db.doc('clients/b1/demandesAgent/k-vieille').set({
+        compteOxygen: 'ox-1', boutiqueId: 'b1', etat: 'rejetee', creeLe: Timestamp.fromMillis(T0 - 9 * JOUR), reponduLe: Timestamp.fromMillis(T0 - 8 * JOUR),
+      }),
+      db.doc('clients/b1/demandesAgent/k-autre').set({
+        compteOxygen: 'ox-2', boutiqueId: 'b1', etat: 'en_attente', creeLe: Timestamp.fromMillis(T0), reponduLe: null,
+      }),
+    ])
+  })
+
+  it('[TC-393-17] les en attente et les fermées depuis moins de 7 jours, de ce compte, la plus récente d’abord', async () => {
+    const r = await lire()
+    expect(r.statut).toBe(200)
+    expect(r.corps.ok).toBe(true)
+    expect(r.corps.demandes.map((d) => [d.id, d.etat])).toEqual([['k-2', 'annulee_agent'], ['k-1', 'en_attente']])
+  })
+
+  it('[TC-393-18] enAttente : seulement les demandes en attente', async () => {
+    const r = await lire({ enAttente: true })
+    expect(r.corps.demandes.map((d) => d.id)).toEqual(['k-1'])
+    expect((await lire({ enAttente: 1 })).statut).toBe(400)
+  })
+
+  it('[TC-393-19] une liaison fermée laisse relire ses demandes', async () => {
+    await db.doc('liaisonsOxygen/L1').update({ finLe: Timestamp.fromMillis(T0 + 10) })
+    expect((await lire()).corps.demandes).toHaveLength(2)
+  })
+})
