@@ -166,7 +166,7 @@ Ce qu'elle écrit : l'opération, construite comme le fait `add`.
 - L'impact sur les soldes passe par `applyInitialTransactionImpact`, qui lève `INSUFFICIENT_STORE_BALANCE`. Toute la transaction est alors annulée et **la demande reste en attente**.
 - `directValidation` et `liquiditySplit` s'appliquent comme dans `add`.
 - La datation est `{ date: dateFr(), createdAt: now }`, l'heure de validation. On n'utilise jamais `ageMs` ni `commandeId`.
-- L'opération est écrite sous l'id `demandeId`.
+- L'opération est écrite sous l'id `demandeId` et porte un champ `demandeId`. Ce champ est ajouté après la relecture finale. Une « Non terminée » validée ou réglée part dans l'historique sous un autre id : le champ, lui, la suit, y compris quand la ligne est rouverte pour correction.
 
 Dans la même transaction :
 - la demande passe à `validee`, avec `reponduLe`, `reponduPar` et `operationId` ;
@@ -239,8 +239,9 @@ Elle rend `{ rejected:true }`.
 ## 7. Déploiement — décision de l'utilisateur, plus tard
 
 Dans l'ordre :
-1. Les règles et les index Firestore.
+1. Les règles et les index Firestore. **Attendre** que les deux index `demandesAgent` soient READY dans la console : plusieurs minutes. Avant cela, `lireDemandes` répond 500, et Oxygen afficherait « distributeur injoignable ».
 2. Les functions `storeTransactionCommand` et `pointEntreeOxygen`.
-3. Le front, par un push de `feat/espace-patron`.
+3. Le même jour, le front, par un push de `feat/espace-patron`. **Faire recharger** chaque poste de caisse : l'application ne se met à jour qu'au rechargement, et un ancien poste ne voit pas les demandes.
+4. Seulement alors, **donner le feu vert à Oxygen**. Sans lui, un agent pourrait envoyer une demande qu'aucune caisse ne voit, et qui attendrait sans fin, puisqu'il n'y a ni expiration ni notification.
 
-Ensuite, envoyer à la session Oxygen la forme exacte des 5 actions, avec des exemples fictifs, sans clé ni jeton.
+La forme exacte des 5 actions a été envoyée à la session Oxygen le 2026-11-17, avec des exemples fictifs, sans clé ni jeton. Oxygen a été prévenu de ne rien activer avant le feu vert de l'étape 4.

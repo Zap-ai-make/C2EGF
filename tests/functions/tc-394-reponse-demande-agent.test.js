@@ -160,3 +160,25 @@ describe('TC-394 — rejeter une demande', () => {
     expect((await db.doc('clients/autre-boutique/demandesAgent/d9').get()).data().etat).toBe('en_attente')
   })
 })
+
+describe('TC-394 — l’opération garde la trace de sa demande (contrat §4.2)', () => {
+  const historiques = async () => (await db.collection(`clients/${STORE}/history`).get()).docs.map((d) => d.data())
+
+  it('[TC-394-12] validée d’un geste, la ligne d’historique porte demandeId', async () => {
+    await accepter('d1')
+    expect((await db.doc(`clients/${STORE}/history/d1`).get()).data().demandeId).toBe('d1')
+  })
+
+  it('[TC-394-13] passée en Non terminée puis validée, la ligne d’historique porte toujours demandeId', async () => {
+    await accepter('d1', 'Non Terminées')
+    expect((await db.doc(`clients/${STORE}/drafts/d1`).get()).data().demandeId).toBe('d1')
+    await call({ action: 'validateDraft', draftId: 'd1', direct: true })
+    expect(await historiques()).toEqual([expect.objectContaining({ demandeId: 'd1', statut: 'Validée' })])
+  })
+
+  it('[TC-394-14] une ligne rouverte pour correction garde demandeId', async () => {
+    await accepter('d1')
+    const { draftId } = await call({ action: 'reopenHistory', historyId: 'd1' })
+    expect((await db.doc(`clients/${STORE}/drafts/${draftId}`).get()).data().demandeId).toBe('d1')
+  })
+})

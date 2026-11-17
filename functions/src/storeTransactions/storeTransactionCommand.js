@@ -296,6 +296,8 @@ function brouillonDeLigneRouverte(history, { historyId, storeId, store, profile,
     date: history.date,
     createdAt: history.createdAt || now,
     ...(Array.isArray(history.modifications) ? { modifications: history.modifications } : {}),
+    // Née d'une demande d'agent, elle le reste une fois corrigée.
+    ...(typeof history.demandeId === 'string' ? { demandeId: history.demandeId } : {}),
     reopenedFromHistoryId: historyId,
     // Le mode de règlement d'origine, mis de côté sous un AUTRE nom.
     //
@@ -1146,6 +1148,10 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
         date: dateFr(),
         createdAt: now,
         updatedAt: now,
+        // La trace de la demande (contrat §4.2). L'identifiant ne suffit pas :
+        // une Non terminée, une fois validée ou réglée, part dans l'historique
+        // sous un autre identifiant. Ce champ, lui, suit la ligne partout.
+        demandeId,
       }
       t.set(ref, data)
       t.update(demandeRef, { etat: ETATS_DEMANDE.VALIDEE, operationId: demandeId, ...fermeture })

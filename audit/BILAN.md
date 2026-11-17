@@ -972,7 +972,12 @@ Le siège donne du stock à crédit aux agents la nuit ; le lendemain, l'agent r
   - **Hors ligne** : les demandes ne s'affichent pas.
   - **Double saisie** : « Déjà saisi à HH:MM ? » signale qu'une opération identique a déjà été saisie à la main.
   - **Le reste** : une règle Firestore (lecture par la boutique, aucune écriture cliente), deux index de groupe, et la fiche d'aide 7 complétée.
-  - **À déployer, sur décision de l'utilisateur** : règles et index, puis les functions `pointEntreeOxygen` et `storeTransactionCommand`, puis le front.
+  - **Trace** : l'opération porte un champ `demandeId`, qui la suit dans l'historique et à la correction.
+  - **À déployer, sur décision de l'utilisateur, dans cet ordre** :
+    1. les règles et les index, puis attendre que les deux index `demandesAgent` soient READY ;
+    2. les functions `pointEntreeOxygen` et `storeTransactionCommand` ;
+    3. le même jour, le front, puis faire recharger chaque poste ;
+    4. seulement alors, le feu vert à Oxygen.
   - **Conception** : `docs/superpowers/specs/2026-11-17-demandes-agent-design.md`.
 - **Ordre de déploiement, functions d'abord, puis le front** (un front sans ses functions verrait chaque saisie refusée « Commande inconnue. ») : `storeTransactionCommand`, `addTransactionPayment`, `addTransactionRefund`, `listOutstandingDrafts`, `listClientHistory`, `pointEntreeOxygen`. Les fonctions de collaboration n'ont reçu qu'une constante inutilisée du profil généré : leur redéploiement n'est pas nécessaire. Procédure : `docs/deployer-les-functions.md`. Geste humain.
 - **Observé à l'essai, non corrigé (commun à toute non terminée)** : une ligne annulée peut réapparaître depuis le cache si le réseau tombe dans la seconde qui suit l'annulation, avant que l'écoute n'ait reçu la suppression ; elle disparaît au retour du réseau. Le même mécanisme vaut pour un dépôt annulé.
