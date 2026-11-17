@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, renderHook, screen, fireEvent, within, act, waitFor } from '@testing-library/react'
 
 /**
@@ -224,18 +224,55 @@ describe('TC-397 — l’écoute des demandes', () => {
     expect(result.current.demandes).toEqual([])
   })
 
-  it('[TC-397-11] ce que l’appareil a gardé ne s’affiche pas : seul le serveur dit qu’une demande attend encore', () => {
-    // navigator.onLine ment sur un Wi-Fi sans internet : le cache montrerait
-    // des demandes que l'agent a peut-être annulées depuis.
-    const { result } = monter()
-    const observer = abonner.mock.calls[0][1]
-    const lues = [{ id: 'd1', clientId: 'c1', agent: {}, sens: 'depot', montant: 1, creeLe: H(10) }]
-    act(() => observer(lues, [], { depuisServeur: false }))
-    expect(result.current.demandes).toEqual([])
-    act(() => observer(lues, [], SERVEUR))
-    expect(result.current.demandes).toHaveLength(1)
-    // La connexion tombe sans que le poste le sache : Firestore, lui, le dit.
-    act(() => observer(lues, [], { depuisServeur: false }))
-    expect(result.current.demandes).toEqual([])
+  describe('le cache de l’appareil', () => {
+    beforeEach(() => { vi.useFakeTimers() })
+    afterEach(() => { vi.useRealTimers() })
+    const CACHE = { depuisServeur: false }
+    const lue = (id, heure) => ({ id, clientId: `c-${id}`, agent: {}, sens: 'depot', montant: 1, creeLe: H(heure) })
+    const ids = (result) => result.current.demandes.map((d) => d.id)
+
+    it('[TC-397-11] ce que l’appareil a gardé ne s’affiche pas : seul le serveur dit qu’une demande attend encore', () => {
+      // navigator.onLine ment sur un Wi-Fi sans internet : le cache montrerait
+      // des demandes que l'agent a peut-être annulées depuis.
+      const { result } = monter()
+      const observer = abonner.mock.calls[0][1]
+      act(() => observer([lue('d1', 10)], [], CACHE))
+      expect(ids(result)).toEqual([])
+      act(() => { vi.advanceTimersByTime(60_000) })
+      expect(ids(result)).toEqual([])
+      act(() => observer([lue('d1', 10)], [], SERVEUR))
+      expect(ids(result)).toEqual(['d1'])
+    })
+
+    it('[TC-397-13] quand une autre demande se ferme, le cache répond un instant : les autres restent, sans clignoter', () => {
+      // Vu à l'essai réel du 17 novembre : ~300 ms de réponse du cache à chaque
+      // fermeture, et le tableau entier se vidait sous le doigt de la caissière.
+      const { result } = monter()
+      const observer = abonner.mock.calls[0][1]
+      act(() => observer([lue('d1', 10), lue('d2', 11)], [], SERVEUR))
+      act(() => observer([lue('d2', 11), lue('d9', 9)], [], CACHE))
+      // Le cache retire d1 (fermée), n'ajoute pas d9 (jamais confirmée).
+      expect(ids(result)).toEqual(['d2'])
+      act(() => { vi.advanceTimersByTime(300) })
+      act(() => observer([lue('d2', 11)], [], SERVEUR))
+      act(() => { vi.advanceTimersByTime(60_000) })
+      expect(ids(result)).toEqual(['d2'])
+    })
+
+    it('[TC-397-14] la connexion tombe sans que le poste le sache : passé 10 s sans le serveur, les lignes partent', () => {
+      const { result } = monter()
+      const observer = abonner.mock.calls[0][1]
+      act(() => observer([lue('d1', 10)], [], SERVEUR))
+      act(() => observer([lue('d1', 10)], [], CACHE))
+      act(() => { vi.advanceTimersByTime(9_999) })
+      expect(ids(result)).toEqual(['d1'])
+      // Une deuxième réponse du cache ne relance pas l'attente.
+      act(() => observer([lue('d1', 10)], [], CACHE))
+      act(() => { vi.advanceTimersByTime(1) })
+      expect(ids(result)).toEqual([])
+      // Le serveur revient : la demande aussi.
+      act(() => observer([lue('d1', 10)], [], SERVEUR))
+      expect(ids(result)).toEqual(['d1'])
+    })
   })
 })
