@@ -77,6 +77,7 @@ creeLe                             heure serveur
 reponduLe                          heure de la fermeture, quelle qu'elle soit ; null tant qu'elle est en attente
 reponduPar                         uid de la caissière ; null pour une annulation
 operationId                        = id de la demande une fois validée, sinon null
+statutInitial                      le statut choisi à l'acceptation (« Validée » ou « Non Terminées ») ; absent sinon
 ```
 
 `agent.code` est le code réseau de la fiche (`fiche.orange`). C'est celui que porte le champ `code` d'une opération saisie au formulaire (`preparerTransaction`).
@@ -153,7 +154,8 @@ Ce qu'elle refuse, et comment :
 | Situation | Réponse |
 |---|---|
 | Demande absente | `STORE_TRANSACTION_NOT_FOUND` |
-| Déjà validée | Rejeu : `{ accepted:true, operationId, idempotent:true }` |
+| Déjà validée, même statut | Rejeu : `{ accepted:true, operationId, idempotent:true }` |
+| Déjà validée, autre statut | `DEMANDE_CLOSE` : « Cette demande a déjà été acceptée. » Une autre caisse a répondu ; ajouté après la mise en service |
 | Annulée par l'agent | `DEMANDE_CLOSE` : « L'agent a annulé cette demande. » |
 | Rejetée | `DEMANDE_CLOSE` : « Cette demande a déjà été rejetée. » |
 | Fiche absente, ou sans code réseau | Refus |
@@ -169,7 +171,7 @@ Ce qu'elle écrit : l'opération, construite comme le fait `add`.
 - L'opération est écrite sous l'id `demandeId` et porte un champ `demandeId`. Ce champ est ajouté après la relecture finale. Une « Non terminée » validée ou réglée part dans l'historique sous un autre id : le champ, lui, la suit, y compris quand la ligne est rouverte pour correction.
 
 Dans la même transaction :
-- la demande passe à `validee`, avec `reponduLe`, `reponduPar` et `operationId` ;
+- la demande passe à `validee`, avec `reponduLe`, `reponduPar`, `operationId` et `statutInitial` ;
 - les soldes sont mis à jour ;
 - le journal d'audit reçoit une ligne `{ action, transactionId, demandeId, … }`.
 
