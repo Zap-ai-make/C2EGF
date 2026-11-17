@@ -228,6 +228,22 @@
       ]
     },
     {
+      "collectionGroup": "demandesAgent",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "compteOxygen", "order": "ASCENDING" },
+        { "fieldPath": "etat", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "demandesAgent",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "compteOxygen", "order": "ASCENDING" },
+        { "fieldPath": "reponduLe", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "history",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
