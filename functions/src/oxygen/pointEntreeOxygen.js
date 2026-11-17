@@ -28,7 +28,15 @@
  */
 
 import { ligneDeDocument } from '../clients/historiqueClient.js'
+import { STORE_NETWORKS } from '../config/storeProfile.js'
 import { estRembSiege } from '../storeTransactions/rembSiege.js'
+import {
+  COLLECTION_DEMANDES,
+  ETATS_DEMANDE,
+  TYPE_DU_SENS,
+  codeReseauDeFiche,
+  demandeRendue,
+} from './demande.js'
 import {
   COLLECTION_CODES,
   COLLECTION_JOURNAL,
@@ -444,7 +452,161 @@ async function lireActivite(corps, { db, Timestamp, maintenant, oxygen }) {
   return repondre({ ok: true, nonTerminees, lignes, curseur: page.curseur, encore: page.encore })
 }
 
-const ACTIONS = Object.freeze({ rechercher, relier, consommerPourCodeSecret, lireActivite })
+// ─── Les demandes d'opération ─────────────────────────────────────────────────
+//
+// Contrat : C:\dev\oxygen\docs\contrats\demande-operation.md, version 4, §8 ;
+// précisé par docs/superpowers/specs/2026-11-17-demandes-agent-design.md §5.2.
+//
+// Oxygen crée, annule et relit ; la caissière accepte ou rejette, avec sa
+// propre authentification, par `storeTransactionCommand`. Un agent peut avoir
+// autant de demandes en attente qu'il veut (décidé le 2026-11-17) : aucun verrou.
+
+/** Le format des identifiants de document : celui de `commandeId`. */
+const FORMAT_ID = /^[A-Za-z0-9_-]{1,160}$/
+const SENS = Object.freeze(Object.keys(TYPE_DU_SENS))
+const CLES_COMMUNES = Object.freeze(['action', 'distributeurId', 'compteOxygen', 'liaison'])
+
+const refDemande = (db, boutiqueId, demandeId) => db.doc(`clients/${boutiqueId}/${COLLECTION_DEMANDES}/${demandeId}`)
+const refus = (raison) => ({ ok: false, raison })
+
+/** Les champs communs à toute action sur les demandes, plus ceux de l'action. */
+function validerCommun(corps, cles, oxygen) {
+  validerCles(corps, [...CLES_COMMUNES, ...cles])
+  validerDistributeur(corps, oxygen)
+  return {
+    compteOxygen: valider(corps.compteOxygen, FORMAT_COMPTE, 'Compte invalide.'),
+    liaisonId: valider(corps.liaison, FORMAT_LIAISON, 'Liaison invalide.'),
+  }
+}
+
+/** La boutique et la demande qu'une action désigne. */
+const validerCible = (corps) => ({
+  boutiqueId: valider(corps.boutiqueId, FORMAT_ID, 'Boutique invalide.'),
+  demandeId: valider(corps.demandeId, FORMAT_ID, 'Demande invalide.'),
+})
+
+/**
+ * La liaison, si elle appartient à CE compte chez CE distributeur — ouverte ou
+ * fermée : c'est à chaque action de dire ce qu'une liaison fermée lui permet.
+ */
+function liaisonDuCompte(snap, { compteOxygen }, oxygen) {
+  const liaison = snap.exists ? snap.data() : null
+  return liaison && liaison.compteOxygen === compteOxygen && liaison.distributeurId === oxygen.distributeurId
+    ? liaison
+    : null
+}
+
+/** Une demande que ce compte peut voir : la sienne, et seulement elle. */
+const demandeDuCompte = (snap, { compteOxygen }) => (snap.exists && snap.get('compteOxygen') === compteOxygen ? snap.data() : null)
+
+/**
+ * Crée une demande, en attente.
+ *
+ * ⚠ LE REJEU D'ABORD. Renvoyée après une réponse perdue, la même clé rend la
+ *   même demande, quel que soit son état depuis : la liaison a pu se fermer
+ *   entre les deux, et l'agent se croirait refusé alors qu'il a bien demandé.
+ */
+async function demander(corps, { db, Timestamp, maintenant, oxygen }) {
+  const ids = validerCommun(corps, ['boutiqueId', 'sens', 'reseau', 'montant', 'saisieLe', 'cle'], oxygen)
+  const boutiqueId = valider(corps.boutiqueId, FORMAT_ID, 'Boutique invalide.')
+  const cle = valider(corps.cle, FORMAT_ID, 'Clé invalide.')
+  if (!SENS.includes(corps.sens)) invalide('Sens invalide.')
+  if (!estInstant(corps.saisieLe)) invalide('Moment de saisie invalide.')
+  if (!oxygen.actif) return fermee()
+  if (!Number.isSafeInteger(corps.montant) || corps.montant <= 0) return repondre(refus('montant_invalide'))
+  if (!STORE_NETWORKS.includes(corps.reseau)) return repondre(refus('reseau_invalide'))
+
+  const ref = refDemande(db, boutiqueId, cle)
+  const heure = Timestamp.fromMillis(maintenant())
+
+  return repondre(await db.runTransaction(async (t) => {
+    const existante = await t.get(ref)
+    if (existante.exists) {
+      // Une clé est un UUID tiré par l'app : la retrouver sous un autre compte
+      // n'est pas un rejeu, c'est une demande mal formée.
+      if (existante.get('compteOxygen') !== ids.compteOxygen) invalide('Clé déjà prise.')
+      return { ok: true, demande: demandeRendue(ref.id, existante.data()) }
+    }
+
+    const liaison = liaisonDuCompte(await t.get(db.doc(`${COLLECTION_LIAISONS}/${ids.liaisonId}`)), ids, oxygen)
+    if (!liaison) return refus('liaison_inconnue')
+    if (liaison.finLe) return refus('liaison_fermee')
+
+    const [boutique, fiche] = await t.getAll(db.doc(`stores/${boutiqueId}`), db.doc(`globalClients/${liaison.clientId}`))
+    if (!boutique.exists || boutique.get('active') !== true) return refus('boutique_indisponible')
+    // Sans code sur ce réseau, la caissière ne pourrait jamais la valider : la
+    // demande attendrait sans fin. Mieux vaut le dire à l'agent maintenant.
+    const code = codeReseauDeFiche(fiche.exists ? fiche.data() : null, corps.reseau)
+    if (!code) return refus('reseau_invalide')
+
+    const donnees = {
+      distributeurId: oxygen.distributeurId,
+      compteOxygen: ids.compteOxygen,
+      liaisonId: ids.liaisonId,
+      clientId: liaison.clientId,
+      // Une copie, pour que l'écran de la caisse n'ait pas à lire la fiche de
+      // chaque demande. La fiche fait foi à la validation.
+      agent: { nom: fiche.get('nom') ?? '', prenom: fiche.get('prenom') ?? '', code },
+      boutiqueId,
+      boutiqueNom: boutique.get('name') ?? '',
+      sens: corps.sens,
+      reseau: corps.reseau,
+      montant: corps.montant,
+      // L'heure du téléphone, pour l'affichage seulement : l'opération sera
+      // datée de sa validation, côté serveur.
+      saisieLe: Timestamp.fromMillis(corps.saisieLe),
+      etat: ETATS_DEMANDE.EN_ATTENTE,
+      creeLe: heure,
+      reponduLe: null,
+      reponduPar: null,
+      operationId: null,
+    }
+    t.set(ref, donnees)
+    return { ok: true, demande: demandeRendue(ref.id, donnees) }
+  }))
+}
+
+/** Une seule demande, par son chemin : deux lectures, la liaison et elle. */
+async function etatDemande(corps, { db, oxygen }) {
+  const ids = validerCommun(corps, ['boutiqueId', 'demandeId'], oxygen)
+  const { boutiqueId, demandeId } = validerCible(corps)
+  if (!oxygen.actif) return fermee()
+
+  const [liaisonSnap, demandeSnap] = await db.getAll(db.doc(`${COLLECTION_LIAISONS}/${ids.liaisonId}`), refDemande(db, boutiqueId, demandeId))
+  if (!liaisonDuCompte(liaisonSnap, ids, oxygen)) return repondre(refus('liaison_inconnue'))
+  const donnees = demandeDuCompte(demandeSnap, ids)
+  if (!donnees) return repondre(refus('demande_inconnue'))
+  return repondre({ ok: true, demande: demandeRendue(demandeId, donnees) })
+}
+
+/**
+ * L'agent retire sa demande, tant que la caissière n'a pas répondu. Sinon rien
+ * ne s'écrit, et l'agent apprend ce qui lui est arrivé.
+ */
+async function annuler(corps, { db, Timestamp, maintenant, oxygen }) {
+  const ids = validerCommun(corps, ['boutiqueId', 'demandeId'], oxygen)
+  const { boutiqueId, demandeId } = validerCible(corps)
+  if (!oxygen.actif) return fermee()
+  const ref = refDemande(db, boutiqueId, demandeId)
+  const heure = Timestamp.fromMillis(maintenant())
+
+  return repondre(await db.runTransaction(async (t) => {
+    const [liaisonSnap, demandeSnap] = await t.getAll(db.doc(`${COLLECTION_LIAISONS}/${ids.liaisonId}`), ref)
+    if (!liaisonDuCompte(liaisonSnap, ids, oxygen)) return refus('liaison_inconnue')
+    const donnees = demandeDuCompte(demandeSnap, ids)
+    if (!donnees) return refus('demande_inconnue')
+    if (donnees.etat !== ETATS_DEMANDE.EN_ATTENTE) return { ok: true, demande: demandeRendue(demandeId, donnees) }
+
+    const fermeture = { etat: ETATS_DEMANDE.ANNULEE_AGENT, reponduLe: heure }
+    t.update(ref, fermeture)
+    return { ok: true, demande: demandeRendue(demandeId, { ...donnees, ...fermeture }) }
+  }))
+}
+
+const ACTIONS = Object.freeze({
+  rechercher, relier, consommerPourCodeSecret, lireActivite,
+  demander, etatDemande, annuler,
+})
 
 /**
  * Traite une demande du serveur Oxygen. Rend `{ statut, corps }` ; l'enveloppe
