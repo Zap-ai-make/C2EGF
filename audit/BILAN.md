@@ -1005,10 +1005,10 @@ Le siège donne du stock à crédit aux agents la nuit ; le lendemain, l'agent r
     - liste des boutiques, retrait (avec le numéro dealer) et dépôt (sans) par le vrai point d'entrée ;
     - captures à 1440 et 390.
   - **Observé, non corrigé, commun à tout le CRM** : le SDK Firebase ajoute « [400] » à chaque message d'erreur d'une function (« Numéro dealer Orange : 8 chiffres. [400] »). Une ligne de `storeTransactionCommandService.js` le retirerait.
-  - **À déployer, sur décision de l'utilisateur, dans cet ordre** :
-    1. les functions `storeTransactionCommand` et `pointEntreeOxygen` ;
-    2. le front ;
-    3. prévenir Oxygen, qui déploie sa fonction le même jour (commit Oxygen f6b65ae).
+  - **En ligne le 17 novembre 2026** :
+    - l'utilisateur a déployé les functions `storeTransactionCommand` et `pointEntreeOxygen` ;
+    - le front a été poussé à 16:36 UTC (00e1b55), et le bundle de production contenait la carte du Profil à 16:40 UTC ;
+    - Oxygen a été prévenu ; il déploie sa fonction (f6b65ae) sur l'accord de l'utilisateur.
   - **Conception** : `docs/superpowers/specs/2026-11-17-numeros-boutique-design.md`.
 - **Ordre de déploiement, functions d'abord, puis le front** (un front sans ses functions verrait chaque saisie refusée « Commande inconnue. ») : `storeTransactionCommand`, `addTransactionPayment`, `addTransactionRefund`, `listOutstandingDrafts`, `listClientHistory`, `pointEntreeOxygen`. Les fonctions de collaboration n'ont reçu qu'une constante inutilisée du profil généré : leur redéploiement n'est pas nécessaire. Procédure : `docs/deployer-les-functions.md`. Geste humain.
 - **Observé à l'essai, non corrigé (commun à toute non terminée)** : une ligne annulée peut réapparaître depuis le cache si le réseau tombe dans la seconde qui suit l'annulation, avant que l'écoute n'ait reçu la suppression ; elle disparaît au retour du réseau. Le même mécanisme vaut pour un dépôt annulé.
