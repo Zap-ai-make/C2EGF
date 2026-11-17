@@ -69,6 +69,12 @@
      plus clair qui tienne AA sur sa propre teinte douce (4,64:1). */
   --color-siege:        #0270b0;
   --color-siege-soft:   #e0f2fe;
+  /* Demande d'un agent, venue de l'app Oxygen : pas encore une opération.
+     Violet, maquette B choisie par l'utilisateur ; 6,9:1 sur sa teinte douce,
+     et les couleurs de sens y tiennent au moins 4,6:1. */
+  --color-agent:        #5b3ba8;
+  --color-agent-soft:   #f1edfb;
+  --color-agent-line:   #d9cff3;
 
   /* ── Signaux ───────────────────────────────────────────────────────────── */
   /* `success` partage aujourd'hui la teinte de `inflow`, et ce n'est pas un

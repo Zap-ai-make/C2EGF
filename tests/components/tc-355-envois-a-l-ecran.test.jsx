@@ -26,6 +26,8 @@ vi.mock('../../src/context/ThemeContext', () => ({
 vi.mock('../../src/context/transactions.jsx', () => ({
   useTransactions: () => contextValue,
 }))
+// Les demandes d'agent ont leur propre écoute (TC-397) : aucune ici.
+vi.mock('../../src/hooks/useDemandesAgent.js', () => ({ useDemandesAgent: () => ({ demandes: [] }) }))
 vi.mock('../../src/context/AuthContext', () => ({
   useAuth: () => ({
     currentUser: { uid: 'u1', email: 'b1@c2egf.test', metadata: {} },

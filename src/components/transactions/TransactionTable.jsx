@@ -36,6 +36,10 @@ import EtatEnvoi from '../ui/EtatEnvoi.jsx'
 import EnvoiSiegeMenu from './EnvoiSiegeMenu.jsx'
 import { consequenceAnnulation, estRembSiege, REMB_SIEGE_ACTIF } from '../../utils/rembSiege.js'
 import { libelleVase } from '../../utils/ravitaillement.js'
+import { useDemandesAgent } from '../../hooks/useDemandesAgent.js'
+import { dejaSaisie } from '../../utils/demandesAgent.js'
+import { accepterDemandeAgent, rejeterDemandeAgent } from '../../services/demandesAgentService.js'
+import LigneDemandeAgent from './LigneDemandeAgent.jsx'
 
 /** Les règlements d'une ligne qui attendent le réseau, et ceux qu'il a refusés. */
 function ReglementsEnAttente({ reglements, onRetirer }) {
@@ -107,7 +111,11 @@ function CaseFiltre({ teinte, libelle, nombre, total, choisie, estompee, desacti
 }
 
 const TransactionTable = memo(function TransactionTable() {
-  const { pendingTransactions, getActionButtons, getTransactionStyles, addPaymentTranche, addRefundTranche, startEditTransaction, trashTransaction, envoyerAuSiege, loading } = useTransactions()
+  const { pendingTransactions, completedTransactions, getActionButtons, getTransactionStyles, addPaymentTranche, addRefundTranche, startEditTransaction, trashTransaction, envoyerAuSiege, loading } = useTransactions()
+  // Les demandes des agents (contrat Oxygen v4) : en tête du tableau, quel que
+  // soit le filtre, hors des cases et du Total caisse — ce ne sont pas encore
+  // des opérations. Vides hors ligne et là où le profil n'ouvre pas Oxygen.
+  const { demandes } = useDemandesAgent()
   const envois = useEnvois()
   const retirerEnvoi = useCallback((id) => { envois?.retirer(id) }, [envois])
   const { themeClasses } = useTheme()
@@ -138,7 +146,7 @@ const TransactionTable = memo(function TransactionTable() {
    * il n'y a rien à compter — l'écran des non terminées est souvent vide.
    */
   const [maintenant, setMaintenant] = useState(() => Date.now())
-  const riendACompter = uniquePendingTransactions.length === 0
+  const riendACompter = uniquePendingTransactions.length === 0 && demandes.length === 0
 
   useEffect(() => {
     if (riendACompter) return undefined
@@ -371,6 +379,34 @@ const TransactionTable = memo(function TransactionTable() {
       })
     }
   }, [envoyerAuSiege])
+
+  /**
+   * La réponse à une demande d'agent : le geste qui part, et la demande qu'il
+   * vise. Jamais par la file d'envoi (demandesAgentService.js). En cas de
+   * succès, rien à faire : l'écoute retire la ligne, et une « Non terminée »
+   * revient comme ligne ordinaire par l'écoute des brouillons.
+   */
+  const [reponseDemande, setReponseDemande] = useState(null)
+  const repondreDemande = useCallback(async (demande, geste) => {
+    if (reponseDemande) return
+    setReponseDemande({ id: demande.id, geste })
+    try {
+      if (geste === 'rejeter') await rejeterDemandeAgent(demande.id)
+      else await accepterDemandeAgent(demande.id, geste === 'valider' ? 'Validée' : 'Non Terminées')
+    } catch (error) {
+      logger.user.error('Réponse à une demande d’agent', error)
+      setRollbackToast({ show: true, message: error?.message || 'Réponse non enregistrée', type: 'rollback' })
+      setTimeout(() => setRollbackToast({ show: false, message: '', type: 'info' }), 4000)
+    } finally {
+      setReponseDemande(null)
+    }
+  }, [reponseDemande])
+
+  // Ce que la caissière a déjà saisi elle-même, pour signaler une demande en double.
+  const operationsSaisies = useMemo(
+    () => [...uniquePendingTransactions, ...(completedTransactions || [])],
+    [uniquePendingTransactions, completedTransactions],
+  )
 
   const handleMethodChosen = useCallback((method) => {
     const transaction = pendingTransactions.find(t => t.id === activeDropdown)
@@ -634,7 +670,7 @@ const TransactionTable = memo(function TransactionTable() {
                 Array.from({ length: 3 }).map((_, index) => (
                   <SkeletonRow key={`skeleton-${index}`} cols={6} />
                 ))
-              ) : uniquePendingTransactions.length === 0 ? (
+              ) : uniquePendingTransactions.length === 0 && demandes.length === 0 ? (
                 <tr>
                   <td colSpan="6" className="p-4">
                     <EmptyState
@@ -645,7 +681,20 @@ const TransactionTable = memo(function TransactionTable() {
                   </td>
                 </tr>
               ) : (
-                lignesAffichees.map((item) => {
+                <>
+                {/* EN TÊTE, ET HORS DU FILTRE : un agent attend la réponse. */}
+                {demandes.map((demande) => (
+                  <LigneDemandeAgent
+                    key={`demande-${demande.id}`}
+                    demande={demande}
+                    styles={getTransactionStyles(demande.type)}
+                    maintenant={maintenant}
+                    dejaSaisieMs={dejaSaisie(demande, operationsSaisies)?.instantMs}
+                    enCours={reponseDemande?.id === demande.id ? reponseDemande.geste : null}
+                    onRepondre={repondreDemande}
+                  />
+                ))}
+                {lignesAffichees.map((item) => {
                   if (item.entete) return renderEnteteGroupe(item.entete)
 
                   const transaction = item.seule
@@ -807,7 +856,8 @@ const TransactionTable = memo(function TransactionTable() {
                       </td>
                     </tr>
                   )
-                })
+                })}
+                </>
               )}
               {/* SOUS UN FILTRE, LA LISTE DIT CE QU'ELLE CACHE. Une opération
                   qu'on vient d'enregistrer, d'une autre nature, n'apparaîtrait
