@@ -989,5 +989,26 @@ Le siège donne du stock à crédit aux agents la nuit ; le lendemain, l'agent r
   - **Le verrou des réponses** : il était global, et un clic sur une autre demande était ignoré pendant qu'une réponse partait. Il est par demande, et une demande répondue quitte le tableau dès la réponse, sans attendre l'écoute (TC-397-04, TC-397-12). À l'essai réel, avec une réponse retenue 3 s, la ligne qui part est grisée, la voisine reste cliquable, et les deux aboutissent.
   - **Total caisse** : un test fixe qu'une demande en attente n'y compte pas (TC-390-2).
   - **En ligne le 17 novembre 2026** : le front a été poussé à 14:22 UTC (378411f), et le bundle de production contient le nouveau code. L'utilisateur a ensuite déployé la function `storeTransactionCommand`.
+- **Numéros de la boutique (17 novembre, demandés par l'app Oxygen)** :
+  - **Saisie** : la boutique saisit elle-même son numéro flotte (pour l'appeler) et son numéro dealer Orange (la SIM qui reçoit la monnaie des agents), depuis son Profil. C'est une décision de l'utilisateur, qui a accepté le risque : le compte boutique pourrait mettre une autre SIM.
+  - **Journal** : chaque changement y est inscrit, avec l'avant et l'après.
+  - **Serveur** : une action `updateStoreNumbers` sur `storeTransactionCommand`, plutôt qu'une nouvelle function, à cause du quota Cloud Run. Elle exige le compte boutique et 8 chiffres ; un champ vidé efface le numéro ; rien n'est écrit si rien ne change (TC-398, TC-399).
+  - **Point d'entrée Oxygen** (contrat §9) :
+    - `listerBoutiques` rend `flotte`, jamais le numéro dealer ;
+    - `demander` rend `dealer` seulement pour un retrait. Il est relu au moment de la réponse, rejeu compris, et jamais recopié dans la demande ;
+    - une valeur non conforme sur la fiche n'est pas rendue (TC-393-20 à 22).
+  - **Écran** : une carte « Numéros de la boutique » dans le Profil, visible du seul compte boutique. Le bouton est grisé hors ligne. Si les numéros sont illisibles, la carte n'affiche aucun champ (TC-400).
+  - **Éprouvé sur émulateurs** :
+    - saisie avec des espaces, enregistrée sans ;
+    - refus d'un numéro court ;
+    - fiche et journal vérifiés ;
+    - liste des boutiques, retrait (avec le numéro dealer) et dépôt (sans) par le vrai point d'entrée ;
+    - captures à 1440 et 390.
+  - **Observé, non corrigé, commun à tout le CRM** : le SDK Firebase ajoute « [400] » à chaque message d'erreur d'une function (« Numéro dealer Orange : 8 chiffres. [400] »). Une ligne de `storeTransactionCommandService.js` le retirerait.
+  - **À déployer, sur décision de l'utilisateur, dans cet ordre** :
+    1. les functions `storeTransactionCommand` et `pointEntreeOxygen` ;
+    2. le front ;
+    3. prévenir Oxygen, qui déploie sa fonction le même jour (commit Oxygen f6b65ae).
+  - **Conception** : `docs/superpowers/specs/2026-11-17-numeros-boutique-design.md`.
 - **Ordre de déploiement, functions d'abord, puis le front** (un front sans ses functions verrait chaque saisie refusée « Commande inconnue. ») : `storeTransactionCommand`, `addTransactionPayment`, `addTransactionRefund`, `listOutstandingDrafts`, `listClientHistory`, `pointEntreeOxygen`. Les fonctions de collaboration n'ont reçu qu'une constante inutilisée du profil généré : leur redéploiement n'est pas nécessaire. Procédure : `docs/deployer-les-functions.md`. Geste humain.
 - **Observé à l'essai, non corrigé (commun à toute non terminée)** : une ligne annulée peut réapparaître depuis le cache si le réseau tombe dans la seconde qui suit l'annulation, avant que l'écoute n'ait reçu la suppression ; elle disparaît au retour du réseau. Le même mécanisme vaut pour un dépôt annulé.
