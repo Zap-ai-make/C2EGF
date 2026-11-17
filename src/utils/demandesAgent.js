@@ -1,0 +1,82 @@
+import { REFUSEE } from '../services/fileEnvoi.js'
+import { instantDeDepart } from './attente.js'
+
+/**
+ * Les demandes que les agents lancent depuis l'app Oxygen, telles que la
+ * caissière les voit dans ses Non Terminées
+ * (docs/superpowers/specs/2026-11-17-demandes-agent-design.md §5.5).
+ *
+ * Une demande n'est pas encore une opération : elle ne compte ni dans les cases
+ * ni dans le Total caisse. Elle en prend seulement la forme, pour se lire dans
+ * le même tableau que les opérations dont la caissière a l'habitude.
+ */
+
+const TYPE_DU_SENS = Object.freeze({ depot: 'Dépôt', retrait: 'Retrait' })
+
+/** Accents et casse retirés : l'historique porte des « Retrait » et des « retrait ». */
+const normaliser = (valeur) => String(valeur || '')
+  .normalize('NFD')
+  .replace(/[̀-ͯ]/g, '')
+  .toLowerCase()
+
+/** Les lignes qui n'ont pas eu lieu, et ne peuvent donc pas faire doublon. */
+const STATUTS_DEFAITS = Object.freeze(['supprimee', 'annulee'])
+
+const enDate = (valeur) => {
+  if (!valeur) return null
+  if (typeof valeur.toDate === 'function') return valeur.toDate()
+  const date = valeur instanceof Date ? valeur : new Date(valeur)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+/**
+ * La ligne d'une demande, dans la forme d'une opération du tableau : le nom et
+ * le code de l'agent viennent de la copie gardée sur la demande, la date de son
+ * arrivée au serveur (`creeLe`) — c'est d'elle que se compte l'attente.
+ */
+export function ligneDeDemande(id, donnees) {
+  return {
+    id,
+    estDemandeAgent: true,
+    sens: donnees.sens,
+    clientId: donnees.clientId,
+    client: { nom: donnees.agent?.nom ?? '', prenom: donnees.agent?.prenom ?? '' },
+    code: donnees.agent?.code ?? '',
+    type: TYPE_DU_SENS[donnees.sens] ?? '',
+    reseau: donnees.reseau,
+    montant: donnees.montant,
+    createdAt: enDate(donnees.creeLe),
+  }
+}
+
+/** La plus ancienne d'abord : c'est l'agent qui attend depuis le plus longtemps. */
+export const trierDemandes = (lignes) =>
+  [...lignes].sort((a, b) => (instantDeDepart(a) ?? 0) - (instantDeDepart(b) ?? 0))
+
+/**
+ * La caissière l'a-t-elle déjà saisie elle-même ? Hors ligne, elle ne voit pas
+ * les demandes et saisit l'opération à la main ; la demande, elle, attend
+ * toujours. La valider ensuite compterait l'argent deux fois.
+ *
+ * Rend la PREMIÈRE opération du même agent, du même type et du même montant
+ * saisie depuis la demande, ou `null`. Un signal, jamais un blocage : deux
+ * retraits identiques le même jour arrivent aussi.
+ *
+ * @returns {{id: string, instantMs: number} | null}
+ */
+export function dejaSaisie(ligne, operations = []) {
+  const depart = instantDeDepart(ligne)
+  if (depart === null) return null
+  const type = normaliser(ligne.type)
+
+  let premiere = null
+  for (const op of operations) {
+    if (!op || op.id === ligne.id || op.clientId !== ligne.clientId) continue
+    if (normaliser(op.type) !== type || Number(op.montant) !== Number(ligne.montant)) continue
+    if (STATUTS_DEFAITS.includes(normaliser(op.statut)) || op.envoi?.etat === REFUSEE) continue
+    const instantMs = instantDeDepart(op)
+    if (instantMs === null || instantMs < depart) continue
+    if (!premiere || instantMs < premiere.instantMs) premiere = { id: op.id, instantMs }
+  }
+  return premiere
+}
