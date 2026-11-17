@@ -29,6 +29,7 @@
 
 import { ligneDeDocument } from '../clients/historiqueClient.js'
 import { STORE_NETWORKS } from '../config/storeProfile.js'
+import { dealerDe, flotteDe } from '../boutiques/numeros.js'
 import { estRembSiege } from '../storeTransactions/rembSiege.js'
 import {
   COLLECTION_DEMANDES,
@@ -508,6 +509,23 @@ const demandeDuCompte = (snap, { compteOxygen }) => (snap.exists && snap.get('co
  *   même demande, quel que soit son état depuis : la liaison a pu se fermer
  *   entre les deux, et l'agent se croirait refusé alors qu'il a bien demandé.
  */
+/**
+ * Le numéro dealer de la boutique, pour un retrait seulement (contrat §9) :
+ * l'app compose aussitôt le code d'envoi des unités vers lui. Sur un dépôt,
+ * c'est la boutique qui envoie : rien à composer. Lu sur la fiche au moment
+ * de la réponse, jamais recopié dans la demande.
+ */
+function avecDealer(demande, fiche) {
+  const dealer = demande.sens === 'retrait' ? dealerDe(fiche, demande.reseau) : undefined
+  return dealer ? { ...demande, dealer } : demande
+}
+
+/** La boutique telle que la liste la rend : son numéro flotte s'il en a un, jamais le numéro dealer. */
+function boutiqueListee(snap, enPlus = {}) {
+  const flotte = flotteDe(snap.data())
+  return { id: snap.id, nom: snap.get('name') ?? '', ...enPlus, ...(flotte ? { flotte } : {}) }
+}
+
 async function demander(corps, { db, Timestamp, maintenant, oxygen }) {
   const ids = validerCommun(corps, ['boutiqueId', 'sens', 'reseau', 'montant', 'saisieLe', 'cle'], oxygen)
   const boutiqueId = valider(corps.boutiqueId, FORMAT_ID, 'Boutique invalide.')
@@ -527,7 +545,10 @@ async function demander(corps, { db, Timestamp, maintenant, oxygen }) {
       // Une clé est un UUID tiré par l'app : la retrouver sous un autre compte
       // n'est pas un rejeu, c'est une demande mal formée.
       if (existante.get('compteOxygen') !== ids.compteOxygen) invalide('Clé déjà prise.')
-      return { ok: true, demande: demandeRendue(ref.id, existante.data()) }
+      const rejouee = existante.data()
+      // Le numéro du MOMENT, relu sur la fiche : la boutique a pu en changer.
+      const fiche = rejouee.sens === 'retrait' ? (await t.get(db.doc(`stores/${rejouee.boutiqueId}`))).data() : null
+      return { ok: true, demande: avecDealer(demandeRendue(ref.id, rejouee), fiche) }
     }
 
     const liaison = liaisonDuCompte(await t.get(db.doc(`${COLLECTION_LIAISONS}/${ids.liaisonId}`)), ids, oxygen)
@@ -564,7 +585,7 @@ async function demander(corps, { db, Timestamp, maintenant, oxygen }) {
       operationId: null,
     }
     t.set(ref, donnees)
-    return { ok: true, demande: demandeRendue(ref.id, donnees) }
+    return { ok: true, demande: avecDealer(demandeRendue(ref.id, donnees), boutique.data()) }
   }))
 }
 
@@ -646,12 +667,12 @@ async function listerBoutiques(corps, { db, oxygen }) {
   const boutiques = derniere.size ? await db.getAll(...[...derniere.keys()].map((id) => db.doc(`stores/${id}`))) : []
   const servies = boutiques
     .filter((b) => b.exists && b.get('active') === true)
-    .map((b) => ({ id: b.id, nom: b.get('name') ?? '', derniereLe: derniere.get(b.id) }))
+    .map((b) => boutiqueListee(b, { derniereLe: derniere.get(b.id) }))
 
   const reponse = { ok: true, servies, reseaux: [...STORE_NETWORKS] }
   if (avecToutes) {
     const actives = await db.collection('stores').where('active', '==', true).orderBy('name').get()
-    reponse.boutiques = actives.docs.map((b) => ({ id: b.id, nom: b.get('name') ?? '' }))
+    reponse.boutiques = actives.docs.map((b) => boutiqueListee(b))
   }
   return repondre(reponse)
 }
