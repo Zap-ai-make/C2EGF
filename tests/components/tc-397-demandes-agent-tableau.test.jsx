@@ -170,6 +170,7 @@ describe('TC-397 — l’écoute des demandes', () => {
     ({ useDemandesAgent } = await vi.importActual('../../src/hooks/useDemandesAgent.js'))
   })
   const auth = { userProfile: { storeId: 's1' }, activeStore: { id: 's1' } }
+  const SERVEUR = { depuisServeur: true }
   const monter = (valeur = auth) => renderHook(() => useDemandesAgent(), {
     wrapper: ({ children }) => <AuthContext.Provider value={valeur}>{children}</AuthContext.Provider>,
   })
@@ -184,11 +185,11 @@ describe('TC-397 — l’écoute des demandes', () => {
     expect(abonner).toHaveBeenCalledTimes(1)
     const [collection, observer, options] = abonner.mock.calls[0]
     expect(collection).toBe('demandesAgent')
-    expect(options).toEqual({ where: [{ field: 'etat', operator: '==', value: 'en_attente' }], limitCount: 200 })
+    expect(options).toEqual({ where: [{ field: 'etat', operator: '==', value: 'en_attente' }], limitCount: 200, includeMetadataChanges: true })
     act(() => observer([
       { id: 'd2', clientId: 'c2', agent: { nom: 'B' }, sens: 'retrait', montant: 1, creeLe: H(11) },
       { id: 'd1', clientId: 'c1', agent: { nom: 'A' }, sens: 'depot', montant: 1, creeLe: H(10) },
-    ]))
+    ], [], SERVEUR))
     expect(result.current.demandes.map((d) => d.id)).toEqual(['d1', 'd2'])
   })
 
@@ -202,9 +203,24 @@ describe('TC-397 — l’écoute des demandes', () => {
   it('[TC-397-10] une écoute refusée (règle pas encore déployée) se tait : aucune demande', () => {
     const { result } = monter()
     const observer = abonner.mock.calls[0][1]
-    act(() => observer([{ id: 'd1', clientId: 'c1', agent: {}, sens: 'depot', montant: 1, creeLe: H(10) }]))
+    act(() => observer([{ id: 'd1', clientId: 'c1', agent: {}, sens: 'depot', montant: 1, creeLe: H(10) }], [], SERVEUR))
     expect(result.current.demandes).toHaveLength(1)
     act(() => observer.onError(Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' })))
+    expect(result.current.demandes).toEqual([])
+  })
+
+  it('[TC-397-11] ce que l’appareil a gardé ne s’affiche pas : seul le serveur dit qu’une demande attend encore', () => {
+    // navigator.onLine ment sur un Wi-Fi sans internet : le cache montrerait
+    // des demandes que l'agent a peut-être annulées depuis.
+    const { result } = monter()
+    const observer = abonner.mock.calls[0][1]
+    const lues = [{ id: 'd1', clientId: 'c1', agent: {}, sens: 'depot', montant: 1, creeLe: H(10) }]
+    act(() => observer(lues, [], { depuisServeur: false }))
+    expect(result.current.demandes).toEqual([])
+    act(() => observer(lues, [], SERVEUR))
+    expect(result.current.demandes).toHaveLength(1)
+    // La connexion tombe sans que le poste le sache : Firestore, lui, le dit.
+    act(() => observer(lues, [], { depuisServeur: false }))
     expect(result.current.demandes).toEqual([])
   })
 })

@@ -18,12 +18,19 @@ import logger from '../utils/logger.js'
  *   vue depuis le cache de l'appareil a peut-être été annulée par l'agent
  *   depuis. La caissière saisit alors comme avant (contrat §4.2).
  *
+ * ⚠ SEUL LE SERVEUR FAIT FOI. `navigator.onLine` dit vrai sur un Wi-Fi sans
+ *   internet : l'écoute s'ouvre, et Firestore répond depuis le cache. Ces
+ *   réponses-là ne montrent rien. Quand la connexion tombe en cours de
+ *   journée, Firestore le signale par une réponse du cache, et les lignes
+ *   partent (`includeMetadataChanges`).
+ *
  * ⚠ UNE ÉCOUTE REFUSÉE SE TAIT. Tant que la règle n'est pas déployée, la
  *   caisse marche comme avant, sans demande et sans bandeau d'erreur.
  */
 const REQUETE = Object.freeze({
   where: [{ field: 'etat', operator: '==', value: 'en_attente' }],
   limitCount: 200,
+  includeMetadataChanges: true,
 })
 
 export function useDemandesAgent() {
@@ -37,8 +44,9 @@ export function useDemandesAgent() {
 
   useEffect(() => {
     if (!actif) return undefined
-    const recevoir = (documents) => {
-      setLues({ storeId, lignes: trierDemandes(documents.map((d) => ligneDeDemande(d.id, d))) })
+    const recevoir = (documents, _changements, origine) => {
+      const lignes = origine?.depuisServeur === true ? documents.map((d) => ligneDeDemande(d.id, d)) : []
+      setLues({ storeId, lignes: trierDemandes(lignes) })
     }
     recevoir.onError = (erreur) => {
       logger.user.error('Demandes des agents', erreur)

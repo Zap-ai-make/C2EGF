@@ -21,6 +21,8 @@
  *           puis un nouvel abonné en rouvre une neuve ;
  *   [EH-04] se désabonner arrête aussi une reprise programmée ;
  *   [EH-05] deux abonnés à la même requête partagent une seule écoute (inchangé).
+ *   [EH-06] une écoute qui le demande reçoit aussi les réponses du cache,
+ *           chacune marquée : venue du serveur ou non (demandes d'agent, 2026-11-17).
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -211,5 +213,25 @@ describe('TC-372 — les écoutes de l\'historique tiennent', () => {
 
     arreterA()
     expect(derniere().fermer).not.toHaveBeenCalled()
+  })
+
+  it('[EH-06] includeMetadataChanges : chaque réponse dit si elle vient du serveur', () => {
+    onSnapshot.mockImplementation((_q, options, suivant, echec) => {
+      ouvertures.push({ options, suivant, echec, fermer: vi.fn() })
+      return derniere().fermer
+    })
+    const recu = abonne()
+    svc.subscribeToCollection('demandesAgent', recu, { ...JOURNEE, includeMetadataChanges: true })
+    expect(derniere().options).toEqual({ includeMetadataChanges: true })
+
+    derniere().suivant({ ...reponse('d1'), metadata: { fromCache: true } })
+    derniere().suivant({ ...reponse('d1'), metadata: { fromCache: false } })
+    expect(recu.mock.calls.map((appel) => appel[2])).toEqual([{ depuisServeur: false }, { depuisServeur: true }])
+
+    // Rouverte après une erreur, l'écoute garde son option.
+    derniere().echec(erreur('unavailable'))
+    vi.advanceTimersByTime(RESILIENT_BASE_DELAY_MS)
+    expect(ouvertures).toHaveLength(2)
+    expect(derniere().options).toEqual({ includeMetadataChanges: true })
   })
 })
