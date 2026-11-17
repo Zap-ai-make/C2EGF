@@ -193,6 +193,7 @@ export const FICHES = Object.freeze([
       'Chaque ligne dit **depuis combien de temps** elle attend. Au-delà de 30 minutes, elle se colore : le client attend trop.',
       'Plusieurs opérations du même client et du même type se replient sur une seule ligne, avec leur **total**. Le bouton « Voir les … » les déplie, {{Masquer}} les replie.',
       "Une opération réglée en partie montre ce qu'il reste à payer.",
+      'Une ligne violette **Demande de l’agent** vient de l’app Oxygen : {{Valider}}, {{Non terminée}} ou {{Rejeter}}.',
     ],
   },
   {

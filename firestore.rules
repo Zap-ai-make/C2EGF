@@ -577,6 +577,16 @@ service cloud.firestore {
         }
       }
 
+      // Demandes d'opération lancées par les agents depuis l'app Oxygen
+      // (docs/superpowers/specs/2026-11-17-demandes-agent-design.md).
+      // La boutique destinataire les écoute ; personne ne les écrit depuis un
+      // navigateur : elles naissent au point d'entrée Oxygen et se ferment par
+      // storeTransactionCommand, qui crée l'opération dans la même transaction.
+      match /demandesAgent/{demandeId} {
+        allow read: if isStoreMember(storeId);
+        allow create, update, delete: if false;
+      }
+
       match /networkBalances/{balanceId} {
         allow read: if isStoreMember(storeId) || isDealer() || isSystemManager();
         // Le serveur initialise à zéro et applique chaque mouvement avec son audit.

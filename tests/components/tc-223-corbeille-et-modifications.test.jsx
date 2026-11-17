@@ -32,6 +32,8 @@ vi.mock('react-router-dom', async () => {
   const reel = await vi.importActual('react-router-dom')
   return { ...reel, useNavigate: () => navigate }
 })
+// Les demandes d'agent ont leur propre écoute (TC-397) : aucune ici.
+vi.mock('../../src/hooks/useDemandesAgent.js', () => ({ useDemandesAgent: () => ({ demandes: [] }) }))
 vi.mock('../../src/context/AuthContext', () => ({
   useAuth: () => ({
     currentUser: { uid: 'u1' },
