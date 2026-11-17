@@ -123,9 +123,11 @@ Une liaison **fermée** a deux effets :
 - Une demande en attente passe à `annulee_agent`, avec `reponduLe`.
 - Dans tous les cas, la réponse est `{ ok:true, demande }`, avec l'état réel de la demande.
 
-**`lireDemandes`** prend `{ ... }` et rend `{ ok:true, demandes }`. Il fait deux requêtes sur `collectionGroup('demandesAgent')` :
+**`lireDemandes`** prend `{ ..., enAttente?: boolean }` et rend `{ ok:true, demandes }`. Il fait deux requêtes sur `collectionGroup('demandesAgent')` :
 - les demandes de ce compte en attente, limite 200 ;
-- celles fermées depuis moins de 7 jours (`reponduLe` ≥ maintenant − 7 j), limite 200.
+- celles fermées depuis moins de 7 jours (`reponduLe` ≥ maintenant − 7 j), limite 200. Cette seconde requête est sautée quand `enAttente` est vrai.
+
+L'option `enAttente` a été demandée par Oxygen le 2026-11-17. L'Accueil de l'agent montre une carte par demande en attente. Il appelle `lireDemandes { enAttente: true }` toutes les 10 s, pendant 5 min au plus, tant qu'au moins une demande est en attente. Chaque tour coûte la liaison plus max(1, n) lectures. Une demande qui sort de la liste reçoit un seul `etatDemande`, pour connaître son état final.
 
 Les deux résultats sont fusionnés sans doublon, la plus récente demande d'abord (`creeLe`).
 
@@ -221,7 +223,7 @@ Elle rend `{ rejected:true }`.
   - sous le montant, « Déjà saisi à HH:MM ? » s'affiche en `warn` quand une opération du même `clientId`, du même type et du même montant a été créée depuis `creeLe` ;
   - on la cherche dans les non terminées et dans l'historique du jour, en excluant les lignes supprimées ;
   - c'est une fonction pure, testée seule.
-- **Aide** : la fiche 8 gagne une étape, « Une ligne violette **Demande de l'agent** vient de l'app Oxygen : {{Valider}}, {{Non terminée}} ou {{Rejeter}}. ».
+- **Aide** : la fiche 7 (« Lire la liste des opérations qui attendent ») gagne une étape, « Une ligne violette **Demande de l'agent** vient de l'app Oxygen : {{Valider}}, {{Non terminée}} ou {{Rejeter}}. ».
 
 ## 6. Ce qui est laissé au constructeur
 
