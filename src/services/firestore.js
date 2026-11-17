@@ -594,6 +594,10 @@ export class FirestoreService {
       this.connectionPool.set(subscriptionKey, listenerInfo)
 
       listenerInfo.unsubscribe = resilientOnSnapshot(q, {
+        // Les réponses du cache aussi, et celle du serveur même quand elle
+        // égale le cache : l'abonné qui le demande veut savoir d'où vient
+        // chaque réponse (le troisième argument de `onNext`).
+        ...(queryOptions.includeMetadataChanges ? { snapshotOptions: { includeMetadataChanges: true } } : {}),
         onNext: (snapshot) => {
           try {
             // Obtenir tous les documents du snapshot
@@ -610,9 +614,10 @@ export class FirestoreService {
             cacheManager.set(cacheKey, documents, FIRESTORE_CONFIG.CACHE.TTL * 2) // TTL plus long pour real-time
 
             // Notifier tous les callbacks enregistrés
+            const origine = { depuisServeur: snapshot.metadata?.fromCache !== true }
             listenerInfo.callbacks.forEach(item => {
               try {
-                item.onNext(documents, changes) // Passer aussi les changements pour optimisation
+                item.onNext(documents, changes, origine) // Passer aussi les changements pour optimisation
               } catch (error) {
                 console.error('Firestore subscription callback error:', error)
               }

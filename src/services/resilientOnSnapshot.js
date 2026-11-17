@@ -59,6 +59,8 @@ export function safeUnsubscribe(unsubscribe) {
  * @param {(error: Error) => void} [options.onError]
  * @param {number} [options.delayMs] délai initial du backoff
  * @param {number} [options.maxDelayMs] plafond du backoff
+ * @param {object} [options.snapshotOptions] options d'écoute du SDK (`{ includeMetadataChanges }`),
+ *   gardées à chaque réouverture
  * @param {Function} [options.subscribe] injection de onSnapshot (tests)
  * @param {Function} [options.setTimeoutFn] injection du minuteur (tests)
  * @param {Function} [options.clearTimeoutFn]
@@ -69,6 +71,7 @@ export function resilientOnSnapshot(query, {
   onError,
   delayMs = RESILIENT_BASE_DELAY_MS,
   maxDelayMs = RESILIENT_MAX_DELAY_MS,
+  snapshotOptions,
   subscribe = onSnapshot,
   setTimeoutFn = setTimeout,
   clearTimeoutFn = clearTimeout,
@@ -89,22 +92,22 @@ export function resilientOnSnapshot(query, {
 
   function open() {
     if (stopped) return
+    const suivant = (snapshot) => {
+      // Un snapshot réussi réinitialise le backoff : une coupure passagère ne
+      // doit pas laisser la prochaine dans une fenêtre d'attente d'une minute.
+      currentDelay = delayMs
+      onNext?.(snapshot)
+    }
+    const echec = (err) => {
+      // On prévient TOUJOURS l'appelant d'abord : c'est lui qui décide quoi
+      // afficher. Le réabonnement vient après, jamais à la place.
+      onError?.(err)
+      programmerReprise(err)
+    }
     try {
-      currentUnsubscribe = subscribe(
-        query,
-        (snapshot) => {
-          // Un snapshot réussi réinitialise le backoff : une coupure passagère ne
-          // doit pas laisser la prochaine dans une fenêtre d'attente d'une minute.
-          currentDelay = delayMs
-          onNext?.(snapshot)
-        },
-        (err) => {
-          // On prévient TOUJOURS l'appelant d'abord : c'est lui qui décide quoi
-          // afficher. Le réabonnement vient après, jamais à la place.
-          onError?.(err)
-          programmerReprise(err)
-        },
-      )
+      currentUnsubscribe = snapshotOptions
+        ? subscribe(query, snapshotOptions, suivant, echec)
+        : subscribe(query, suivant, echec)
     } catch (err) {
       // ⚠ `onSnapshot` peut LEVER au lieu de rapporter — c'est le cas quand la
       //   file interne du SDK est déjà tombée : toute opération suivante relance

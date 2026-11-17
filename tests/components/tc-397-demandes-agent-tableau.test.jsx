@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, renderHook, screen, fireEvent, within, act, waitFor } from '@testing-library/react'
 
 /**
@@ -117,18 +117,17 @@ describe('TC-397 — les demandes dans le tableau', () => {
   })
 
   it('[TC-397-03] Valider, Non terminée et Rejeter envoient chacun leur geste', async () => {
+    demandesMock = [demande('d1', 'KABORE', 'depot'), demande('d2', 'ZONGO', 'retrait'), demande('d3', 'TRAORE', 'depot')]
     render(<TransactionTable />)
     fireEvent.click(geste('d1', 'Valider'))
     await waitFor(() => expect(accepter).toHaveBeenCalledWith('d1', 'Validée'))
-    await waitFor(() => expect(geste('d1', 'Non terminée')).not.toBeDisabled())
-    fireEvent.click(geste('d1', 'Non terminée'))
-    await waitFor(() => expect(accepter).toHaveBeenLastCalledWith('d1', 'Non Terminées'))
-    await waitFor(() => expect(geste('d1', 'Rejeter')).not.toBeDisabled())
-    fireEvent.click(geste('d1', 'Rejeter'))
-    await waitFor(() => expect(rejeter).toHaveBeenCalledWith('d1'))
+    fireEvent.click(geste('d2', 'Non terminée'))
+    await waitFor(() => expect(accepter).toHaveBeenLastCalledWith('d2', 'Non Terminées'))
+    fireEvent.click(geste('d3', 'Rejeter'))
+    await waitFor(() => expect(rejeter).toHaveBeenCalledWith('d3'))
   })
 
-  it('[TC-397-04] pendant l’appel, les trois gestes de la ligne se grisent', async () => {
+  it('[TC-397-04] pendant l’appel, les trois gestes de la ligne se grisent ; la réponse reçue, la ligne part sans attendre l’écoute', async () => {
     let finir
     accepter.mockReturnValue(new Promise((resolve) => { finir = resolve }))
     render(<TransactionTable />)
@@ -138,7 +137,23 @@ describe('TC-397 — les demandes dans le tableau', () => {
     for (const bouton of boutons) expect(bouton).toBeDisabled()
     expect(boutons.map((b) => b.textContent)).toContain('…')
     await act(async () => { finir({ accepted: true }) })
-    for (const bouton of within(rangee('d1')).getAllByRole('button')) expect(bouton).not.toBeDisabled()
+    // L'écoute (demandesMock) la liste encore : la caissière ne doit pas
+    // pouvoir répondre une deuxième fois dans l'intervalle.
+    expect(screen.queryByTestId('demande-agent-d1')).toBeNull()
+    expect(accepter).toHaveBeenCalledTimes(1)
+  })
+
+  it('[TC-397-12] une réponse qui part ne bloque pas les autres demandes', async () => {
+    accepter.mockReturnValue(new Promise(() => {}))
+    demandesMock = [demande('d1', 'KABORE', 'depot'), demande('d2', 'ZONGO', 'retrait')]
+    render(<TransactionTable />)
+    fireEvent.click(geste('d1', 'Valider'))
+    expect(geste('d2', 'Rejeter')).not.toBeDisabled()
+    fireEvent.click(geste('d2', 'Rejeter'))
+    await waitFor(() => expect(rejeter).toHaveBeenCalledWith('d2'))
+    // Un deuxième clic sur la ligne qui attend sa réponse ne repart pas.
+    fireEvent.click(within(rangee('d1')).getAllByRole('button')[1])
+    expect(accepter).toHaveBeenCalledTimes(1)
   })
 
   it('[TC-397-05] seulement des demandes : pas d’état vide', () => {
@@ -170,6 +185,7 @@ describe('TC-397 — l’écoute des demandes', () => {
     ({ useDemandesAgent } = await vi.importActual('../../src/hooks/useDemandesAgent.js'))
   })
   const auth = { userProfile: { storeId: 's1' }, activeStore: { id: 's1' } }
+  const SERVEUR = { depuisServeur: true }
   const monter = (valeur = auth) => renderHook(() => useDemandesAgent(), {
     wrapper: ({ children }) => <AuthContext.Provider value={valeur}>{children}</AuthContext.Provider>,
   })
@@ -184,11 +200,11 @@ describe('TC-397 — l’écoute des demandes', () => {
     expect(abonner).toHaveBeenCalledTimes(1)
     const [collection, observer, options] = abonner.mock.calls[0]
     expect(collection).toBe('demandesAgent')
-    expect(options).toEqual({ where: [{ field: 'etat', operator: '==', value: 'en_attente' }], limitCount: 200 })
+    expect(options).toEqual({ where: [{ field: 'etat', operator: '==', value: 'en_attente' }], limitCount: 200, includeMetadataChanges: true })
     act(() => observer([
       { id: 'd2', clientId: 'c2', agent: { nom: 'B' }, sens: 'retrait', montant: 1, creeLe: H(11) },
       { id: 'd1', clientId: 'c1', agent: { nom: 'A' }, sens: 'depot', montant: 1, creeLe: H(10) },
-    ]))
+    ], [], SERVEUR))
     expect(result.current.demandes.map((d) => d.id)).toEqual(['d1', 'd2'])
   })
 
@@ -202,9 +218,61 @@ describe('TC-397 — l’écoute des demandes', () => {
   it('[TC-397-10] une écoute refusée (règle pas encore déployée) se tait : aucune demande', () => {
     const { result } = monter()
     const observer = abonner.mock.calls[0][1]
-    act(() => observer([{ id: 'd1', clientId: 'c1', agent: {}, sens: 'depot', montant: 1, creeLe: H(10) }]))
+    act(() => observer([{ id: 'd1', clientId: 'c1', agent: {}, sens: 'depot', montant: 1, creeLe: H(10) }], [], SERVEUR))
     expect(result.current.demandes).toHaveLength(1)
     act(() => observer.onError(Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' })))
     expect(result.current.demandes).toEqual([])
+  })
+
+  describe('le cache de l’appareil', () => {
+    beforeEach(() => { vi.useFakeTimers() })
+    afterEach(() => { vi.useRealTimers() })
+    const CACHE = { depuisServeur: false }
+    const lue = (id, heure) => ({ id, clientId: `c-${id}`, agent: {}, sens: 'depot', montant: 1, creeLe: H(heure) })
+    const ids = (result) => result.current.demandes.map((d) => d.id)
+
+    it('[TC-397-11] ce que l’appareil a gardé ne s’affiche pas : seul le serveur dit qu’une demande attend encore', () => {
+      // navigator.onLine ment sur un Wi-Fi sans internet : le cache montrerait
+      // des demandes que l'agent a peut-être annulées depuis.
+      const { result } = monter()
+      const observer = abonner.mock.calls[0][1]
+      act(() => observer([lue('d1', 10)], [], CACHE))
+      expect(ids(result)).toEqual([])
+      act(() => { vi.advanceTimersByTime(60_000) })
+      expect(ids(result)).toEqual([])
+      act(() => observer([lue('d1', 10)], [], SERVEUR))
+      expect(ids(result)).toEqual(['d1'])
+    })
+
+    it('[TC-397-13] quand une autre demande se ferme, le cache répond un instant : les autres restent, sans clignoter', () => {
+      // Vu à l'essai réel du 17 novembre : ~300 ms de réponse du cache à chaque
+      // fermeture, et le tableau entier se vidait sous le doigt de la caissière.
+      const { result } = monter()
+      const observer = abonner.mock.calls[0][1]
+      act(() => observer([lue('d1', 10), lue('d2', 11)], [], SERVEUR))
+      act(() => observer([lue('d2', 11), lue('d9', 9)], [], CACHE))
+      // Le cache retire d1 (fermée), n'ajoute pas d9 (jamais confirmée).
+      expect(ids(result)).toEqual(['d2'])
+      act(() => { vi.advanceTimersByTime(300) })
+      act(() => observer([lue('d2', 11)], [], SERVEUR))
+      act(() => { vi.advanceTimersByTime(60_000) })
+      expect(ids(result)).toEqual(['d2'])
+    })
+
+    it('[TC-397-14] la connexion tombe sans que le poste le sache : passé 10 s sans le serveur, les lignes partent', () => {
+      const { result } = monter()
+      const observer = abonner.mock.calls[0][1]
+      act(() => observer([lue('d1', 10)], [], SERVEUR))
+      act(() => observer([lue('d1', 10)], [], CACHE))
+      act(() => { vi.advanceTimersByTime(9_999) })
+      expect(ids(result)).toEqual(['d1'])
+      // Une deuxième réponse du cache ne relance pas l'attente.
+      act(() => observer([lue('d1', 10)], [], CACHE))
+      act(() => { vi.advanceTimersByTime(1) })
+      expect(ids(result)).toEqual([])
+      // Le serveur revient : la demande aussi.
+      act(() => observer([lue('d1', 10)], [], SERVEUR))
+      expect(ids(result)).toEqual(['d1'])
+    })
   })
 })

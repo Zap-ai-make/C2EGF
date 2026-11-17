@@ -88,6 +88,19 @@ describe('TC-394 — accepter une demande', () => {
     expect(await soldes()).toEqual(apres)
   })
 
+  it('[TC-394-15] Non terminée sur un poste, Valider sur l’autre : le second apprend que la demande est déjà acceptée', async () => {
+    // Rejouer, c'est redemander LE MÊME geste. Un autre statut n'est pas une
+    // réponse perdue : c'est une deuxième caisse, qui ne doit pas croire avoir
+    // validé ce qui attend encore d'être réglé.
+    await accepter('d1', 'Non Terminées')
+    const apres = await soldes()
+    expect(await lireDemande()).toMatchObject({ etat: 'validee', statutInitial: 'Non Terminées' })
+    await expect(accepter('d1', 'Validée')).rejects.toMatchObject({ code: 'DEMANDE_CLOSE', message: 'Cette demande a déjà été acceptée.' })
+    expect(await accepter('d1', 'Non Terminées')).toEqual({ accepted: true, operationId: 'd1', idempotent: true })
+    expect(await compter('history')).toBe(0)
+    expect(await soldes()).toEqual(apres)
+  })
+
   it('[TC-394-04] l’opération est datée de sa validation, côté serveur : ni l’heure du téléphone, ni un ageMs', async () => {
     const debut = Date.now() - 5000
     await accepter('d1', 'Validée', { ageMs: 3_600_000 })

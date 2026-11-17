@@ -1106,7 +1106,12 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
 
       const statut = String(payload.statut || '').trim()
       if (![...PENDING, ...VALIDATED].includes(statut)) fail('STORE_TRANSACTION_INVALID', 'Statut initial non autorisé.')
-      if (demande.etat === ETATS_DEMANDE.VALIDEE) {
+      // Rejouer, c'est redemander le MÊME geste : une réponse perdue en route.
+      // Un autre statut vient d'une autre caisse, qui apprend que la demande
+      // est prise. Une demande acceptée sans `statutInitial` (avant ce champ)
+      // se rejoue comme avant.
+      const memeGeste = (demande.statutInitial ?? statut) === statut
+      if (demande.etat === ETATS_DEMANDE.VALIDEE && memeGeste) {
         return { accepted: true, operationId: demande.operationId ?? demandeId, idempotent: true }
       }
       refuserSiDemandeClose(demande)
@@ -1154,7 +1159,7 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
         demandeId,
       }
       t.set(ref, data)
-      t.update(demandeRef, { etat: ETATS_DEMANDE.VALIDEE, operationId: demandeId, ...fermeture })
+      t.update(demandeRef, { etat: ETATS_DEMANDE.VALIDEE, operationId: demandeId, statutInitial: statut, ...fermeture })
       t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
       t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: demandeId, demandeId, uid, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
       return { accepted: true, operationId: demandeId, statut }
