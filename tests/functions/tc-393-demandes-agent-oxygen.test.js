@@ -92,6 +92,26 @@ describe('TC-393 — demander', () => {
     expect(await demandes()).toHaveLength(1)
   })
 
+  it('[TC-393-21] un retrait rend le numéro dealer de la boutique pour son réseau ; un dépôt, non ; jamais recopié dans la demande', async () => {
+    await db.doc('stores/b1').update({ dealer: { Orange: '76111111' } })
+    const retrait = await appel(base({ sens: 'retrait', cle: 'k-r' }))
+    expect(retrait.corps.demande.dealer).toBe('76111111')
+    const depot = await appel(base({ sens: 'depot', cle: 'k-d' }))
+    expect(depot.corps.demande).not.toHaveProperty('dealer')
+    // Une fiche retouchée à la main : aucun numéro plutôt qu'un numéro faux.
+    await db.doc('stores/b1').update({ dealer: { Orange: '76 11 11 11' } })
+    const douteux = await appel(base({ sens: 'retrait', cle: 'k-x' }))
+    expect(douteux.corps.demande).not.toHaveProperty('dealer')
+    for (const d of await demandes()) expect(d.data()).not.toHaveProperty('dealer')
+  })
+
+  it('[TC-393-22] rejouée après un changement de numéro, la demande rend le numéro du moment', async () => {
+    await db.doc('stores/b1').update({ dealer: { Orange: '76111111' } })
+    expect((await appel(base({ sens: 'retrait' }))).corps.demande.dealer).toBe('76111111')
+    await db.doc('stores/b1').update({ dealer: { Orange: '76222222' } })
+    expect((await appel(base({ sens: 'retrait' }))).corps.demande.dealer).toBe('76222222')
+  })
+
   it('[TC-393-03] la même clé venue d’un autre compte est une demande mal formée', async () => {
     await appel(base())
     const r = await appel(base({ compteOxygen: 'ox-2', liaison: 'L2' }))
@@ -220,6 +240,18 @@ describe('TC-393 — listerBoutiques', () => {
     const avec = await lister({ avecToutes: true })
     expect(avec.corps.boutiques).toEqual([{ id: 'b3', nom: 'Atelier 3' }, { id: 'b1', nom: 'Boutique 1' }])
     expect((await lister({ avecToutes: 'oui' })).statut).toBe(400)
+  })
+
+  it('[TC-393-20] le numéro flotte accompagne la boutique qui en a un ; jamais de numéro dealer dans la liste', async () => {
+    // Contrat §9 : Oxygen garde la liste 24 h. Un numéro dealer périmé ferait
+    // perdre des unités à l'agent : il n'arrive qu'avec la demande.
+    await db.doc('stores/b1').update({ flotte: '70111111', dealer: { Orange: '76111111' } })
+    const r = await lister({ avecToutes: true })
+    expect(r.corps.servies).toEqual([
+      { id: 'b3', nom: 'Atelier 3', derniereLe: T0 - 1000 },
+      { id: 'b1', nom: 'Boutique 1', derniereLe: T0 - 5000, flotte: '70111111' },
+    ])
+    expect(r.corps.boutiques).toEqual([{ id: 'b3', nom: 'Atelier 3' }, { id: 'b1', nom: 'Boutique 1', flotte: '70111111' }])
   })
 
   it('[TC-393-16] une liaison fermée ne liste plus rien', async () => {

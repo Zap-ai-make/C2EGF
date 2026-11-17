@@ -39,6 +39,7 @@ import {
   clientDeFiche,
   codeReseauDeFiche,
 } from '../oxygen/demande.js'
+import { dealerDe, flotteDe, numerosSaisis } from '../boutiques/numeros.js'
 
 const SETTLEMENT_FIELDS = [
   'originalAmount', 'paidAmount', 'refundedAmount', 'remainingAmount',
@@ -183,6 +184,17 @@ const MESSAGES_DEMANDE_CLOSE = Object.freeze({
 function refuserSiDemandeClose(demande) {
   if (demande.etat === ETATS_DEMANDE.EN_ATTENTE) return
   fail('DEMANDE_CLOSE', MESSAGES_DEMANDE_CLOSE[demande.etat] ?? 'Cette demande est close.')
+}
+
+/** Les numéros conformes d'une fiche, clés absentes omises : l'avant et l'après du journal. */
+function numerosDe(store) {
+  const flotte = flotteDe(store)
+  const dealer = {}
+  for (const reseau of STORE_NETWORKS) {
+    const numero = dealerDe(store, reseau)
+    if (numero) dealer[reseau] = numero
+  }
+  return { ...(flotte ? { flotte } : {}), dealer }
 }
 
 function cleanId(value, field) {
@@ -363,7 +375,7 @@ async function readActor(t, db, uid) {
 
 export async function storeTransactionCommandHandler(request, { db, FieldValue, logWriter = write }) {
   const uid = validateAuthUid(request.auth?.uid)
-  const payload = validateInputPayload(request.data, ['action', 'transaction', 'draftId', 'historyId', 'updates', 'paymentMethod', 'amount', 'network', 'balanceType', 'balanceAmount', 'balances', 'note', 'direct', 'expediteur', 'replenishmentId', 'returnId', 'commandeId', 'ageMs', 'demandeId', 'statut'])
+  const payload = validateInputPayload(request.data, ['action', 'transaction', 'draftId', 'historyId', 'updates', 'paymentMethod', 'amount', 'network', 'balanceType', 'balanceAmount', 'balances', 'note', 'direct', 'expediteur', 'replenishmentId', 'returnId', 'commandeId', 'ageMs', 'demandeId', 'statut', 'flotte', 'dealer'])
   const action = String(payload.action || '')
   const now = FieldValue.serverTimestamp()
   // L'identifiant qu'une file d'envoi hors ligne donne à une saisie ou à une
@@ -420,6 +432,29 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       t.set(balanceRef, { balances, updatedAt: now })
       t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, uid, beforeBalances: before, afterBalances: balances, createdAt: now })
       return { balances }
+    }
+
+    // ─── Les numéros de la boutique (contrat Oxygen, §9) ──────────────────────
+    //
+    // Décidé par l'utilisateur le 2026-11-17 : la boutique saisit elle-même son
+    // numéro flotte et son numéro dealer, depuis son Profil. Le risque est connu
+    // et accepté : le compte boutique pourrait mettre une autre SIM là où les
+    // agents envoient leur argent. D'où le journal, avec l'avant et l'après.
+    // Avant la lecture des soldes : une boutique toute neuve, qui n'en a pas
+    // encore, doit pouvoir donner ses numéros.
+    if (action === 'updateStoreNumbers') {
+      if (profile.role !== 'store_admin') fail('ROLE_FORBIDDEN', 'Seul le compte boutique modifie ses numéros.')
+      const saisis = numerosSaisis({ flotte: payload.flotte, dealer: payload.dealer }, STORE_NETWORKS)
+      if (!saisis.ok) fail('STORE_TRANSACTION_INVALID', saisis.message)
+      const avant = numerosDe(store)
+      const apres = numerosDe(saisis)
+      if (JSON.stringify(avant) === JSON.stringify(apres)) return { numeros: apres, inchange: true }
+      // Un numéro vidé efface son champ : la clé disparaît, jamais `null` ni ''.
+      const champs = { flotte: saisis.flotte ?? FieldValue.delete() }
+      for (const reseau of STORE_NETWORKS) champs[`dealer.${reseau}`] = saisis.dealer[reseau] ?? FieldValue.delete()
+      t.update(db.doc(`stores/${storeId}`), champs)
+      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, uid, avant, apres, createdAt: now })
+      return { numeros: apres }
     }
 
     const balanceSnap = await t.get(balanceRef)

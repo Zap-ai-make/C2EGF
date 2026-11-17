@@ -4,11 +4,12 @@ import { useTheme } from '../context/ThemeContext'
 import { useNavigate } from 'react-router-dom'
 import ChangePasswordModal from '../components/auth/ChangePasswordModal'
 import { formatDate, getAvatarInitial } from '../utils/authHelpers'
-import { AUTH_LABELS, AUTH_ROLE_LABELS } from '../constants/authMessages'
+import { AUTH_LABELS, AUTH_ROLES, AUTH_ROLE_LABELS } from '../constants/authMessages'
 import { AUTH_STYLES } from '../constants/authStyles'
 import { useUserActivity } from '../hooks/useUserActivity'
 import PageHeader from '../components/ui/PageHeader'
 import { useEnvois } from '../context/envoisContexte.js'
+import NumerosBoutique from '../components/profil/NumerosBoutique.jsx'
 
 function Profil() {
   const { currentUser, userProfile, activeStore, logout } = useAuth()
@@ -161,6 +162,12 @@ function Profil() {
             </div>
           </div>
         </div>
+
+        {/* Les numéros que l'app Oxygen montre aux agents : la boutique seule les
+            saisit (décidé par l'utilisateur le 2026-11-17). */}
+        {userProfile?.role === AUTH_ROLES.STORE_ADMIN && activeStore?.id && (
+          <NumerosBoutique storeId={activeStore.id} />
+        )}
 
         {/* Statistiques rapides */}
         <div className="bg-white rounded-lg shadow-md p-6">
