@@ -34,6 +34,7 @@ const lire = (chemin) => readFileSync(resolve(process.cwd(), chemin), 'utf8')
 const SOURCES_INTERFACE = [
   'src/components/transactions/TransactionForm.jsx',
   'src/components/transactions/TransactionTable.jsx',
+  'src/components/transactions/LigneDemandeAgent.jsx',
   'src/components/transactions/ClientSearch.jsx',
   'src/components/historique/HistoriqueTable.jsx',
   'src/components/historique/HistoriqueArchives.jsx',
@@ -238,5 +239,18 @@ describe('TC-225 — l’argent du siège dans l’aide', () => {
 
   it('[TC-225-RS3] la fiche des cases dit qu’elles filtrent, et comment revenir à tout', () => {
     expect(fiche(8).etapes.some((e) => /ne voir que cette nature/.test(e) && e.includes('{{Tout}}'))).toBe(true)
+  })
+})
+
+/**
+ * TC-225-RS4 — Les demandes d'agent dans l'aide
+ * (docs/superpowers/specs/2026-11-17-demandes-agent-design.md §5.5).
+ */
+describe('TC-225 — les demandes d’agent dans l’aide', () => {
+  const fiche = (id) => FICHES.find((f) => f.id === id)
+
+  it('[TC-225-RS4] la fiche de la liste dit d’où vient une ligne violette, et ses trois gestes', () => {
+    expect(fiche(7).etapes.some((e) => e.includes('Demande de l’agent')
+      && ['{{Valider}}', '{{Non terminée}}', '{{Rejeter}}'].every((geste) => e.includes(geste)))).toBe(true)
   })
 })
