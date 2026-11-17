@@ -10,7 +10,7 @@
  * qu'ici, pour que les deux côtés ne divergent pas.
  */
 
-import { enMs } from './liaison.js'
+import { champsAgentFiche, enMs } from './liaison.js'
 
 /** Une collection par boutique : `clients/{boutiqueId}/demandesAgent/{cle}`. */
 export const COLLECTION_DEMANDES = 'demandesAgent'
@@ -42,9 +42,20 @@ export const LIMITE_DEMANDES = 200
 /**
  * Le code de la fiche sur ce réseau : c'est lui que porte le champ `code`
  * d'une opération saisie au formulaire (`preparerTransaction`).
+ *
+ * ⚠ LE COMPTE ORANGE SE DÉRIVE QUAND IL MANQUE. L'app l'écrit à chaque
+ *   enregistrement d'une fiche : le code agent, à défaut le numéro agent
+ *   (`normaliserChampsAgent`, src/services/firestore.js). Une fiche écrite hors
+ *   de l'app — un script, un import — peut ne pas le porter ; l'agent n'en a
+ *   pas moins un compte Orange, et sa demande ne doit pas être refusée.
  */
-export const codeReseauDeFiche = (fiche, reseau) =>
-  String(fiche?.[String(reseau).toLowerCase()] ?? '').trim()
+export function codeReseauDeFiche(fiche, reseau) {
+  const cle = String(reseau).toLowerCase()
+  const propre = String(fiche?.[cle] ?? '').trim()
+  if (propre || cle !== 'orange') return propre
+  const { codeAgent, numeroAgent } = champsAgentFiche(fiche)
+  return codeAgent || numeroAgent
+}
 
 const CHAMPS_CLIENT = Object.freeze(['nom', 'prenom', 'orange', 'codeAgent', 'numeroAgent'])
 
@@ -57,6 +68,12 @@ export function clientDeFiche(clientId, fiche) {
   const client = { id: clientId }
   for (const champ of CHAMPS_CLIENT) {
     if (fiche && Object.hasOwn(fiche, champ)) client[champ] = fiche[champ]
+  }
+  // Le compte Orange, dérivé s'il manque : le formulaire le relit quand la
+  // caissière modifie l'opération, et refuserait un client sans lui.
+  if (!client.orange) {
+    const orange = codeReseauDeFiche(fiche, 'Orange')
+    if (orange) client.orange = orange
   }
   return client
 }

@@ -123,7 +123,7 @@ describe('TC-394 — accepter une demande', () => {
   })
 
   it('[TC-394-08] une fiche qui a perdu son code Orange, ou disparue : refus clair, la demande attend', async () => {
-    await db.doc('globalClients/c1').set({ nom: 'KABORE', prenom: 'Awa', codeAgent: '1234567' })
+    await db.doc('globalClients/c1').set({ nom: 'KABORE', prenom: 'Awa', codeAgent: '', numeroAgent: '' })
     await expect(accepter('d1')).rejects.toMatchObject({ code: 'STORE_TRANSACTION_INVALID' })
     await db.doc('globalClients/c1').delete()
     await expect(accepter('d1')).rejects.toMatchObject({ code: 'STORE_TRANSACTION_NOT_FOUND' })

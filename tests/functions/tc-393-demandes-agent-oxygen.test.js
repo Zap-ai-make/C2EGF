@@ -137,9 +137,13 @@ describe('TC-393 — demander', () => {
   })
 
   it('[TC-393-09] une fiche sans code sur ce réseau ne pourrait jamais être validée : refusée', async () => {
-    await db.doc('globalClients/c1').set({ nom: 'KABORE', prenom: 'Awa', codeAgent: '1234567' })
+    await db.doc('globalClients/c1').set({ nom: 'KABORE', prenom: 'Awa', codeAgent: '', numeroAgent: '' })
     expect((await appel(base())).corps).toEqual({ ok: false, raison: 'reseau_invalide' })
     expect(await demandes()).toHaveLength(0)
+    // Sans `orange` mais avec un code agent : le compte Orange se dérive, comme à l'app.
+    await db.doc('globalClients/c1').set({ nom: 'KABORE', prenom: 'Awa', codeAgent: '1234567' })
+    expect((await appel(base())).corps.ok).toBe(true)
+    expect((await db.doc('clients/b1/demandesAgent/k-1').get()).data().agent.code).toBe('1234567')
   })
 
   it('[TC-393-10] distributeur éteint par le profil : 403', async () => {

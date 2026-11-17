@@ -36,11 +36,21 @@ describe('TC-392 — la demande, hors de Firestore', () => {
     expect(codeReseauDeFiche(null, 'Orange')).toBe('')
   })
 
+  it('[TC-392-06] sans champ `orange`, le compte Orange se dérive comme à l’app : le code agent, à défaut le numéro', () => {
+    // normaliserChampsAgent (src/services/firestore.js) écrit orange = codeAgent || numeroAgent ;
+    // une fiche écrite hors de l'app (script, import) peut ne pas le porter.
+    expect(codeReseauDeFiche({ codeAgent: '1234567', numeroAgent: '70112233' }, 'Orange')).toBe('1234567')
+    expect(codeReseauDeFiche({ codeAgent: '', numeroAgent: '70112233' }, 'Orange')).toBe('70112233')
+    expect(codeReseauDeFiche({ codeAgent: '', numeroAgent: '' }, 'Orange')).toBe('')
+    expect(codeReseauDeFiche({ orange: '7654321', codeAgent: '1234567' }, 'Orange')).toBe('7654321')
+  })
+
   it('[TC-392-03] clientDeFiche garde les seules clés présentes', () => {
     expect(clientDeFiche('c1', { nom: 'KABORE', prenom: 'Awa', orange: '7012', telephone: '1' }))
       .toEqual({ id: 'c1', nom: 'KABORE', prenom: 'Awa', orange: '7012' })
+    // Le compte Orange dérivé y entre : le formulaire le relit pour « Modifier ».
     expect(clientDeFiche('c2', { codeAgent: '123', numeroAgent: '70000000' }))
-      .toEqual({ id: 'c2', codeAgent: '123', numeroAgent: '70000000' })
+      .toEqual({ id: 'c2', codeAgent: '123', numeroAgent: '70000000', orange: '123' })
   })
 })
 
