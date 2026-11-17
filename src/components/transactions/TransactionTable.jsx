@@ -115,7 +115,14 @@ const TransactionTable = memo(function TransactionTable() {
   // Les demandes des agents (contrat Oxygen v4) : en tête du tableau, quel que
   // soit le filtre, hors des cases et du Total caisse — ce ne sont pas encore
   // des opérations. Vides hors ligne et là où le profil n'ouvre pas Oxygen.
-  const { demandes } = useDemandesAgent()
+  const { demandes: demandesEcoutees } = useDemandesAgent()
+  // Les demandes auxquelles la caissière vient de répondre : leur ligne part
+  // dès la réponse du serveur, sans attendre que l'écoute la retire.
+  const [repondues, setRepondues] = useState(() => new Set())
+  const demandes = useMemo(
+    () => demandesEcoutees.filter((d) => !repondues.has(d.id)),
+    [demandesEcoutees, repondues],
+  )
   const envois = useEnvois()
   const retirerEnvoi = useCallback((id) => { envois?.retirer(id) }, [envois])
   const { themeClasses } = useTheme()
@@ -381,26 +388,32 @@ const TransactionTable = memo(function TransactionTable() {
   }, [envoyerAuSiege])
 
   /**
-   * La réponse à une demande d'agent : le geste qui part, et la demande qu'il
-   * vise. Jamais par la file d'envoi (demandesAgentService.js). En cas de
-   * succès, rien à faire : l'écoute retire la ligne, et une « Non terminée »
-   * revient comme ligne ordinaire par l'écoute des brouillons.
+   * La réponse à une demande d'agent : le geste qui part, par demande.
+   * Répondre à l'une ne bloque pas les autres ; un deuxième clic sur la même
+   * ne repart pas (le `ref` le voit avant le rendu qui grise les boutons).
+   * Jamais par la file d'envoi (demandesAgentService.js). En cas de succès, la
+   * ligne part ; une « Non terminée » revient comme ligne ordinaire par
+   * l'écoute des brouillons. En cas d'échec, elle reste, avec le message.
    */
-  const [reponseDemande, setReponseDemande] = useState(null)
+  const [reponsesDemandes, setReponsesDemandes] = useState({})
+  const reponsesQuiPartent = useRef(new Set())
   const repondreDemande = useCallback(async (demande, geste) => {
-    if (reponseDemande) return
-    setReponseDemande({ id: demande.id, geste })
+    if (reponsesQuiPartent.current.has(demande.id)) return
+    reponsesQuiPartent.current.add(demande.id)
+    setReponsesDemandes((enCours) => ({ ...enCours, [demande.id]: geste }))
     try {
       if (geste === 'rejeter') await rejeterDemandeAgent(demande.id)
       else await accepterDemandeAgent(demande.id, geste === 'valider' ? 'Validée' : 'Non Terminées')
+      setRepondues((faites) => new Set(faites).add(demande.id))
     } catch (error) {
       logger.user.error('Réponse à une demande d’agent', error)
       setRollbackToast({ show: true, message: error?.message || 'Réponse non enregistrée', type: 'rollback' })
       setTimeout(() => setRollbackToast({ show: false, message: '', type: 'info' }), 4000)
     } finally {
-      setReponseDemande(null)
+      reponsesQuiPartent.current.delete(demande.id)
+      setReponsesDemandes(({ [demande.id]: _fini, ...enCours }) => enCours)
     }
-  }, [reponseDemande])
+  }, [])
 
   // Ce que la caissière a déjà saisi elle-même, pour signaler une demande en double.
   const operationsSaisies = useMemo(
@@ -690,7 +703,7 @@ const TransactionTable = memo(function TransactionTable() {
                     styles={getTransactionStyles(demande.type)}
                     maintenant={maintenant}
                     dejaSaisieMs={dejaSaisie(demande, operationsSaisies)?.instantMs}
-                    enCours={reponseDemande?.id === demande.id ? reponseDemande.geste : null}
+                    enCours={reponsesDemandes[demande.id] ?? null}
                     onRepondre={repondreDemande}
                   />
                 ))}

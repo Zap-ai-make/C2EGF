@@ -117,18 +117,17 @@ describe('TC-397 — les demandes dans le tableau', () => {
   })
 
   it('[TC-397-03] Valider, Non terminée et Rejeter envoient chacun leur geste', async () => {
+    demandesMock = [demande('d1', 'KABORE', 'depot'), demande('d2', 'ZONGO', 'retrait'), demande('d3', 'TRAORE', 'depot')]
     render(<TransactionTable />)
     fireEvent.click(geste('d1', 'Valider'))
     await waitFor(() => expect(accepter).toHaveBeenCalledWith('d1', 'Validée'))
-    await waitFor(() => expect(geste('d1', 'Non terminée')).not.toBeDisabled())
-    fireEvent.click(geste('d1', 'Non terminée'))
-    await waitFor(() => expect(accepter).toHaveBeenLastCalledWith('d1', 'Non Terminées'))
-    await waitFor(() => expect(geste('d1', 'Rejeter')).not.toBeDisabled())
-    fireEvent.click(geste('d1', 'Rejeter'))
-    await waitFor(() => expect(rejeter).toHaveBeenCalledWith('d1'))
+    fireEvent.click(geste('d2', 'Non terminée'))
+    await waitFor(() => expect(accepter).toHaveBeenLastCalledWith('d2', 'Non Terminées'))
+    fireEvent.click(geste('d3', 'Rejeter'))
+    await waitFor(() => expect(rejeter).toHaveBeenCalledWith('d3'))
   })
 
-  it('[TC-397-04] pendant l’appel, les trois gestes de la ligne se grisent', async () => {
+  it('[TC-397-04] pendant l’appel, les trois gestes de la ligne se grisent ; la réponse reçue, la ligne part sans attendre l’écoute', async () => {
     let finir
     accepter.mockReturnValue(new Promise((resolve) => { finir = resolve }))
     render(<TransactionTable />)
@@ -138,7 +137,23 @@ describe('TC-397 — les demandes dans le tableau', () => {
     for (const bouton of boutons) expect(bouton).toBeDisabled()
     expect(boutons.map((b) => b.textContent)).toContain('…')
     await act(async () => { finir({ accepted: true }) })
-    for (const bouton of within(rangee('d1')).getAllByRole('button')) expect(bouton).not.toBeDisabled()
+    // L'écoute (demandesMock) la liste encore : la caissière ne doit pas
+    // pouvoir répondre une deuxième fois dans l'intervalle.
+    expect(screen.queryByTestId('demande-agent-d1')).toBeNull()
+    expect(accepter).toHaveBeenCalledTimes(1)
+  })
+
+  it('[TC-397-12] une réponse qui part ne bloque pas les autres demandes', async () => {
+    accepter.mockReturnValue(new Promise(() => {}))
+    demandesMock = [demande('d1', 'KABORE', 'depot'), demande('d2', 'ZONGO', 'retrait')]
+    render(<TransactionTable />)
+    fireEvent.click(geste('d1', 'Valider'))
+    expect(geste('d2', 'Rejeter')).not.toBeDisabled()
+    fireEvent.click(geste('d2', 'Rejeter'))
+    await waitFor(() => expect(rejeter).toHaveBeenCalledWith('d2'))
+    // Un deuxième clic sur la ligne qui attend sa réponse ne repart pas.
+    fireEvent.click(within(rangee('d1')).getAllByRole('button')[1])
+    expect(accepter).toHaveBeenCalledTimes(1)
   })
 
   it('[TC-397-05] seulement des demandes : pas d’état vide', () => {
