@@ -26,6 +26,7 @@ import {
   dansLesPeriodes,
   ECHECS_MAX,
   DUREE_CODE_MS,
+  MARGE_REJEU_MS,
 } from '../../functions/src/oxygen/liaison.js'
 
 describe('TC-376 — identifiants', () => {
@@ -103,6 +104,23 @@ describe('TC-376 — décision sur un code saisi', () => {
 
   it('[TC-376-12] rejoué par le même compte pour le même objet : la même réponse', () => {
     expect(decider(actif({ utiliseLe: T - 1000, utilisePar: 'cpt-1', objet: 'liaison' }))).toEqual({ rejoue: true })
+  })
+
+  it('[TC-376-12b] le rejeu ne vaut que dans la fenêtre du code : jusqu’à son expiration, ou deux minutes après son usage si c’est plus tard', () => {
+    // Sans limite, quiconque a vu le code une fois le rejouerait des jours plus
+    // tard (« code oublié » depuis un téléphone inconnu, Oxygen, 2026-11-18).
+    const utilise = (utiliseLe) => actif({ utiliseLe, utilisePar: 'cpt-1', objet: 'liaison' })
+    const fin = T + DUREE_CODE_MS
+    expect(MARGE_REJEU_MS).toBe(2 * 60 * 1000)
+    // Utilisé tôt : la fenêtre s'arrête à l'expiration.
+    expect(decider(utilise(T), '111111', { maintenantMs: fin - 1 })).toEqual({ rejoue: true })
+    expect(decider(utilise(T), '111111', { maintenantMs: fin })).toEqual({ refus: 'code_deja_utilise' })
+    // Utilisé à la dernière minute : deux minutes de plus, pour une réponse perdue.
+    const tard = fin - 30_000
+    expect(decider(utilise(tard), '111111', { maintenantMs: tard + MARGE_REJEU_MS - 1 })).toEqual({ rejoue: true })
+    expect(decider(utilise(tard), '111111', { maintenantMs: tard + MARGE_REJEU_MS })).toEqual({ refus: 'code_deja_utilise' })
+    // Des jours plus tard : refusé.
+    expect(decider(utilise(T), '111111', { maintenantMs: T + 3 * 86_400_000 })).toEqual({ refus: 'code_deja_utilise' })
   })
 
   it('[TC-376-13] déjà utilisé par un autre compte, ou pour un autre objet', () => {

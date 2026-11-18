@@ -115,10 +115,20 @@ export const enMs = (valeur) => {
  *   même réponse, pas « déjà utilisé » — l'agent se croirait refusé alors qu'il
  *   est relié. Un rejeu, c'est le même code, le même compte, le même objet.
  *
+ * ⚠ ET IL NE VAUT QUE DANS LA FENÊTRE DU CODE : jusqu'à son expiration, ou
+ *   `MARGE_REJEU_MS` après son usage si c'est plus tard (un code consommé à la
+ *   dernière minute, dont la réponse se perd). Sans limite, quiconque a vu le
+ *   code une fois — la caissière, un voisin de guichet — le rejouerait des
+ *   jours plus tard ; avec le « code oublié » d'Oxygen depuis un téléphone
+ *   inconnu, ce serait prendre le compte (convenu avec Oxygen le 2026-11-18).
+ *
  * @param {object|null} doc  le document `codesLiaisonOxygen/{clientId}`
  * @param {{empreinte: string, compteOxygen: string, objet: 'liaison'|'code_secret', maintenantMs: number}} saisie
  * @returns {{accepte: true} | {rejoue: true} | {refus: string, echecs?: number, epuise?: true}}
  */
+/** Ce qu'un rejeu garde après l'usage d'un code : le temps d'une réponse perdue. */
+export const MARGE_REJEU_MS = 2 * 60 * 1000
+
 export function verifierCode(doc, { empreinte, compteOxygen, objet, maintenantMs }) {
   if (!doc) return { refus: 'code_incorrect' }
 
@@ -128,9 +138,9 @@ export function verifierCode(doc, { empreinte, compteOxygen, objet, maintenantMs
 
   if (memeEmpreinte(empreinte, doc.codeHache)) {
     if (utilise) {
-      return doc.utilisePar === compteOxygen && doc.objet === objet
-        ? { rejoue: true }
-        : { refus: 'code_deja_utilise' }
+      const memeGeste = doc.utilisePar === compteOxygen && doc.objet === objet
+      const dansLaFenetre = maintenantMs < Math.max(enMs(doc.expireLe), enMs(doc.utiliseLe) + MARGE_REJEU_MS)
+      return memeGeste && dansLaFenetre ? { rejoue: true } : { refus: 'code_deja_utilise' }
     }
     if (echecs >= ECHECS_MAX) return { refus: 'code_annule' }
     if (expire) return { refus: 'code_expire' }
