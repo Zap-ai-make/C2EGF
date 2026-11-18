@@ -1012,3 +1012,200 @@ Le siège donne du stock à crédit aux agents la nuit ; le lendemain, l'agent r
   - **Conception** : `docs/superpowers/specs/2026-11-17-numeros-boutique-design.md`.
 - **Ordre de déploiement, functions d'abord, puis le front** (un front sans ses functions verrait chaque saisie refusée « Commande inconnue. ») : `storeTransactionCommand`, `addTransactionPayment`, `addTransactionRefund`, `listOutstandingDrafts`, `listClientHistory`, `pointEntreeOxygen`. Les fonctions de collaboration n'ont reçu qu'une constante inutilisée du profil généré : leur redéploiement n'est pas nécessaire. Procédure : `docs/deployer-les-functions.md`. Geste humain.
 - **Observé à l'essai, non corrigé (commun à toute non terminée)** : une ligne annulée peut réapparaître depuis le cache si le réseau tombe dans la seconde qui suit l'annulation, avant que l'écoute n'ait reçu la suppression ; elle disparaît au retour du réseau. Le même mécanisme vaut pour un dépôt annulé.
+
+## 11. Audit complet — 18 novembre 2026
+
+Branche `feat/espace-patron`, HEAD `3b397e3` : la production, plus une note de bilan locale. Aucun fichier suivi n'a été modifié par l'audit ; le seul fichier ajouté est `audit/captures-18-11.mjs`, non suivi comme `captures-31-10.mjs`.
+
+**Le périmètre.** Depuis l'audit complet du 31 octobre (`2165ccb`), 146 commits ont été faits, et 126 fichiers ont changé dans `src`, `functions/src`, `config`, `scripts`, `firestore.rules`, `firestore.indexes.json` et `vercel.json` : 8 692 lignes ajoutées, 938 retirées. Ils portent :
+- le travail sans connexion (lots G0 à G4, H) ;
+- l'annuaire des clients en 64 tranches ;
+- l'espace du patron et la création de boutique ;
+- la liaison à l'app Oxygen, ses demandes d'agent et les numéros de la boutique ;
+- le remboursement au siège ;
+- les filtres des non terminées.
+
+**La méthode** est celle d'`ADOPTION.md`, en trois passes : sécurité, cinq piliers, interface.
+- **Lecture** : les frontières de confiance nées depuis le 31 octobre ont été lues en entier, et le reste couvert par recherches transversales. Ce n'est pas une lecture ligne par ligne de tout le dépôt.
+- **Hors du périmètre** : aucun déploiement, aucun accès à la console, aucune écriture en production. Les émulateurs ont tourné sur des projets `demo-*`.
+- **Production** : la seule lecture est celle du JavaScript public servi par c2egf.vercel.app.
+
+### Synthèse
+
+**Le socle tient.**
+
+- **Règles.** Les blocs ajoutés sont fermés :
+  - l'annuaire se lit exactement comme `globalClients`, et personne ne l'écrit depuis un navigateur ;
+  - liaisons et codes Oxygen sont fermés à tous ;
+  - le journal des liaisons n'est lisible que par le patron ;
+  - les demandes d'agent sont lisibles par leur seule boutique.
+
+  Les six reproductions des faiblesses de septembre restent fermées.
+- **Point d'entrée Oxygen.**
+  - Seul le compte de service d'Oxygen peut l'appeler, et sans projet reconnu, l'accès est refusé à tous (`private`).
+  - Les entrées sont validées par liste blanche et formats stricts, les actions choisies par une table fermée.
+  - Les codes de liaison sont hachés et annulés au cinquième échec.
+- **Commandes.**
+  - `storeTransactionCommand`, les règlements et `creerBoutique` relisent profil et boutique dans leur transaction et valident chaque entrée.
+  - Les nouveaux gestes (demandes d'agent, numéros, remboursement au siège) écrivent leur journal et se rejouent sans s'appliquer deux fois.
+  - `creerBoutique` est réservée au patron, et retire le compte si l'écriture échoue.
+- **Hygiène.**
+  - Aucun HTML brut, aucun `eval`, aucun `console.log`, aucun secret dans 2 392 blobs Git.
+  - Aucun avis de dépendance haut ou critique non traité.
+  - La politique de contenu de `vercel.json` n'a pas changé.
+- **Interface.** Les 24 captures (banc du 31 octobre et nouveaux écrans, deux largeurs) n'ont aucun débordement, aucun champ ni bouton sans nom, et aucune erreur console. UI-03 est donc bien corrigé.
+- **Poids.** Au démarrage : `index` 426,78 kB et le morceau partagé 686,16 kB, soit environ 1 113 kB, contre 1 243 kB d'un seul bloc le 31 octobre.
+
+**Un constat important, et cinq mineurs.**
+
+- **SEC-14, important.** Le garde-fou du numéro dealer ne garde rien. Le journal où chaque changement est inscrit n'est lisible que par la boutique elle-même ; ni le patron ni aucun écran ne le lit.
+- **PERF-05.** Le point d'entrée Oxygen sert une requête à la fois.
+- **SEC-15.** Une opération peut être antidatée jusqu'à 7 jours, sans que rien ne le montre.
+- **UI-05.** Chaque refus du serveur s'affiche suivi de « [400] ».
+- **SEC-16.** Les caissières peuvent lire le compte Oxygen de l'agent.
+- **UI-06.** Sur téléphone, les boutons d'une demande d'agent sont hors de l'écran.
+
+Rien de critique.
+
+### Vérifications exécutées
+
+| Contrôle | Résultat |
+|---|---|
+| `npm run quality:check` | **Réussi** (code 0, 579 s) |
+| `check:generated` · `check:secrets` · `lint` | Les quatre artefacts correspondent au profil (règles, dealer, boutique, Oxygen) · aucune signature dans les fichiers suivis · réussi |
+| `check:audit` | Aucun avis haut ou critique non traité, à la racine ni dans `functions`. Une exception active, inchangée : GHSA-m9gg-hp2v-232j (`@grpc/grpc-js`), depuis le 2026-10-23 |
+| `test:unit` | **149 fichiers, 3 481 tests réussis** (3 143 le 31 octobre) |
+| `test:components` | **74 fichiers, 902 tests réussis** (685) |
+| `npm run build` | `index` **426,78 kB, gzip 134,06** ; morceau partagé `jsx-runtime` **686,16 kB, gzip 206,24**, chargé au démarrage ; `Dashboard` 392,80 kB ; xlsx 491,98 kB ; `PanneauAssistant` 115,32 kB, au premier clic. Rolldown avertit d'un morceau de plus de 500 kB |
+| Règles Firestore, `demo-akayis-test` | **23 fichiers, 456 tests réussis**, en une passe, sans dépassement de délai (QUA-09 tient) |
+| Intégration, `demo-akayis-test` | **2 fichiers, 42 tests réussis** |
+| Functions, `demo-akayis-test` | **32 fichiers, 683 tests réussis** (444) |
+| Functions bout-en-bout, `demo-akayis-test` | **3 fichiers, 40 tests réussis**, avec `FUNCTIONS_DISCOVERY_TIMEOUT=120` |
+| `audit/reproduce-rules.mjs` | **6 scénarios fermés** (SEC-01 à SEC-05) |
+| `audit/scan-secrets.mjs` | **2 392 blobs texte Git examinés, aucune signature** |
+| `audit/inventory.mjs` | 763 fichiers suivis, 362 fichiers source, 62 795 lignes ; **44 fenêtres identiques** (41). Hors du graphe de `main.jsx`, seulement les modules connus (`ProtectedRoute`, banc et doublures) |
+| `jscpd`, `knip` | **Non lancés** : ils ne sont pas installés dans le dépôt, et l'audit ne télécharge rien |
+| Banc du 31 octobre (`audit/captures-31-10.mjs`) | Six espaces en **1 440 et 390 px** : aucun débordement, aucun champ ni bouton sans nom, aucune image sans texte, aucune erreur console |
+| Nouveaux écrans (`audit/captures-18-11.mjs`, émulateurs `demo-c2egf-local`) | Transactions avec deux demandes d'agent, Profil et sa carte des numéros, Clients, Historique, et pour le patron Clients et Boutiques, en **1 440 et 390 px** : mêmes zéros. Voir UI-06 |
+| Bundle de production | La clé de site reCAPTCHA et le code d'App Check sont présents (SEC-11, ci-dessous) |
+| `npm outdated` | Voir QUA-08 (suite) |
+
+### SEC-14 — Le journal des numéros de la boutique n'est lu par personne
+
+**IMPORTANT · effort S à M · décision de l'utilisateur.**
+
+- **Le contexte.** Depuis le 17 novembre, la boutique saisit elle-même son numéro dealer, la SIM où les agents envoient leurs unités lors d'un retrait. L'utilisateur a accepté le risque qu'une boutique y mette une autre SIM, avec un garde-fou : chaque changement va au journal, avec l'avant et l'après.
+- **Le défaut.** Ce journal est `clients/{boutique}/auditLogs`, et ses règles n'en ouvrent la lecture qu'aux membres de la boutique (`firestore.rules`, `match /auditLogs` sous `match /clients/{storeId}`). Le patron ne peut pas le lire, et aucun écran ne l'affiche.
+- **L'effet.** Si une boutique mettait sa propre SIM, seule elle-même (et quiconque ouvre la console Firebase) pourrait le voir. Les unités envoyées par les agents seraient perdues pour eux, sans que personne au réseau ne le sache.
+- **Correction proposée**, au choix de l'utilisateur :
+  - afficher les deux numéros, et la date du dernier changement, sur la page Boutiques du patron ;
+  - ou ouvrir au patron la lecture de ce journal ;
+  - ou revenir à la saisie par le patron, que l'audit recommandait le 17 novembre.
+
+  Dans les trois cas, un test fixe qui voit quoi.
+
+### PERF-05 — Le point d'entrée Oxygen sert une requête à la fois
+
+**MINEUR, à mesurer avant d'élargir · effort S.**
+
+- **Le réglage.** `pointEntreeOxygen` tourne avec `maxInstances: 1` et `cpu: 'gcf_gen1'` (1/6 de vCPU). La documentation de firebase-functions le dit : sous un vCPU, une instance ne sert qu'**une** requête à la fois. Ce choix, pris pour le quota Cloud Run, n'est écrit nulle part comme une limite de débit.
+- **La charge.** Depuis les demandes d'agent, l'Accueil d'Oxygen relit `lireDemandes` toutes les 10 s pour chaque agent qui attend une réponse. S'y ajoutent `listerBoutiques`, `demander`, l'activité et les liaisons.
+- **L'effet.** À l'échelle du pilote, rien. Avec plusieurs dizaines d'agents en attente au même moment, ou pendant un démarrage à froid, les requêtes s'attendent. Au-delà de 30 s, Oxygen dit à l'agent « distributeur injoignable ».
+- **Correction proposée** :
+  - après une semaine d'usage, lire dans Cloud Run la latence et le nombre de refus 429 de ce service ;
+  - s'ils montent, passer à 2 ou 3 instances, ce qui pèse sur le quota CPU de us-central1 ;
+  - dans tous les cas, écrire la limite dans `docs/deployer-les-functions.md`.
+
+### SEC-15 — Une opération antidatée jusqu'à 7 jours ne se voit nulle part
+
+**MINEUR · effort S.**
+
+- **Le mécanisme.** Partie en retard, une saisie garde le jour où elle a eu lieu (lot G4a) : le poste envoie un âge (`ageMs`), le serveur le retranche de son heure, dans la limite de 7 jours (`instantDeLaCaisse.js`). Le serveur garde aussi l'heure réelle de réception, `recuLe`.
+- **Le défaut.** `recuLe` n'est lu par aucun écran, aucun rapport, aucune function. L'âge vient du poste : un appel construit à la main peut ranger une opération dans un jour passé, déjà relu par le patron, et rien ne la distingue d'une saisie à l'heure.
+- **Correction proposée** : dans le détail d'une ligne de l'historique, et pour le patron, afficher « saisie hors ligne, reçue le … » quand `recuLe` existe.
+
+### UI-05 — Chaque refus du serveur s'affiche suivi de « [400] »
+
+**MINEUR · effort S · commun à tout le CRM.**
+
+- **La cause.** Le SDK Firebase ajoute le code HTTP au message de toute erreur d'une function (`@firebase/functions`, `_errorForResponse`). La caissière lit donc « Numéro dealer Orange : 8 chiffres. [400] », ou « Cette demande a déjà été acceptée. [400] ».
+- **Correction proposée** : `storeTransactionCommandService.js` traduit déjà « internal [0] » (TC-356). Retirer le suffixe ` [nnn]` dans `callableError`, et dans les autres enveloppes de callables, avec un test qui le fixe.
+
+### SEC-16 — Les caissières peuvent lire le compte Oxygen de l'agent
+
+**MINEUR · effort S · ouvert depuis la relecture du 17 novembre.**
+
+- **Le défaut.** Le document `clients/{boutique}/demandesAgent/{clé}` porte `compteOxygen` et `liaisonId`, que la règle laisse lire à toute la boutique. L'écran ne les montre pas, mais un poste peut les lire.
+- **Correction proposée** : ranger ces deux champs hors de ce que la caisse lit, avec Oxygen au courant, puisque `lireDemandes` filtre sur `compteOxygen`.
+
+### UI-06 — Sur téléphone, les boutons d'une demande d'agent sont hors de l'écran
+
+**MINEUR · effort M.**
+
+- **Le défaut.** À 390 px, le tableau des non terminées défile dans son cadre : les gestes d'une ligne (Non terminée, Valider, Rejeter pour une demande) sont à droite, hors de l'écran, et le bouton rond de l'assistant recouvre une colonne.
+- **La portée.** C'était déjà le cas pour toute ligne non terminée. La caisse travaille sur PC, d'où le classement en mineur.
+- **Correction proposée** : sur téléphone, présenter chaque ligne en carte, avec ses gestes dessous.
+
+### SEC-11 — App Check : la clé est en ligne, l'application d'App Check reste à confirmer
+
+Son statut n'avait pas été mis à jour depuis le 31 octobre.
+- **Vérifié le 18 novembre** : le JavaScript de production contient la clé de site reCAPTCHA et le code d'App Check. La variable est donc dans Vercel, et un build déployé la porte.
+- **Hors de portée d'un agent** : l'application (« enforce ») d'App Check sur AI Logic dans la console.
+- **À confirmer par l'utilisateur** : une question posée à l'assistant en production reçoit-elle sa réponse ?
+
+### QUA-05 (suite) et QUA-08 (suite)
+
+- **Gros modules.** Pas un défaut, mais à découper quand on les touchera :
+  - `storeTransactionCommand.js` a presque doublé (703 → 1 208 lignes). Il porte maintenant les demandes d'agent et les numéros de la boutique, qui ne sont pas des transactions : ils y sont pour ne pas ajouter de function au quota Cloud Run ;
+  - `TransactionTable.jsx` : 849 → 1 147 lignes ;
+  - `transactions.jsx` : 581 → 854 lignes ;
+  - `firestore.js` : 1 247 → 1 433 lignes.
+- **Dépendances.** Aucune n'a d'avis bloquant.
+  - Mineures en retard : `firebase` 13.1.0 → 13.4.0, `firebase-admin` 14.5.0 → 14.5.1 (racine et `functions`), `vite` 8.3.5 → 8.3.8, `vitest` 5.0.5 → 5.1.1, `eslint` 10.13 → 10.15, `lucide-react` 1.66 → 1.75, `@playwright/test` 1.62 → 1.65.
+  - Majeures disponibles : `vite-plugin-pwa` 2.0, `@testing-library/jest-dom` 7, `globals` 17, `eslint-plugin-react-refresh` 0.5.
+  - À traiter comme en novembre : un paquet par commit, toutes les suites à chaque fois.
+
+### Rappels : des limites acceptées, que les nouveautés élargissent
+
+- **Liaison Oxygen.** N'importe quelle boutique peut générer un code de liaison pour n'importe quel agent (règle 10 du contrat). La caissière est la seule barrière, et chaque code est journalisé. Depuis les demandes d'agent, un compte Oxygen relié à la mauvaise fiche peut lire l'activité de l'agent et envoyer des demandes à son nom. Un dépôt part toutefois vers le code de la fiche, pas vers le demandeur.
+- **Copie de l'annuaire.** Elle reste sur l'appareil après la déconnexion (lot G2), environ 15 700 fiches. Un accès physique à un poste suffit pour la lire.
+- **Toujours ouvert, validation humaine**, inchangé depuis le 31 octobre ([REPRISE-APRES-URGENCE.md](REPRISE-APRES-URGENCE.md)) :
+  - `enforceAppCheck: false`, et aucune limite par acteur sur les callables ;
+  - la durée et la révocation des sessions ;
+  - les sauvegardes, PITR et la preuve de restauration ;
+  - l'IAM, les alertes et les en-têtes réellement servis.
+
+### Vérifié et sain
+
+- **`firestore.rules`** : les 53 lignes ajoutées depuis le 31 octobre ne laissent écrire aucun navigateur. L'annuaire a la même lecture que `globalClients` (`hasProfile() || isSystemManager()`).
+- **`pointEntreeOxygen`** :
+  - un refus métier en 200, une panne en 400, 403 ou 500, jamais confondus ;
+  - aucune lecture sans borne : 50 lignes au plus pour les boutiques servies, 200 pour les demandes ;
+  - `dealer` rendu seulement pour un retrait, relu au moment de la réponse, et jamais un numéro non conforme.
+- **`genererCodeLiaison`** : le compte boutique seul, un code par fiche (le nouveau annule l'ancien), haché, valable 15 minutes, journalisé avec la boutique.
+- **`creerBoutique`** : le patron seul. Un nom ou un e-mail déjà pris est refusé, et un second clic rend la boutique déjà créée au lieu d'une erreur.
+- **Règlements et remboursement au siège** :
+  - un numéro déjà porté par l'historique est refusé (`IDEMPOTENCY_CONFLICT`) ;
+  - un remboursement au siège ne se règle ni ne se rembourse par tranche ;
+  - les refus métier arrivent lisibles (BUG-09 tient).
+- **Demandes d'agent** :
+  - l'opération est datée par le serveur ;
+  - le rejeu ne s'applique pas deux fois, et un autre statut reçoit `DEMANDE_CLOSE` ;
+  - accepter et rejeter ne passent jamais par la file d'envoi ;
+  - la caisse n'affiche que les demandes confirmées par le serveur.
+- **File d'envoi** : une base par compte. La déconnexion est refusée tant qu'une opération attend.
+
+### Plan de remédiation proposé
+
+| Lot | Contenu | Critère de sortie |
+|---|---|---|
+| D1 — décision | SEC-14 : qui voit le numéro dealer et ses changements | L'utilisateur choisit ; un test rouge puis vert fixe ce que le patron voit |
+| D2 | UI-05 : le suffixe « [400] » retiré de tous les messages de refus | Un test rouge puis vert sur `callableError` ; aucun message de refus ne finit par ` [nnn]` |
+| D3 | SEC-15 : « saisie hors ligne, reçue le … » dans le détail des lignes antidatées | Un test de composant ; une capture |
+| D4 — mesure | PERF-05 : latence et refus 429 du point d'entrée après une semaine d'usage | Les chiffres dans le bilan ; la limite écrite dans `docs/deployer-les-functions.md` |
+| Backlog | SEC-16 (avec Oxygen), UI-06, QUA-05 suite, QUA-08 suite (un paquet par commit) | Comme le 2 novembre, un commit par point |
+| A — humain | SEC-11 : confirmer qu'App Check est appliqué à AI Logic, et que l'assistant répond en production | Une question posée en production reçoit sa réponse |
+
+Une correction métier et un nettoyage ne partagent pas un lot. D1 et D3 touchent l'écran et peut-être les règles ; leurs déploiements restent une décision humaine.
+
+**Point d'arrêt `ADOPTION.md`** : rien n'est corrigé tant que l'utilisateur n'a pas validé le périmètre.
