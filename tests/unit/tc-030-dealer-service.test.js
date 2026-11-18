@@ -848,4 +848,21 @@ describe('listNetworkCaisses', () => {
 
     await expect(listNetworkCaisses()).rejects.toThrow('Accès refusé')
   })
+
+  it('[CAI-09] chaque caisse porte les numéros de la boutique et la date de leur dernier changement, lus sur la même fiche', async () => {
+    // Constat SEC-14 de l'audit du 18 novembre : le patron doit voir quand une
+    // boutique change son numéro dealer. Aucune lecture de plus : la fiche est
+    // celle que l'écoute partagée lit déjà.
+    const le18 = new Date(2026, 10, 18, 10, 42)
+    mocks.lireBoutiquesActives.mockResolvedValueOnce([
+      { id: 'store-a', data: () => ({ name: 'A', active: true, flotte: '70111111', dealer: { Orange: '76111111' }, numerosModifiesLe: { toDate: () => le18 } }) },
+      { id: 'store-b', data: () => ({ name: 'B', active: true }) },
+    ])
+    mocks.getDocs.mockResolvedValueOnce(makeBalancesSnap([]))
+
+    const { caisses } = await listNetworkCaisses()
+
+    expect(caisses[0].numeros).toEqual({ flotte: '70111111', dealer: '76111111', modifiesLe: le18 })
+    expect(caisses[1].numeros).toEqual({ flotte: null, dealer: null, modifiesLe: null })
+  })
 })

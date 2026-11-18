@@ -42,6 +42,16 @@ Ce qui change côté CRM :
 - `demande.dealer` reste dans la réponse de `demander` tant que l'app v7 le lit. Oxygen préviendra quand il pourra partir.
 - **Risque restant**, noté des deux côtés : le premier numéro retenu n'est vérifié par personne. La seconde barrière est le nom qu'Orange affiche avant le code secret, « ANSI SAWADOGO MORE C2EGF BURKINA » pour toutes les SIM dealer C2EGF, selon l'utilisateur.
 
+### Côté patron (2026-11-18, accord de l'utilisateur, constat SEC-14 de l'audit)
+
+Le patron doit savoir qu'une boutique a changé son numéro dealer, et lequel : c'est lui qui débloquera le retrait chez Oxygen.
+- **Écriture** : `updateStoreNumbers` écrit `numerosModifiesLe` (heure du serveur) sur la fiche à chaque changement réel, première saisie comprise.
+- **Lecture** : `listNetworkCaisses` ajoute à chaque caisse `numeros: { flotte, dealer, modifiesLe }` (`null` s'ils manquent), lus sur la fiche que l'écoute partagée lit déjà. Aucune lecture de plus.
+- **Affichage**, sous le nom de chaque boutique de la page Boutiques :
+  - « Flotte 70 11 22 33 · Dealer Orange 76 44 55 66 · changés le 18/11 à 10:42 » ;
+  - un changement de moins de 7 jours est écrit en orange (`warn`). La première saisie aussi : c'est elle qu'Oxygen retient sans vérification ;
+  - une boutique sans numéro affiche « Numéros non saisis ».
+
 ## Comment
 
 ### Données

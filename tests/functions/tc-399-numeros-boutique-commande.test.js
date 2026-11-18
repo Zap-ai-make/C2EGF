@@ -1,6 +1,6 @@
 import { beforeAll, afterAll, beforeEach, describe, expect, it } from 'vitest'
 import { initializeApp, getApps, deleteApp } from 'firebase-admin/app'
-import { getFirestore, FieldValue } from 'firebase-admin/firestore'
+import { getFirestore, FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { storeTransactionCommandHandler } from '../../functions/src/storeTransactions/storeTransactionCommand.js'
 
 /**
@@ -81,6 +81,19 @@ describe('TC-399 — la boutique enregistre ses numéros', () => {
       .rejects.toMatchObject({ code: 'STORE_TRANSACTION_INVALID', message: 'Réseau inconnu : Moov.' })
     expect(await fiche()).toEqual({ active: true, name: 'Boutique N' })
     expect(await journal()).toEqual([])
+  })
+
+  it('[TC-399-05] chaque vrai changement date la fiche (numerosModifiesLe), pour que le patron le voie', async () => {
+    // Constat SEC-14 de l'audit du 18 novembre : le journal n'est lu que par la
+    // boutique. La date sur la fiche, que le patron lit déjà, dit quand.
+    const avant = Date.now() - 5000
+    await enregistrer('70123456', { Orange: '76543210' })
+    const premiere = (await fiche()).numerosModifiesLe
+    expect(premiere).toBeInstanceOf(Timestamp)
+    expect(premiere.toMillis()).toBeGreaterThanOrEqual(avant)
+    // Rien à changer : la date ne bouge pas.
+    await enregistrer('70 12 34 56', { Orange: '76543210' })
+    expect((await fiche()).numerosModifiesLe.isEqual(premiere)).toBe(true)
   })
 
   it('[TC-399-04] rien à changer : aucune écriture, aucune ligne au journal', async () => {

@@ -51,6 +51,40 @@ import NouvelleBoutique from '../../components/patron/NouvelleBoutique.jsx'
  */
 const montantCaisse = (v) => (v === null || v === undefined ? 'Inconnu' : formatCurrency(v))
 
+/**
+ * Les numéros de la boutique, sous son nom : « Flotte 70 11 22 33 · Dealer
+ * Orange 76 44 55 66 · changés le 18/11 à 10:42 ».
+ *
+ * ⚠ UN CHANGEMENT RÉCENT RESSORT, PREMIÈRE SAISIE COMPRISE. Le numéro dealer est
+ *   celui où les agents envoient leurs unités ; Oxygen retient le premier sans
+ *   vérification, et bloque le retrait quand il change jusqu'à ce que le patron
+ *   débloque. C'est ici qu'il voit quoi vérifier (constat SEC-14, audit du 18
+ *   novembre 2026). Le journal de la boutique, lui, ne lui est pas ouvert.
+ */
+const RECENT_MS = 7 * 24 * 3_600_000
+const enPaires = (numero) => numero.replace(/(\d{2})(?=\d)/g, '$1 ')
+const deuxChiffres = (n) => String(n).padStart(2, '0')
+const jourHeure = (d) => `${deuxChiffres(d.getDate())}/${deuxChiffres(d.getMonth() + 1)} à ${deuxChiffres(d.getHours())}:${deuxChiffres(d.getMinutes())}`
+
+function NumerosBoutique({ storeId, numeros }) {
+  const { flotte, dealer, modifiesLe } = numeros ?? {}
+  if (!flotte && !dealer) {
+    return <p data-testid={`numeros-${storeId}`} className="mt-0.5 text-xs text-ink-muted">Numéros non saisis</p>
+  }
+  const recent = modifiesLe instanceof Date && Date.now() - modifiesLe.getTime() < RECENT_MS
+  const parties = [flotte && `Flotte ${enPaires(flotte)}`, dealer && `Dealer ${DEALER_NETWORK} ${enPaires(dealer)}`].filter(Boolean)
+  return (
+    <p data-testid={`numeros-${storeId}`} className="mt-0.5 text-xs tabular-nums text-ink-muted">
+      {parties.join(' · ')}
+      {modifiesLe instanceof Date && (
+        <span data-testid={`numeros-date-${storeId}`} className={recent ? 'font-semibold text-warn' : 'text-ink-muted'}>
+          {` · changés le ${jourHeure(modifiesLe)}`}
+        </span>
+      )}
+    </p>
+  )
+}
+
 /** La note d'une somme : rien si elle est complète, sinon ce qui manque. */
 const noteIllisibles = (illisibles) => (
   illisibles > 0
@@ -441,6 +475,7 @@ function PatronBoutiques() {
                       className="rounded-xl border border-brand-200 bg-surface px-3 py-2.5"
                     >
                       <p className="font-bold text-ink">{c.name ?? c.storeId}</p>
+                      <NumerosBoutique storeId={c.storeId} numeros={c.numeros} />
                       <dl className="mt-2 grid grid-cols-2 gap-1.5 text-sm">
                         <div className="rounded-lg border border-brand-200 bg-canvas px-2 py-1">
                           {/* ⚠ CORRECTION 4 DU BRIEF — PASTILLE, PAS BORDURE.
