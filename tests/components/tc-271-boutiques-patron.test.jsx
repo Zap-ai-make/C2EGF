@@ -485,3 +485,42 @@ describe('TC-271 — la carte du chiffre d’affaires', () => {
     expect(screen.getByRole('alert')).toBeInTheDocument()
   })
 })
+
+/**
+ * Les numéros de chaque boutique, et la date de leur dernier changement
+ * (constat SEC-14 de l'audit du 18 novembre 2026). Le patron débloque chez
+ * Oxygen un retrait dont le numéro dealer a changé : il doit voir lequel,
+ * et quand. Un changement récent, première saisie comprise, ressort en orange.
+ */
+describe('TC-271 — les numéros de la boutique', () => {
+  const deux = (n) => String(n).padStart(2, '0')
+  const jourHeure = (d) => `${deux(d.getDate())}/${deux(d.getMonth() + 1)} à ${deux(d.getHours())}:${deux(d.getMinutes())}`
+  const avecNumeros = (numeros) => {
+    listNetworkCaisses.mockResolvedValue({
+      caisses: [{ ...caisse(1), numeros }, { ...caisse(2), numeros: { flotte: null, dealer: null, modifiesLe: null } }],
+      total: 2, sommeStock: 3000, sommeLiquidite: 1500, illisibles: 0,
+    })
+  }
+
+  it('[TC-271-22] la carte montre flotte et dealer, et un changement de moins de 7 jours ressort', async () => {
+    const recent = new Date(Date.now() - 2 * 3_600_000)
+    avecNumeros({ flotte: '70111111', dealer: '76111111', modifiesLe: recent })
+    render(<PatronBoutiques />)
+    const numeros = await screen.findByTestId('numeros-s1')
+    expect(numeros).toHaveTextContent('Flotte 70 11 11 11')
+    expect(numeros).toHaveTextContent('Dealer Orange 76 11 11 11')
+    const date = screen.getByTestId('numeros-date-s1')
+    expect(date).toHaveTextContent(`changés le ${jourHeure(recent)}`)
+    expect(date).toHaveClass('text-warn')
+  })
+
+  it('[TC-271-23] sans numéro, la carte le dit ; un changement ancien ne ressort pas', async () => {
+    const ancien = new Date(Date.now() - 10 * 86_400_000)
+    avecNumeros({ flotte: null, dealer: '76111111', modifiesLe: ancien })
+    render(<PatronBoutiques />)
+    expect(await screen.findByTestId('numeros-s2')).toHaveTextContent('Numéros non saisis')
+    expect(screen.getByTestId('numeros-s1')).toHaveTextContent('Dealer Orange 76 11 11 11')
+    expect(screen.getByTestId('numeros-s1')).not.toHaveTextContent('Flotte')
+    expect(screen.getByTestId('numeros-date-s1')).not.toHaveClass('text-warn')
+  })
+})

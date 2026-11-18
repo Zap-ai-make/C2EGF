@@ -450,7 +450,10 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       const apres = numerosDe(saisis)
       if (JSON.stringify(avant) === JSON.stringify(apres)) return { numeros: apres, inchange: true }
       // Un numéro vidé efface son champ : la clé disparaît, jamais `null` ni ''.
-      const champs = { flotte: saisis.flotte ?? FieldValue.delete() }
+      // `numerosModifiesLe` : le patron voit quand (constat SEC-14 de l'audit du
+      // 18 novembre), sur la fiche qu'il lit déjà ; le journal, lui, ne lui est
+      // pas ouvert.
+      const champs = { flotte: saisis.flotte ?? FieldValue.delete(), numerosModifiesLe: now }
       for (const reseau of STORE_NETWORKS) champs[`dealer.${reseau}`] = saisis.dealer[reseau] ?? FieldValue.delete()
       t.update(db.doc(`stores/${storeId}`), champs)
       t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, uid, avant, apres, createdAt: now })

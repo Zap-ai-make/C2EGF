@@ -232,9 +232,19 @@ export async function listNetworkCaisses({ network = DEALER_NETWORK } = {}) {
     //   somme des caisses d'un argent qui n'est plus en service.
     const caisses = boutiques.map((d) => {
       const solde = soldes.get(d.id)
+      const fiche = d.data() ?? {}
       return {
         storeId: d.id,
-        name: d.data()?.name ?? null,
+        name: fiche.name ?? null,
+        // Les numéros que la boutique saisit dans son Profil, et la date de leur
+        // dernier changement : le patron voit quand un numéro dealer change
+        // (constat SEC-14 de l'audit du 18 novembre). Même fiche, aucune
+        // lecture de plus.
+        numeros: {
+          flotte: typeof fiche.flotte === 'string' ? fiche.flotte : null,
+          dealer: typeof fiche.dealer?.[network] === 'string' ? fiche.dealer[network] : null,
+          modifiesLe: fiche.numerosModifiesLe?.toDate?.() ?? null,
+        },
         // `null` ≠ 0 : une boutique sans document de soldes n'a pas une caisse
         // vide, elle a une caisse INCONNUE. L'écran doit pouvoir le dire, et la
         // somme doit pouvoir refuser de se prononcer.

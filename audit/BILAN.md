@@ -1092,7 +1092,11 @@ Rien de critique.
 
 ### SEC-14 — Le journal des numéros de la boutique n'est lu par personne
 
-**IMPORTANT · effort S à M · décision de l'utilisateur.**
+**IMPORTANT · effort S à M · décision de l'utilisateur · CORRIGÉ dans le code le 18 novembre 2026 (`be3a2f3`, première option), non déployé.**
+- **Écriture** : chaque vrai changement date la fiche (`numerosModifiesLe`).
+- **Affichage** : la page Boutiques du patron montre flotte, dealer Orange et la date ; un changement de moins de 7 jours, première saisie comprise, ressort en orange (TC-399-05, CAI-09, TC-271-22 et 23).
+- **Oxygen**, le même jour, à l'accord de l'utilisateur : `listerBoutiques` avec `avecToutes` rend le numéro dealer (`0b4643e`, contrat §9.1 v8). Oxygen retient le premier numéro vu et bloque le retrait chez une boutique dont le numéro change, jusqu'au déblocage signé par l'utilisateur.
+- **Essai réel sur émulateurs** : saisie dans le Profil, ligne orange chez le patron à 1440 et 390, numéro dealer dans la liste d'Oxygen.
 
 - **Le contexte.** Depuis le 17 novembre, la boutique saisit elle-même son numéro dealer, la SIM où les agents envoient leurs unités lors d'un retrait. L'utilisateur a accepté le risque qu'une boutique y mette une autre SIM, avec un garde-fou : chaque changement va au journal, avec l'avant et l'après.
 - **Le défaut.** Ce journal est `clients/{boutique}/auditLogs`, et ses règles n'en ouvrent la lecture qu'aux membres de la boutique (`firestore.rules`, `match /auditLogs` sous `match /clients/{storeId}`). Le patron ne peut pas le lire, et aucun écran ne l'affiche.
@@ -1203,7 +1207,7 @@ Son statut n'avait pas été mis à jour depuis le 31 octobre.
 | D2 | UI-05 : le suffixe « [400] » retiré de tous les messages de refus | Un test rouge puis vert sur `callableError` ; aucun message de refus ne finit par ` [nnn]` |
 | D3 | SEC-15 : « saisie hors ligne, reçue le … » dans le détail des lignes antidatées | Un test de composant ; une capture |
 | D4 — mesure | PERF-05 : latence et refus 429 du point d'entrée après une semaine d'usage | Les chiffres dans le bilan ; la limite écrite dans `docs/deployer-les-functions.md` |
-| Backlog | SEC-16 (avec Oxygen), UI-06, QUA-05 suite, QUA-08 suite (un paquet par commit) | Comme le 2 novembre, un commit par point |
+| Backlog | SEC-16 (avec Oxygen), UI-06, QUA-05 suite, QUA-08 suite (un paquet par commit) ; TC-089, fragile sous charge, relevé le 18 novembre : il attend le cadre du formulaire, puis cherche la liste des réseaux encore en chargement (`getByTestId` au lieu de `findByTestId`), un échec sur une suite complète, vert seul et à la relance | Comme le 2 novembre, un commit par point |
 | A — humain | SEC-11 : confirmer qu'App Check est appliqué à AI Logic, et que l'assistant répond en production | Une question posée en production reçoit sa réponse |
 
 Une correction métier et un nettoyage ne partagent pas un lot. D1 et D3 touchent l'écran et peut-être les règles ; leurs déploiements restent une décision humaine.
