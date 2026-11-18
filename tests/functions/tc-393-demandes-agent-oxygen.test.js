@@ -242,16 +242,30 @@ describe('TC-393 — listerBoutiques', () => {
     expect((await lister({ avecToutes: 'oui' })).statut).toBe(400)
   })
 
-  it('[TC-393-20] le numéro flotte accompagne la boutique qui en a un ; jamais de numéro dealer dans la liste', async () => {
-    // Contrat §9 : Oxygen garde la liste 24 h. Un numéro dealer périmé ferait
-    // perdre des unités à l'agent : il n'arrive qu'avec la demande.
+  it('[TC-393-20] le numéro flotte accompagne la boutique qui en a un ; le numéro dealer, seulement la liste complète', async () => {
+    // Contrat §9.1 (v8, 2026-11-18) : Oxygen RETIENT le premier numéro dealer
+    // vu par boutique ; un changement bloque le retrait jusqu'au déblocage
+    // signé par l'utilisateur. Il le lit dans `boutiques`, jamais dans `servies`.
     await db.doc('stores/b1').update({ flotte: '70111111', dealer: { Orange: '76111111' } })
     const r = await lister({ avecToutes: true })
     expect(r.corps.servies).toEqual([
       { id: 'b3', nom: 'Atelier 3', derniereLe: T0 - 1000 },
       { id: 'b1', nom: 'Boutique 1', derniereLe: T0 - 5000, flotte: '70111111' },
     ])
-    expect(r.corps.boutiques).toEqual([{ id: 'b3', nom: 'Atelier 3' }, { id: 'b1', nom: 'Boutique 1', flotte: '70111111' }])
+    expect(r.corps.boutiques).toEqual([
+      { id: 'b3', nom: 'Atelier 3' },
+      { id: 'b1', nom: 'Boutique 1', flotte: '70111111', dealer: { Orange: '76111111' } },
+    ])
+  })
+
+  it('[TC-393-23] un numéro dealer non conforme, ou rangé sous un autre réseau, n’entre pas dans la liste', async () => {
+    await db.doc('stores/b1').update({ dealer: { Orange: '76 11 11 11', Moov: '70000000' } })
+    await db.doc('stores/b3').update({ dealer: { Orange: '76333333', Moov: '70000000' } })
+    const { boutiques } = (await lister({ avecToutes: true })).corps
+    expect(boutiques).toEqual([
+      { id: 'b3', nom: 'Atelier 3', dealer: { Orange: '76333333' } },
+      { id: 'b1', nom: 'Boutique 1' },
+    ])
   })
 
   it('[TC-393-16] une liaison fermée ne liste plus rien', async () => {

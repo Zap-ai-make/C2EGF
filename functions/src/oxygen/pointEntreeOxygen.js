@@ -520,10 +520,28 @@ function avecDealer(demande, fiche) {
   return dealer ? { ...demande, dealer } : demande
 }
 
-/** La boutique telle que la liste la rend : son numéro flotte s'il en a un, jamais le numéro dealer. */
-function boutiqueListee(snap, enPlus = {}) {
+/** Les numéros dealer conformes de la fiche, par réseau ; `undefined` s'il n'y en a aucun. */
+function dealersDe(fiche) {
+  const dealer = {}
+  for (const reseau of STORE_NETWORKS) {
+    const numero = dealerDe(fiche, reseau)
+    if (numero) dealer[reseau] = numero
+  }
+  return Object.keys(dealer).length ? dealer : undefined
+}
+
+/**
+ * La boutique telle que la liste la rend : son numéro flotte s'il en a un.
+ *
+ * Le numéro dealer, seulement dans la liste complète (`avecDealer`), contrat
+ * §9.1 v8 : Oxygen RETIENT le premier numéro vu par boutique et par réseau, et
+ * un numéro qui change bloque le retrait chez elle jusqu'au déblocage signé
+ * par l'utilisateur. Le numéro n'est montré à l'agent que sur l'écran du retrait.
+ */
+function boutiqueListee(snap, enPlus = {}, { avecDealer = false } = {}) {
   const flotte = flotteDe(snap.data())
-  return { id: snap.id, nom: snap.get('name') ?? '', ...enPlus, ...(flotte ? { flotte } : {}) }
+  const dealer = avecDealer ? dealersDe(snap.data()) : undefined
+  return { id: snap.id, nom: snap.get('name') ?? '', ...enPlus, ...(flotte ? { flotte } : {}), ...(dealer ? { dealer } : {}) }
 }
 
 async function demander(corps, { db, Timestamp, maintenant, oxygen }) {
@@ -672,7 +690,7 @@ async function listerBoutiques(corps, { db, oxygen }) {
   const reponse = { ok: true, servies, reseaux: [...STORE_NETWORKS] }
   if (avecToutes) {
     const actives = await db.collection('stores').where('active', '==', true).orderBy('name').get()
-    reponse.boutiques = actives.docs.map((b) => boutiqueListee(b))
+    reponse.boutiques = actives.docs.map((b) => boutiqueListee(b, {}, { avecDealer: true }))
   }
   return repondre(reponse)
 }

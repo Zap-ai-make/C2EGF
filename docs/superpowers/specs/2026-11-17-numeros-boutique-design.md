@@ -23,13 +23,24 @@ Le CRM garde ces deux numéros dans la fiche de chaque boutique, et les rend à 
 - **Format** : 8 chiffres, sans espace ni indicatif. Un numéro absent n'est pas une erreur. Sa clé est omise, jamais `null` ni chaîne vide.
 - **`listerBoutiques`** :
   - chaque boutique de `servies` et de `boutiques` porte en plus `flotte?: string` ;
-  - aucun numéro dealer dans la liste : Oxygen la garde 24 h, et un numéro périmé ferait perdre des unités.
+  - aucun numéro dealer dans la liste : Oxygen la garde 24 h, et un numéro périmé ferait perdre des unités. **Remplacé le 2026-11-18, voir « Version 8 » ci-dessous.**
 - **`demander`** :
   - l'objet `demande` porte en plus `dealer?: string`, le numéro dealer de la boutique pour le réseau de la demande ;
   - **seulement pour un retrait** : sur un dépôt, c'est la boutique qui envoie ;
   - il est lu sur la fiche de la boutique au moment de la réponse, rejeu compris ;
   - il n'est **jamais recopié** dans le document de la demande ;
   - `annuler`, `etatDemande` et `lireDemandes` ne le rendent pas : l'app ne compose que juste après la demande.
+
+## Version 8 (2026-11-18, accord de l'utilisateur)
+
+Le chantier sécurité des codes d'Oxygen (contrat §9.1) :
+- **Rétention** : Oxygen retient le premier numéro dealer vu par boutique et par réseau.
+- **Blocage** : un numéro qui change ensuite bloque le retrait chez cette boutique, pour tous les agents, jusqu'à un déblocage signé par l'utilisateur.
+
+Ce qui change côté CRM :
+- `listerBoutiques` avec `avecToutes: true` : chaque boutique de `boutiques` porte en plus `dealer?: { Orange: '76111111' }`, avec seulement les numéros conformes. Une boutique sans numéro n'a pas la clé. `servies` ne change pas.
+- `demande.dealer` reste dans la réponse de `demander` tant que l'app v7 le lit. Oxygen préviendra quand il pourra partir.
+- **Risque restant**, noté des deux côtés : le premier numéro retenu n'est vérifié par personne. La seconde barrière est le nom qu'Orange affiche avant le code secret, « ANSI SAWADOGO MORE C2EGF BURKINA » pour toutes les SIM dealer C2EGF, selon l'utilisateur.
 
 ## Comment
 
