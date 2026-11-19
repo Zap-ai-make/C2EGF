@@ -260,11 +260,24 @@ describe('TC-377 — relier', () => {
     expect(await relier('1234567', code)).toEqual({ ok: false, raison: 'code_expire' })
   })
 
-  it('[TC-377-22] rejoué par le même compte : la même réponse, une seule liaison', async () => {
+  it('[TC-377-22] rejoué par le même compte dans la fenêtre : la même réponse, une seule liaison', async () => {
     const { code } = await generer('u-a', 'f-awa')
+    // Utilisé à 14 min 30 : la réponse se perd, le rejeu arrive après l'expiration
+    // mais dans les deux minutes qui suivent l'usage.
+    maintenantMs = T0 + DUREE_CODE_MS - 30_000
     const premiere = await relier('1234567', code)
-    maintenantMs = T0 + DUREE_CODE_MS + 1 // le rejeu peut arriver après l'expiration
+    maintenantMs = T0 + DUREE_CODE_MS + 1
     expect(await relier('1234567', code)).toEqual(premiere)
+    expect(await actives()).toHaveLength(1)
+  })
+
+  it('[TC-377-22b] rejoué hors de la fenêtre, même par le même compte : « déjà utilisé »', async () => {
+    // Le rejeu sans limite laissait quiconque avait vu le code s'en resservir
+    // des jours plus tard (Oxygen, « code oublié », 2026-11-18).
+    const { code } = await generer('u-a', 'f-awa')
+    await relier('1234567', code)
+    maintenantMs = T0 + DUREE_CODE_MS + 1
+    expect(await relier('1234567', code)).toEqual({ ok: false, raison: 'code_deja_utilise' })
     expect(await actives()).toHaveLength(1)
   })
 
@@ -345,6 +358,16 @@ describe('TC-377 — consommerPourCodeSecret', () => {
     expect(await consommer(deux.code)).toEqual({ statut: 200, corps: { ok: true } }) // rejeu
     expect((await db.doc(`liaisonsOxygen/${liaison}`).get()).data().finLe).toBeNull()
     expect((await db.doc('codesLiaisonOxygen/f-awa').get()).data()).toMatchObject({ objet: 'code_secret', utilisePar: 'cpt-1' })
+    expect((await journal()).filter((l) => l.issue === 'utilise_code_secret')).toHaveLength(1)
+  })
+
+  it('[TC-377-32] un code secret consommé ne se rejoue plus des jours plus tard', async () => {
+    const un = await generer('u-a', 'f-awa')
+    await relier('1234567', un.code, 'cpt-1')
+    const deux = await generer('u-b', 'f-awa')
+    expect(await consommer(deux.code)).toEqual({ statut: 200, corps: { ok: true } })
+    maintenantMs = T0 + 3 * 86_400_000
+    expect(await consommer(deux.code)).toEqual({ statut: 200, corps: { ok: false, raison: 'code_deja_utilise' } })
     expect((await journal()).filter((l) => l.issue === 'utilise_code_secret')).toHaveLength(1)
   })
 

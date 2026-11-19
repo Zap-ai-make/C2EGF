@@ -1213,3 +1213,17 @@ Son statut n'avait pas été mis à jour depuis le 31 octobre.
 Une correction métier et un nettoyage ne partagent pas un lot. D1 et D3 touchent l'écran et peut-être les règles ; leurs déploiements restent une décision humaine.
 
 **Point d'arrêt `ADOPTION.md`** : rien n'est corrigé tant que l'utilisateur n'a pas validé le périmètre.
+
+### SEC-17 — Un code de liaison consommé se rejouait sans limite de temps (relevé après l'audit, par Oxygen)
+
+**IMPORTANT · effort S · CORRIGÉ dans le code le 18 novembre 2026 (`ada088e`), non déployé.**
+
+- **Le défaut.** `verifierCode` (`functions/src/oxygen/liaison.js`) acceptait le rejeu d'un code consommé (même code, même compte, même usage) sans regarder l'heure. Le rejeu n'existe que pour une réponse perdue, quelques secondes après l'usage.
+- **L'effet.** Avec le « code oublié » qu'Oxygen prépare depuis un téléphone inconnu (code agent + code de liaison), quiconque avait vu un code une fois aurait pu le rejouer des jours plus tard, poser un nouveau code secret et prendre le compte de l'agent. Ce chemin n'était pas en service : le défaut n'était pas exploitable avant lui.
+- **La correction**, convenue avec Oxygen :
+  - un rejeu ne vaut que jusqu'à la plus tardive de deux heures : l'expiration du code (15 min après sa génération), ou son usage + 2 min (`MARGE_REJEU_MS`) ;
+  - au-delà, la réponse est `code_deja_utilise`, que l'app traduit déjà : « Ce code n'est plus valable. Demandez-en un nouveau à la boutique. » ;
+  - la même règle vaut pour les deux usages, relier et code secret ;
+  - tests : TC-376-12b, TC-377-22b et TC-377-32, rouges puis verts. TC-377-22, qui fixait l'ancien rejeu après l'expiration, couvre maintenant le cas légitime : un code utilisé à 14 min 30, rejoué juste après la 15e.
+- **Mise en service** : la function `pointEntreeOxygen`, sur décision de l'utilisateur, **avant** le « code oublié » d'Oxygen depuis un téléphone inconnu.
+
