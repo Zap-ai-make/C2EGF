@@ -1226,4 +1226,5 @@ Une correction métier et un nettoyage ne partagent pas un lot. D1 et D3 touchen
   - la même règle vaut pour les deux usages, relier et code secret ;
   - tests : TC-376-12b, TC-377-22b et TC-377-32, rouges puis verts. TC-377-22, qui fixait l'ancien rejeu après l'expiration, couvre maintenant le cas légitime : un code utilisé à 14 min 30, rejoué juste après la 15e.
 - **Mise en service** : la function `pointEntreeOxygen`, sur décision de l'utilisateur, **avant** le « code oublié » d'Oxygen depuis un téléphone inconnu.
+- **Déployé le 19 novembre 2026** par l'utilisateur, avec `storeTransactionCommand` : le correctif SEC-17, le §9.1 v8 et la date du dernier changement des numéros (SEC-14). Une sonde sans jeton sur `pointEntreeOxygen` répond 403. Oxygen est prévenu. Le front (affichage chez le patron) attend son push.
 
