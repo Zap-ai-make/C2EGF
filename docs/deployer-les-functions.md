@@ -285,6 +285,25 @@ Chaque geste ci-dessous est humain, et l'ordre compte.
 - une page d'activité : environ 5 lectures, plus les lignes rendues.
 Aucune écoute permanente.
 
+### 8.1 Le signal vers Oxygen (contrat demande-operation v9, §10, 2026-11-20)
+
+Quand la caissière valide ou rejette une demande d'agent, `storeTransactionCommand`
+prévient le serveur Oxygen, qui réveille le téléphone de l'agent. Aucun secret, aucun
+droit à changer : le jeton d'identité est celui du compte de service sous lequel tourne
+déjà la function.
+
+1. **L'adresse du compte, pour Oxygen.** Console Google Cloud, Cloud Run,
+   `storetransactioncommand`, onglet Sécurité, « Compte de service ». C'est sans doute
+   le compte par défaut, `594056712396-compute@developer.gserviceaccount.com`. Oxygen
+   n'accepte que les jetons de cette adresse. Elle doit être la même dans les deux
+   régions.
+2. **Oxygen d'abord.** Avant, l'action `signal` répond 400, sans effet.
+3. **Puis `storeTransactionCommand`**, seule. Pas de front.
+4. **Vérifier** : une demande validée réveille l'app à l'instant. Un signal raté laisse
+   une ligne `OXYGEN_SIGNAL_ECHEC` (WARNING) dans les journaux de la function, avec le
+   statut HTTP ou le nom de l'erreur : 401 veut dire que l'adresse donnée à Oxygen n'est
+   pas la bonne.
+
 ---
 
 ## Ce qu'il n'y a PAS à déployer

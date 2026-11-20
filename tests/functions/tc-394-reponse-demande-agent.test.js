@@ -195,3 +195,53 @@ describe('TC-394 — l’opération garde la trace de sa demande (contrat §4.2)
     expect((await db.doc(`clients/${STORE}/drafts/${draftId}`).get()).data().demandeId).toBe('d1')
   })
 })
+
+describe('TC-394 — le signal à Oxygen quand la demande se ferme (contrat v9 §10)', () => {
+  // Le signal relit la demande au moment où il part : il doit partir après l'écriture.
+  const espion = () => {
+    const appels = []
+    const signalerOxygen = async (demandeId) => { appels.push({ demandeId, etat: (await lireDemande(demandeId)).etat }) }
+    return { appels, signalerOxygen }
+  }
+  const avec = (deps) => (data) => storeTransactionCommandHandler(request(data), { db, FieldValue, logWriter: () => {}, ...deps })
+
+  it('[TC-394-16] Valider signale la demande, déjà validée quand le signal part', async () => {
+    const { appels, signalerOxygen } = espion()
+    await avec({ signalerOxygen })({ action: 'acceptAgentRequest', demandeId: 'd1', statut: 'Validée' })
+    expect(appels).toEqual([{ demandeId: 'd1', etat: 'validee' }])
+  })
+
+  it('[TC-394-17] Rejeter signale la demande, déjà rejetée quand le signal part', async () => {
+    const { appels, signalerOxygen } = espion()
+    await avec({ signalerOxygen })({ action: 'rejectAgentRequest', demandeId: 'd1' })
+    expect(appels).toEqual([{ demandeId: 'd1', etat: 'rejetee' }])
+  })
+
+  it('[TC-394-18] ni le rejeu du même geste, ni un refus, ni une autre commande ne signalent', async () => {
+    const { appels, signalerOxygen } = espion()
+    const appeler = avec({ signalerOxygen })
+    await appeler({ action: 'acceptAgentRequest', demandeId: 'd1', statut: 'Non Terminées' })
+    await appeler({ action: 'acceptAgentRequest', demandeId: 'd1', statut: 'Non Terminées' })
+    await appeler({ action: 'validateDraft', draftId: 'd1', direct: true })
+    await db.doc(`clients/${STORE}/demandesAgent/d2`).set(demande({ sens: 'retrait', montant: 90000 }))
+    await expect(appeler({ action: 'acceptAgentRequest', demandeId: 'd2', statut: 'Validée' })).rejects.toMatchObject({ code: 'INSUFFICIENT_STORE_BALANCE' })
+    await db.doc(`clients/${STORE}/demandesAgent/d3`).set(demande())
+    await appeler({ action: 'rejectAgentRequest', demandeId: 'd3' })
+    await appeler({ action: 'rejectAgentRequest', demandeId: 'd3' })
+    expect(appels.map((a) => a.demandeId)).toEqual(['d1', 'd3'])
+  })
+
+  it('[TC-394-19] un signal qui échoue ne change rien pour la caissière : une ligne de journal, c’est tout', async () => {
+    const journal = []
+    const signalerOxygen = async () => { throw Object.assign(new Error('Signal Oxygen : envoi 400'), { statut: 400 }) }
+    const reponse = await avec({ signalerOxygen, logWriter: (ligne) => journal.push(ligne) })({ action: 'acceptAgentRequest', demandeId: 'd1', statut: 'Validée' })
+    expect(reponse).toEqual({ accepted: true, operationId: 'd1', statut: 'Validée' })
+    expect((await lireDemande()).etat).toBe('validee')
+    expect(journal).toContainEqual({ severity: 'WARNING', event: 'OXYGEN_SIGNAL_ECHEC', demandeId: 'd1', statut: 400 })
+
+    const lent = async () => { throw new DOMException('délai', 'TimeoutError') }
+    await db.doc(`clients/${STORE}/demandesAgent/d2`).set(demande())
+    expect(await avec({ signalerOxygen: lent, logWriter: (ligne) => journal.push(ligne) })({ action: 'rejectAgentRequest', demandeId: 'd2' })).toEqual({ rejected: true })
+    expect(journal).toContainEqual({ severity: 'WARNING', event: 'OXYGEN_SIGNAL_ECHEC', demandeId: 'd2', erreur: 'TimeoutError' })
+  })
+})

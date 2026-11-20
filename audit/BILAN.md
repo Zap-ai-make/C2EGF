@@ -1010,6 +1010,12 @@ Le siège donne du stock à crédit aux agents la nuit ; le lendemain, l'agent r
     - le front a été poussé à 16:36 UTC (00e1b55), et le bundle de production contenait la carte du Profil à 16:40 UTC ;
     - Oxygen a été prévenu ; il déploie sa fonction (f6b65ae) sur l'accord de l'utilisateur.
   - **Conception** : `docs/superpowers/specs/2026-11-17-numeros-boutique-design.md`.
+- **Le signal à Oxygen (20 novembre, contrat v9 §10, à la demande de l'utilisateur)** :
+  - **Pourquoi** : l'agent voit à l'instant la réponse de la caissière, au lieu de jusqu'à 10 s. L'app Oxygen ne relit plus l'état que toutes les 30 s : trois fois moins d'appels à `pointEntreeOxygen`.
+  - **Serveur** : après `acceptAgentRequest` ou `rejectAgentRequest`, `storeTransactionCommand` envoie à Oxygen un signal sans contenu (l'identifiant de la demande). Le jeton d'identité vient du serveur de métadonnées, sans dépendance ajoutée. Un seul appel, 3 s au plus, jamais pour un rejeu ; rien sur un projet `demo-*` (TC-401, TC-394-16 à 19).
+  - **La caissière** : jamais d'erreur à cause du signal ; un échec laisse une ligne `OXYGEN_SIGNAL_ECHEC` au journal. Le signal est attendu (Cloud Run gèle l'instance après la réponse), mais sa carte disparaît dès l'écriture.
+  - **Non déployé.** Ordre : l'utilisateur confirme l'adresse du compte de service, Oxygen met l'action `signal` en ligne, puis l'utilisateur déploie `storeTransactionCommand`. Pas de front. Procédure : `docs/deployer-les-functions.md` §8.1.
+  - **Conception** : `docs/superpowers/specs/2026-11-20-signal-oxygen-design.md`.
 - **Ordre de déploiement, functions d'abord, puis le front** (un front sans ses functions verrait chaque saisie refusée « Commande inconnue. ») : `storeTransactionCommand`, `addTransactionPayment`, `addTransactionRefund`, `listOutstandingDrafts`, `listClientHistory`, `pointEntreeOxygen`. Les fonctions de collaboration n'ont reçu qu'une constante inutilisée du profil généré : leur redéploiement n'est pas nécessaire. Procédure : `docs/deployer-les-functions.md`. Geste humain.
 - **Observé à l'essai, non corrigé (commun à toute non terminée)** : une ligne annulée peut réapparaître depuis le cache si le réseau tombe dans la seconde qui suit l'annulation, avant que l'écoute n'ait reçu la suppression ; elle disparaît au retour du réseau. Le même mécanisme vaut pour un dépôt annulé.
 
