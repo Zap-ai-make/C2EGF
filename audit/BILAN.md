@@ -1092,7 +1092,7 @@ Rien de critique.
 
 ### SEC-14 — Le journal des numéros de la boutique n'est lu par personne
 
-**IMPORTANT · effort S à M · décision de l'utilisateur · CORRIGÉ dans le code le 18 novembre 2026 (`be3a2f3`, première option), non déployé.**
+**IMPORTANT · effort S à M · décision de l'utilisateur · CORRIGÉ le 18 novembre 2026 (`be3a2f3`, première option) · EN PRODUCTION le 20 novembre 2026.**
 - **Écriture** : chaque vrai changement date la fiche (`numerosModifiesLe`).
 - **Affichage** : la page Boutiques du patron montre flotte, dealer Orange et la date ; un changement de moins de 7 jours, première saisie comprise, ressort en orange (TC-399-05, CAI-09, TC-271-22 et 23).
 - **Oxygen**, le même jour, à l'accord de l'utilisateur : `listerBoutiques` avec `avecToutes` rend le numéro dealer (`0b4643e`, contrat §9.1 v8). Oxygen retient le premier numéro vu et bloque le retrait chez une boutique dont le numéro change, jusqu'au déblocage signé par l'utilisateur.
@@ -1216,7 +1216,7 @@ Une correction métier et un nettoyage ne partagent pas un lot. D1 et D3 touchen
 
 ### SEC-17 — Un code de liaison consommé se rejouait sans limite de temps (relevé après l'audit, par Oxygen)
 
-**IMPORTANT · effort S · CORRIGÉ dans le code le 18 novembre 2026 (`ada088e`), non déployé.**
+**IMPORTANT · effort S · CORRIGÉ le 18 novembre 2026 (`ada088e`) · EN PRODUCTION le 19 novembre 2026.**
 
 - **Le défaut.** `verifierCode` (`functions/src/oxygen/liaison.js`) acceptait le rejeu d'un code consommé (même code, même compte, même usage) sans regarder l'heure. Le rejeu n'existe que pour une réponse perdue, quelques secondes après l'usage.
 - **L'effet.** Avec le « code oublié » qu'Oxygen prépare depuis un téléphone inconnu (code agent + code de liaison), quiconque avait vu un code une fois aurait pu le rejouer des jours plus tard, poser un nouveau code secret et prendre le compte de l'agent. Ce chemin n'était pas en service : le défaut n'était pas exploitable avant lui.
@@ -1226,5 +1226,6 @@ Une correction métier et un nettoyage ne partagent pas un lot. D1 et D3 touchen
   - la même règle vaut pour les deux usages, relier et code secret ;
   - tests : TC-376-12b, TC-377-22b et TC-377-32, rouges puis verts. TC-377-22, qui fixait l'ancien rejeu après l'expiration, couvre maintenant le cas légitime : un code utilisé à 14 min 30, rejoué juste après la 15e.
 - **Mise en service** : la function `pointEntreeOxygen`, sur décision de l'utilisateur, **avant** le « code oublié » d'Oxygen depuis un téléphone inconnu.
-- **Déployé le 19 novembre 2026** par l'utilisateur, avec `storeTransactionCommand` : le correctif SEC-17, le §9.1 v8 et la date du dernier changement des numéros (SEC-14). Une sonde sans jeton sur `pointEntreeOxygen` répond 403. Oxygen est prévenu. Le front (affichage chez le patron) attend son push.
+- **Déployé le 19 novembre 2026** par l'utilisateur, avec `storeTransactionCommand` : le correctif SEC-17, le §9.1 v8 et la date du dernier changement des numéros (SEC-14). Une sonde sans jeton sur `pointEntreeOxygen` répond 403. Oxygen est prévenu.
+- **Front en Production le 20 novembre 2026 à 09:24 UTC** (04e8e7c). Le push du 19 à 11:33 UTC n'avait donné qu'une Preview ; l'utilisateur l'a promue. Le JavaScript de production contient `numerosModifiesLe`, `numeros-date-` et « Numéros non saisis ». À retenir : un push ne garantit pas la Production ; regarder `/deployments` après chaque push.
 
