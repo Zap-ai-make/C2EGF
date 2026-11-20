@@ -40,6 +40,7 @@ import {
   codeReseauDeFiche,
 } from '../oxygen/demande.js'
 import { dealerDe, flotteDe, numerosSaisis } from '../boutiques/numeros.js'
+import { signalerDemandeFermee } from '../oxygen/signal.js'
 
 const SETTLEMENT_FIELDS = [
   'originalAmount', 'paidAmount', 'refundedAmount', 'remainingAmount',
@@ -373,7 +374,7 @@ async function readActor(t, db, uid) {
   return { profile, storeId, store: storeSnap.data() }
 }
 
-export async function storeTransactionCommandHandler(request, { db, FieldValue, logWriter = write }) {
+export async function storeTransactionCommandHandler(request, { db, FieldValue, logWriter = write, signalerOxygen = signalerDemandeFermee }) {
   const uid = validateAuthUid(request.auth?.uid)
   const payload = validateInputPayload(request.data, ['action', 'transaction', 'draftId', 'historyId', 'updates', 'paymentMethod', 'amount', 'network', 'balanceType', 'balanceAmount', 'balances', 'note', 'direct', 'expediteur', 'replenishmentId', 'returnId', 'commandeId', 'ageMs', 'demandeId', 'statut', 'flotte', 'dealer'])
   const action = String(payload.action || '')
@@ -1207,5 +1208,19 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
   })
 
   logWriter({ severity: 'INFO', event: 'STORE_TRANSACTION_COMMAND', action, actorUid: uid, result: 'success' })
+
+  // La demande vient de se fermer : Oxygen réveille le téléphone de l'agent
+  // (contrat v9 §10). Attendu, car Cloud Run gèle l'instance une fois la
+  // réponse rendue ; la caissière n'attend pas pour autant, sa carte part dès
+  // l'écriture. Un rejeu n'en renvoie pas, et un échec ne coûte à l'agent
+  // qu'un tour de relecture : jamais une erreur pour la caissière.
+  if ((action === 'acceptAgentRequest' || action === 'rejectAgentRequest') && !result.idempotent) {
+    const demandeId = cleanId(payload.demandeId, 'demandeId')
+    try {
+      await signalerOxygen(demandeId)
+    } catch (error) {
+      logWriter({ severity: 'WARNING', event: 'OXYGEN_SIGNAL_ECHEC', demandeId, ...(error?.statut ? { statut: error.statut } : { erreur: error?.name || 'Error' }) })
+    }
+  }
   return result
 }
