@@ -293,10 +293,10 @@ droit à changer : le jeton d'identité est celui du compte de service sous lequ
 déjà la function.
 
 1. **L'adresse du compte, pour Oxygen.** Console Google Cloud, Cloud Run,
-   `storetransactioncommand`, onglet Sécurité, « Compte de service ». C'est sans doute
-   le compte par défaut, `594056712396-compute@developer.gserviceaccount.com`. Oxygen
-   n'accepte que les jetons de cette adresse. Elle doit être la même dans les deux
-   régions.
+   `storetransactioncommand`, onglet Sécurité, « Compte de service ». C'est le compte
+   par défaut, `594056712396-compute@developer.gserviceaccount.com` (confirmé par
+   l'utilisateur et donné à Oxygen le 2026-11-20). Oxygen n'accepte que les jetons de
+   cette adresse. Elle doit être la même dans les deux régions.
 2. **Oxygen d'abord.** Avant, l'action `signal` répond 400, sans effet.
 3. **Puis `storeTransactionCommand`**, seule. Pas de front.
 4. **Vérifier** : une demande validée réveille l'app à l'instant. Un signal raté laisse
