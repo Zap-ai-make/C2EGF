@@ -44,6 +44,9 @@ export const ANNULATION = 'annulation'
 // Le remboursement au siège : ses quatre commandes (saisie, envoi, modification,
 // annulation) partent par ce seul type, la charge portant la commande telle quelle.
 export const REMB_SIEGE = 'remb_siege'
+// Les transferts d'argent : leurs quatre commandes (saisie, tranche, modification,
+// annulation) partent de même par ce seul type, la commande portée telle quelle.
+export const TRANSFERT_ARGENT = 'transfert_argent'
 
 // Ce qu'une annulation vise : chacune de ces lignes a sa commande au serveur.
 export const CIBLE_NON_TERMINEE = 'non_terminee'
