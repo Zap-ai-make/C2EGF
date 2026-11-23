@@ -109,7 +109,9 @@ import { getBusinessDayBounds } from '../utils/businessDate.js'
 
 const TYPES_DEALER = Object.freeze(['Ravitaillement', 'Retour', 'Clôture'])
 // Le rétablir dans le CA = retirer « Remb. siège » de cette liste.
-const TYPES_HORS_CA = Object.freeze([...TYPES_DEALER, 'Remb. siège'])
+// Le transfert d'argent non plus (spec 2026-11-23) : l'argent est au client
+// ordinaire et au siège, la boutique ne fait que le faire passer.
+const TYPES_HORS_CA = Object.freeze([...TYPES_DEALER, 'Remb. siège', 'Transfert argent'])
 const STATUTS_DEFAITS = Object.freeze(['Annulée', 'Supprimée'])
 
 /**

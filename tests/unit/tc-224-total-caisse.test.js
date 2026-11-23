@@ -26,7 +26,7 @@ describe('TC-224 — sommesEnAttente', () => {
       { id: 'a', type: 'Dépôt', montant: 20_000 },
       { id: 'b', type: 'Retrait', montant: 30_000 },
       { id: 'c', type: 'Dépôt', montant: 5_000 },
-    ])).toEqual({ depots: 25_000, retraits: 30_000, nbDepots: 2, nbRetraits: 1, siege: 0, nbSiege: 0 })
+    ])).toEqual({ depots: 25_000, retraits: 30_000, nbDepots: 2, nbRetraits: 1, siege: 0, nbSiege: 0, transfertsDus: 0, retraitsARecevoir: 0, nbTransferts: 0 })
   })
 
   it('[TC-224-2] compte les libelles sans accent, ecrits a une autre epoque', () => {
@@ -36,7 +36,7 @@ describe('TC-224 — sommesEnAttente', () => {
       { id: 'a', type: 'Depot', montant: 10_000 },
       { id: 'b', type: 'DEPOT', montant: 1_000 },
       { id: 'c', type: 'retrait', montant: 2_000 },
-    ])).toEqual({ depots: 11_000, retraits: 2_000, nbDepots: 2, nbRetraits: 1, siege: 0, nbSiege: 0 })
+    ])).toEqual({ depots: 11_000, retraits: 2_000, nbDepots: 2, nbRetraits: 1, siege: 0, nbSiege: 0, transfertsDus: 0, retraitsARecevoir: 0, nbTransferts: 0 })
   })
 
   it('[TC-224-3] ne compte qu une fois une ligne livree en double', () => {
@@ -45,7 +45,7 @@ describe('TC-224 — sommesEnAttente', () => {
     expect(sommesEnAttente([
       { id: 'a', type: 'Dépôt', montant: 20_000 },
       { id: 'a', type: 'Dépôt', montant: 20_000 },
-    ])).toEqual({ depots: 20_000, retraits: 0, nbDepots: 1, nbRetraits: 0, siege: 0, nbSiege: 0 })
+    ])).toEqual({ depots: 20_000, retraits: 0, nbDepots: 1, nbRetraits: 0, siege: 0, nbSiege: 0, transfertsDus: 0, retraitsARecevoir: 0, nbTransferts: 0 })
   })
 
   it('[TC-224-4] ignore les types qui ne sont ni depot ni retrait', () => {
@@ -54,13 +54,13 @@ describe('TC-224 — sommesEnAttente', () => {
     expect(sommesEnAttente([
       { id: 'a', type: 'Ravitaillement', montant: 500_000 },
       { id: 'b', type: 'Clôture', montant: 90_000 },
-    ])).toEqual({ depots: 0, retraits: 0, nbDepots: 0, nbRetraits: 0, siege: 0, nbSiege: 0 })
+    ])).toEqual({ depots: 0, retraits: 0, nbDepots: 0, nbRetraits: 0, siege: 0, nbSiege: 0, transfertsDus: 0, retraitsARecevoir: 0, nbTransferts: 0 })
   })
 
   it('[TC-224-5] traverse une liste vide, nulle ou trouee sans exploser', () => {
-    expect(sommesEnAttente()).toEqual({ depots: 0, retraits: 0, nbDepots: 0, nbRetraits: 0, siege: 0, nbSiege: 0 })
+    expect(sommesEnAttente()).toEqual({ depots: 0, retraits: 0, nbDepots: 0, nbRetraits: 0, siege: 0, nbSiege: 0, transfertsDus: 0, retraitsARecevoir: 0, nbTransferts: 0 })
     expect(sommesEnAttente([null, undefined, { id: 'a', type: 'Dépôt' }]))
-      .toEqual({ depots: 0, retraits: 0, nbDepots: 1, nbRetraits: 0, siege: 0, nbSiege: 0 })
+      .toEqual({ depots: 0, retraits: 0, nbDepots: 1, nbRetraits: 0, siege: 0, nbSiege: 0, transfertsDus: 0, retraitsARecevoir: 0, nbTransferts: 0 })
   })
 })
 
@@ -109,6 +109,7 @@ describe('TC-224 — l argent qui part au siege', () => {
   it('[TC-224-10] compte a part le reste a envoyer, sans toucher depots ni retraits', () => {
     expect(sommesEnAttente([depot, retrait, remb()])).toEqual({
       depots: 20_000, nbDepots: 1, retraits: 30_000, nbRetraits: 1, siege: 100_000, nbSiege: 1,
+      transfertsDus: 0, retraitsARecevoir: 0, nbTransferts: 0,
     })
   })
 
@@ -118,7 +119,7 @@ describe('TC-224 — l argent qui part au siege', () => {
 
   it('[TC-224-12] une ligne livree deux fois compte une fois ; une ligne refusee ne compte pas', () => {
     expect(sommesEnAttente([remb(), remb()])).toMatchObject({ siege: 100_000, nbSiege: 1 })
-    expect(sommesEnAttente([remb({ envoi: { etat: REFUSEE } })])).toMatchObject({ siege: 0, nbSiege: 0 })
+    expect(sommesEnAttente([remb({ envoi: { etat: REFUSEE } })])).toMatchObject({ siege: 0, nbSiege: 0, transfertsDus: 0, retraitsARecevoir: 0, nbTransferts: 0 })
   })
 
   it('[TC-224-13] sans reste lisible, le reste vaut le montant moins ce qui est parti — jamais zero', () => {

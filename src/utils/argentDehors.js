@@ -1,5 +1,6 @@
 import { isDepositType, isWithdrawalType } from './financialImpact'
 import { estRembSiege } from './rembSiege.js'
+import { estTransfertArgent } from './transfertArgent.js'
 
 /**
  * L'argent dehors — ce que les boutiques ont engagé sans l'avoir encaissé.
@@ -90,6 +91,8 @@ export function agregerArgentDehors(brouillons, boutiques = []) {
     // Un remboursement au siège en attente est de l'argent que la boutique doit
     // au siège : ni dehors, ni illisible (TC-389).
     if (estRembSiege(brouillon)) continue
+    // Un transfert d'argent non plus : son client n'est pas un agent (TC-414).
+    if (estTransfertArgent(brouillon)) continue
     const ligne = parId.get(brouillon?.storeId)
     if (!ligne) { horsReseau += 1; continue }
 

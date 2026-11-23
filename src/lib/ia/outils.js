@@ -41,6 +41,7 @@ import {
 import { FICHES, TITRES_GROUPES, groupesOrdonnes } from '../../content/aideFiches.js'
 import { TYPES_DEALER } from '../../utils/helpers.js'
 import { estRembSiege } from '../../utils/rembSiege.js'
+import { estTransfertArgent } from '../../utils/transfertArgent.js'
 import { CLES_DESTINATIONS } from './destinations.js'
 import { DECLARATIONS_DE_PREPARATION } from './preparations.js'
 import { DECLARATION_CAISSE } from './caisse.js'
@@ -164,7 +165,8 @@ async function historiqueDeLaPeriode(periode) {
  *   boutique le stock que le siège lui a donné à crédit, et la boutique l'envoie
  *   au siège : ce n'est pas une encaisse. Rendu à part, sous son nom.
  */
-const horsTotal = (ligne) => TYPES_DEALER.includes(ligne?.type) || estRembSiege(ligne)
+// Ni le transfert d'argent (spec 2026-11-23) : son client n'est pas un agent.
+const horsTotal = (ligne) => TYPES_DEALER.includes(ligne?.type) || estRembSiege(ligne) || estTransfertArgent(ligne)
 
 function totaliser(lignes, { inclureDealer = false } = {}) {
   const valides = lignes.filter((l) => !estDefait(l))
@@ -377,7 +379,7 @@ async function bilanDuJour({ jours } = {}) {
 
   const creances = brouillons.status === 'fulfilled' && Array.isArray(brouillons.value) ? brouillons.value : []
   // Un remboursement au siège en attente n'est pas une dette de l'agent : il a payé.
-  const creancesRetenues = creances.filter((c) => !estDefait(c) && !estRembSiege(c))
+  const creancesRetenues = creances.filter((c) => !estDefait(c) && !estRembSiege(c) && !estTransfertArgent(c))
   const totalCreances = creancesRetenues.reduce((somme, c) => somme + montantDe(c), 0)
 
   return {
@@ -438,7 +440,7 @@ async function creancesEnCours({ client } = {}) {
 
   // Un remboursement au siège en attente n'est pas une créance : l'agent a payé,
   // c'est la boutique qui doit encore l'envoyer au siège.
-  let lignes = (Array.isArray(brouillons) ? brouillons : []).filter((l) => !estDefait(l) && !estRembSiege(l))
+  let lignes = (Array.isArray(brouillons) ? brouillons : []).filter((l) => !estDefait(l) && !estRembSiege(l) && !estTransfertArgent(l))
   if (typeof client === 'string' && client.trim()) {
     const aiguille = client.trim().toLowerCase()
     lignes = lignes.filter((l) =>

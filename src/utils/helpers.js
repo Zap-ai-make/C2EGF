@@ -2,6 +2,7 @@ import { TRANSACTION_STYLES, FILTER_CONFIG } from './constants.js'
 import { parseFcfaAmount } from './fcfaAmount.js'
 import { BUSINESS_TIME_ZONE } from './businessDate.js'
 import { detailDuReglement, statutDuReglement } from './detailReglement.js'
+import { estTransfertArgent, libelleTransfert } from './transfertArgent.js'
 
 /**
  * Extrait le nom complet du client
@@ -380,10 +381,11 @@ export const createExportData = (transactions) => {
     return {
     'N°': index + 1,
     'Date & Heure': transaction.date || '',
-    'Client': getClientName(transaction.client),
-    'Type': transaction.type || '',
+    // Un transfert d'argent garde sa ligne, sous les mots de l'écran (spec 2026-11-23).
+    'Client': estTransfertArgent(transaction) ? transaction.nomClient || '' : getClientName(transaction.client),
+    'Type': estTransfertArgent(transaction) ? libelleTransfert(transaction) : transaction.type || '',
     'Réseau': transaction.reseau || '',
-    'Code': transaction.code || '',
+    'Code': (estTransfertArgent(transaction) ? transaction.codeTransfert : transaction.code) || '',
     // La destination du règlement quand l'argent est parti sur un compte agent.
     // Sans elle dans l'export, un règlement contesté ne se rapproche de rien —
     // et c'est précisément pour ça que la boutique note ce code.

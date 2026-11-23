@@ -70,6 +70,7 @@ const TEINTES_CASES = {
   depot: { texte: 'text-inflow', cadre: 'border-inflow/30 bg-inflow-soft', anneau: 'ring-inflow' },
   retrait: { texte: 'text-danger', cadre: 'border-danger/30 bg-danger-soft', anneau: 'ring-danger' },
   siege: { texte: 'text-siege', cadre: 'border-siege/30 bg-siege-soft', anneau: 'ring-siege' },
+  transfert: { texte: 'text-transfert', cadre: 'border-transfert/30 bg-transfert-soft', anneau: 'ring-transfert' },
 }
 
 /**
@@ -188,6 +189,7 @@ const TransactionTable = memo(function TransactionTable() {
     depot: totauxEnAttente.nbDepots,
     retrait: totauxEnAttente.nbRetraits,
     siege: totauxEnAttente.nbSiege,
+    transfert: totauxEnAttente.nbTransferts,
   }
   const filtreActif = filtre !== 'tout' && comptesParNature[filtre] > 0 ? filtre : 'tout'
   useEffect(() => {
@@ -632,7 +634,7 @@ const TransactionTable = memo(function TransactionTable() {
           <CaseFiltre
             teinte="tout"
             libelle="Tout"
-            nombre={totauxEnAttente.nbDepots + totauxEnAttente.nbRetraits + totauxEnAttente.nbSiege}
+            nombre={totauxEnAttente.nbDepots + totauxEnAttente.nbRetraits + totauxEnAttente.nbSiege + totauxEnAttente.nbTransferts}
             choisie={filtreActif === 'tout'}
             estompee={filtreActif !== 'tout'}
             desactivee={false}
@@ -672,6 +674,21 @@ const TransactionTable = memo(function TransactionTable() {
               desactivee={totauxEnAttente.nbSiege === 0}
               onChoisir={() => choisirFiltre('siege')}
               testIds={{ caseId: 'case-siege-non-terminees', nombreId: 'nombre-siege-non-terminees', totalId: 'total-siege-non-terminees' }}
+            />
+          )}
+          {/* Les transferts d'argent (spec 2026-11-23), seulement quand il y en
+              a. Sans total, comme « Tout » : ce qui part au siège et ce qui en
+              revient vont en sens contraires, et le Total caisse en tient compte. */}
+          {totauxEnAttente.nbTransferts > 0 && (
+            <CaseFiltre
+              teinte="transfert"
+              libelle="Transferts"
+              nombre={totauxEnAttente.nbTransferts}
+              choisie={filtreActif === 'transfert'}
+              estompee={filtreActif !== 'tout' && filtreActif !== 'transfert'}
+              desactivee={false}
+              onChoisir={() => choisirFiltre('transfert')}
+              testIds={{ caseId: 'case-transferts-non-terminees', nombreId: 'nombre-transferts-non-terminees', totalId: 'total-transferts-non-terminees' }}
             />
           )}
         </div>
