@@ -18,10 +18,12 @@ import {
   REGLEMENT,
   REMBOURSEMENT,
   REMB_SIEGE,
+  TRANSFERT_ARGENT,
   SAISIE,
 } from '../services/fileEnvoi.js'
 import { runStoreTransactionCommand } from '../services/storeTransactionCommandService.js'
 import { estRembSiege } from '../utils/rembSiege.js'
+import { estTransfertArgent, resumeTransfert } from '../utils/transfertArgent.js'
 import { NETWORK_OPTIONS } from '../utils/constants.js'
 import { appliquerFile, resumeLigne } from '../utils/envoisEnAttente.js'
 import {
@@ -550,6 +552,53 @@ export const TransactionsProvider = ({ children }) => {
     [envoyerRembSiege],
   )
 
+  /**
+   * Les transferts d'argent : leurs quatre commandes partent par la file sous un
+   * seul type, comme le remboursement au siège. `avant` (ce que la ligne a laissé
+   * dans les soldes) accompagne tout geste sur une ligne : le sens d'une tranche
+   * dépend de son opération.
+   *
+   * @returns {Promise<{ statut: string }>} « en_attente » ou « envoyee »
+   */
+  const envoyerTransfertArgent = useCallback(async (commande, { avant, id } = {}) => {
+    try {
+      setError(null)
+      if (!parLaFile) {
+        await runStoreTransactionCommand(commande)
+        return { statut: ENVOYEE }
+      }
+      const charge = { commande, reseau: NETWORK_OPTIONS[0], ...(avant ? { avant } : {}) }
+      return await (id ? soumettre(TRANSFERT_ARGENT, charge, { id }) : soumettre(TRANSFERT_ARGENT, charge))
+    } catch (error) {
+      console.error('Erreur lors du transfert d’argent:', error)
+      setError(error.message)
+      throw error
+    }
+  }, [parLaFile, soumettre])
+
+  const ligneEnAttente = (draftId) => lignesAfficheesRef.current.nonTerminees.find((t) => t.id === draftId)
+
+  const ajouterTransfertArgent = useCallback(
+    (transaction) => envoyerTransfertArgent({ action: 'addMoneyTransfer', transaction }),
+    [envoyerTransfertArgent],
+  )
+
+  const traiterTransfertArgent = useCallback(
+    (draftId, montant) => envoyerTransfertArgent(
+      { action: 'settleMoneyTransfer', draftId, amount: montant },
+      { avant: resumeTransfert(ligneEnAttente(draftId)) },
+    ),
+    [envoyerTransfertArgent],
+  )
+
+  const modifierTransfertArgent = useCallback(
+    (draftId, updates) => envoyerTransfertArgent(
+      { action: 'updateMoneyTransfer', draftId, updates },
+      { avant: resumeTransfert(ligneEnAttente(draftId)) },
+    ),
+    [envoyerTransfertArgent],
+  )
+
   const modifierRembSiege = useCallback((draftId, updates) => {
     const ligne = lignesAfficheesRef.current.nonTerminees.find((t) => t.id === draftId)
     return envoyerRembSiege(
@@ -656,6 +705,9 @@ export const TransactionsProvider = ({ children }) => {
       else if (operation.type === REMB_SIEGE && operation.charge.commande?.action === 'trashSiegeRepayment' && operation.charge.commande.historyId) {
         marquerAnnulee(operation.charge.commande.historyId)
       }
+      else if (operation.type === TRANSFERT_ARGENT && operation.charge.commande?.action === 'trashMoneyTransfer' && operation.charge.commande.historyId) {
+        marquerAnnulee(operation.charge.commande.historyId)
+      }
     })
   }, [apresEnvoi, remplacerCorrigee, marquerAnnulee])
 
@@ -686,6 +738,13 @@ export const TransactionsProvider = ({ children }) => {
       if (estRembSiege(visee)) {
         const commande = { action: 'trashSiegeRepayment', ...(brouillon ? { draftId: id } : { historyId: id }) }
         const issue = await envoyerRembSiege(commande, { avant: resumeRembSiege(visee), id: `${REMB_SIEGE}-annulation-${id}` })
+        if (!brouillon && !parLaFile) marquerAnnulee(id)
+        return issue
+      }
+      // Un transfert d'argent de même, par `trashMoneyTransfer` (TC-406).
+      if (estTransfertArgent(visee)) {
+        const commande = { action: 'trashMoneyTransfer', ...(brouillon ? { draftId: id } : { historyId: id }) }
+        const issue = await envoyerTransfertArgent(commande, { avant: resumeTransfert(visee), id: `${TRANSFERT_ARGENT}-annulation-${id}` })
         if (!brouillon && !parLaFile) marquerAnnulee(id)
         return issue
       }
@@ -720,7 +779,7 @@ export const TransactionsProvider = ({ children }) => {
       setError(error.message)
       throw error
     }
-  }, [parLaFile, soumettre, marquerAnnulee, envoyerRembSiege])
+  }, [parLaFile, soumettre, marquerAnnulee, envoyerRembSiege, envoyerTransfertArgent])
 
   /**
    * Ouvre le formulaire sur une transaction validée, pour correction.
@@ -809,6 +868,10 @@ export const TransactionsProvider = ({ children }) => {
     if (estRembSiege(transaction) && (Number(transaction.envoyeAuSiege) || 0) > 0) {
       return { ...actions, modifier: false }
     }
+    // De même pour un transfert d'argent dont une tranche est faite.
+    if (estTransfertArgent(transaction) && (Number(transaction.montantTraite) || 0) > 0) {
+      return { ...actions, modifier: false }
+    }
     return actions
   }, [])
 
@@ -834,6 +897,9 @@ export const TransactionsProvider = ({ children }) => {
     ajouterRembSiege,
     envoyerAuSiege,
     modifierRembSiege,
+    ajouterTransfertArgent,
+    traiterTransfertArgent,
+    modifierTransfertArgent,
     validateTransaction,
     addPaymentTranche,
     addRefundTranche,

@@ -193,7 +193,8 @@ export const getAvailableActions = (transactionType) => {
     payerPar: false,
     rembourser: false,
     encaisser: false,
-    envoyerSiege: false
+    envoyerSiege: false,
+    trancheTransfert: false
   }
 
   // Logique claire par type de transaction
@@ -214,6 +215,11 @@ export const getAvailableActions = (transactionType) => {
       // L'agent a déjà payé : la ligne attend que la boutique envoie au siège,
       // par tranches, toujours depuis le stock.
       actions.envoyerSiege = true
+      break
+    case 'Transfert argent':
+      // Une tranche vers le siège (transfert) ou du siège (retrait), toujours
+      // en stock ; le libellé du bouton suit l'opération de la ligne.
+      actions.trancheTransfert = true
       break
     default:
       // Pas d'actions spéciales pour les autres types
