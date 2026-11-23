@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { useToast } from '../hooks/useToast'
 import Toast from '../components/Toast'
 import TransactionForm from '../components/transactions/TransactionForm'
+import TransfertArgentForm from '../components/transactions/TransfertArgentForm.jsx'
 import RavitaillementPanel from '../components/transactions/RavitaillementPanel'
 import TransactionTable from '../components/transactions/TransactionTable'
 import DealerTransferForm from '../components/transactions/DealerTransferForm'
@@ -18,6 +19,7 @@ import { ravitaillementsEnCours } from '../utils/ravitaillement.js'
 import { COLLABORATIONS_ENABLED } from '../constants/collaborationConstants'
 import { STORE_TRANSACTION_VISIBILITY } from '../constants/storeWorkspace.js'
 import { useIncomingCollaborationsCount } from '../hooks/useIncomingCollaborationsCount'
+import { TRANSFERT_ARGENT_ACTIF, estTransfertArgent } from '../utils/transfertArgent.js'
 
 /**
  * Transactions — les modes visibles du profil, et c'est l'URL qui décide.
@@ -56,7 +58,7 @@ const LIBELLES = {
 
 function Transactions() {
   const { clients, addClient } = useClients()
-  const { userProfile } = useAuth()
+  const { userProfile, activeStore } = useAuth()
   const {
     pendingTransactions = [],
     completedTransactions = [],
@@ -66,6 +68,10 @@ function Transactions() {
   const [params, setParams] = useSearchParams()
   const [formulaireOuvert, setFormulaireOuvert] = useState(false)
   const [ravitaillementOuvert, setRavitaillementOuvert] = useState(false)
+  // Les deux mini-onglets de la saisie (spec 2026-11-23, approche B choisie par
+  // l'utilisateur) : « Agent », le formulaire d'aujourd'hui, et les transferts
+  // d'argent, si le profil le permet ET que la boutique a coché l'option.
+  const [onglet, setOnglet] = useState('agent')
   // Ce que le formulaire dit en se fermant, après une modification.
   const { toasts, showToast, removeToast } = useToast()
   const storeId = userProfile?.storeId ?? null
@@ -103,7 +109,19 @@ function Transactions() {
   const fermerFormulaire = useCallback(() => {
     clearEditTransaction?.()
     setFormulaireOuvert(false)
+    setOnglet('agent')
   }, [clearEditTransaction])
+
+  // En modification, une ligne ne change pas de famille : son onglet est imposé.
+  const transfertEnModif = estTransfertArgent(editingTransaction)
+  const ongletsVisibles = (TRANSFERT_ARGENT_ACTIF && activeStore?.transfertsArgent === true) || transfertEnModif
+  const ongletAffiche = editingTransaction
+    ? (transfertEnModif ? 'transfert' : 'agent')
+    : (ongletsVisibles ? onglet : 'agent')
+  const ongletClass = (actif) =>
+    `rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:cursor-not-allowed disabled:opacity-50 ${
+      actif ? 'bg-surface text-ink shadow-sm' : 'text-ink-muted hover:text-ink'
+    }`
 
   // `replace` : basculer d'onglet n'est pas une navigation qu'on veut retrouver
   // dans l'historique du navigateur à chaque clic.
@@ -242,15 +260,40 @@ function Transactions() {
         spacious
         testId="transaction-dialog"
       >
+        {ongletsVisibles && (
+          <div role="tablist" aria-label="Client de l’opération" className="mb-4 inline-flex gap-1 rounded-lg bg-brand-50 p-1">
+            {[['agent', 'Agent'], ['transfert', 'Western Union · Ria · MoneyGram']].map(([cle, libelle]) => (
+              <button
+                key={cle}
+                type="button"
+                role="tab"
+                aria-selected={ongletAffiche === cle}
+                disabled={Boolean(editingTransaction) && ongletAffiche !== cle}
+                onClick={() => setOnglet(cle)}
+                className={ongletClass(ongletAffiche === cle)}
+              >
+                {libelle}
+              </button>
+            ))}
+          </div>
+        )}
         <ErrorBoundary>
-          <TransactionForm
-            clients={clients}
-            embedded
-            onAddClient={addClient}
-            onComplete={fermerFormulaire}
-            onCancel={fermerFormulaire}
-            annoncer={showToast}
-          />
+          {ongletAffiche === 'transfert' ? (
+            <TransfertArgentForm
+              onComplete={fermerFormulaire}
+              onCancel={fermerFormulaire}
+              annoncer={showToast}
+            />
+          ) : (
+            <TransactionForm
+              clients={clients}
+              embedded
+              onAddClient={addClient}
+              onComplete={fermerFormulaire}
+              onCancel={fermerFormulaire}
+              annoncer={showToast}
+            />
+          )}
         </ErrorBoundary>
       </Dialog>
 
