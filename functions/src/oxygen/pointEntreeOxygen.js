@@ -31,6 +31,7 @@ import { ligneDeDocument } from '../clients/historiqueClient.js'
 import { STORE_NETWORKS } from '../config/storeProfile.js'
 import { dealerDe, flotteDe } from '../boutiques/numeros.js'
 import { estRembSiege } from '../storeTransactions/rembSiege.js'
+import { estTransfertArgent } from '../storeTransactions/transfertArgent.js'
 import {
   COLLECTION_DEMANDES,
   ETATS_DEMANDE,
@@ -437,6 +438,8 @@ async function lireActivite(corps, { db, Timestamp, maintenant, oxygen }) {
     // Le contrat validé avec Oxygen ne connaît pas ce type : il n'entre pas dans
     // le flux avant que l'utilisateur rouvre ce contrat (TC-377-RS).
     if (estRembSiege(donnees)) return null
+    // Ni le transfert d'argent : son client n'est pas un agent (TC-377-TA).
+    if (estTransfertArgent(donnees)) return null
     const ligne = ligneDeDocument({ id: doc.id, chemin: doc.ref.path, donnees, source, nomsDeBoutique: new Map() })
     if (!ligne || !dansLesPeriodes(ligne.createdAt, periodes)) return null
     return {

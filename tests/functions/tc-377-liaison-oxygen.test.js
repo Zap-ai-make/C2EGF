@@ -448,6 +448,25 @@ describe('TC-377 — lireActivite', () => {
     expect(corps.nonTerminees).toEqual([])
   })
 
+  /**
+   * TC-377-TA (= TC-407-02) — un transfert d'argent n'entre pas non plus dans le
+   * flux Oxygen (spec 2026-11-23). Il ne porte jamais de `clientId` (TC-405-01) ;
+   * la ligne posée ici en porte un, pour éprouver la garde elle-même.
+   */
+  it('[TC-377-TA] le transfert d’argent n’entre pas dans le flux Oxygen', async () => {
+    const liaison = await relie()
+    maintenantMs = T0 + 10 * H
+    const transfert = { type: 'Transfert argent', service: 'Ria', operation: 'transfert', nomClient: 'DIALLO Awa', balanceType: 'stock' }
+    await Promise.all([
+      db.doc('clients/store-a/history/depot').set(ligne()),
+      db.doc('clients/store-a/history/ta-valide').set(ligne({ ...transfert, montantTraite: 1000, resteATraiter: 0 })),
+      db.doc('clients/store-a/drafts/ta-attente').set(ligne({ ...transfert, statut: 'Non Terminées', montantTraite: 0, resteATraiter: 1000 })),
+    ])
+    const { corps } = await lire(liaison)
+    expect(corps.lignes.map((l) => l.id)).toEqual(['depot'])
+    expect(corps.nonTerminees).toEqual([])
+  })
+
   it('[TC-377-36] pages de 50, reprises sans perte ni doublon', async () => {
     const liaison = await relie()
     maintenantMs = T0 + 10 * H
