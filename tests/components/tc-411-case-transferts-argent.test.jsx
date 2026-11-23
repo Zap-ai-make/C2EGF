@@ -11,6 +11,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 const enregistrer = vi.fn()
 vi.mock('../../src/services/reglagesBoutiqueService.js', () => ({
   enregistrerTransfertsArgent: (...a) => enregistrer(...a),
+  rafraichirFicheBoutique: () => Promise.resolve(),
 }))
 let enLigne = true
 vi.mock('../../src/hooks/useEnLigne.js', () => ({ useEnLigne: () => enLigne }))

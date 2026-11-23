@@ -57,7 +57,7 @@ export function lireLaCaisse({ soldes, enAttente = [] } = {}) {
     remboursements_siege_non_envoyes: { nombre: attente.nbSiege, montant: attente.siege },
     // Western Union, Ria, MoneyGram : ni dépôt ni retrait d'agent (spec 2026-11-23).
     transferts_non_termines: {
-      nombre: attente.nbTransferts,
+      nombre: attente.nbTransfertsDus + attente.nbRetraitsARecevoir,
       a_envoyer_au_siege: attente.transfertsDus,
       a_encaisser_du_siege: attente.retraitsARecevoir,
     },

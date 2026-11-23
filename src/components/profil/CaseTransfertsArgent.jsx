@@ -1,7 +1,7 @@
 import { useId, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { useEnLigne } from '../../hooks/useEnLigne.js'
-import { enregistrerTransfertsArgent } from '../../services/reglagesBoutiqueService.js'
+import { enregistrerTransfertsArgent, rafraichirFicheBoutique } from '../../services/reglagesBoutiqueService.js'
 import { TRANSFERT_ARGENT_ACTIF } from '../../utils/transfertArgent.js'
 
 /**
@@ -35,6 +35,9 @@ export default function CaseTransfertsArgent() {
       const { transfertsArgent } = await enregistrerTransfertsArgent(voulu)
       mettreAJourBoutique({ transfertsArgent })
       setMessage({ texte: 'Enregistré.', erreur: false })
+      // Sans cette lecture, un démarrage hors ligne relirait l'ancienne fiche
+      // du cache, et l'onglet manquerait. Son échec ne change rien au réglage.
+      if (activeStore?.id) rafraichirFicheBoutique(activeStore.id).catch(() => {})
     } catch (error) {
       setMessage({ texte: error?.message || 'Réglage non enregistré.', erreur: true })
     } finally {

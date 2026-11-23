@@ -1,6 +1,6 @@
 import { ArrowRight } from 'lucide-react'
 import Dialog from '../ui/Dialog'
-import { formatInstant, getClientName } from '../../utils/helpers.js'
+import { formatInstant, libelleDeLigne, nomDeLigne } from '../../utils/helpers.js'
 
 /**
  * Le journal des corrections d'une transaction.
@@ -29,7 +29,7 @@ function ModificationsDialog({ transaction, open, onClose }) {
       open={open}
       onClose={onClose}
       title="Modifications"
-      description={transaction ? `${getClientName(transaction.client)} · ${transaction.type}` : undefined}
+      description={transaction ? `${nomDeLigne(transaction)} · ${libelleDeLigne(transaction)}` : undefined}
       largeur="max-w-lg"
       testId="modifications-dialog"
     >

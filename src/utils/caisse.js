@@ -22,12 +22,13 @@ const normaliser = (valeur) => String(valeur || '')
  * La nature d'une non terminée : ce que comptent les cases au-dessus de la
  * liste, et ce que trie leur filtre. Une seule lecture pour les deux.
  *
- * @returns {'depot'|'retrait'|'siege'|'transfert'|null}
+ * @returns {'depot'|'retrait'|'siege'|'transfert'|'retraitTransfert'|null}
  */
 export function natureEnAttente(transaction) {
   if (!transaction) return null
   if (estRembSiege(transaction)) return 'siege'
-  if (estTransfertArgent(transaction)) return 'transfert'
+  // Deux natures : une case et un filtre pour chaque sens (relecture du 23 novembre).
+  if (estTransfertArgent(transaction)) return transaction.operation === 'retrait' ? 'retraitTransfert' : 'transfert'
   const type = normaliser(transaction.type)
   return type === 'depot' || type === 'retrait' ? type : null
 }
@@ -62,13 +63,13 @@ const resteATraiter = (ligne) => {
  * @param {Array<object>} transactions
  * Un transfert d'argent (spec 2026-11-23) aussi, en deux sommes de sens
  * opposé : ce qu'il reste à envoyer au siège (transferts), ce que le siège
- * doit encore rendre (retraits). Un seul compte pour les deux.
+ * doit encore rendre (retraits), chacune avec son compte.
  *
- * @returns {{depots: number, retraits: number, nbDepots: number, nbRetraits: number, siege: number, nbSiege: number, transfertsDus: number, retraitsARecevoir: number, nbTransferts: number}}
+ * @returns {{depots: number, retraits: number, nbDepots: number, nbRetraits: number, siege: number, nbSiege: number, transfertsDus: number, nbTransfertsDus: number, retraitsARecevoir: number, nbRetraitsARecevoir: number}}
  */
 export function sommesEnAttente(transactions = []) {
   const vues = new Set()
-  const somme = { depots: 0, retraits: 0, nbDepots: 0, nbRetraits: 0, siege: 0, nbSiege: 0, transfertsDus: 0, retraitsARecevoir: 0, nbTransferts: 0 }
+  const somme = { depots: 0, retraits: 0, nbDepots: 0, nbRetraits: 0, siege: 0, nbSiege: 0, transfertsDus: 0, nbTransfertsDus: 0, retraitsARecevoir: 0, nbRetraitsARecevoir: 0 }
 
   for (const transaction of transactions) {
     if (!transaction || vues.has(transaction.id)) continue
@@ -84,9 +85,13 @@ export function sommesEnAttente(transactions = []) {
       continue
     }
     if (nature === 'transfert') {
-      if (transaction.operation === 'retrait') somme.retraitsARecevoir += resteATraiter(transaction)
-      else somme.transfertsDus += resteATraiter(transaction)
-      somme.nbTransferts += 1
+      somme.transfertsDus += resteATraiter(transaction)
+      somme.nbTransfertsDus += 1
+      continue
+    }
+    if (nature === 'retraitTransfert') {
+      somme.retraitsARecevoir += resteATraiter(transaction)
+      somme.nbRetraitsARecevoir += 1
       continue
     }
 

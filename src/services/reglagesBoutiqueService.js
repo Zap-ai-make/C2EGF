@@ -1,3 +1,5 @@
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from '../config/firebase'
 import { runStoreTransactionCommand } from './storeTransactionCommandService.js'
 
 /**
@@ -11,3 +13,10 @@ import { runStoreTransactionCommand } from './storeTransactionCommandService.js'
 /** Coche ou décoche l'option des transferts d'argent ; le serveur rend l'état enregistré. */
 export const enregistrerTransfertsArgent = (actif) =>
   runStoreTransactionCommand({ action: 'updateStoreSettings', transfertsArgent: actif })
+
+/**
+ * Une lecture de la fiche, juste après un réglage enregistré (le réseau est là) :
+ * le cache persistant de l'appareil garde ainsi la nouvelle valeur, que lit un
+ * démarrage hors ligne (relecture du 23 novembre).
+ */
+export const rafraichirFicheBoutique = (storeId) => getDoc(doc(db, 'stores', storeId))

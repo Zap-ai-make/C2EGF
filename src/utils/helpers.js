@@ -17,6 +17,17 @@ export const getClientName = (client) => {
 }
 
 /**
+ * Le nom et la nature d'une ligne, tels que l'écran les montre. Un transfert
+ * d'argent n'a pas de fiche client : son nom est celui tapé à la saisie, et son
+ * type interne (« Transfert argent ») ne s'affiche jamais (spec 2026-11-23).
+ */
+export const nomDeLigne = (transaction) =>
+  estTransfertArgent(transaction) ? transaction.nomClient || '' : getClientName(transaction?.client)
+
+export const libelleDeLigne = (transaction) =>
+  estTransfertArgent(transaction) ? libelleTransfert(transaction) : transaction?.type || ''
+
+/**
  * Crée une date formatée en français
  */
 export const formatDateToFrench = (date = new Date()) => {
@@ -317,12 +328,18 @@ export const matchesSearchTerm = (transaction, searchTerm) => {
   
   const searchLower = searchTerm.toLowerCase()
   
-  // Recherche dans le nom du client
-  const clientName = getClientName(transaction.client).toLowerCase()
+  // Recherche dans le nom du client (celui tapé à la saisie, pour un transfert)
+  const clientName = nomDeLigne(transaction).toLowerCase()
   if (clientName.includes(searchLower)) return true
   
   // Recherche dans le code réseau
   if (transaction.code && transaction.code.toString().includes(searchLower)) return true
+
+  // Un transfert d'argent se retrouve par son code (MTCN…) et son téléphone.
+  if (estTransfertArgent(transaction)) {
+    if (String(transaction.codeTransfert ?? '').toLowerCase().includes(searchLower)) return true
+    if (String(transaction.telephone ?? '').includes(searchLower)) return true
+  }
   
   // Recherche dans le réseau
   if (transaction.reseau && transaction.reseau.toLowerCase().includes(searchLower)) return true
@@ -382,8 +399,8 @@ export const createExportData = (transactions) => {
     'N°': index + 1,
     'Date & Heure': transaction.date || '',
     // Un transfert d'argent garde sa ligne, sous les mots de l'écran (spec 2026-11-23).
-    'Client': estTransfertArgent(transaction) ? transaction.nomClient || '' : getClientName(transaction.client),
-    'Type': estTransfertArgent(transaction) ? libelleTransfert(transaction) : transaction.type || '',
+    'Client': nomDeLigne(transaction),
+    'Type': libelleDeLigne(transaction),
     'Réseau': transaction.reseau || '',
     'Code': (estTransfertArgent(transaction) ? transaction.codeTransfert : transaction.code) || '',
     // La destination du règlement quand l'argent est parti sur un compte agent.

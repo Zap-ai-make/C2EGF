@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useTransactions } from '../../context/transactions.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
-import { getClientName, formatTransactionDateTime, tonStatut } from '../../utils/helpers.js'
+import { getClientName, nomDeLigne, libelleDeLigne, formatTransactionDateTime, tonStatut } from '../../utils/helpers.js'
 import { useWindowedRows } from '../../hooks/useWindowedRows.js'
 import EmptyState from '../ui/EmptyState.jsx'
 import { History } from 'lucide-react'
@@ -13,7 +13,7 @@ import ModificationsDialog from './ModificationsDialog.jsx'
 import { STORE_HISTORY_CONFIG } from '../../constants/storeWorkspace.js'
 import { TYPE_RAVITAILLEMENT, TYPE_RETOUR } from '../../utils/ravitaillement.js'
 import { consequenceAnnulation, estRembSiege } from '../../utils/rembSiege.js'
-import { consequenceAnnulationTransfert, estTransfertArgent, libelleTransfert } from '../../utils/transfertArgent.js'
+import { consequenceAnnulationTransfert, estTransfertArgent } from '../../utils/transfertArgent.js'
 import { regrouperParClientEtType } from '../../utils/regroupement.js'
 import { dureeDe, formaterHeure } from '../../utils/attente.js'
 import { detailDuReglement, statutDuReglement } from '../../utils/detailReglement.js'
@@ -325,10 +325,10 @@ function HistoriqueTable({ transactions = [], onReopen }) {
               <span>{transaction.expediteur || 'Sans expéditeur'}</span>
               <span className="text-xs text-ink-muted">dealer</span>
             </span>
-          ) : estTransfertArgent(transaction) ? transaction.nomClient : getClientName(transaction.client)}
+          ) : nomDeLigne(transaction)}
         </td>
         <td className={`whitespace-nowrap px-4 py-3 text-base font-medium ${styles.textColor}`}>
-          {(estTransfertArgent(transaction) ? libelleTransfert(transaction) : transaction.type) || '-'}
+          {libelleDeLigne(transaction) || '-'}
           {(estLigneDealer(transaction.type) || estRembSiege(transaction) || estTransfertArgent(transaction)) && libelleReserve(transaction.balanceType) && (
             <span className="ml-1 text-xs font-normal text-ink-muted">
               · {libelleReserve(transaction.balanceType)}
@@ -584,9 +584,9 @@ function HistoriqueTable({ transactions = [], onReopen }) {
               <span className="font-medium">
                 {estLigneDealer(aSupprimer.type)
                   ? (aSupprimer.expediteur || 'Sans expéditeur')
-                  : getClientName(aSupprimer.client)}
+                  : nomDeLigne(aSupprimer)}
               </span>
-              {' · '}{aSupprimer.type}
+              {' · '}{libelleDeLigne(aSupprimer)}
               {' · '}
               <span className="font-mono tabular-nums">
                 {(Number(aSupprimer.montant) || 0).toLocaleString('fr-FR')} FCFA

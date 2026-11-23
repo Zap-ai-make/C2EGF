@@ -43,11 +43,12 @@ describe('TC-414 — la caisse', () => {
     expect(total(355_000, 175_000, [transfert({ montantTraite: 20_000, resteATraiter: 30_000 })])).toBe(depart)
   })
 
-  it('[TC-414-02] les dépôts et retraits d’agent ne bougent pas ; la nature est « transfert »', () => {
+  it('[TC-414-02] les dépôts et retraits d’agent ne bougent pas ; une nature par sens', () => {
     const r = sommesEnAttente([depot, transfert(), retrait()])
-    expect(r).toMatchObject({ depots: 100_000, nbDepots: 1, retraits: 0, nbRetraits: 0, siege: 0, transfertsDus: 50_000, retraitsARecevoir: 75_000, nbTransferts: 2 })
+    expect(r).toMatchObject({ depots: 100_000, nbDepots: 1, retraits: 0, nbRetraits: 0, siege: 0, transfertsDus: 50_000, nbTransfertsDus: 1, retraitsARecevoir: 75_000, nbRetraitsARecevoir: 1 })
     expect(natureEnAttente(transfert())).toBe('transfert')
-    expect(natureEnAttente(retrait())).toBe('transfert')
+    // Deux natures, une case et un filtre pour chaque sens (relecture du 23 novembre, TC-415).
+    expect(natureEnAttente(retrait())).toBe('retraitTransfert')
   })
 })
 

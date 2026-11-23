@@ -15,7 +15,7 @@ import { useTransactions } from '../../context/transactions.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
 import { PAYMENT_METHODS } from '../../utils/constants.js'
 import { REFUSEE, REGLEMENT } from '../../services/fileEnvoi.js'
-import { getClientName, formatTransactionDateTime } from '../../utils/helpers.js'
+import { getClientName, nomDeLigne, libelleDeLigne, formatTransactionDateTime } from '../../utils/helpers.js'
 import { SkeletonRow } from '../ui/SkeletonList.jsx'
 import EmptyState from '../ui/EmptyState.jsx'
 import Dialog from '../ui/Dialog.jsx'
@@ -35,7 +35,7 @@ import { useEnvois } from '../../context/envoisContexte.js'
 import EtatEnvoi from '../ui/EtatEnvoi.jsx'
 import EnvoiSiegeMenu from './EnvoiSiegeMenu.jsx'
 import TrancheTransfertMenu from './TrancheTransfertMenu.jsx'
-import { consequenceAnnulationTransfert, estTransfertArgent, libelleTransfert } from '../../utils/transfertArgent.js'
+import { consequenceAnnulationTransfert, estTransfertArgent } from '../../utils/transfertArgent.js'
 import { consequenceAnnulation, estRembSiege, REMB_SIEGE_ACTIF } from '../../utils/rembSiege.js'
 import { libelleVase } from '../../utils/ravitaillement.js'
 import { useDemandesAgent } from '../../hooks/useDemandesAgent.js'
@@ -71,6 +71,7 @@ const TEINTES_CASES = {
   retrait: { texte: 'text-danger', cadre: 'border-danger/30 bg-danger-soft', anneau: 'ring-danger' },
   siege: { texte: 'text-siege', cadre: 'border-siege/30 bg-siege-soft', anneau: 'ring-siege' },
   transfert: { texte: 'text-transfert', cadre: 'border-transfert/30 bg-transfert-soft', anneau: 'ring-transfert' },
+  retraitTransfert: { texte: 'text-transfert', cadre: 'border-transfert/30 bg-transfert-soft', anneau: 'ring-transfert' },
 }
 
 /**
@@ -189,7 +190,8 @@ const TransactionTable = memo(function TransactionTable() {
     depot: totauxEnAttente.nbDepots,
     retrait: totauxEnAttente.nbRetraits,
     siege: totauxEnAttente.nbSiege,
-    transfert: totauxEnAttente.nbTransferts,
+    transfert: totauxEnAttente.nbTransfertsDus,
+    retraitTransfert: totauxEnAttente.nbRetraitsARecevoir,
   }
   const filtreActif = filtre !== 'tout' && comptesParNature[filtre] > 0 ? filtre : 'tout'
   useEffect(() => {
@@ -634,7 +636,7 @@ const TransactionTable = memo(function TransactionTable() {
           <CaseFiltre
             teinte="tout"
             libelle="Tout"
-            nombre={totauxEnAttente.nbDepots + totauxEnAttente.nbRetraits + totauxEnAttente.nbSiege + totauxEnAttente.nbTransferts}
+            nombre={totauxEnAttente.nbDepots + totauxEnAttente.nbRetraits + totauxEnAttente.nbSiege + totauxEnAttente.nbTransfertsDus + totauxEnAttente.nbRetraitsARecevoir}
             choisie={filtreActif === 'tout'}
             estompee={filtreActif !== 'tout'}
             desactivee={false}
@@ -677,18 +679,34 @@ const TransactionTable = memo(function TransactionTable() {
             />
           )}
           {/* Les transferts d'argent (spec 2026-11-23), seulement quand il y en
-              a. Sans total, comme « Tout » : ce qui part au siège et ce qui en
-              revient vont en sens contraires, et le Total caisse en tient compte. */}
-          {totauxEnAttente.nbTransferts > 0 && (
+              a. DEUX cases, chacune avec son reste : ce que le Total caisse
+              retranche (à envoyer au siège) et ce qu'il ajoute (à encaisser du
+              siège). Leur somme ne dirait rien ; séparés, ils rendent le total
+              vérifiable à la main (relecture du 23 novembre). */}
+          {totauxEnAttente.nbTransfertsDus > 0 && (
             <CaseFiltre
               teinte="transfert"
-              libelle="Transferts"
-              nombre={totauxEnAttente.nbTransferts}
+              libelle="Transferts à envoyer"
+              nombre={totauxEnAttente.nbTransfertsDus}
+              total={totauxEnAttente.transfertsDus}
               choisie={filtreActif === 'transfert'}
               estompee={filtreActif !== 'tout' && filtreActif !== 'transfert'}
               desactivee={false}
               onChoisir={() => choisirFiltre('transfert')}
               testIds={{ caseId: 'case-transferts-non-terminees', nombreId: 'nombre-transferts-non-terminees', totalId: 'total-transferts-non-terminees' }}
+            />
+          )}
+          {totauxEnAttente.nbRetraitsARecevoir > 0 && (
+            <CaseFiltre
+              teinte="retraitTransfert"
+              libelle="Retraits à encaisser"
+              nombre={totauxEnAttente.nbRetraitsARecevoir}
+              total={totauxEnAttente.retraitsARecevoir}
+              choisie={filtreActif === 'retraitTransfert'}
+              estompee={filtreActif !== 'tout' && filtreActif !== 'retraitTransfert'}
+              desactivee={false}
+              onChoisir={() => choisirFiltre('retraitTransfert')}
+              testIds={{ caseId: 'case-retraits-transfert-non-terminees', nombreId: 'nombre-retraits-transfert-non-terminees', totalId: 'total-retraits-transfert-non-terminees' }}
             />
           )}
         </div>
@@ -799,10 +817,10 @@ const TransactionTable = memo(function TransactionTable() {
                         <EtatEnvoi envoi={transaction.envoi} />
                       </td>
                       <td className="px-4 py-3 text-base font-medium">
-                        {estTransfertArgent(transaction) ? transaction.nomClient : getClientName(transaction.client)}
+                        {nomDeLigne(transaction)}
                       </td>
                       <td className={`px-4 py-3 text-base font-medium ${styles.textColor}`}>
-                        {estTransfertArgent(transaction) ? libelleTransfert(transaction) : transaction.type}
+                        {libelleDeLigne(transaction)}
                       </td>
                       <td className="px-4 py-3 text-base">
                         {(estTransfertArgent(transaction) ? transaction.codeTransfert : transaction.code) || '-'}
@@ -1199,8 +1217,8 @@ const TransactionTable = memo(function TransactionTable() {
         {aSupprimer && (
           <div className="space-y-3 text-sm text-ink">
             <p>
-              <span className="font-medium">{estTransfertArgent(aSupprimer) ? aSupprimer.nomClient : getClientName(aSupprimer.client)}</span>
-              {' · '}{estTransfertArgent(aSupprimer) ? libelleTransfert(aSupprimer) : aSupprimer.type}
+              <span className="font-medium">{nomDeLigne(aSupprimer)}</span>
+              {' · '}{libelleDeLigne(aSupprimer)}
               {' · '}
               <span className="font-mono tabular-nums">
                 {(Number(aSupprimer.montant) || 0).toLocaleString('fr-FR')} FCFA
