@@ -33,6 +33,7 @@
      brand-500 11,78:1 · brand-400 6,36:1 · brand-600 15,04:1
      ink 15,55:1 · ink-muted 5,63:1
      inflow 5,35:1 · outflow 8,14:1 · warn 5,93:1 · danger 7,87:1 · siege 5,32:1
+     transfert 7,88:1
    ═══════════════════════════════════════════════════════════════════════════ */
 
 @theme {
@@ -69,6 +70,11 @@
      plus clair qui tienne AA sur sa propre teinte douce (4,64:1). */
   --color-siege:        #0270b0;
   --color-siege-soft:   #e0f2fe;
+  /* Transfert d'argent (Western Union, Ria, MoneyGram, autres) : le client
+     n'est pas un agent. Prune, loin du rouge-brun d'un retrait ; 7,22:1 sur sa
+     teinte douce. */
+  --color-transfert:      #9d174d;
+  --color-transfert-soft: #fdf2f8;
   /* Demande d'un agent, venue de l'app Oxygen : pas encore une opération.
      Violet, maquette B choisie par l'utilisateur ; 6,9:1 sur sa teinte douce,
      et les couleurs de sens y tiennent au moins 4,6:1. */

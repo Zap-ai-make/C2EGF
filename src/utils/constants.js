@@ -84,6 +84,10 @@ export const TRANSACTION_STYLES = {
     textColor: 'text-siege',
     bgColor: 'bg-siege-soft'
   },
+  'Transfert argent': {
+    textColor: 'text-transfert',
+    bgColor: 'bg-transfert-soft'
+  },
   default: {
     textColor: 'text-ink-muted',
     bgColor: 'bg-canvas'
