@@ -43,6 +43,7 @@ import {
   impactTrancheTransfert,
   impactModificationTransfert,
   impactAnnulationTransfert,
+  MESSAGE_GESTE_TRANSFERT,
 } from './transfertArgent.js'
 import {
   COLLECTION_DEMANDES,
@@ -83,7 +84,9 @@ const SENDERS_MAX = 50
 // livraison resterait soldee a tort.
 // Le remboursement au siège aussi : il se défait par `trashSiegeRepayment`, qui
 // sait rendre ses deux jambes. L'inversion générique lèverait une erreur nue.
-const UNCANCELLABLE_TYPES = [REPLENISHMENT_TYPE, CLOSURE_TYPE, RETURN_TYPE, TYPE_REMB_SIEGE]
+// Le transfert d'argent de même, par `trashMoneyTransfer` ; `refuserSiTransfertArgent`
+// le refuse plus tôt, avec son propre message.
+const UNCANCELLABLE_TYPES = [REPLENISHMENT_TYPE, CLOSURE_TYPE, RETURN_TYPE, TYPE_REMB_SIEGE, TYPE_TRANSFERT_ARGENT]
 const NOTE_MAX = 280
 // La corbeille. Un statut à part, et pas « Annulée » : une annulation est une
 // décision métier, une suppression est un geste de correction. Les confondre
@@ -182,6 +185,11 @@ function fail(code, message) { throw new DealerRequestError(code, message) }
  */
 function refuserSiRembSiege(doc) {
   if (estRembSiege(doc)) fail('STORE_TRANSACTION_INVALID', MESSAGE_GESTE_GENERIQUE)
+}
+
+/** Même garde pour une ligne de transfert d'argent : ses jambes ne sont pas celles d'un dépôt. */
+function refuserSiTransfertArgent(doc) {
+  if (estTransfertArgent(doc)) fail('STORE_TRANSACTION_INVALID', MESSAGE_GESTE_TRANSFERT)
 }
 /** Ce que la caissière lit quand la demande s'est fermée sous ses yeux. */
 const MESSAGES_DEMANDE_CLOSE = Object.freeze({
@@ -620,6 +628,7 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       if (!snap.exists) fail('SETTLEMENT_DRAFT_NOT_FOUND', 'Transaction introuvable.')
       const old = snap.data()
       refuserSiRembSiege(old)
+      refuserSiTransfertArgent(old)
       // Une marque sur le brouillon, pas une trace à part : la file n'envoie une
       // modification qu'après la précédente, donc seule la dernière peut revenir.
       if (commandeId && old.derniereCommande === commandeId) return { id: draftId, idempotent: true }
@@ -655,6 +664,7 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       if (!snap.exists) return { deleted: false }
       const old = snap.data()
       refuserSiRembSiege(old)
+      refuserSiTransfertArgent(old)
       if (SETTLEMENT_FIELDS.some(field => Object.hasOwn(old, field))) fail('SETTLED_DRAFT_IMMUTABLE', 'Une transaction ayant engagé un règlement ne peut pas être supprimée.')
       const nextBalances = reverseInitialTransactionImpact(balances, old)
       t.delete(ref)
@@ -681,6 +691,7 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       if (!snap.exists) return { validated: false }
       const draft = snap.data()
       refuserSiRembSiege(draft)
+      refuserSiTransfertArgent(draft)
       if (SETTLEMENT_FIELDS.some(field => Object.hasOwn(draft, field))) fail('SETTLED_DRAFT_IMMUTABLE', 'Utilisez le règlement par tranche pour cette transaction.')
       const amount = payload.amount == null ? draft.montant : cleanAmount(payload.amount)
       const paymentMethod = payload.paymentMethod == null ? null : String(payload.paymentMethod)
@@ -699,6 +710,7 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       const snap = await t.get(ref)
       if (!snap.exists) fail('STORE_TRANSACTION_NOT_FOUND', 'Transaction introuvable.')
       const history = snap.data()
+      refuserSiTransfertArgent(history)
       if (history.collaborationId) fail('STORE_TRANSACTION_INVALID', "Une trace de collaboration ne peut pas être annulée depuis l'historique.")
       // `reverseHistoryTransactionImpact` ne sait défaire qu'un dépôt ou un
       // retrait. Sur un ravitaillement ou une clôture il ne rendrait rien et la
@@ -728,6 +740,7 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       const snap = await t.get(ref)
       if (!snap.exists) fail('STORE_TRANSACTION_NOT_FOUND', 'Transaction introuvable.')
       const history = snap.data()
+      refuserSiTransfertArgent(history)
       // Renvoyée, ou annulée entre-temps depuis un autre poste : le but est atteint,
       // et le montant n'a été rendu qu'une fois.
       if (commandeId && [DELETED_STATUS, CANCELLED_STATUS].includes(history.statut)) return { trashed: true, historyId, idempotent: true }
@@ -761,6 +774,7 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       if (!snap.exists) fail('SETTLEMENT_DRAFT_NOT_FOUND', 'Transaction introuvable.')
       const old = snap.data()
       refuserSiRembSiege(old)
+      refuserSiTransfertArgent(old)
       // Ici le garde-fou large EST le bon : sur un brouillon, ces champs
       // n'apparaissent que si des tranches ont réellement été engagées.
       if (SETTLEMENT_FIELDS.some(field => Object.hasOwn(old, field))) fail('SETTLED_DRAFT_IMMUTABLE', 'Une transaction ayant engagé un règlement ne peut pas être supprimée.')
@@ -807,6 +821,7 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       const snap = await t.get(ref)
       if (!snap.exists) fail('STORE_TRANSACTION_NOT_FOUND', 'Transaction introuvable.')
       const history = snap.data()
+      refuserSiTransfertArgent(history)
       refuserSiIntouchable(history, 'rouverte')
       // Une ligne SANS règlement — le bouton « Valider » du formulaire, un
       // import, une migration — est rouvrable comme les autres. Elle était
@@ -856,6 +871,7 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       const snap = await t.get(ref)
       if (!snap.exists) fail('STORE_TRANSACTION_NOT_FOUND', 'Transaction introuvable.')
       const history = snap.data()
+      refuserSiTransfertArgent(history)
       refuserSiIntouchable(history, 'corrigée')
       const paymentMethod = history.paymentMethod ?? null
       if (paymentMethod && !STORE_PAYMENT_METHODS.includes(paymentMethod)) fail('INVALID_PAYMENT_METHOD', 'Méthode de paiement non autorisée.')

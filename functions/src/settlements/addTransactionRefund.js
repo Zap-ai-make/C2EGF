@@ -19,6 +19,7 @@ import { write } from 'firebase-functions/logger'
 import { DealerRequestError } from '../errors.js'
 import { writeSafeAuditLog } from '../logging.js'
 import { estRembSiege, MESSAGE_GESTE_GENERIQUE } from '../storeTransactions/rembSiege.js'
+import { estTransfertArgent, MESSAGE_GESTE_TRANSFERT } from '../storeTransactions/transfertArgent.js'
 import {
   readValidatedProfile,
   validateAuthUid,
@@ -145,6 +146,7 @@ export async function addTransactionRefundHandler(request, { db, FieldValue, log
       // Un remboursement au siège ne se rembourse pas au client : il n'a pas de
       // tranche client à rendre (TC-381).
       if (estRembSiege(draft)) throw new DealerRequestError('STORE_TRANSACTION_INVALID', MESSAGE_GESTE_GENERIQUE)
+      if (estTransfertArgent(draft)) throw new DealerRequestError('STORE_TRANSACTION_INVALID', MESSAGE_GESTE_TRANSFERT)
 
       // ── Type métier ÉPINGLÉ (défense en profondeur, cf. C1) ────────────────
       // On relit le type épinglé par la 1re tranche (settlementType, champ serveur
