@@ -34,6 +34,17 @@ import {
   impactModification,
 } from './rembSiege.js'
 import {
+  TYPE_TRANSFERT_ARGENT,
+  SERVICES_TRANSFERT,
+  OPERATIONS_TRANSFERT,
+  TRANCHES_MAX,
+  estTransfertArgent,
+  impactSaisieTransfert,
+  impactTrancheTransfert,
+  impactModificationTransfert,
+  impactAnnulationTransfert,
+} from './transfertArgent.js'
+import {
   COLLECTION_DEMANDES,
   ETATS_DEMANDE,
   TYPE_DU_SENS,
@@ -237,7 +248,11 @@ function cleanTransaction(input) {
 // Les commandes du remboursement au siège, éteintes avec leur drapeau de profil.
 const ACTIONS_REMB_SIEGE = ['addSiegeRepayment', 'sendToSiege', 'updateSiegeRepayment', 'trashSiegeRepayment']
 // Les commandes des transferts d'argent, éteintes avec leur drapeau de profil.
-const ACTIONS_TRANSFERT_ARGENT = ['updateStoreSettings']
+const ACTIONS_TRANSFERT_ARGENT = ['updateStoreSettings', 'addMoneyTransfer', 'settleMoneyTransfer', 'updateMoneyTransfer', 'trashMoneyTransfer']
+// Ce qu'une modification peut changer : jamais l'opération (annuler et ressaisir),
+// ni le statut, ni le suivi des tranches.
+const CHAMPS_TRANSFERT_MODIFIABLES = ['service', 'servicePrecise', 'nomClient', 'telephone', 'codeTransfert', 'montant', 'balanceType']
+const PAS_UN_TRANSFERT = 'Cette ligne n’est pas un transfert d’argent.'
 // Ce qu'une modification peut changer : ni le type, ni le statut, ni le suivi des envois.
 const CHAMPS_REMB_SIEGE_MODIFIABLES = ['client', 'clientId', 'code', 'montant', 'balanceType']
 
@@ -259,6 +274,38 @@ function cleanRembSiege(input) {
     montant: cleanAmount(input.montant),
     balanceType: input.balanceType,
     statut: PENDING.includes(statut) ? 'Non Terminées' : 'Validée',
+  }
+}
+
+/**
+ * Une opération de transfert telle que le navigateur l'envoie. Le client est
+ * une personne ordinaire : jamais de `client`, `clientId` ni `code`, qui
+ * désignent un agent et rattacheraient la ligne à son historique. Le type, le
+ * réseau et le statut ne viennent jamais de la charge utile.
+ */
+function cleanTransfertArgent(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) fail('STORE_TRANSACTION_INVALID', 'Opération invalide.')
+  if (JSON.stringify(input).length > 20_000) fail('STORE_TRANSACTION_INVALID', 'Opération trop volumineuse.')
+  if (!SERVICES_TRANSFERT.includes(input.service)) fail('STORE_TRANSACTION_INVALID', 'Service : Western Union, Ria, MoneyGram ou Autres.')
+  if (!OPERATIONS_TRANSFERT.includes(input.operation)) fail('STORE_TRANSACTION_INVALID', 'Opération : Transfert ou Retrait.')
+  if (!['stock', 'liquidite'].includes(input.balanceType)) fail('STORE_TRANSACTION_INVALID', 'Choisissez Stock ou Espèce.')
+  const nomClient = typeof input.nomClient === 'string' ? input.nomClient.replace(/\s+/g, ' ').trim() : ''
+  if (!nomClient || nomClient.length > 60) fail('STORE_TRANSACTION_INVALID', 'Nom du client obligatoire (60 caractères au plus).')
+  const servicePrecise = input.service === 'Autres' && typeof input.servicePrecise === 'string' ? input.servicePrecise.trim() : ''
+  if (servicePrecise.length > 40) fail('STORE_TRANSACTION_INVALID', 'Service précisé : 40 caractères au plus.')
+  const telephone = typeof input.telephone === 'string' ? input.telephone.replace(/\s+/g, '') : ''
+  if (!/^\d{0,15}$/.test(telephone)) fail('STORE_TRANSACTION_INVALID', 'Téléphone : chiffres seulement.')
+  const codeTransfert = typeof input.codeTransfert === 'string' ? input.codeTransfert.trim() : ''
+  if (codeTransfert.length > 30) fail('STORE_TRANSACTION_INVALID', 'Code du transfert : 30 caractères au plus.')
+  return {
+    service: input.service,
+    ...(servicePrecise ? { servicePrecise } : {}),
+    operation: input.operation,
+    nomClient,
+    ...(telephone ? { telephone } : {}),
+    ...(codeTransfert ? { codeTransfert } : {}),
+    montant: cleanAmount(input.montant),
+    balanceType: input.balanceType,
   }
 }
 
@@ -1136,6 +1183,178 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
         fail('STORE_TRANSACTION_INVALID', 'Ce remboursement a déjà été annulé.')
       }
       const nextBalances = impactAnnulation(balances, ligne.reseau || STORE_NETWORKS[0], ligne)
+      t.update(ref, { ...corbeille, origin: 'history' })
+      t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
+      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, historyId, uid, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
+      return { trashed: true, historyId }
+    }
+
+    // ─── Les transferts d'argent (Western Union, Ria, MoneyGram, autres) ─────
+    //
+    // docs/superpowers/specs/2026-11-23-transferts-argent-design.md. Calqués
+    // sur le remboursement au siège : une réserve à la fois, le + d'abord,
+    // `commandeId` vérifié avant tout impact. Toujours en non terminée (pas de
+    // « Valider », décision de l'utilisateur) ; les tranches passent toujours
+    // par le stock. Seule la saisie exige l'option de la boutique : décochée,
+    // une boutique doit encore pouvoir fermer ses lignes.
+
+    if (action === 'addMoneyTransfer') {
+      if (store.transfertsArgent !== true) fail('STORE_TRANSACTION_INVALID', 'Transferts d’argent non activés pour cette boutique.')
+      const operation = cleanTransfertArgent(payload.transaction)
+      const ref = commandeId
+        ? db.doc(`clients/${storeId}/drafts/${commandeId}`)
+        : db.collection(`clients/${storeId}/drafts`).doc()
+      // ⚠ AVANT L'IMPACT, comme `add` : déjà appliqué, un retrait a peut-être
+      //   vidé la réserve qu'il demandait.
+      if (commandeId && (await t.get(ref)).exists) return { id: ref.id, idempotent: true }
+      const network = STORE_NETWORKS[0]
+      const nextBalances = impactSaisieTransfert(balances, network, operation)
+      t.set(ref, {
+        ...operation,
+        type: TYPE_TRANSFERT_ARGENT,
+        reseau: network,
+        statut: 'Non Terminées',
+        montantTraite: 0,
+        resteATraiter: operation.montant,
+        tranches: [],
+        storeId,
+        storeName: store.name || profile.storeName || '',
+        operatorId: uid,
+        operatorName: profile.name || '',
+        operatorEmail: profile.email || '',
+        ...datation,
+        updatedAt: now,
+      })
+      t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
+      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: ref.id, uid, operation: operation.operation, balanceType: operation.balanceType, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
+      return { id: ref.id }
+    }
+
+    if (action === 'settleMoneyTransfer') {
+      const draftId = cleanId(payload.draftId, 'draftId')
+      const amount = cleanAmount(payload.amount)
+      const draftRef = db.doc(`clients/${storeId}/drafts/${draftId}`)
+      const historyRef = db.doc(`clients/${storeId}/history/${draftId}`)
+      const snap = await t.get(draftRef)
+      if (!snap.exists) {
+        // Renvoyée après la tranche qui a soldé la ligne : elle est dans
+        // l'historique, et sa tranche avec elle.
+        const partie = commandeId ? await t.get(historyRef) : null
+        if (partie?.exists && (partie.data().tranches ?? []).some(e => e.id === commandeId)) {
+          return { settled: true, resteATraiter: 0, historyId: draftId, idempotent: true }
+        }
+        fail('SETTLEMENT_DRAFT_NOT_FOUND', 'Transaction introuvable.')
+      }
+      const draft = snap.data()
+      if (!estTransfertArgent(draft)) fail('STORE_TRANSACTION_INVALID', PAS_UN_TRANSFERT)
+      const tranches = Array.isArray(draft.tranches) ? draft.tranches : []
+      if (commandeId && tranches.some(e => e.id === commandeId)) return { settled: true, resteATraiter: draft.resteATraiter, idempotent: true }
+      const resteAvant = Number(draft.resteATraiter) || 0
+      if (amount > resteAvant) {
+        fail('STORE_TRANSACTION_INVALID', `Montant supérieur au reste. Reste : ${resteAvant.toLocaleString('fr-FR')} FCFA`)
+      }
+      const reste = resteAvant - amount
+      // ⚠ LU AVANT TOUTE ÉCRITURE, comme `sendToSiege` : on n'écrase pas une
+      //   autre ligne d'historique.
+      if (reste === 0 && (await t.get(historyRef)).exists) {
+        fail('IDEMPOTENCY_CONFLICT', 'Ce numéro de transaction est déjà pris par une autre ligne.')
+      }
+      const nextBalances = impactTrancheTransfert(balances, draft.reseau || STORE_NETWORKS[0], draft, amount)
+      const tranche = { id: commandeId ?? db.collection(`clients/${storeId}/drafts`).doc().id, montant: amount, at: faitLe ?? new Date(), by: uid, byName: profile.name || '' }
+      const suivi = {
+        montantTraite: (Number(draft.montantTraite) || 0) + amount,
+        resteATraiter: reste,
+        tranches: [...tranches, tranche].slice(-TRANCHES_MAX),
+        updatedAt: now,
+      }
+      if (reste > 0) {
+        t.update(draftRef, suivi)
+      } else {
+        t.set(historyRef, { ...draft, ...suivi, statut: 'Validée', validatedAt: faitLe ?? now, ...recu })
+        t.delete(draftRef)
+      }
+      t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
+      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: draftId, uid, amount, operation: draft.operation, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
+      return { settled: true, resteATraiter: reste, ...(reste === 0 ? { historyId: draftId } : {}) }
+    }
+
+    if (action === 'updateMoneyTransfer') {
+      const draftId = cleanId(payload.draftId, 'draftId')
+      const ref = db.doc(`clients/${storeId}/drafts/${draftId}`)
+      const snap = await t.get(ref)
+      if (!snap.exists) fail('SETTLEMENT_DRAFT_NOT_FOUND', 'Transaction introuvable.')
+      const old = snap.data()
+      if (!estTransfertArgent(old)) fail('STORE_TRANSACTION_INVALID', PAS_UN_TRANSFERT)
+      if (commandeId && old.derniereCommande === commandeId) return { id: draftId, idempotent: true }
+      // Comme un dépôt entamé : une tranche est faite, la ligne est figée.
+      if ((Number(old.montantTraite) || 0) > 0) fail('SETTLED_DRAFT_IMMUTABLE', 'Une opération déjà traitée en partie ne se modifie plus.')
+      const updates = payload.updates
+      if (!updates || typeof updates !== 'object' || Array.isArray(updates)) fail('STORE_TRANSACTION_INVALID', 'Modification invalide.')
+      const retenus = Object.fromEntries(CHAMPS_TRANSFERT_MODIFIABLES.filter(champ => updates[champ] !== undefined).map(champ => [champ, updates[champ]]))
+      const apres = cleanTransfertArgent({
+        service: old.service, servicePrecise: old.servicePrecise, nomClient: old.nomClient, telephone: old.telephone,
+        codeTransfert: old.codeTransfert, montant: old.montant, balanceType: old.balanceType,
+        ...retenus,
+        operation: old.operation,
+      })
+      const nextBalances = impactModificationTransfert(balances, old.reseau || STORE_NETWORKS[0], old, apres)
+      const journal = Array.isArray(old.modifications) ? old.modifications : []
+      const montantChange = Number(old.montant) !== apres.montant
+      // Un champ facultatif vidé disparaît de la ligne, jamais une chaîne vide.
+      const effaces = Object.fromEntries(['servicePrecise', 'telephone', 'codeTransfert']
+        .filter(champ => old[champ] !== undefined && apres[champ] === undefined)
+        .map(champ => [champ, FieldValue.delete()]))
+      t.update(ref, {
+        ...apres,
+        ...effaces,
+        resteATraiter: apres.montant,
+        updatedAt: now,
+        ...(montantChange ? { modifications: empilerModification(journal, { avant: Number(old.montant), apres: apres.montant, uid, nom: profile.name || '', faitLe }) } : {}),
+        ...(commandeId ? { derniereCommande: commandeId } : {}),
+      })
+      t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
+      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: draftId, uid, before: old, after: apres, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
+      return { id: draftId }
+    }
+
+    // « Cette opération n'a pas eu lieu » : TOUTES les jambes sont défaites, à
+    // tout moment, tranches comprises. C'est aussi le seul chemin pour corriger
+    // une tranche mal tapée : annuler, ressaisir, retraiter.
+    if (action === 'trashMoneyTransfer') {
+      const surBrouillon = payload.draftId != null
+      if (surBrouillon === (payload.historyId != null)) fail('STORE_TRANSACTION_INVALID', 'Indiquez la ligne à annuler.')
+      const corbeille = { statut: DELETED_STATUS, deletedAt: faitLe ?? now, ...recu, deletedBy: uid, deletedByName: profile.name || '', updatedAt: now }
+
+      if (surBrouillon) {
+        const draftId = cleanId(payload.draftId, 'draftId')
+        const corbeilleRef = commandeId
+          ? db.doc(`clients/${storeId}/history/${commandeId}`)
+          : db.collection(`clients/${storeId}/history`).doc()
+        if (commandeId && (await t.get(corbeilleRef)).exists) return { trashed: true, historyId: corbeilleRef.id, idempotent: true }
+        const ref = db.doc(`clients/${storeId}/drafts/${draftId}`)
+        const snap = await t.get(ref)
+        if (!snap.exists) fail('SETTLEMENT_DRAFT_NOT_FOUND', 'Transaction introuvable.')
+        const old = snap.data()
+        if (!estTransfertArgent(old)) fail('STORE_TRANSACTION_INVALID', PAS_UN_TRANSFERT)
+        const nextBalances = impactAnnulationTransfert(balances, old.reseau || STORE_NETWORKS[0], old)
+        t.set(corbeilleRef, { ...old, ...corbeille, origin: 'draft' })
+        t.delete(ref)
+        t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
+        t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: draftId, historyId: corbeilleRef.id, uid, before: old, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
+        return { trashed: true, historyId: corbeilleRef.id }
+      }
+
+      const historyId = cleanId(payload.historyId, 'historyId')
+      const ref = db.doc(`clients/${storeId}/history/${historyId}`)
+      const snap = await t.get(ref)
+      if (!snap.exists) fail('STORE_TRANSACTION_NOT_FOUND', 'Transaction introuvable.')
+      const ligne = snap.data()
+      if (!estTransfertArgent(ligne)) fail('STORE_TRANSACTION_INVALID', PAS_UN_TRANSFERT)
+      if (ligne.statut === DELETED_STATUS) {
+        if (commandeId) return { trashed: true, historyId, idempotent: true }
+        fail('STORE_TRANSACTION_INVALID', 'Cette opération a déjà été annulée.')
+      }
+      const nextBalances = impactAnnulationTransfert(balances, ligne.reseau || STORE_NETWORKS[0], ligne)
       t.update(ref, { ...corbeille, origin: 'history' })
       t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
       t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, historyId, uid, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
