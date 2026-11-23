@@ -276,6 +276,7 @@ describe('TC-309 — la caisse que voit l’assistant', () => {
       depots_non_termines: { nombre: 1, montant: 50000 },
       retraits_non_termines: { nombre: 0, montant: 0 },
       remboursements_siege_non_envoyes: { nombre: 0, montant: 0 },
+      transferts_non_termines: { nombre: 0, a_envoyer_au_siege: 0, a_encaisser_du_siege: 0 },
       total_caisse: 120000 + 30000 + 50000,
     })
   })
