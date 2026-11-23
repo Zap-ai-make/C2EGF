@@ -9,6 +9,7 @@ import { AUTH_STYLES } from '../constants/authStyles'
 import PageHeader from '../components/ui/PageHeader'
 import { useEnvois } from '../context/envoisContexte.js'
 import NumerosBoutique from '../components/profil/NumerosBoutique.jsx'
+import CaseTransfertsArgent from '../components/profil/CaseTransfertsArgent.jsx'
 
 function Profil() {
   const { currentUser, userProfile, activeStore, logout } = useAuth()
@@ -144,6 +145,7 @@ function Profil() {
               Configuration
             </h2>
             <NumerosBoutique storeId={activeStore.id} sansCadre />
+            <CaseTransfertsArgent />
           </section>
         )}
       </div>
