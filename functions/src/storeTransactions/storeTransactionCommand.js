@@ -20,6 +20,7 @@ import {
   STORE_REPLENISHMENT_SENDERS,
   STORE_TIME_ZONE,
   SIEGE_REPAYMENT_ENABLED,
+  MONEY_TRANSFER_ENABLED,
 } from '../config/storeProfile.js'
 import { instantDeLaCaisse } from '../instantDeLaCaisse.js'
 import {
@@ -235,6 +236,8 @@ function cleanTransaction(input) {
 }
 // Les commandes du remboursement au siège, éteintes avec leur drapeau de profil.
 const ACTIONS_REMB_SIEGE = ['addSiegeRepayment', 'sendToSiege', 'updateSiegeRepayment', 'trashSiegeRepayment']
+// Les commandes des transferts d'argent, éteintes avec leur drapeau de profil.
+const ACTIONS_TRANSFERT_ARGENT = ['updateStoreSettings']
 // Ce qu'une modification peut changer : ni le type, ni le statut, ni le suivi des envois.
 const CHAMPS_REMB_SIEGE_MODIFIABLES = ['client', 'clientId', 'code', 'montant', 'balanceType']
 
@@ -376,7 +379,7 @@ async function readActor(t, db, uid) {
 
 export async function storeTransactionCommandHandler(request, { db, FieldValue, logWriter = write, signalerOxygen = signalerDemandeFermee }) {
   const uid = validateAuthUid(request.auth?.uid)
-  const payload = validateInputPayload(request.data, ['action', 'transaction', 'draftId', 'historyId', 'updates', 'paymentMethod', 'amount', 'network', 'balanceType', 'balanceAmount', 'balances', 'note', 'direct', 'expediteur', 'replenishmentId', 'returnId', 'commandeId', 'ageMs', 'demandeId', 'statut', 'flotte', 'dealer'])
+  const payload = validateInputPayload(request.data, ['action', 'transaction', 'draftId', 'historyId', 'updates', 'paymentMethod', 'amount', 'network', 'balanceType', 'balanceAmount', 'balances', 'note', 'direct', 'expediteur', 'replenishmentId', 'returnId', 'commandeId', 'ageMs', 'demandeId', 'statut', 'flotte', 'dealer', 'transfertsArgent'])
   const action = String(payload.action || '')
   const now = FieldValue.serverTimestamp()
   // L'identifiant qu'une file d'envoi hors ligne donne à une saisie ou à une
@@ -392,6 +395,9 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
   const datation = faitLe ? { date: dateFr(faitLe), createdAt: faitLe, ...recu } : { date: dateFr(), createdAt: now }
   if (ACTIONS_REMB_SIEGE.includes(action) && !SIEGE_REPAYMENT_ENABLED) {
     fail('STORE_TRANSACTION_INVALID', 'Le remboursement au siège est désactivé.')
+  }
+  if (ACTIONS_TRANSFERT_ARGENT.includes(action) && !MONEY_TRANSFER_ENABLED) {
+    fail('STORE_TRANSACTION_INVALID', 'Les transferts d’argent sont désactivés.')
   }
 
   const result = await db.runTransaction(async t => {
@@ -459,6 +465,22 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       t.update(db.doc(`stores/${storeId}`), champs)
       t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, uid, avant, apres, createdAt: now })
       return { numeros: apres }
+    }
+
+    // ─── Les réglages de la boutique (Profil → Configuration) ────────────────
+    //
+    // Demandé par l'utilisateur le 2026-11-23 : chaque boutique coche elle-même
+    // l'option des transferts d'argent. Comme les numéros : jamais par la file
+    // d'envoi, avant la lecture des soldes, journal avec l'avant et l'après.
+    if (action === 'updateStoreSettings') {
+      if (profile.role !== 'store_admin') fail('ROLE_FORBIDDEN', 'Seul le compte boutique modifie ses réglages.')
+      if (typeof payload.transfertsArgent !== 'boolean') fail('STORE_TRANSACTION_INVALID', 'Réglage invalide.')
+      const avant = { transfertsArgent: store.transfertsArgent === true }
+      const apres = { transfertsArgent: payload.transfertsArgent }
+      if (avant.transfertsArgent === apres.transfertsArgent) return { ...apres, inchange: true }
+      t.update(db.doc(`stores/${storeId}`), { ...apres, reglagesModifiesLe: now })
+      t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, uid, avant, apres, createdAt: now })
+      return apres
     }
 
     const balanceSnap = await t.get(balanceRef)
