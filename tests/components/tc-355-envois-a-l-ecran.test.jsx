@@ -36,7 +36,6 @@ vi.mock('../../src/context/AuthContext', () => ({
     logout: vi.fn(),
   }),
 }))
-vi.mock('../../src/hooks/useUserActivity', () => ({ useUserActivity: () => ({}) }))
 
 import TransactionTable from '../../src/components/transactions/TransactionTable.jsx'
 import OfflineBanner from '../../src/components/OfflineBanner.jsx'

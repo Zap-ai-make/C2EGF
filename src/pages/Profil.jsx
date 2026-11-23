@@ -6,7 +6,6 @@ import ChangePasswordModal from '../components/auth/ChangePasswordModal'
 import { formatDate, getAvatarInitial } from '../utils/authHelpers'
 import { AUTH_LABELS, AUTH_ROLES, AUTH_ROLE_LABELS } from '../constants/authMessages'
 import { AUTH_STYLES } from '../constants/authStyles'
-import { useUserActivity } from '../hooks/useUserActivity'
 import PageHeader from '../components/ui/PageHeader'
 import { useEnvois } from '../context/envoisContexte.js'
 import NumerosBoutique from '../components/profil/NumerosBoutique.jsx'
@@ -26,13 +25,8 @@ function Profil() {
   // Utiliser les données Firebase Auth comme fallback
   const displayName = activeStore?.name || userProfile?.storeName || userProfile?.name || currentUser?.email?.split('@')[0] || 'Boutique'
   const displayEmail = userProfile?.email || currentUser?.email || 'Non renseigné'
-  const userId = currentUser?.uid || 'Non disponible'
-  const isEmailVerified = currentUser?.emailVerified || false
   const creationTime = userProfile?.createdAt || currentUser?.metadata?.creationTime || null
   const lastSignInTime = userProfile?.lastLogin || currentUser?.metadata?.lastSignInTime || null
-
-  // Calculer les vraies statistiques d'activité
-  const userActivity = useUserActivity(currentUser, userProfile)
 
   const handleLogout = useCallback(async () => {
     try {
@@ -123,28 +117,6 @@ function Profil() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                ID Utilisateur
-              </label>
-              <div className="p-3 bg-gray-50 rounded-md border font-mono text-sm">
-                {userId}
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Statut du compte
-              </label>
-              <div className="p-3 bg-gray-50 rounded-md border">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  isEmailVerified ? 'bg-success-soft text-success' : 'bg-warn-soft text-warn'
-                }`}>
-                  {isEmailVerified ? 'Email vérifié' : 'Email non vérifié'}
-                </span>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
                 Date de création
               </label>
               <div className="p-3 bg-gray-50 rounded-md border">
@@ -163,72 +135,17 @@ function Profil() {
           </div>
         </div>
 
-        {/* Les numéros que l'app Oxygen montre aux agents : la boutique seule les
-            saisit (décidé par l'utilisateur le 2026-11-17). */}
+        {/* Ce qui se règle, regroupé (demande de l'utilisateur, 2026-11-23) :
+            les numéros que l'app Oxygen montre aux agents — la boutique seule
+            les saisit (décidé le 2026-11-17). */}
         {userProfile?.role === AUTH_ROLES.STORE_ADMIN && activeStore?.id && (
-          <NumerosBoutique storeId={activeStore.id} />
+          <section aria-labelledby="titre-configuration" className="bg-white rounded-lg shadow-md p-6 space-y-6">
+            <h2 id="titre-configuration" className={`text-xl font-bold ${themeClasses.text}`}>
+              Configuration
+            </h2>
+            <NumerosBoutique storeId={activeStore.id} sansCadre />
+          </section>
         )}
-
-        {/* Statistiques rapides */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className={`text-xl font-bold ${themeClasses.text} mb-6`}>
-            Activité
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className={`${themeClasses.tableHeader} p-4 rounded-lg`}>
-              <div className="text-center">
-                <div className={`text-2xl font-bold ${themeClasses.text}`}>
-                  {userActivity.monthlyLogins}
-                </div>
-                <div className="text-sm text-gray-600">Connexions ce mois</div>
-              </div>
-            </div>
-
-            <div className={`${themeClasses.tableHeader} p-4 rounded-lg`}>
-              <div className="text-center">
-                <div className={`text-2xl font-bold ${themeClasses.text}`}>
-                  {userActivity.daysSinceRegistration}
-                </div>
-                <div className="text-sm text-gray-600">Jours depuis l'inscription</div>
-              </div>
-            </div>
-
-            <div className={`${themeClasses.tableHeader} p-4 rounded-lg`}>
-              <div className="text-center">
-                <div className={`text-2xl font-bold ${themeClasses.text}`}>
-                  {userActivity.accountStatus}
-                </div>
-                <div className="text-sm text-gray-600">Statut du compte</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Statistiques supplémentaires */}
-          {userActivity.totalTransactions > 0 && (
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className={`${themeClasses.tableAccent} p-4 rounded-lg`}>
-                  <div className="text-center">
-                    <div className={`text-xl font-bold ${themeClasses.text}`}>
-                      {userActivity.totalTransactions}
-                    </div>
-                    <div className="text-sm text-gray-600">Transactions effectuées</div>
-                  </div>
-                </div>
-
-                <div className={`${themeClasses.tableAccent} p-4 rounded-lg`}>
-                  <div className="text-center">
-                    <div className={`text-xl font-bold ${themeClasses.text}`}>
-                      {userActivity.hasTransactions ? 'Oui' : 'Non'}
-                    </div>
-                    <div className="text-sm text-gray-600">Activité récente</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Modal de confirmation de déconnexion */}
