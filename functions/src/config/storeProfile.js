@@ -29,6 +29,10 @@
  *     siège (addSiegeRepayment, sendToSiege, updateSiegeRepayment,
  *     trashSiegeRepayment) refusent.
  *
+ *   • MONEY_TRANSFER_ENABLED   — false ⇒ les commandes des transferts d'argent
+ *     (updateStoreSettings, addMoneyTransfer, settleMoneyTransfer,
+ *     updateMoneyTransfer, trashMoneyTransfer) refusent.
+ *
  * ⚠ Ces méthodes ne sont validées qu'à la DÉCLARATION d'une tranche, jamais à sa
  * confirmation : une tranche portant un ancien code doit rester confirmable.
  */
@@ -49,3 +53,5 @@ export const STORE_REPLENISHMENT_SENDERS = ['Patron', 'Mme Sawadogo', 'Mohamed',
 export const STORE_TIME_ZONE = 'Africa/Ouagadougou'
 
 export const SIEGE_REPAYMENT_ENABLED = true
+
+export const MONEY_TRANSFER_ENABLED = true

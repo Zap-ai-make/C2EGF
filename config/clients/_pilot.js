@@ -84,6 +84,18 @@ export const pilotProfile = Object.freeze({
     enabled: false,
   }),
 
+  // ── Transferts d'argent (Western Union, Ria, MoneyGram, autres) ──────────
+  // Certaines boutiques font aussi un service de transfert : l'argent de ces
+  // clients ordinaires passe par leur caisse. Chaque boutique coche l'option
+  // dans Profil → Configuration (champ `transfertsArgent` de sa fiche) ; un
+  // onglet de saisie apparaît alors dans « Enregistrer une transaction »
+  // (docs/superpowers/specs/2026-11-23-transferts-argent-design.md).
+  //   enabled → true : la case est proposée et le serveur accepte les commandes.
+  //             false : ni l'une ni les autres.
+  moneyTransfer: Object.freeze({
+    enabled: false,
+  }),
+
   // ── Édition directe des soldes réseau par la boutique (caissière) ──────────
   // true  = la boutique saisit ses soldes en direct (règle Firestore permissive,
   //         exception V1 assumée, sans piste d'audit serveur).

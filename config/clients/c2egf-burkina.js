@@ -81,6 +81,13 @@ export const c2egfProfile = Object.freeze({
     enabled: true,
   }),
 
+  // ── Transferts d'argent : allumé (demande du 2026-11-23) ──────────────────
+  // Des boutiques C2EGF font aussi Western Union, Ria ou MoneyGram ; chacune
+  // coche l'option elle-même dans son Profil.
+  moneyTransfer: Object.freeze({
+    enabled: true,
+  }),
+
   // ── Édition directe des soldes réseau par la boutique ──────────────────────
   // false = affordance masquée dans l'UI. Option la moins exposante entre les
   // deux (SECURITY.md §0) : l'édition directe est une exception V1 sans piste

@@ -88,6 +88,12 @@ export function generateStoreProfileFile(profile) {
     throw new Error('Profil invalide : siegeRepayment.enabled doit être un booléen.')
   }
 
+  // Absent vaut éteint, comme le remboursement au siège.
+  const moneyTransferEnabled = profile?.moneyTransfer?.enabled ?? false
+  if (typeof moneyTransferEnabled !== 'boolean') {
+    throw new Error('Profil invalide : moneyTransfer.enabled doit être un booléen.')
+  }
+
   return `/**
  * storeProfile.js — axes BOUTIQUE du profil client, côté Cloud Functions.
  * ─────────────────────────────────────────────────────────────────────────────
@@ -119,6 +125,10 @@ export function generateStoreProfileFile(profile) {
  *     siège (addSiegeRepayment, sendToSiege, updateSiegeRepayment,
  *     trashSiegeRepayment) refusent.
  *
+ *   • MONEY_TRANSFER_ENABLED   — false ⇒ les commandes des transferts d'argent
+ *     (updateStoreSettings, addMoneyTransfer, settleMoneyTransfer,
+ *     updateMoneyTransfer, trashMoneyTransfer) refusent.
+ *
  * ⚠ Ces méthodes ne sont validées qu'à la DÉCLARATION d'une tranche, jamais à sa
  * confirmation : une tranche portant un ancien code doit rester confirmable.
  */
@@ -139,5 +149,7 @@ export const STORE_REPLENISHMENT_SENDERS = [${quoteList(senders)}]
 export const STORE_TIME_ZONE = '${timezone}'
 
 export const SIEGE_REPAYMENT_ENABLED = ${siegeRepaymentEnabled}
+
+export const MONEY_TRANSFER_ENABLED = ${moneyTransferEnabled}
 `
 }
