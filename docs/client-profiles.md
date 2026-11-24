@@ -50,6 +50,7 @@ la résolution **stricte** (qui lève) est réservée à la génération de règ
 | `storeWorkspace` | visibilité progressive des entrées boutique pendant l'accompagnement | Front |
 | `regional.timezone` | fuseau horaire d'affichage des dates | Front |
 | `oxygen` | liaison à l'app agent Oxygen : activée ou non, `distributeurId`, nom annoncé | Front + **Functions** (`oxygenProfile.js`) |
+| `moneyTransfer.enabled` | transferts d'argent (Western Union, Ria, MoneyGram, autres) proposés ou non ; chaque boutique coche ensuite l'option dans son Profil (`stores/{id}.transfertsArgent`) | Front + **Functions** (`MONEY_TRANSFER_ENABLED`) |
 
 > `collaborations.enabled` est **indépendant du nombre de réseaux** : une boutique sollicite une
 > consœur parce qu'elle est à court de **stock**, pas parce qu'il lui manque une SIM. Un client

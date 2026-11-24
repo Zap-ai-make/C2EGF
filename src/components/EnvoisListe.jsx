@@ -11,10 +11,12 @@ import {
   REMB_SIEGE,
   RETOUR,
   SAISIE,
+  TRANSFERT_ARGENT,
 } from '../services/fileEnvoi.js'
 import { getClientName } from '../utils/helpers.js'
 import { libelleVase } from '../utils/ravitaillement.js'
 import { TYPE_REMB_SIEGE } from '../utils/rembSiege.js'
+import { libelleTransfert } from '../utils/transfertArgent.js'
 
 /** Les quatre commandes du remboursement au siège, dans les mêmes mots que les autres. */
 function decrireRembSiege({ commande = {}, avant = {} }) {
@@ -25,6 +27,21 @@ function decrireRembSiege({ commande = {}, avant = {} }) {
   if (commande.action === 'sendToSiege') return `Envoi au siège de ${fcfa(commande.amount)}`
   if (commande.action === 'updateSiegeRepayment') return `Correction : ${TYPE_REMB_SIEGE} de ${fcfa({ ...avant, ...commande.updates }.montant)}`
   if (commande.action === 'trashSiegeRepayment') return `Annulation : ${TYPE_REMB_SIEGE} de ${fcfa(avant.montant)}`
+  return 'Opération inconnue'
+}
+
+/** Les quatre commandes d'un transfert d'argent. `avant` dit l'opération de la ligne visée. */
+function decrireTransfert({ commande = {}, avant = {} }) {
+  const nature = avant.operation === 'retrait' ? 'Retrait' : 'Transfert'
+  if (commande.action === 'addMoneyTransfer') {
+    const transaction = commande.transaction ?? {}
+    return `${libelleTransfert(transaction)} de ${fcfa(transaction.montant)} en ${libelleVase(transaction.balanceType).toLowerCase()} — ${transaction.nomClient}`
+  }
+  if (commande.action === 'settleMoneyTransfer') {
+    return avant.operation === 'retrait' ? `Encaissement de ${fcfa(commande.amount)}` : `Envoi au siège de ${fcfa(commande.amount)}`
+  }
+  if (commande.action === 'updateMoneyTransfer') return `Correction : ${nature} de ${fcfa({ ...avant, ...commande.updates }.montant)}`
+  if (commande.action === 'trashMoneyTransfer') return `Annulation : ${nature} de ${fcfa(avant.montant)}`
   return 'Opération inconnue'
 }
 
@@ -59,6 +76,7 @@ export function decrireOperation({ type, charge = {} }) {
     return `Annulation : ${nature ?? 'opération'} de ${fcfa(montant)}`
   }
   if (type === REMB_SIEGE) return decrireRembSiege(charge)
+  if (type === TRANSFERT_ARGENT) return decrireTransfert(charge)
   return 'Opération inconnue'
 }
 

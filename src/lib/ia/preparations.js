@@ -59,6 +59,7 @@ import {
 } from '../../utils/reglement.js'
 import { libelleVase, preparerRavitaillement, preparerRetour } from '../../utils/ravitaillement.js'
 import { estRembSiege } from '../../utils/rembSiege.js'
+import { estTransfertArgent } from '../../utils/transfertArgent.js'
 
 const CHOIX_MAX = 5
 const NATURES = Object.freeze(TRANSACTION_TYPES.map((t) => t.value))
@@ -328,7 +329,8 @@ export function trouverOperationEnAttente(enAttente = [], { client, type, operat
   const lignes = (Array.isArray(enAttente) ? enAttente : [])
     // Un remboursement au siège ne s'encaisse ni ne se paie : il s'envoie au
     // siège, par son propre bouton (TC-389).
-    .filter((ligne) => ligne?.id && !ligne.deletedAt && !estRembSiege(ligne) && !vues.has(ligne.id) && vues.add(ligne.id))
+    // Ni un transfert d'argent : il s'envoie au siège ou s'encaisse par ses boutons.
+    .filter((ligne) => ligne?.id && !ligne.deletedAt && !estRembSiege(ligne) && !estTransfertArgent(ligne) && !vues.has(ligne.id) && vues.add(ligne.id))
     .sort((a, b) => instant(a) - instant(b))
 
   let duClient

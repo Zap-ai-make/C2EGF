@@ -17,6 +17,7 @@ import { useAuth } from '../context/AuthContext'
 import { COLLABORATIONS_ENABLED } from '../constants/collaborationConstants'
 import { STORE_HISTORY_CONFIG } from '../constants/storeWorkspace.js'
 import { useTransactions } from '../context/transactions.jsx'
+import { TRANSFERT_ARGENT_ACTIF } from '../utils/transfertArgent.js'
 
 /**
  * Historique — les sources visibles du profil, un seul endroit où l'on relit.
@@ -43,8 +44,13 @@ import { useTransactions } from '../context/transactions.jsx'
  * le bouton « précédent » du navigateur reste sensé.
  */
 
+// Les transferts d'argent (spec 2026-11-23) : leur onglet suit les transactions
+// clients, et n'existe que pour la boutique qui en fait (voir `ongletsVisibles`).
+const ONGLET_TRANSFERTS = { cle: 'transferts', libelle: 'Transferts' }
+
 const ONGLETS = [
   { cle: 'clients', libelle: 'Transactions clients' },
+  ...(TRANSFERT_ARGENT_ACTIF ? [ONGLET_TRANSFERTS] : []),
   ...(STORE_HISTORY_CONFIG.dealer
     ? [{ cle: 'dealer', libelle: STORE_HISTORY_CONFIG.dealerLabel }]
     : []),
@@ -84,6 +90,10 @@ const PHRASES_PAR_ONGLET = {
     jour: 'Mouvements de la journée en cours. Les livraisons encore dues sont toutes affichées, même plus anciennes.',
     periode: (du, au) => `Mouvements ${du === au ? `du ${du}` : `du ${du} au ${au}`} et de la journée en cours. Les livraisons encore dues sont toutes affichées.`,
   },
+  transferts: {
+    jour: 'Seule la journée en cours est chargée. Choisissez des dates pour relire les jours précédents.',
+    periode: (du, au) => (du === au ? `Le ${du}, et la journée en cours.` : `Du ${du} au ${au}, et la journée en cours.`),
+  },
   corbeille: {
     jour: 'Lignes supprimées aujourd\u2019hui. Choisissez des dates pour relire celles d\u2019autres jours.',
     periode: (du, au) => `Lignes supprimées aujourd\u2019hui, et celles saisies ${du === au ? `le ${du}` : `du ${du} au ${au}`}.`,
@@ -121,7 +131,7 @@ function PeriodeAffichee({ onglet, periode, enChargement, erreur, horsLigne = fa
 }
 
 function Historique() {
-  const { currentUser, userProfile } = useAuth()
+  const { currentUser, userProfile, activeStore } = useAuth()
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
   const storeId = userProfile?.storeId ?? null
@@ -136,19 +146,26 @@ function Historique() {
     revenirAuJour,
   } = useTransactions()
 
-  const demande = params.get('onglet')
-  const onglet = ONGLETS.some((o) => o.cle === demande) ? demande : ONGLETS[0].cle
-
   const {
     filteredTransactions,
     corbeille,
     transactionsClients,
+    transactionsTransferts = [],
+    filteredTransferts = [],
     applyDateFilter,
     applySearchFilter,
     handleSearchChange,
     resetToToday,
     resetFilters,
   } = useHistoriqueFilters()
+
+  // L'onglet des transferts : pour la boutique qui a coché l'option, ou qui en
+  // a encore dans son historique (décochée, elle doit relire les siens).
+  const avecTransferts = activeStore?.transfertsArgent === true || transactionsTransferts.length > 0
+  const ongletsVisibles = ONGLETS.filter((o) => o.cle !== ONGLET_TRANSFERTS.cle || avecTransferts)
+
+  const demande = params.get('onglet')
+  const onglet = ongletsVisibles.some((o) => o.cle === demande) ? demande : ongletsVisibles[0].cle
 
   const allerA = useCallback(
     (cle) => setParams({ onglet: cle }, { replace: true }),
@@ -179,7 +196,7 @@ function Historique() {
       <PageHeader title="Historique" />
 
       <div className="mb-6 flex flex-wrap gap-2" role="tablist" aria-label="Sources de l’historique">
-        {ONGLETS.map((o) => (
+        {ongletsVisibles.map((o) => (
           <button
             key={o.cle}
             type="button"
@@ -194,7 +211,7 @@ function Historique() {
         ))}
       </div>
 
-      {onglet === 'clients' && (
+      {(onglet === 'clients' || onglet === 'transferts') && (
         <div className="space-y-6">
           {/* Section des filtres */}
           <div className="bg-white rounded-lg shadow-md p-6">
@@ -216,7 +233,7 @@ function Historique() {
           </div>
 
           <PeriodeAffichee
-            onglet="clients"
+            onglet={onglet}
             periode={periode}
             enChargement={periodeEnChargement}
             erreur={erreurPeriode}
@@ -226,27 +243,27 @@ function Historique() {
 
           {/* Navigation par jour : ses cartes comptent ce que le tableau peut montrer. */}
           <DailyPagination
-            transactions={transactionsClients}
+            transactions={onglet === 'transferts' ? transactionsTransferts : transactionsClients}
             onDateSelect={applyDateFilter}
           />
 
           {/* Tableau des transactions */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <HistoriqueTable
-              transactions={filteredTransactions}
+              transactions={onglet === 'transferts' ? filteredTransferts : filteredTransactions}
               onReopen={rouvrirPuisCorriger}
             />
 
 
             <ActionButtons
-              filteredTransactions={filteredTransactions}
+              filteredTransactions={onglet === 'transferts' ? filteredTransferts : filteredTransactions}
               resetFilters={resetFilters}
             />
           </div>
         </div>
       )}
 
-      {onglet !== 'clients' && (
+      {onglet !== 'clients' && onglet !== 'transferts' && (
         <div className="overflow-hidden rounded-xl border border-line bg-surface">
           {onglet === 'dealer' && (
             <ArchiveDealer currentUser={currentUser} userProfile={userProfile} />

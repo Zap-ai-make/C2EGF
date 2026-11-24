@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useTransactions } from '../../context/transactions.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
-import { getClientName, formatTransactionDateTime, tonStatut } from '../../utils/helpers.js'
+import { getClientName, nomDeLigne, libelleDeLigne, formatTransactionDateTime, tonStatut } from '../../utils/helpers.js'
 import { useWindowedRows } from '../../hooks/useWindowedRows.js'
 import EmptyState from '../ui/EmptyState.jsx'
 import { History } from 'lucide-react'
@@ -13,6 +13,7 @@ import ModificationsDialog from './ModificationsDialog.jsx'
 import { STORE_HISTORY_CONFIG } from '../../constants/storeWorkspace.js'
 import { TYPE_RAVITAILLEMENT, TYPE_RETOUR } from '../../utils/ravitaillement.js'
 import { consequenceAnnulation, estRembSiege } from '../../utils/rembSiege.js'
+import { consequenceAnnulationTransfert, estTransfertArgent } from '../../utils/transfertArgent.js'
 import { regrouperParClientEtType } from '../../utils/regroupement.js'
 import { dureeDe, formaterHeure } from '../../utils/attente.js'
 import { detailDuReglement, statutDuReglement } from '../../utils/detailReglement.js'
@@ -108,9 +109,13 @@ const raisonNonSupprimable = (transaction) =>
 // et ses tranches se défont par l'annulation, puis la caissière ressaisit.
 const RAISON_REMB_SIEGE = 'Un remboursement au siège ne se modifie pas : annulez-le puis ressaisissez-le.'
 
+// De même pour un transfert d'argent : `trashMoneyTransfer` défait tout.
+const RAISON_TRANSFERT = 'Un transfert d’argent ne se modifie pas : annulez-le puis ressaisissez-le.'
+
 const raisonNonModifiable = (transaction) =>
   transaction.envoi?.etat === REFUSEE ? RAISON_REFUSEE
     : estRembSiege(transaction) ? RAISON_REMB_SIEGE
+    : estTransfertArgent(transaction) ? RAISON_TRANSFERT
     : reglementInacheve(transaction) ? RAISON_PARTIEL : null
 
 /**
@@ -320,18 +325,18 @@ function HistoriqueTable({ transactions = [], onReopen }) {
               <span>{transaction.expediteur || 'Sans expéditeur'}</span>
               <span className="text-xs text-ink-muted">dealer</span>
             </span>
-          ) : getClientName(transaction.client)}
+          ) : nomDeLigne(transaction)}
         </td>
         <td className={`whitespace-nowrap px-4 py-3 text-base font-medium ${styles.textColor}`}>
-          {transaction.type || '-'}
-          {(estLigneDealer(transaction.type) || estRembSiege(transaction)) && libelleReserve(transaction.balanceType) && (
+          {libelleDeLigne(transaction) || '-'}
+          {(estLigneDealer(transaction.type) || estRembSiege(transaction) || estTransfertArgent(transaction)) && libelleReserve(transaction.balanceType) && (
             <span className="ml-1 text-xs font-normal text-ink-muted">
               · {libelleReserve(transaction.balanceType)}
             </span>
           )}
         </td>
         <td className="whitespace-nowrap px-4 py-3 text-base">
-          {transaction.code || '-'}
+          {(estTransfertArgent(transaction) ? transaction.codeTransfert : transaction.code) || '-'}
           {/* La DESTINATION du règlement, quand l'argent est parti sur un
               compte agent au lieu d'être remis en main propre. Deux lignes
               plutôt qu'une colonne de plus : la question « où est parti
@@ -579,9 +584,9 @@ function HistoriqueTable({ transactions = [], onReopen }) {
               <span className="font-medium">
                 {estLigneDealer(aSupprimer.type)
                   ? (aSupprimer.expediteur || 'Sans expéditeur')
-                  : getClientName(aSupprimer.client)}
+                  : nomDeLigne(aSupprimer)}
               </span>
-              {' · '}{aSupprimer.type}
+              {' · '}{libelleDeLigne(aSupprimer)}
               {' · '}
               <span className="font-mono tabular-nums">
                 {(Number(aSupprimer.montant) || 0).toLocaleString('fr-FR')} FCFA
@@ -598,6 +603,11 @@ function HistoriqueTable({ transactions = [], onReopen }) {
             ) : estRembSiege(aSupprimer) ? (
               <p className="text-ink-muted">
                 {consequenceAnnulation(aSupprimer)} La ligne ira dans la corbeille,
+                où elle restera lisible. Elle ne pourra pas être restaurée.
+              </p>
+            ) : estTransfertArgent(aSupprimer) ? (
+              <p className="text-ink-muted">
+                {consequenceAnnulationTransfert(aSupprimer)} La ligne ira dans la corbeille,
                 où elle restera lisible. Elle ne pourra pas être restaurée.
               </p>
             ) : (

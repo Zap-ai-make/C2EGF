@@ -15,7 +15,7 @@ import { useTransactions } from '../../context/transactions.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
 import { PAYMENT_METHODS } from '../../utils/constants.js'
 import { REFUSEE, REGLEMENT } from '../../services/fileEnvoi.js'
-import { getClientName, formatTransactionDateTime } from '../../utils/helpers.js'
+import { getClientName, nomDeLigne, libelleDeLigne, formatTransactionDateTime } from '../../utils/helpers.js'
 import { SkeletonRow } from '../ui/SkeletonList.jsx'
 import EmptyState from '../ui/EmptyState.jsx'
 import Dialog from '../ui/Dialog.jsx'
@@ -34,6 +34,8 @@ import { ChevronRight } from 'lucide-react'
 import { useEnvois } from '../../context/envoisContexte.js'
 import EtatEnvoi from '../ui/EtatEnvoi.jsx'
 import EnvoiSiegeMenu from './EnvoiSiegeMenu.jsx'
+import TrancheTransfertMenu from './TrancheTransfertMenu.jsx'
+import { consequenceAnnulationTransfert, estTransfertArgent } from '../../utils/transfertArgent.js'
 import { consequenceAnnulation, estRembSiege, REMB_SIEGE_ACTIF } from '../../utils/rembSiege.js'
 import { libelleVase } from '../../utils/ravitaillement.js'
 import { useDemandesAgent } from '../../hooks/useDemandesAgent.js'
@@ -68,6 +70,8 @@ const TEINTES_CASES = {
   depot: { texte: 'text-inflow', cadre: 'border-inflow/30 bg-inflow-soft', anneau: 'ring-inflow' },
   retrait: { texte: 'text-danger', cadre: 'border-danger/30 bg-danger-soft', anneau: 'ring-danger' },
   siege: { texte: 'text-siege', cadre: 'border-siege/30 bg-siege-soft', anneau: 'ring-siege' },
+  transfert: { texte: 'text-transfert', cadre: 'border-transfert/30 bg-transfert-soft', anneau: 'ring-transfert' },
+  retraitTransfert: { texte: 'text-transfert', cadre: 'border-transfert/30 bg-transfert-soft', anneau: 'ring-transfert' },
 }
 
 /**
@@ -111,7 +115,7 @@ function CaseFiltre({ teinte, libelle, nombre, total, choisie, estompee, desacti
 }
 
 const TransactionTable = memo(function TransactionTable() {
-  const { pendingTransactions, completedTransactions, getActionButtons, getTransactionStyles, addPaymentTranche, addRefundTranche, startEditTransaction, trashTransaction, envoyerAuSiege, loading } = useTransactions()
+  const { pendingTransactions, completedTransactions, getActionButtons, getTransactionStyles, addPaymentTranche, addRefundTranche, startEditTransaction, trashTransaction, envoyerAuSiege, traiterTransfertArgent, loading } = useTransactions()
   // Les demandes des agents (contrat Oxygen v4) : en tête du tableau, quel que
   // soit le filtre, hors des cases et du Total caisse — ce ne sont pas encore
   // des opérations. Vides hors ligne et là où le profil n'ouvre pas Oxygen.
@@ -186,6 +190,8 @@ const TransactionTable = memo(function TransactionTable() {
     depot: totauxEnAttente.nbDepots,
     retrait: totauxEnAttente.nbRetraits,
     siege: totauxEnAttente.nbSiege,
+    transfert: totauxEnAttente.nbTransfertsDus,
+    retraitTransfert: totauxEnAttente.nbRetraitsARecevoir,
   }
   const filtreActif = filtre !== 'tout' && comptesParNature[filtre] > 0 ? filtre : 'tout'
   useEffect(() => {
@@ -281,7 +287,7 @@ const TransactionTable = memo(function TransactionTable() {
           behavior: prefereMouvementReduit() ? 'auto' : 'smooth',
         })
       }
-    } else if (actionType === 'payerPar' || actionType === 'rembourser' || actionType === 'encaisser' || actionType === 'envoyerSiege') {
+    } else if (actionType === 'payerPar' || actionType === 'rembourser' || actionType === 'encaisser' || actionType === 'envoyerSiege' || actionType === 'trancheTransfert') {
       if (activeDropdown === transactionId) {
         setActiveDropdown(null)
         setCurrentActionType(null)
@@ -386,6 +392,32 @@ const TransactionTable = memo(function TransactionTable() {
       })
     }
   }, [envoyerAuSiege])
+
+  /**
+   * Une tranche d'un transfert d'argent : envoyée au siège ou encaissée, selon
+   * l'opération de la ligne. Même chemin que l'envoi au siège : le menu se
+   * ferme, la tranche part derrière.
+   */
+  const handleTrancheTransfert = useCallback(async (transactionId, montant) => {
+    const actionKey = `${transactionId}-trancheTransfert`
+    setProcessingActions(prev => new Set(prev).add(actionKey))
+    setActiveDropdown(null)
+    setCurrentActionType(null)
+    setDropdownStep(1)
+    try {
+      await traiterTransfertArgent(transactionId, montant)
+    } catch (error) {
+      logger.user.error('Tranche de transfert', error)
+      setRollbackToast({ show: true, message: error?.message || 'Tranche non enregistrée', type: 'rollback' })
+      setTimeout(() => setRollbackToast({ show: false, message: '', type: 'info' }), 4000)
+    } finally {
+      setProcessingActions(prev => {
+        const suivant = new Set(prev)
+        suivant.delete(actionKey)
+        return suivant
+      })
+    }
+  }, [traiterTransfertArgent])
 
   /**
    * La réponse à une demande d'agent : le geste qui part, par demande.
@@ -604,7 +636,7 @@ const TransactionTable = memo(function TransactionTable() {
           <CaseFiltre
             teinte="tout"
             libelle="Tout"
-            nombre={totauxEnAttente.nbDepots + totauxEnAttente.nbRetraits + totauxEnAttente.nbSiege}
+            nombre={totauxEnAttente.nbDepots + totauxEnAttente.nbRetraits + totauxEnAttente.nbSiege + totauxEnAttente.nbTransfertsDus + totauxEnAttente.nbRetraitsARecevoir}
             choisie={filtreActif === 'tout'}
             estompee={filtreActif !== 'tout'}
             desactivee={false}
@@ -644,6 +676,37 @@ const TransactionTable = memo(function TransactionTable() {
               desactivee={totauxEnAttente.nbSiege === 0}
               onChoisir={() => choisirFiltre('siege')}
               testIds={{ caseId: 'case-siege-non-terminees', nombreId: 'nombre-siege-non-terminees', totalId: 'total-siege-non-terminees' }}
+            />
+          )}
+          {/* Les transferts d'argent (spec 2026-11-23), seulement quand il y en
+              a. DEUX cases, chacune avec son reste : ce que le Total caisse
+              retranche (à envoyer au siège) et ce qu'il ajoute (à encaisser du
+              siège). Leur somme ne dirait rien ; séparés, ils rendent le total
+              vérifiable à la main (relecture du 23 novembre). */}
+          {totauxEnAttente.nbTransfertsDus > 0 && (
+            <CaseFiltre
+              teinte="transfert"
+              libelle="Transferts à envoyer"
+              nombre={totauxEnAttente.nbTransfertsDus}
+              total={totauxEnAttente.transfertsDus}
+              choisie={filtreActif === 'transfert'}
+              estompee={filtreActif !== 'tout' && filtreActif !== 'transfert'}
+              desactivee={false}
+              onChoisir={() => choisirFiltre('transfert')}
+              testIds={{ caseId: 'case-transferts-non-terminees', nombreId: 'nombre-transferts-non-terminees', totalId: 'total-transferts-non-terminees' }}
+            />
+          )}
+          {totauxEnAttente.nbRetraitsARecevoir > 0 && (
+            <CaseFiltre
+              teinte="retraitTransfert"
+              libelle="Retraits à encaisser"
+              nombre={totauxEnAttente.nbRetraitsARecevoir}
+              total={totauxEnAttente.retraitsARecevoir}
+              choisie={filtreActif === 'retraitTransfert'}
+              estompee={filtreActif !== 'tout' && filtreActif !== 'retraitTransfert'}
+              desactivee={false}
+              onChoisir={() => choisirFiltre('retraitTransfert')}
+              testIds={{ caseId: 'case-retraits-transfert-non-terminees', nombreId: 'nombre-retraits-transfert-non-terminees', totalId: 'total-retraits-transfert-non-terminees' }}
             />
           )}
         </div>
@@ -754,13 +817,13 @@ const TransactionTable = memo(function TransactionTable() {
                         <EtatEnvoi envoi={transaction.envoi} />
                       </td>
                       <td className="px-4 py-3 text-base font-medium">
-                        {getClientName(transaction.client)}
+                        {nomDeLigne(transaction)}
                       </td>
                       <td className={`px-4 py-3 text-base font-medium ${styles.textColor}`}>
-                        {transaction.type}
+                        {libelleDeLigne(transaction)}
                       </td>
                       <td className="px-4 py-3 text-base">
-                        {transaction.code || '-'}
+                        {(estTransfertArgent(transaction) ? transaction.codeTransfert : transaction.code) || '-'}
                       </td>
                       <td className={`px-4 py-3 text-right text-base font-medium tabular-nums ${styles.textColor}`}>
                         <span>{(Number(transaction.montant) || 0).toLocaleString('fr-FR')} FCFA</span>
@@ -777,6 +840,18 @@ const TransactionTable = memo(function TransactionTable() {
                                 Envoyé : {Number(transaction.envoyeAuSiege).toLocaleString('fr-FR')} FCFA
                                 {' · '}
                                 <span className="text-warn">Reste : {(Number(transaction.resteAuSiege) || 0).toLocaleString('fr-FR')} FCFA</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {estTransfertArgent(transaction) && (
+                          <div className="mt-0.5 text-xs font-normal tabular-nums text-ink-muted">
+                            <div>{transaction.operation === 'retrait' ? 'Payé' : 'Reçu'} en {libelleVase(transaction.balanceType)}</div>
+                            {(Number(transaction.montantTraite) || 0) > 0 && (
+                              <div>
+                                {transaction.operation === 'retrait' ? 'Encaissé' : 'Envoyé'} : {Number(transaction.montantTraite).toLocaleString('fr-FR')} FCFA
+                                {' · '}
+                                <span className="text-warn">Reste : {(Number(transaction.resteATraiter) || 0).toLocaleString('fr-FR')} FCFA</span>
                               </div>
                             )}
                           </div>
@@ -834,6 +909,18 @@ const TransactionTable = memo(function TransactionTable() {
                               className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 dropdown-trigger"
                             >
                               Envoyer au siège
+                            </button>
+                          )}
+
+                          {/* Transfert d'argent : vers le siège ou du siège,
+                              toujours en stock ; le mot suit l'opération. */}
+                          {actions.trancheTransfert && (
+                            <button
+                              onClick={(e) => handleActionClick(transaction.id, 'trancheTransfert', e)}
+                              disabled={isProcessingTransaction}
+                              className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 dropdown-trigger"
+                            >
+                              {transaction.operation === 'retrait' ? 'Encaisser' : 'Envoyer au siège'}
                             </button>
                           )}
 
@@ -916,6 +1003,11 @@ const TransactionTable = memo(function TransactionTable() {
             <EnvoiSiegeMenu
               ligne={pendingTransactions.find(tx => tx.id === activeDropdown)}
               onEnvoyer={(montant) => handleEnvoiSiege(activeDropdown, montant)}
+            />
+          ) : currentActionType === 'trancheTransfert' ? (
+            <TrancheTransfertMenu
+              ligne={pendingTransactions.find(tx => tx.id === activeDropdown)}
+              onValider={(montant) => handleTrancheTransfert(activeDropdown, montant)}
             />
           ) : dropdownStep === 1 ? (
             <>
@@ -1125,8 +1217,8 @@ const TransactionTable = memo(function TransactionTable() {
         {aSupprimer && (
           <div className="space-y-3 text-sm text-ink">
             <p>
-              <span className="font-medium">{getClientName(aSupprimer.client)}</span>
-              {' · '}{aSupprimer.type}
+              <span className="font-medium">{nomDeLigne(aSupprimer)}</span>
+              {' · '}{libelleDeLigne(aSupprimer)}
               {' · '}
               <span className="font-mono tabular-nums">
                 {(Number(aSupprimer.montant) || 0).toLocaleString('fr-FR')} FCFA
@@ -1135,6 +1227,8 @@ const TransactionTable = memo(function TransactionTable() {
             <p className="text-ink-muted">
               {estRembSiege(aSupprimer)
                 ? `${consequenceAnnulation(aSupprimer)} La ligne ira dans la corbeille, où elle restera lisible. Elle ne pourra pas être restaurée.`
+                : estTransfertArgent(aSupprimer)
+                ? `${consequenceAnnulationTransfert(aSupprimer)} La ligne ira dans la corbeille, où elle restera lisible. Elle ne pourra pas être restaurée.`
                 : 'Le stock engagé sera rendu et la ligne ira dans la corbeille, où elle restera lisible. Elle ne pourra pas être restaurée.'}
             </p>
           </div>

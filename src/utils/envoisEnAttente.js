@@ -34,6 +34,7 @@ import {
   REMB_SIEGE,
   RETOUR,
   SAISIE,
+  TRANSFERT_ARGENT,
 } from '../services/fileEnvoi.js'
 import {
   adjustBalanceValue,
@@ -49,6 +50,7 @@ import {
 } from './financialImpact.js'
 import { TYPE_RAVITAILLEMENT, TYPE_RETOUR } from './ravitaillement.js'
 import { TYPE_REMB_SIEGE, effetRembSiegeSurLesSoldes } from './rembSiege.js'
+import { TYPE_TRANSFERT_ARGENT, effetTransfertSurLesSoldes } from './transfertArgent.js'
 
 const FUSEAU = 'Africa/Ouagadougou'
 const { PENDING, VALIDATED, DELETED } = FIRESTORE_CONFIG.STATUS
@@ -295,6 +297,9 @@ const EFFETS_SUR_LES_LIGNES = {
   [REMB_SIEGE](op, nonTerminees, historique) {
     EFFETS_REMB_SIEGE[op.charge?.commande?.action]?.(op, nonTerminees, historique)
   },
+  [TRANSFERT_ARGENT](op, nonTerminees, historique) {
+    EFFETS_TRANSFERT_ARGENT[op.charge?.commande?.action]?.(op, nonTerminees, historique)
+  },
 }
 
 // Ce qu'une modification de remboursement au siège peut changer : la liste
@@ -372,8 +377,80 @@ const EFFETS_REMB_SIEGE = {
   },
 }
 
+// Ce qu'une modification de transfert peut changer : la liste blanche de
+// `updateMoneyTransfer`. Jamais l'opération.
+const CHAMPS_TRANSFERT = ['service', 'servicePrecise', 'nomClient', 'telephone', 'codeTransfert', 'montant', 'balanceType']
+
+/**
+ * Ce que chaque commande d'un transfert d'argent fait aux deux listes, sous la
+ * forme que le serveur leur donnera. Même schéma que le remboursement au siège.
+ */
+const EFFETS_TRANSFERT_ARGENT = {
+  addMoneyTransfer(op, nonTerminees, historique) {
+    if (nonTerminees.has(op.id) || historique.has(op.id)) return
+    const { transaction } = op.charge.commande
+    nonTerminees.set(op.id, {
+      ...transaction,
+      id: op.id,
+      type: TYPE_TRANSFERT_ARGENT,
+      reseau: op.charge.reseau,
+      statut: PENDING,
+      montantTraite: 0,
+      resteATraiter: transaction.montant,
+      tranches: [],
+      date: jourFr(op.creeLe),
+      createdAt: Timestamp.fromMillis(op.creeLe),
+      envoi: etatEnvoi(op),
+    })
+  },
+  settleMoneyTransfer(op, nonTerminees, historique) {
+    if (op.etat !== EN_ATTENTE) return
+    const { draftId, amount } = op.charge.commande
+    const ligne = nonTerminees.get(draftId)
+    if (!ligne || (ligne.tranches ?? []).some((t) => t.id === op.id)) return
+    const montant = Number(amount) || 0
+    const reste = Math.max(0, (Number(ligne.resteATraiter) || 0) - montant)
+    const traitee = marquee({
+      ...ligne,
+      montantTraite: (Number(ligne.montantTraite) || 0) + montant,
+      resteATraiter: reste,
+      tranches: [...(ligne.tranches ?? []), { id: op.id, montant }],
+    }, op)
+    if (reste > 0) {
+      nonTerminees.set(draftId, traitee)
+      return
+    }
+    nonTerminees.delete(draftId)
+    historique.set(draftId, { ...traitee, statut: VALIDATED, validatedAt: Timestamp.fromMillis(op.creeLe) })
+  },
+  updateMoneyTransfer(op, nonTerminees) {
+    if (op.etat !== EN_ATTENTE) return
+    const { draftId, updates = {} } = op.charge.commande
+    const ligne = nonTerminees.get(draftId)
+    if (!ligne || ligne.derniereCommande === op.id) return
+    const retenus = Object.fromEntries(CHAMPS_TRANSFERT.filter((champ) => updates[champ] !== undefined).map((champ) => [champ, updates[champ]]))
+    const modifiee = { ...ligne, ...retenus }
+    nonTerminees.set(draftId, marquee({ ...modifiee, resteATraiter: Number(modifiee.montant) || 0 }, op))
+  },
+  trashMoneyTransfer(op, nonTerminees, historique) {
+    if (op.etat !== EN_ATTENTE) return
+    const { draftId, historyId } = op.charge.commande
+    const deletedAt = new Date(op.creeLe)
+    if (draftId) {
+      const ligne = nonTerminees.get(draftId)
+      if (!ligne || historique.has(op.id)) return
+      nonTerminees.delete(draftId)
+      historique.set(op.id, marquee({ ...ligne, id: op.id, statut: DELETED, origin: 'draft', deletedAt }, op))
+      return
+    }
+    const ligne = historique.get(historyId)
+    if (!ligne || ligne.deletedAt) return
+    historique.set(historyId, marquee({ ...ligne, statut: DELETED, origin: 'history', deletedAt }, op))
+  },
+}
+
 /** Refusées, elles se lisent encore sur leur ligne, avec leur raison. */
-const VISIBLES_REFUSEES = [SAISIE, REGLEMENT, REMBOURSEMENT, REMB_SIEGE]
+const VISIBLES_REFUSEES = [SAISIE, REGLEMENT, REMBOURSEMENT, REMB_SIEGE, TRANSFERT_ARGENT]
 
 /**
  * Les lignes du serveur, après tout ce qui attend le réseau.
@@ -456,6 +533,8 @@ function effetSurLesSoldes(soldes, op, brouillons) {
     }
     case REMB_SIEGE:
       return effetRembSiegeSurLesSoldes(soldes, charge.reseau, charge.commande, charge.avant ?? null)
+    case TRANSFERT_ARGENT:
+      return effetTransfertSurLesSoldes(soldes, charge.reseau, charge.commande, charge.avant ?? null)
     default:
       return null
   }

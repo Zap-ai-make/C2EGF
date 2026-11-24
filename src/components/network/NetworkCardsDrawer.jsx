@@ -52,8 +52,8 @@ function NetworkCardsDrawer() {
     const stock = activeProfile.networks.enabled
       .reduce((somme, reseau) => somme + (Number(networkData[reseau]?.stock) || 0), 0)
     const liquidite = Number(networkData.Liquidite?.liquidite) || 0
-    const { depots, retraits, siege } = sommesEnAttente(pendingTransactions)
-    return totalCaisse({ stock, liquidite, depots, retraits, siege })
+    const { depots, retraits, siege, transfertsDus, retraitsARecevoir } = sommesEnAttente(pendingTransactions)
+    return totalCaisse({ stock, liquidite, depots, retraits, siege, transfertsDus, retraitsARecevoir })
   }, [networkData, pendingTransactions])
 
   return (

@@ -12,7 +12,7 @@
 import { Trash2 } from 'lucide-react'
 import { useTransactions } from '../../context/transactions.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
-import { getClientName, formatTransactionDateTime, formatInstant } from '../../utils/helpers.js'
+import { nomDeLigne, libelleDeLigne, formatTransactionDateTime, formatInstant } from '../../utils/helpers.js'
 import EmptyState from '../ui/EmptyState.jsx'
 import EtatEnvoi from '../ui/EtatEnvoi.jsx'
 
@@ -94,10 +94,10 @@ function CorbeilleTable({ transactions = [] }) {
                     {formatTransactionDateTime(transaction)}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-base">
-                    {getClientName(transaction.client)}
+                    {nomDeLigne(transaction)}
                   </td>
                   <td className={`whitespace-nowrap px-4 py-3 text-base font-medium ${styles.textColor}`}>
-                    {transaction.type || '-'}
+                    {libelleDeLigne(transaction) || '-'}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-base">
                     {transaction.reseau || '-'}

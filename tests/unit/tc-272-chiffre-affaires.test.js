@@ -155,6 +155,7 @@ describe('TC-272 — la somme', () => {
       .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // type: Retour
       .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // type: Clôture
       .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // type: Remb. siège
+      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // type: Transfert argent
       .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // statut: Annulée
       .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // statut: Supprimée
       .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // Ravitaillement∩Annulée
@@ -165,6 +166,8 @@ describe('TC-272 — la somme', () => {
       .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // Clôture∩Supprimée
       .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // Remb. siège∩Annulée
       .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // Remb. siège∩Supprimée
+      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // Transfert argent∩Annulée
+      .mockResolvedValueOnce({ data: () => ({ total: 0 }) })          // Transfert argent∩Supprimée
     const r = await chiffreAffaires({ type: 'jour', cle: '2026-10-15' })
     expect(r).toEqual({ total: 847300000, incomplet: false })
     expect(sum).toHaveBeenCalledWith('montant')
@@ -278,6 +281,8 @@ describe('TC-272 — la somme', () => {
       'Retour×Annulée', 'Retour×Supprimée',
       // Le remboursement au siège (2026-11-14) : hors CA, comme les types dealer.
       'Remb. siège×Annulée', 'Remb. siège×Supprimée',
+      // Le transfert d'argent (2026-11-23) : hors CA de même.
+      'Transfert argent×Annulée', 'Transfert argent×Supprimée',
     ].sort())
   })
 
@@ -287,6 +292,27 @@ describe('TC-272 — la somme', () => {
    *   cliente, un « Remb. siège » validé de 200 000 et un supprimé de 50 000.
    *   Les réponses suivent les clauses de chaque requête, pas leur ordre.
    */
+  /**
+   * ⚠ UN TRANSFERT D'ARGENT NON PLUS (spec 2026-11-23) : l'argent est au
+   *   client ordinaire et au siège. Jeu : 350 000 d'activité cliente, un
+   *   transfert validé de 120 000 et un supprimé de 30 000.
+   */
+  it('[TC-272-TA] un transfert d’argent n’entre pas dans le chiffre d’affaires', async () => {
+    getAggregateFromServer.mockImplementation(async ({ c }) => {
+      const type = c.find((clause) => clause.f === 'type')?.v
+      const statut = c.find((clause) => clause.f === 'statut')?.v
+      const total = (() => {
+        if (!type && !statut) return 500000
+        if (type === 'Transfert argent' && !statut) return 150000
+        if (!type && statut === 'Supprimée') return 30000
+        if (type === 'Transfert argent' && statut === 'Supprimée') return 30000
+        return 0
+      })()
+      return { data: () => ({ total }) }
+    })
+    expect(await chiffreAffaires({ type: 'jour', cle: '2026-10-15' })).toEqual({ total: 350000, incomplet: false })
+  })
+
   it('[TC-272-RS] un remboursement au siège n’entre pas dans le chiffre d’affaires', async () => {
     getAggregateFromServer.mockImplementation(async ({ c }) => {
       const type = c.find((clause) => clause.f === 'type')?.v
@@ -308,18 +334,20 @@ describe('TC-272 — la somme', () => {
    *   EXCLUSION (ronde de correction 2, R52) : total − Σ(A) − Σ(B∪C) +
    *   Σ(intersections), JAMAIS la simple soustraction à six termes de la
    *   ronde 1 (qui double-comptait — voir `tc-273-05`). Dans l'ORDRE
-   *   d'émission : total, 4× type, 2× statut, 8× intersection — quinze depuis
-   *   le remboursement au siège (2026-11-14), quatrième type hors CA.
-   *   100000 − (1000+2000+3000+7000) − (4000+5000)
-   *   + (100+200+300+400+500+600+700+800) = 100000 − 13000 − 9000 + 3600 = 81600.
+   *   d'émission : total, 5× type, 2× statut, 10× intersection — quinze depuis
+   *   le remboursement au siège (2026-11-14), dix-huit depuis le transfert
+   *   d'argent (2026-11-23), cinquième type hors CA.
+   *   100000 − (1000+2000+3000+7000+6000) − (4000+5000)
+   *   + (100+200+300+400+500+600+700+800+900+1000) = 100000 − 19000 − 9000 + 5500 = 77500.
    */
-  it('[TC-272-14] quinze agrégations sont émises, et le résultat suit l’inclusion-exclusion complète', async () => {
+  it('[TC-272-14] dix-huit agrégations sont émises, et le résultat suit l’inclusion-exclusion complète', async () => {
     getAggregateFromServer
       .mockResolvedValueOnce({ data: () => ({ total: 100000 }) }) // total
       .mockResolvedValueOnce({ data: () => ({ total: 1000 }) })   // type: Ravitaillement
       .mockResolvedValueOnce({ data: () => ({ total: 2000 }) })   // type: Retour
       .mockResolvedValueOnce({ data: () => ({ total: 3000 }) })   // type: Clôture
       .mockResolvedValueOnce({ data: () => ({ total: 7000 }) })   // type: Remb. siège
+      .mockResolvedValueOnce({ data: () => ({ total: 6000 }) })   // type: Transfert argent
       .mockResolvedValueOnce({ data: () => ({ total: 4000 }) })   // statut: Annulée
       .mockResolvedValueOnce({ data: () => ({ total: 5000 }) })   // statut: Supprimée
       .mockResolvedValueOnce({ data: () => ({ total: 100 }) })    // Ravitaillement∩Annulée
@@ -330,9 +358,11 @@ describe('TC-272 — la somme', () => {
       .mockResolvedValueOnce({ data: () => ({ total: 600 }) })    // Clôture∩Supprimée
       .mockResolvedValueOnce({ data: () => ({ total: 700 }) })    // Remb. siège∩Annulée
       .mockResolvedValueOnce({ data: () => ({ total: 800 }) })    // Remb. siège∩Supprimée
+      .mockResolvedValueOnce({ data: () => ({ total: 900 }) })    // Transfert argent∩Annulée
+      .mockResolvedValueOnce({ data: () => ({ total: 1000 }) })   // Transfert argent∩Supprimée
     const r = await chiffreAffaires({ type: 'jour', cle: '2026-10-15' })
-    expect(getAggregateFromServer).toHaveBeenCalledTimes(15)
-    expect(r).toEqual({ total: 81600, incomplet: false })
+    expect(getAggregateFromServer).toHaveBeenCalledTimes(18)
+    expect(r).toEqual({ total: 77500, incomplet: false })
   })
 
   /**

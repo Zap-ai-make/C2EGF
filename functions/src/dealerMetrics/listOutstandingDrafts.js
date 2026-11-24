@@ -1,5 +1,6 @@
 import { DealerRequestError } from '../errors.js'
 import { estRembSiege } from '../storeTransactions/rembSiege.js'
+import { estTransfertArgent } from '../storeTransactions/transfertArgent.js'
 import {
   readValidatedProfile,
   validateAuthUid,
@@ -58,6 +59,8 @@ export function aggregateOutstandingDrafts({ stores = [], drafts = [] } = {}) {
     // Un remboursement au siège en attente est de l'argent que la boutique doit
     // au siège, pas un dépôt dû par un client : ni dehors, ni illisible (TC-213).
     if (estRembSiege(draft)) continue
+    // Un transfert d'argent non plus : son client n'est pas un agent (spec 2026-11-23).
+    if (estTransfertArgent(draft)) continue
     const row = byStore.get(draft?.storeId)
     if (!row) { horsReseau += 1; continue }
     const amount = remainingAmount(draft)

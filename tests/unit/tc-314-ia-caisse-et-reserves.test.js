@@ -131,6 +131,7 @@ describe('TC-314 — la caisse lue par le modèle', () => {
       // Le reste dû, une seule fois même livré en double.
       retraits_non_termines: { nombre: 1, montant: 10000 },
       remboursements_siege_non_envoyes: { nombre: 0, montant: 0 },
+      transferts_non_termines: { nombre: 0, a_envoyer_au_siege: 0, a_encaisser_du_siege: 0 },
       total_caisse: 200000 + 35000 + 40000 - 10000,
     })
   })

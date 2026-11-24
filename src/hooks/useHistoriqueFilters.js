@@ -3,6 +3,7 @@ import { useTransactions } from '../context/transactions.jsx'
 import { matchesSearchTerm, matchesDateFilter } from '../utils/helpers.js'
 import { STORE_MOVEMENT_TYPES, estSupprimee } from '../utils/constants.js'
 import { bornerPeriode } from '../utils/periodeHistorique.js'
+import { estTransfertArgent } from '../utils/transfertArgent.js'
 
 /** Horodatage de mise à la corbeille, pour le tri du plus récent au plus ancien. */
 const instantSuppression = (transaction) => {
@@ -24,9 +25,15 @@ const instantSuppression = (transaction) => {
  * Une ligne supprimée a rendu son montant aux soldes : la laisser ici la ferait
  * relire comme une opération vivante, et le total de la journée compterait un
  * dépôt que la boutique n'a plus.
+ *
+ * Les transferts d'argent non plus : leur client n'est pas un agent, et ils ont
+ * leur onglet à part (demande de l'utilisateur, 2026-11-24).
  */
 const estTransactionClient = (transaction) =>
-  !STORE_MOVEMENT_TYPES.includes(transaction.type) && !estSupprimee(transaction)
+  !STORE_MOVEMENT_TYPES.includes(transaction.type) && !estSupprimee(transaction) && !estTransfertArgent(transaction)
+
+/** Un transfert d'argent vivant, pour l'onglet « Transferts ». */
+const estTransfertVivant = (transaction) => estTransfertArgent(transaction) && !estSupprimee(transaction)
 
 export const useHistoriqueFilters = () => {
   const { completedTransactions, chargerPeriode, revenirAuJour } = useTransactions()
@@ -57,6 +64,22 @@ export const useHistoriqueFilters = () => {
       matchesSearchTerm(transaction, appliedSearchTerm || searchTerm)
     )
   }, [transactionsClients, appliedDateFilter, appliedSearchTerm, searchTerm, showTodayOnly])
+
+  /**
+   * Les transferts d'argent, avec les mêmes filtres de date et de recherche
+   * que les transactions clients : on y retrouve une ligne par son nom, son
+   * code (MTCN…) ou son téléphone.
+   */
+  const transactionsTransferts = useMemo(
+    () => completedTransactions.filter(estTransfertVivant),
+    [completedTransactions],
+  )
+  const filteredTransferts = useMemo(
+    () => transactionsTransferts.filter((transaction) =>
+      matchesDateFilter(transaction, appliedDateFilter, showTodayOnly) &&
+      matchesSearchTerm(transaction, appliedSearchTerm || searchTerm)),
+    [transactionsTransferts, appliedDateFilter, appliedSearchTerm, searchTerm, showTodayOnly],
+  )
 
   /**
    * La corbeille : tout ce qui a été supprimé, des deux provenances, du plus
@@ -133,6 +156,8 @@ export const useHistoriqueFilters = () => {
     filteredTransactions,
     corbeille,
     transactionsClients,
+    transactionsTransferts,
+    filteredTransferts,
     
     // Actions
     setDateFilter,

@@ -17,7 +17,11 @@ const sansEspaces = (valeur) => valeur.replace(/\s+/g, '')
 
 const CHAMP = 'w-full rounded border border-line px-3 py-2 font-mono tabular-nums focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400'
 
-export default function NumerosBoutique({ storeId }) {
+/**
+ * `sansCadre` : rendu dans la carte Configuration du Profil, qui porte déjà le
+ * cadre et le titre de niveau 2.
+ */
+export default function NumerosBoutique({ storeId, sansCadre = false }) {
   const enLigne = useEnLigne()
   const idFlotte = useId()
   const idDealer = useId()
@@ -69,9 +73,11 @@ export default function NumerosBoutique({ storeId }) {
     setMessage(null)
   }
 
+  const Cadre = sansCadre ? 'section' : 'div'
+  const Titre = sansCadre ? 'h3' : 'h2'
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <h2 className="text-xl font-bold text-ink mb-6">Numéros de la boutique</h2>
+    <Cadre className={sansCadre ? '' : 'bg-white rounded-lg shadow-md p-6'}>
+      <Titre className={`${sansCadre ? 'text-lg mb-4' : 'text-xl mb-6'} font-bold text-ink`}>Numéros de la boutique</Titre>
       {illisible ? (
         <p role="alert" className="rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-warn">
           Numéros illisibles pour l’instant. Réessayez avec une connexion.
@@ -112,6 +118,6 @@ export default function NumerosBoutique({ storeId }) {
           </div>
         </form>
       )}
-    </div>
+    </Cadre>
   )
 }

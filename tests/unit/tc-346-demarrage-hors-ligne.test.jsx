@@ -54,7 +54,6 @@ vi.mock('../../src/utils/authHelpers', async (importOriginal) => ({
   getAuthErrorMessage: vi.fn((code, msg) => msg || code || 'Erreur'),
 }))
 vi.mock('../../src/context/ThemeContext', () => ({ useTheme: () => ({ themeClasses: {} }) }))
-vi.mock('../../src/hooks/useUserActivity', () => ({ useUserActivity: () => ({}) }))
 
 import React from 'react'
 import { renderHook, waitFor, render, screen, fireEvent } from '@testing-library/react'

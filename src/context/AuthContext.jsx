@@ -48,7 +48,10 @@ const fetchStoreProfile = async (profile) => {
   const store = {
     id: profile.storeId,
     name: storeData.name || profile.storeName || 'Boutique',
-    active: storeData.active !== false
+    active: storeData.active !== false,
+    // L'option des transferts d'argent, cochée par la boutique dans son Profil :
+    // elle vient avec la fiche, sans lecture de plus.
+    transfertsArgent: storeData.transfertsArgent === true
   }
 
   if (!store.active) {
@@ -333,6 +336,15 @@ export const AuthProvider = ({ children }) => {
     }
   }, [])
 
+  /**
+   * Un réglage que le serveur vient d'enregistrer, reporté dans la boutique
+   * active. L'état React seul : `firestoreService.setActiveStore` couperait les
+   * abonnements de la boutique.
+   */
+  const mettreAJourBoutique = useCallback((champs) => {
+    setActiveStore((boutique) => (boutique ? { ...boutique, ...champs } : boutique))
+  }, [])
+
   const role = userProfile?.role ?? null
 
   const value = useMemo(() => ({
@@ -352,7 +364,8 @@ export const AuthProvider = ({ children }) => {
     logout,
     resetPassword,
     changePassword,
-    getUserProfile
+    getUserProfile,
+    mettreAJourBoutique
   }), [
     currentUser,
     userProfile,
@@ -365,7 +378,8 @@ export const AuthProvider = ({ children }) => {
     logout,
     resetPassword,
     changePassword,
-    getUserProfile
+    getUserProfile,
+    mettreAJourBoutique
   ])
 
   return (

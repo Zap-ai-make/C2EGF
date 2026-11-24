@@ -2,6 +2,7 @@ import { TRANSACTION_STYLES, FILTER_CONFIG } from './constants.js'
 import { parseFcfaAmount } from './fcfaAmount.js'
 import { BUSINESS_TIME_ZONE } from './businessDate.js'
 import { detailDuReglement, statutDuReglement } from './detailReglement.js'
+import { estTransfertArgent, libelleTransfert } from './transfertArgent.js'
 
 /**
  * Extrait le nom complet du client
@@ -14,6 +15,17 @@ export const getClientName = (client) => {
   }
   return 'Client inconnu'
 }
+
+/**
+ * Le nom et la nature d'une ligne, tels que l'écran les montre. Un transfert
+ * d'argent n'a pas de fiche client : son nom est celui tapé à la saisie, et son
+ * type interne (« Transfert argent ») ne s'affiche jamais (spec 2026-11-23).
+ */
+export const nomDeLigne = (transaction) =>
+  estTransfertArgent(transaction) ? transaction.nomClient || '' : getClientName(transaction?.client)
+
+export const libelleDeLigne = (transaction) =>
+  estTransfertArgent(transaction) ? libelleTransfert(transaction) : transaction?.type || ''
 
 /**
  * Crée une date formatée en français
@@ -193,7 +205,8 @@ export const getAvailableActions = (transactionType) => {
     payerPar: false,
     rembourser: false,
     encaisser: false,
-    envoyerSiege: false
+    envoyerSiege: false,
+    trancheTransfert: false
   }
 
   // Logique claire par type de transaction
@@ -214,6 +227,11 @@ export const getAvailableActions = (transactionType) => {
       // L'agent a déjà payé : la ligne attend que la boutique envoie au siège,
       // par tranches, toujours depuis le stock.
       actions.envoyerSiege = true
+      break
+    case 'Transfert argent':
+      // Une tranche vers le siège (transfert) ou du siège (retrait), toujours
+      // en stock ; le libellé du bouton suit l'opération de la ligne.
+      actions.trancheTransfert = true
       break
     default:
       // Pas d'actions spéciales pour les autres types
@@ -310,12 +328,18 @@ export const matchesSearchTerm = (transaction, searchTerm) => {
   
   const searchLower = searchTerm.toLowerCase()
   
-  // Recherche dans le nom du client
-  const clientName = getClientName(transaction.client).toLowerCase()
+  // Recherche dans le nom du client (celui tapé à la saisie, pour un transfert)
+  const clientName = nomDeLigne(transaction).toLowerCase()
   if (clientName.includes(searchLower)) return true
   
   // Recherche dans le code réseau
   if (transaction.code && transaction.code.toString().includes(searchLower)) return true
+
+  // Un transfert d'argent se retrouve par son code (MTCN…) et son téléphone.
+  if (estTransfertArgent(transaction)) {
+    if (String(transaction.codeTransfert ?? '').toLowerCase().includes(searchLower)) return true
+    if (String(transaction.telephone ?? '').includes(searchLower)) return true
+  }
   
   // Recherche dans le réseau
   if (transaction.reseau && transaction.reseau.toLowerCase().includes(searchLower)) return true
@@ -374,10 +398,11 @@ export const createExportData = (transactions) => {
     return {
     'N°': index + 1,
     'Date & Heure': transaction.date || '',
-    'Client': getClientName(transaction.client),
-    'Type': transaction.type || '',
+    // Un transfert d'argent garde sa ligne, sous les mots de l'écran (spec 2026-11-23).
+    'Client': nomDeLigne(transaction),
+    'Type': libelleDeLigne(transaction),
     'Réseau': transaction.reseau || '',
-    'Code': transaction.code || '',
+    'Code': (estTransfertArgent(transaction) ? transaction.codeTransfert : transaction.code) || '',
     // La destination du règlement quand l'argent est parti sur un compte agent.
     // Sans elle dans l'export, un règlement contesté ne se rapproche de rien —
     // et c'est précisément pour ça que la boutique note ce code.

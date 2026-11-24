@@ -1,6 +1,7 @@
 import { REFUSEE } from '../services/fileEnvoi.js'
 import { montantRestant } from './argentDehors.js'
 import { estRembSiege } from './rembSiege.js'
+import { estTransfertArgent } from './transfertArgent.js'
 
 /**
  * La caisse : ce que la boutique tient, et ce qui est encore en route.
@@ -21,11 +22,13 @@ const normaliser = (valeur) => String(valeur || '')
  * La nature d'une non terminée : ce que comptent les cases au-dessus de la
  * liste, et ce que trie leur filtre. Une seule lecture pour les deux.
  *
- * @returns {'depot'|'retrait'|'siege'|null}
+ * @returns {'depot'|'retrait'|'siege'|'transfert'|'retraitTransfert'|null}
  */
 export function natureEnAttente(transaction) {
   if (!transaction) return null
   if (estRembSiege(transaction)) return 'siege'
+  // Deux natures : une case et un filtre pour chaque sens (relecture du 23 novembre).
+  if (estTransfertArgent(transaction)) return transaction.operation === 'retrait' ? 'retraitTransfert' : 'transfert'
   const type = normaliser(transaction.type)
   return type === 'depot' || type === 'retrait' ? type : null
 }
@@ -41,6 +44,13 @@ const resteAuSiege = (ligne) => {
   return Math.max(0, (Number(ligne.montant) || 0) - (Number(ligne.envoyeAuSiege) || 0))
 }
 
+/** Ce qui reste à traiter sur un transfert d'argent, lu comme `resteAuSiege`. */
+const resteATraiter = (ligne) => {
+  const reste = Number(ligne.resteATraiter)
+  if (ligne.resteATraiter != null && Number.isFinite(reste)) return Math.max(0, reste)
+  return Math.max(0, (Number(ligne.montant) || 0) - (Number(ligne.montantTraite) || 0))
+}
+
 /**
  * Les sommes et les comptes des transactions non terminées, par type.
  *
@@ -51,11 +61,15 @@ const resteAuSiege = (ligne) => {
  * d'agent, c'est l'argent que la boutique tient pour le siège.
  *
  * @param {Array<object>} transactions
- * @returns {{depots: number, retraits: number, nbDepots: number, nbRetraits: number, siege: number, nbSiege: number}}
+ * Un transfert d'argent (spec 2026-11-23) aussi, en deux sommes de sens
+ * opposé : ce qu'il reste à envoyer au siège (transferts), ce que le siège
+ * doit encore rendre (retraits), chacune avec son compte.
+ *
+ * @returns {{depots: number, retraits: number, nbDepots: number, nbRetraits: number, siege: number, nbSiege: number, transfertsDus: number, nbTransfertsDus: number, retraitsARecevoir: number, nbRetraitsARecevoir: number}}
  */
 export function sommesEnAttente(transactions = []) {
   const vues = new Set()
-  const somme = { depots: 0, retraits: 0, nbDepots: 0, nbRetraits: 0, siege: 0, nbSiege: 0 }
+  const somme = { depots: 0, retraits: 0, nbDepots: 0, nbRetraits: 0, siege: 0, nbSiege: 0, transfertsDus: 0, nbTransfertsDus: 0, retraitsARecevoir: 0, nbRetraitsARecevoir: 0 }
 
   for (const transaction of transactions) {
     if (!transaction || vues.has(transaction.id)) continue
@@ -68,6 +82,16 @@ export function sommesEnAttente(transactions = []) {
     if (nature === 'siege') {
       somme.siege += resteAuSiege(transaction)
       somme.nbSiege += 1
+      continue
+    }
+    if (nature === 'transfert') {
+      somme.transfertsDus += resteATraiter(transaction)
+      somme.nbTransfertsDus += 1
+      continue
+    }
+    if (nature === 'retraitTransfert') {
+      somme.retraitsARecevoir += resteATraiter(transaction)
+      somme.nbRetraitsARecevoir += 1
       continue
     }
 
@@ -105,13 +129,18 @@ export function sommesEnAttente(transactions = []) {
  * qui reste à envoyer, si bien que T ne bouge ni à la réception (la réserve et
  * le reste montent ensemble) ni à chaque tranche (ils baissent ensemble).
  *
+ * Un transfert d'argent non terminé suit la même logique (spec 2026-11-23) :
+ * l'argent reçu pour le siège se retranche comme un remboursement, celui que
+ * le siège doit rendre s'ajoute comme un dépôt non terminé.
+ *
  * C'est ce qui fait de T un chiffre vérifiable à la main en fin de journée,
  * là où stock + liquidité seuls laissent toujours un écart à expliquer.
  *
- * @param {{stock: number, liquidite: number, depots: number, retraits: number, siege?: number}} parts
+ * @param {{stock: number, liquidite: number, depots: number, retraits: number, siege?: number, transfertsDus?: number, retraitsARecevoir?: number}} parts
  * @returns {number}
  */
-export function totalCaisse({ stock = 0, liquidite = 0, depots = 0, retraits = 0, siege = 0 } = {}) {
+export function totalCaisse({ stock = 0, liquidite = 0, depots = 0, retraits = 0, siege = 0, transfertsDus = 0, retraitsARecevoir = 0 } = {}) {
   return (Number(stock) || 0) + (Number(liquidite) || 0) + (Number(depots) || 0)
     - (Number(retraits) || 0) - (Number(siege) || 0)
+    - (Number(transfertsDus) || 0) + (Number(retraitsARecevoir) || 0)
 }

@@ -25,6 +25,7 @@ import {
   REGLEMENT,
   REMBOURSEMENT,
   REMB_SIEGE,
+  TRANSFERT_ARGENT,
   RETOUR,
   SAISIE,
 } from './fileEnvoi.js'
@@ -49,7 +50,7 @@ export async function executerEnvoi({ id, type, charge, creeLe }, maintenant = D
   if (type === SAISIE) {
     return runStoreTransactionCommand({ action: 'add', transaction: charge.transaction, ...reconnue })
   }
-  if (type === RAVITAILLEMENT || type === RETOUR || type === REMB_SIEGE) {
+  if (type === RAVITAILLEMENT || type === RETOUR || type === REMB_SIEGE || type === TRANSFERT_ARGENT) {
     return runStoreTransactionCommand({ ...charge.commande, ...reconnue })
   }
   if (type === MODIFICATION) {

@@ -25,6 +25,7 @@
 import { parsefrenchDate } from './helpers.js'
 import { isDepositType, isWithdrawalType } from './financialImpact.js'
 import { estRembSiege } from './rembSiege.js'
+import { estTransfertArgent } from './transfertArgent.js'
 
 /**
  * Seuil de décrochage, en jours. Décidé avec C2EGF : un seuil unique, le même
@@ -48,8 +49,11 @@ const sansAccent = (v) =>
 /** Une opération annulée n'a jamais eu lieu, ni comme visite ni comme volume. */
 export const estAnnulee = (tx) => sansAccent(tx?.statut) === 'annulee'
 
-/** L'agent s'est présenté : toute opération non annulée en atteste. */
-export const compteCommeVisite = (tx) => Boolean(tx) && !estAnnulee(tx)
+/**
+ * L'agent s'est présenté : toute opération non annulée en atteste. Sauf un
+ * transfert d'argent, dont le client n'est pas un agent (spec 2026-11-23).
+ */
+export const compteCommeVisite = (tx) => Boolean(tx) && !estAnnulee(tx) && !estTransfertArgent(tx)
 
 /**
  * L'argent a bougé : ni annulée, ni encore en attente de règlement.

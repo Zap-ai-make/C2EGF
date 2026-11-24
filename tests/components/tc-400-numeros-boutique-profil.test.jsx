@@ -33,7 +33,6 @@ vi.mock('../../src/context/AuthContext', () => ({
 vi.mock('../../src/context/ThemeContext', () => ({
   useTheme: () => ({ themeClasses: { text: 'text-gray-900', accent: 'bg-brand-500', tableHeader: 'bg-gray-100' } }),
 }))
-vi.mock('../../src/hooks/useUserActivity', () => ({ useUserActivity: () => ({}) }))
 
 import NumerosBoutique from '../../src/components/profil/NumerosBoutique.jsx'
 import Profil from '../../src/pages/Profil.jsx'

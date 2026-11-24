@@ -24,7 +24,8 @@ export const DECLARATION_CAISSE = Object.freeze({
   description:
     "Ce que la boutique a EN CE MOMENT : le stock électronique par réseau, les espèces en caisse, " +
     'les dépôts et retraits non terminés, ce qui reste à envoyer au siège sur les remboursements au ' +
-    "siège non terminés (cet argent n'est pas à la boutique : le total caisse le retire), et le total " +
+    "siège non terminés (cet argent n'est pas à la boutique : le total caisse le retire), les " +
+    'transferts Western Union, Ria, MoneyGram non terminés (ni dépôts ni retraits d’agent), et le total ' +
     'caisse — les chiffres de la barre des soldes. ' +
     "À EMPLOYER pour « combien j'ai en espèces », « il me reste combien de stock », « le total " +
     'caisse », « est-ce que je peux payer ce retrait », et avec bilan_du_jour pour tout point de la ' +
@@ -54,8 +55,15 @@ export function lireLaCaisse({ soldes, enAttente = [] } = {}) {
     depots_non_termines: { nombre: attente.nbDepots, montant: attente.depots },
     retraits_non_termines: { nombre: attente.nbRetraits, montant: attente.retraits },
     remboursements_siege_non_envoyes: { nombre: attente.nbSiege, montant: attente.siege },
+    // Western Union, Ria, MoneyGram : ni dépôt ni retrait d'agent (spec 2026-11-23).
+    transferts_non_termines: {
+      nombre: attente.nbTransfertsDus + attente.nbRetraitsARecevoir,
+      a_envoyer_au_siege: attente.transfertsDus,
+      a_encaisser_du_siege: attente.retraitsARecevoir,
+    },
     total_caisse: totalCaisse({
       stock, liquidite: especes, depots: attente.depots, retraits: attente.retraits, siege: attente.siege,
+      transfertsDus: attente.transfertsDus, retraitsARecevoir: attente.retraitsARecevoir,
     }),
   }
 }
