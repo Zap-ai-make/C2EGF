@@ -78,6 +78,6 @@ describe('TC-414 — les autres lecteurs', () => {
 
   it('[TC-414-06] l’aide dit ce que compte la case des transferts', () => {
     const cases = FICHES.find((fiche) => fiche.titre === 'Les cases au-dessus de la liste')
-    expect(cases.etapes.some((etape) => etape.startsWith('{{Transferts}}'))).toBe(true)
+    expect(cases.etapes.some((etape) => etape.startsWith('{{Transferts à envoyer}} et {{Retraits à encaisser}}'))).toBe(true)
   })
 })

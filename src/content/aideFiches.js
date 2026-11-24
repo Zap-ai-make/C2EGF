@@ -204,7 +204,7 @@ export const FICHES = Object.freeze([
       "{{Dépôts}} — tout ce qu'il te reste à **encaisser**.",
       "{{Retraits}} — tout ce qu'il te reste à **payer**.",
       "{{Remb. siège}} — tout ce qu'il te reste à **envoyer au siège**.",
-      '{{Transferts}} — Western Union, Ria, MoneyGram : à **envoyer au siège** ou à **encaisser**.',
+      '{{Transferts à envoyer}} et {{Retraits à encaisser}} — Western Union, Ria, MoneyGram : ce qui reste à **envoyer au siège** ou à **encaisser**. Fermés, ils se relisent dans l’{{Historique}}, onglet {{Transferts}}.',
       'Touche une case pour **ne voir que cette nature** dans la liste ; {{Tout}} remet toute la liste.',
       'Le petit chiffre au-dessus de chaque case dit **combien d’opérations** composent ce total.',
     ],
