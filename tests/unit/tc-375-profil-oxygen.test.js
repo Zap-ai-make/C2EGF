@@ -2,7 +2,7 @@
  * TC-375 — Axe OXYGEN du profil → config functions (oxygenProfile).
  *
  * La liaison d'un agent à l'app Oxygen (contrat C:\dev\oxygen\docs\contrats\liaison-agent.md,
- * version 3) répond pour UN distributeur : `distributeurId` et son nom sont des
+ * version 4) répond pour UN distributeur : `distributeurId` et son nom sont des
  * données client, donc un axe du profil, jamais une constante écrite dans le
  * handler (AGENTS.md : « ajouter un axe = un champ nommé dans _pilot.js »).
  *

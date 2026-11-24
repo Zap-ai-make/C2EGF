@@ -1,7 +1,7 @@
 /**
  * TC-378 — Règles Firestore des trois collections de la liaison Oxygen.
  *
- * Contrat : C:\dev\oxygen\docs\contrats\liaison-agent.md, version 3, §5.3 —
+ * Contrat : C:\dev\oxygen\docs\contrats\liaison-agent.md, version 4, §5.3 —
  * « trois collections nouvelles, fermées par les règles ».
  *
  * Comportement protégé :

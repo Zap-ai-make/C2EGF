@@ -279,7 +279,7 @@ export const creerBoutique = onCall(
 )
 
 // ── Liaison à l'app agent Oxygen ────────────────────────────────────────────
-// Contrat : C:\dev\oxygen\docs\contrats\liaison-agent.md (version 3). Deux
+// Contrat : C:\dev\oxygen\docs\contrats\liaison-agent.md (version 4). Deux
 // services seulement, nés après le lot C1 : us-central1, une instance, 1/6 de
 // vCPU, pour la même raison que creerBoutique — quelques appels par jour ne
 // doivent presque rien peser sur le quota régional.

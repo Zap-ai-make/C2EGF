@@ -218,7 +218,7 @@ décision et un geste humains.
 
 ## 8. La liaison Oxygen : `genererCodeLiaison` et `pointEntreeOxygen` (2026-11-12)
 
-Contrat : `C:\dev\oxygen\docs\contrats\liaison-agent.md`, version 3. Deux services,
+Contrat : `C:\dev\oxygen\docs\contrats\liaison-agent.md`, version 4. Deux services,
 tous deux en us-central1 seulement, à une instance et 1/6 de vCPU (§5, §7) :
 
 - `genererCodeLiaison`, une callable. C'est le bouton « Code de liaison Oxygen »

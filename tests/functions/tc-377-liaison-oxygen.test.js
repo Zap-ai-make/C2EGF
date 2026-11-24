@@ -2,7 +2,7 @@
  * TC-377 — Liaison Oxygen : genererCodeLiaison et le point d'entrée privé.
  *   Handlers avec l'émulateur Firestore, { db } et l'horloge injectés.
  *
- * Contrat : C:\dev\oxygen\docs\contrats\liaison-agent.md, version 3, §5.
+ * Contrat : C:\dev\oxygen\docs\contrats\liaison-agent.md, version 4, §5.
  *
  * Comportement protégé :
  *   génération : comptes de boutique seulement ; fiche existante portant un
@@ -10,7 +10,8 @@
  *                code remplace le précédent.
  *   rechercher : les trois champs ; rien d'autre que le distributeur.
  *   relier     : la fiche du code ; refus métier en 200 ; cinq échecs ; rejeu ;
- *                un seul titulaire par point de vente, fiches jumelles comprises.
+ *                un seul titulaire par point de vente, fiches jumelles comprises ;
+ *                le prénom et le nom de la fiche du code, rejeu compris.
  *   code secret: refusé sans liaison active de CE compte ; ne touche pas la liaison.
  *   activité   : bornée aux périodes du compte ; non terminées en entier ; pages
  *                de 50 ; synchronisation sur la date de modification.
@@ -206,7 +207,7 @@ describe('TC-377 — relier', () => {
   it('[TC-377-14] relie le compte à la fiche du code, et consomme le code', async () => {
     const { code } = await generer('u-b', 'f-awa')
     const reponse = await relier('1234567', code)
-    expect(reponse).toEqual({ ok: true, liaison: expect.any(String), nom: 'C2EGF' })
+    expect(reponse).toEqual({ ok: true, liaison: expect.any(String), nom: 'C2EGF', prenomAgent: 'Awa', nomAgent: 'OUEDRAOGO' })
 
     const liaison = (await db.doc(`liaisonsOxygen/${reponse.liaison}`).get()).data()
     expect(liaison).toMatchObject({
@@ -217,6 +218,18 @@ describe('TC-377 — relier', () => {
     expect(codeDoc).toMatchObject({ utilisePar: 'cpt-1', objet: 'liaison', liaisonId: reponse.liaison })
     expect((await journal()).find((l) => l.issue === 'utilise'))
       .toMatchObject({ clientId: 'f-awa', storeId: 'store-b', uid: 'u-b', liaisonId: reponse.liaison })
+  })
+
+  it('[TC-377-14b] le nom tel que la fiche le porte, espaces compactés ; un champ vide n’est pas rendu', async () => {
+    await db.doc('globalClients/f-awa').update({ nom: '  OUEDRAOGO ', prenom: 'KARIM   ABDOUL ' })
+    const un = await generer('u-a', 'f-awa')
+    expect(await relier('1234567', un.code)).toMatchObject({ prenomAgent: 'KARIM ABDOUL', nomAgent: 'OUEDRAOGO' })
+
+    await db.doc('globalClients/f-awa').update({ prenom: '' })
+    const deux = await generer('u-a', 'f-awa')
+    const reponse = await relier('1234567', deux.code)
+    expect(reponse).toMatchObject({ ok: true, nomAgent: 'OUEDRAOGO' })
+    expect(reponse).not.toHaveProperty('prenomAgent')
   })
 
   it('[TC-377-15] par le numéro agent aussi', async () => {
@@ -266,6 +279,7 @@ describe('TC-377 — relier', () => {
     // mais dans les deux minutes qui suivent l'usage.
     maintenantMs = T0 + DUREE_CODE_MS - 30_000
     const premiere = await relier('1234567', code)
+    expect(premiere).toMatchObject({ prenomAgent: 'Awa', nomAgent: 'OUEDRAOGO' })
     maintenantMs = T0 + DUREE_CODE_MS + 1
     expect(await relier('1234567', code)).toEqual(premiere)
     expect(await actives()).toHaveLength(1)
@@ -293,7 +307,7 @@ describe('TC-377 — relier', () => {
     maintenantMs = T0 + 3_600_000
     const deux = await generer('u-a', 'f-awa')
     expect(await relier('1234567', deux.code, 'cpt-2'))
-      .toEqual({ ok: true, liaison: expect.any(String), nom: 'C2EGF', ancienCompte: 'cpt-1' })
+      .toEqual({ ok: true, liaison: expect.any(String), nom: 'C2EGF', ancienCompte: 'cpt-1', prenomAgent: 'Awa', nomAgent: 'OUEDRAOGO' })
     const fermee = (await db.doc(`liaisonsOxygen/${premiere.liaison}`).get()).data()
     expect(fermee.finLe).toEqual(Timestamp.fromMillis(T0 + 3_600_000))
     expect((await actives()).map((l) => l.compteOxygen)).toEqual(['cpt-2'])
@@ -312,7 +326,8 @@ describe('TC-377 — relier', () => {
     const un = await generer('u-a', 'f-awa')
     await relier('1234567', un.code, 'cpt-1')
     const deux = await generer('u-b', 'f-jumelle')
-    expect(await relier('1234567', deux.code, 'cpt-2')).toMatchObject({ ok: true, ancienCompte: 'cpt-1' })
+    // Le nom vient de la fiche dont le code a été accepté, pas de sa jumelle.
+    expect(await relier('1234567', deux.code, 'cpt-2')).toMatchObject({ ok: true, ancienCompte: 'cpt-1', nomAgent: 'OUEDRAOGO BIS' })
     expect((await actives()).map((l) => l.compteOxygen)).toEqual(['cpt-2'])
   })
 
@@ -320,7 +335,8 @@ describe('TC-377 — relier', () => {
     const un = await generer('u-a', 'f-awa')
     await relier('1234567', un.code, 'cpt-1')
     const deux = await generer('u-a', 'f-awa')
-    expect(await relier('1234567', deux.code, 'cpt-1')).toEqual({ ok: true, liaison: expect.any(String), nom: 'C2EGF' })
+    expect(await relier('1234567', deux.code, 'cpt-1'))
+      .toEqual({ ok: true, liaison: expect.any(String), nom: 'C2EGF', prenomAgent: 'Awa', nomAgent: 'OUEDRAOGO' })
   })
 
   it('[TC-377-28] un autre distributeur, ou un compte mal formé, est une panne de l’appelant', async () => {

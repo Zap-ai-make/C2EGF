@@ -1,7 +1,7 @@
 /**
  * liaison.js — les règles de la liaison Oxygen, sans Firestore.
  *
- * Contrat : C:\dev\oxygen\docs\contrats\liaison-agent.md, version 3, §5.2.
+ * Contrat : C:\dev\oxygen\docs\contrats\liaison-agent.md, version 4, §5.2.
  * PUR : aucune I/O. `genererCodeLiaison.js` et `pointEntreeOxygen.js` apportent
  * les documents ; ce module décide. Même séparation que `historiqueClient.js`,
  * et pour la même raison : une décision qui ouvre l'activité d'un agent à un
@@ -60,6 +60,26 @@ export function champsAgentFiche(fiche) {
 export function cleVerrou(fiche) {
   const { codeAgent, numeroAgent } = champsAgentFiche(fiche)
   return chiffres(codeAgent) || chiffres(numeroAgent) || null
+}
+
+/** Un nom de fiche, espaces rognés et compactés ; '' s'il n'est pas du texte. */
+const nomPropre = (valeur) => (typeof valeur === 'string' ? valeur.replace(/\s+/g, ' ').trim() : '')
+
+/**
+ * Le prénom et le nom que `relier` rend à Oxygen (contrat version 4, §5.2).
+ *
+ * Casse telle quelle : la base est saisie en majuscules, sans accents, et
+ * Oxygen fait la mise en forme. Un champ vide n'est pas rendu.
+ *
+ * ⚠ JAMAIS PAR `rechercher`. Avant le bon code, n'importe qui apprendrait qui
+ *   se cache derrière un code agent.
+ *
+ * @returns {{prenomAgent?: string, nomAgent?: string}}
+ */
+export function nomsAgentFiche(fiche) {
+  const prenomAgent = nomPropre(fiche?.prenom)
+  const nomAgent = nomPropre(fiche?.nom)
+  return { ...(prenomAgent ? { prenomAgent } : {}), ...(nomAgent ? { nomAgent } : {}) }
 }
 
 /**

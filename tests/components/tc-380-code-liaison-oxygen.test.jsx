@@ -16,7 +16,7 @@ const { default: HistoriqueClientPanel } = await import('../../src/components/cl
 /**
  * TC-380 — Le code de liaison Oxygen, côté caissière.
  *
- * Contrat : C:\dev\oxygen\docs\contrats\liaison-agent.md, version 3 :
+ * Contrat : C:\dev\oxygen\docs\contrats\liaison-agent.md, version 4 :
  *   • règle 10 — la consigne « Vérifiez la SIM agent » est sur l'écran avant le code ;
  *   • parcours 4 — hors connexion, le bouton est grisé : « Connexion nécessaire » ;
  *   • §5.1 — six chiffres, compte à rebours de quinze minutes.
