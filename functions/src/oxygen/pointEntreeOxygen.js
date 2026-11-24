@@ -1,7 +1,7 @@
 /**
  * pointEntreeOxygen.js — le point d'entrée privé, appelé par le serveur Oxygen.
  *
- * Contrat : C:\dev\oxygen\docs\contrats\liaison-agent.md, version 3, §5.2.
+ * Contrat : C:\dev\oxygen\docs\contrats\liaison-agent.md, version 4, §5.2.
  *
  * QUI L'APPELLE
  * ─────────────
@@ -47,7 +47,7 @@ import {
   COLLECTION_LIAISONS,
   OXYGEN_DU_PROFIL,
 } from './genererCodeLiaison.js'
-import { cleVerrou, dansLesPeriodes, enMs, hacherCode, verifierCode } from './liaison.js'
+import { cleVerrou, dansLesPeriodes, enMs, hacherCode, nomsAgentFiche, verifierCode } from './liaison.js'
 
 /** Le compte de service qui appelle, créé dans CE projet (docs/deployer-les-functions.md §8). */
 export const COMPTE_APPELANT = 'oxygen-appel'
@@ -292,7 +292,10 @@ async function relier(corps, { db, Timestamp, maintenant, oxygen }) {
       finLe: null,
       codeGenerePar: auteur,
     })
-    const resultat = { ok: true, liaison: nouvelle.id, nom: oxygen.nom, ...(ancienCompte ? { ancienCompte } : {}) }
+    // Le nom de la fiche du code est gardé dans `resultat` : le rejeu le rend aussi.
+    const resultat = {
+      ok: true, liaison: nouvelle.id, nom: oxygen.nom, ...(ancienCompte ? { ancienCompte } : {}), ...nomsAgentFiche(fiche.data()),
+    }
     t.update(gagnante.ref, { utiliseLe: heure, utilisePar: compteOxygen, objet: 'liaison', liaisonId: nouvelle.id, resultat })
     t.set(db.collection(COLLECTION_JOURNAL).doc(), {
       issue: 'utilise', clientId: fiche.id, ...auteur, heure, liaisonId: nouvelle.id,

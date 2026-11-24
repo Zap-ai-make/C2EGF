@@ -1,7 +1,7 @@
 /**
  * genererCodeLiaison.js — le code que la caissière dicte à l'agent.
  *
- * Contrat : C:\dev\oxygen\docs\contrats\liaison-agent.md, version 3, §5.1.
+ * Contrat : C:\dev\oxygen\docs\contrats\liaison-agent.md, version 4, §5.1.
  *
  * Depuis le panneau de l'agent, une boutique connectée obtient six chiffres
  * valables quinze minutes. L'agent les saisit dans Oxygen ; le point d'entrée

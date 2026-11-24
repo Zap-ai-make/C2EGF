@@ -1,7 +1,7 @@
 /**
  * TC-376 — Liaison Oxygen : les règles pures (functions/src/oxygen/liaison.js).
  *
- * Contrat : C:\dev\oxygen\docs\contrats\liaison-agent.md, version 3, §5.2.
+ * Contrat : C:\dev\oxygen\docs\contrats\liaison-agent.md, version 4, §5.2.
  *
  * Ce qui est verrouillé ici, sans Firestore :
  *   • l'identifiant : chiffres seuls, et les TROIS champs d'une fiche (codeAgent,
@@ -11,7 +11,9 @@
  *   • le code de liaison : six chiffres, empreinte liée à la fiche ;
  *   • la décision sur un code saisi, dans l'ordre du contrat (déjà utilisé,
  *     annulé, expiré), le rejeu, et le cinquième échec qui annule ;
- *   • l'appartenance d'une opération aux périodes d'un compte.
+ *   • l'appartenance d'une opération aux périodes d'un compte ;
+ *   • le nom et le prénom rendus par `relier` (version 4) : ceux de la fiche,
+ *     espaces rognés et compactés, casse telle quelle, absents s'ils sont vides.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -24,6 +26,7 @@ import {
   hacherCode,
   verifierCode,
   dansLesPeriodes,
+  nomsAgentFiche,
   ECHECS_MAX,
   DUREE_CODE_MS,
   MARGE_REJEU_MS,
@@ -187,5 +190,20 @@ describe('TC-376 — périodes d’un compte', () => {
   it('[TC-376-24] une opération sans date n’appartient à personne', () => {
     expect(dansLesPeriodes(0, [p(0)])).toBe(false)
     expect(dansLesPeriodes(Number.NaN, [p(100)])).toBe(false)
+  })
+})
+
+describe('TC-376 — le nom rendu par `relier`', () => {
+  it('[TC-376-25] le prénom et le nom de la fiche, espaces rognés et compactés, casse telle quelle', () => {
+    expect(nomsAgentFiche({ nom: '  OUEDRAOGO ', prenom: 'KARIM   ABDOUL ', codeAgent: '1234567' }))
+      .toEqual({ prenomAgent: 'KARIM ABDOUL', nomAgent: 'OUEDRAOGO' })
+    expect(nomsAgentFiche({ nom: 'Kaboré', prenom: 'Awa' })).toEqual({ prenomAgent: 'Awa', nomAgent: 'Kaboré' })
+  })
+
+  it('[TC-376-26] un champ vide, absent ou qui n’est pas du texte n’est pas rendu', () => {
+    expect(nomsAgentFiche({ nom: 'SAWADOGO', prenom: '   ' })).toEqual({ nomAgent: 'SAWADOGO' })
+    expect(nomsAgentFiche({ prenom: 'ILIASSE' })).toEqual({ prenomAgent: 'ILIASSE' })
+    expect(nomsAgentFiche({ nom: 42, prenom: null })).toEqual({})
+    expect(nomsAgentFiche(null)).toEqual({})
   })
 })
