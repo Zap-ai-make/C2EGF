@@ -42,6 +42,7 @@ import {
   TYPE_DU_SENS,
   codeReseauDeFiche,
   demandeRendue,
+  modeDeReserve,
   plafondRemboursement,
 } from './demande.js'
 import {
@@ -411,6 +412,52 @@ async function lirePage({ db, Timestamp }, clientId, curseur, debutMin, debutApp
  * requête. L'app retire donc de son cache toute non terminée absente de la
  * liste, et toute ligne d'historique qu'un `reopenedFromHistoryId` désigne.
  */
+/**
+ * Ce que l'historique de l'agent lit du règlement d'une ligne (contrat
+ * demande-operation v10 §11.4), chaque champ seulement quand la ligne le porte.
+ *
+ * ⚠ `reglements` ABSENT VEUT DIRE « INCONNU », pas « aucune tranche » : les
+ *   lignes d'avant la mise en service ne l'ont pas, et leurs tranches ne sont
+ *   pas recopiées. `paidAmount` et `reste` restent justes.
+ */
+function traceDuReglement(donnees) {
+  return {
+    ...(donnees.paymentMethod ? { mode: donnees.paymentMethod } : {}),
+    ...(donnees.demandeId ? { demandeId: donnees.demandeId } : {}),
+    ...(Array.isArray(donnees.reglements)
+      ? { reglements: donnees.reglements.map((r) => ({ montant: r.montant, mode: r.mode, le: enMs(r.le) || null })) }
+      : {}),
+  }
+}
+
+/**
+ * Un « Remb. siège » tel que l'agent le lit (§11.4) : réglé dès qu'il existe.
+ * Ce qui se passe entre la boutique et le siège ne le concerne pas (règle 7) :
+ * liste blanche, sans reste, ni envoi, ni date d'envoi, ni caissière ; le
+ * statut ne dit que « Validée », ou « Supprimée » si la boutique l'a annulé.
+ */
+function rembSiegeRendu(ligne, donnees) {
+  const annule = Boolean(ligne.deletedAt) || ['supprimee', 'annulee'].includes(plier(donnees.statut))
+  return {
+    id: ligne.id,
+    source: ligne.source,
+    storeId: ligne.storeId,
+    storeName: ligne.storeName,
+    type: ligne.type,
+    typePlie: ligne.typePlie,
+    montant: ligne.montant,
+    mode: modeDeReserve(donnees.balanceType),
+    statut: annule ? 'Supprimée' : 'Validée',
+    reseau: ligne.reseau,
+    code: ligne.code,
+    date: ligne.date,
+    createdAt: ligne.createdAt,
+    updatedAt: enMs(donnees.updatedAt) || null,
+    deletedAt: ligne.deletedAt,
+    ...(donnees.demandeId ? { demandeId: donnees.demandeId } : {}),
+  }
+}
+
 async function lireActivite(corps, { db, Timestamp, maintenant, oxygen }) {
   validerCles(corps, ['action', 'distributeurId', 'compteOxygen', 'liaison', 'curseur'])
   validerDistributeur(corps, oxygen)
@@ -441,17 +488,18 @@ async function lireActivite(corps, { db, Timestamp, maintenant, oxygen }) {
 
   const enLigne = (doc, source) => {
     const donnees = doc.data() ?? {}
-    // Le contrat validé avec Oxygen ne connaît pas ce type : il n'entre pas dans
-    // le flux avant que l'utilisateur rouvre ce contrat (TC-377-RS).
-    if (estRembSiege(donnees)) return null
-    // Ni le transfert d'argent : son client n'est pas un agent (TC-377-TA).
+    // Le transfert d'argent n'entre pas dans le flux : son client n'est pas un agent (TC-377-TA).
     if (estTransfertArgent(donnees)) return null
     const ligne = ligneDeDocument({ id: doc.id, chemin: doc.ref.path, donnees, source, nomsDeBoutique: new Map() })
     if (!ligne || !dansLesPeriodes(ligne.createdAt, periodes)) return null
+    if (estRembSiege(donnees)) return rembSiegeRendu(ligne, donnees)
+    // Les boutiques partagent un compte : le nom de la caissière ne sort pas (§11.1, règle 8).
+    const { operatorName: _caissiere, ...rendue } = ligne
     return {
-      ...ligne,
+      ...rendue,
       updatedAt: enMs(donnees.updatedAt) || null,
       ...(source === 'draft' ? { reopenedFromHistoryId: donnees.reopenedFromHistoryId ?? null } : {}),
+      ...traceDuReglement(donnees),
     }
   }
 
