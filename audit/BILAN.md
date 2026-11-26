@@ -1273,3 +1273,15 @@ Relevé en préparant le remboursement depuis l'app Oxygen : « Encaisser » et 
 - **Décision de l'utilisateur** : « même une transaction, un remboursement… de 1 F doit passer ». `MONTANT_MINIMUM_REGLEMENT` vaut 1, le refus dit « Montant invalide (entier supérieur à 0) », et le bouton − descend sous 500 (les boutons − et + avancent toujours de 500 en 500).
 - **Tests** : TC-307 RG-03 et RG-03b, TC-306 PR-03, PR-03b et PR-03c. Unitaires 156/3528, composants 81/951, lint et build verts.
 - **Mise en service** : front seul, par un push, sur demande de l'utilisateur. Aucune function. Même règle au contrat Oxygen v10 §11 pour le remboursement depuis l'app.
+
+
+## Évolution — le remboursement depuis l'app Oxygen (26 novembre 2026)
+
+Demandé par l'utilisateur, convenu avec la session Oxygen (oxygen-f2) : l'agent rembourse son crédit depuis l'app, la caissière accepte ou rejette. Contrat `demande-operation.md` v10 §11, relu par cette session (sept points et deux précisions repris au contrat). Plan : `docs/superpowers/plans/2026-11-26-remboursement-agent.md`. Branche `feat/remboursement-agent`.
+
+- **Le cœur d'« Encaisser » partagé** (`functions/src/settlements/tranche.js`) : `addTransactionPayment` et l'acceptation d'un remboursement font la même tranche (mêmes champs, même statut final, mêmes soldes). Chaque tranche est aussi écrite sur la ligne, `reglements: [{ montant, mode, le }]`, au plus 50 ; `le` est l'instant de la caisse.
+- **Point d'entrée** : `rembourser` (seulement un Dépôt « Non Terminées » de l'agent, créé pendant ses périodes de liaison ; plafond = reste − l'autre demande en attente ; une demande en attente par mode ; aucun minimum) et `rembourserSiege` (aucune cible, aucun contrôle de dette). La demande rend `nature`, `cibleId`, `mode`. `listerBoutiques` porte `remboursement: true`, ouvert par le profil (`oxygen.remboursement`, vrai pour C2EGF seulement).
+- **Caisse** : la demande remonte en tête, « Remboursement demandé par l’agent », avec le montant, le mode et le reste de la ligne visée, qui garde sa place et ses gestes. « Accepter » fait la tranche dans la transaction qui ferme la demande, jamais par la file ; tout se revérifie (ligne encore en attente, Dépôt du même agent, montant ≤ reste). Un remboursement siège accepté devient une ligne « Remb. siège » toujours Non Terminées, dans la réserve du mode.
+- **Historique de l'agent** (`lireActivite`) : `reglements`, `mode`, `demandeId` ; les « Remb. siège » de l'agent entrent dans le flux, lus « Validée » ou « Supprimée », sans rien de l'envoi au siège ; `operatorName` ne sort plus.
+- **Tests** : TC-417, TC-418, TC-420, TC-421, TC-422, TC-235-RG, TC-375-08, TC-377-RS/42/43 ; formes exactes mises à jour dans TC-392, TC-393, TC-396.
+- **Mise en service** : `docs/deployer-les-functions.md` §8.2 — Oxygen, puis le front et les postes rechargés, puis `storeTransactionCommand`, `addTransactionPayment`, `pointEntreeOxygen`.
