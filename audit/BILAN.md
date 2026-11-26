@@ -1264,3 +1264,12 @@ Demande de l'utilisateur, convenue avec la session Oxygen : une fois le code de 
 - **Deux champs, pas une chaîne** : la fiche écrit « NOM PRÉNOM », en majuscules et sans accents (100 % des 6 982 fiches de l'export local des doublons), et 928 prénoms y sont composés : Oxygen ne saurait pas où couper. Oxygen fait la mise en casse.
 - **Tests** : TC-376-25 et 26 (la règle pure), TC-377-14b (espaces, champ vide) ; TC-377-14, 22, 24, 26 et 27 vérifient la forme exacte, le rejeu et la fiche jumelle.
 - **À déployer, sur décision de l'utilisateur** : `pointEntreeOxygen` seule. Oxygen sait faire sans les deux champs : l'ordre de mise en service n'importe pas.
+
+
+## Correctif — plus de minimum de 500 F au règlement (26 novembre 2026)
+
+Relevé en préparant le remboursement depuis l'app Oxygen : « Encaisser » et « Payer par » refusaient tout montant sous 500 F (`verifierMontantReglement`), même quand le reste dû était plus petit. Un reste de 300 F, ou un crédit de 300 F dès le départ, ne pouvait plus se régler. La saisie d'une transaction et le serveur (`addTransactionPayment`) acceptaient déjà tout entier > 0.
+
+- **Décision de l'utilisateur** : « même une transaction, un remboursement… de 1 F doit passer ». `MONTANT_MINIMUM_REGLEMENT` vaut 1, le refus dit « Montant invalide (entier supérieur à 0) », et le bouton − descend sous 500 (les boutons − et + avancent toujours de 500 en 500).
+- **Tests** : TC-307 RG-03 et RG-03b, TC-306 PR-03, PR-03b et PR-03c. Unitaires 156/3528, composants 81/951, lint et build verts.
+- **Mise en service** : front seul, par un push, sur demande de l'utilisateur. Aucune function. Même règle au contrat Oxygen v10 §11 pour le remboursement depuis l'app.

@@ -83,12 +83,27 @@ describe('TC-306 — le montant proposé d’office', () => {
 })
 
 describe('TC-306 — encaisser et payer', () => {
-  it('[PR-03] refuse moins de 500 FCFA', () => {
+  it('[PR-03] refuse 0 FCFA', () => {
     monter(brouillon(), { encaisser: true })
     ouvrir('Encaisser')
-    confirmerAvec('400')
-    expect(screen.getByText('Montant invalide (minimum 500 FCFA, entier)')).toBeInTheDocument()
+    confirmerAvec('0')
+    expect(screen.getByText('Montant invalide (entier supérieur à 0)')).toBeInTheDocument()
     expect(addPaymentTranche).not.toHaveBeenCalled()
+  })
+
+  it('[PR-03b] un reste de 300 FCFA s’encaisse : aucun minimum de 500', async () => {
+    monter(brouillon({ montant: 10300, settlementStatus: 'partial', paidAmount: 10000, remainingAmount: 300 }), { encaisser: true })
+    expect(ouvrir('Encaisser')).toHaveValue(300)
+    confirmerAvec('300')
+    await waitFor(() => expect(addPaymentTranche).toHaveBeenCalled())
+    expect(addPaymentTranche.mock.calls[0][1]).toBe(300)
+  })
+
+  it('[PR-03c] le bouton − descend sous 500 FCFA', () => {
+    monter(brouillon({ settlementStatus: 'partial', paidAmount: 49200, remainingAmount: 800 }), { encaisser: true })
+    const champ = ouvrir('Encaisser')
+    fireEvent.click(screen.getByRole('button', { name: 'Retirer 500 FCFA' }))
+    expect(champ).toHaveValue(300)
   })
 
   it('[PR-04] refuse plus que le reste dû', () => {
