@@ -40,7 +40,7 @@ import { consequenceAnnulation, estRembSiege, REMB_SIEGE_ACTIF } from '../../uti
 import { libelleVase } from '../../utils/ravitaillement.js'
 import { useDemandesAgent } from '../../hooks/useDemandesAgent.js'
 import { dejaSaisie } from '../../utils/demandesAgent.js'
-import { accepterDemandeAgent, rejeterDemandeAgent } from '../../services/demandesAgentService.js'
+import { accepterDemandeAgent, accepterRemboursementAgent, rejeterDemandeAgent } from '../../services/demandesAgentService.js'
 import LigneDemandeAgent from './LigneDemandeAgent.jsx'
 
 /** Les règlements d'une ligne qui attendent le réseau, et ceux qu'il a refusés. */
@@ -435,6 +435,7 @@ const TransactionTable = memo(function TransactionTable() {
     setReponsesDemandes((enCours) => ({ ...enCours, [demande.id]: geste }))
     try {
       if (geste === 'rejeter') await rejeterDemandeAgent(demande.id)
+      else if (geste === 'accepter') await accepterRemboursementAgent(demande.id)
       else await accepterDemandeAgent(demande.id, geste === 'valider' ? 'Validée' : 'Non Terminées')
       setRepondues((faites) => new Set(faites).add(demande.id))
     } catch (error) {
@@ -763,9 +764,12 @@ const TransactionTable = memo(function TransactionTable() {
                   <LigneDemandeAgent
                     key={`demande-${demande.id}`}
                     demande={demande}
+                    // La ligne qu'un remboursement règle : son reste se lit sur la demande.
+                    cible={demande.cibleId ? pendingTransactions.find((t) => t.id === demande.cibleId) ?? null : null}
                     styles={getTransactionStyles(demande.type)}
                     maintenant={maintenant}
-                    dejaSaisieMs={dejaSaisie(demande, operationsSaisies)?.instantMs}
+                    // Un remboursement n'est pas une opération que la caissière aurait saisie.
+                    dejaSaisieMs={demande.nature === 'remboursement' ? undefined : dejaSaisie(demande, operationsSaisies)?.instantMs}
                     enCours={reponsesDemandes[demande.id] ?? null}
                     onRepondre={repondreDemande}
                   />

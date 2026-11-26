@@ -13,6 +13,17 @@ import { instantDeDepart } from './attente.js'
 
 const TYPE_DU_SENS = Object.freeze({ depot: 'Dépôt', retrait: 'Retrait' })
 
+/**
+ * Ce que l'agent demande (contrat demande-operation v10 §11.2) : une opération,
+ * le remboursement de son crédit, ou celui d'un crédit du siège. Une demande
+ * d'avant ce champ est une opération.
+ */
+export const NATURES_DEMANDE = Object.freeze({
+  OPERATION: 'operation',
+  REMBOURSEMENT: 'remboursement',
+  REMB_SIEGE: 'remb_siege',
+})
+
 /** Accents et casse retirés : l'historique porte des « Retrait » et des « retrait ». */
 const normaliser = (valeur) => String(valeur || '')
   .normalize('NFD')
@@ -35,14 +46,18 @@ const enDate = (valeur) => {
  * arrivée au serveur (`creeLe`) — c'est d'elle que se compte l'attente.
  */
 export function ligneDeDemande(id, donnees) {
+  const nature = donnees.nature ?? NATURES_DEMANDE.OPERATION
   return {
     id,
     estDemandeAgent: true,
+    nature,
+    ...(donnees.cibleId ? { cibleId: donnees.cibleId } : {}),
+    ...(donnees.mode ? { mode: donnees.mode } : {}),
     sens: donnees.sens,
     clientId: donnees.clientId,
     client: { nom: donnees.agent?.nom ?? '', prenom: donnees.agent?.prenom ?? '' },
     code: donnees.agent?.code ?? '',
-    type: TYPE_DU_SENS[donnees.sens] ?? '',
+    type: nature === NATURES_DEMANDE.REMB_SIEGE ? 'Remb. siège' : (TYPE_DU_SENS[donnees.sens] ?? ''),
     reseau: donnees.reseau,
     montant: donnees.montant,
     createdAt: enDate(donnees.creeLe),

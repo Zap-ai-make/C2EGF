@@ -32,6 +32,7 @@ const accepter = vi.fn()
 const rejeter = vi.fn()
 vi.mock('../../src/services/demandesAgentService.js', () => ({
   accepterDemandeAgent: (...a) => accepter(...a),
+  accepterRemboursementAgent: vi.fn(),
   rejeterDemandeAgent: (...a) => rejeter(...a),
 }))
 // Pour l'écoute elle-même (TC-397-08 à 10).

@@ -29,7 +29,7 @@ beforeEach(() => runStoreTransactionCommand.mockReset())
 describe('TC-396 — la ligne d’une demande', () => {
   it('[TC-396-01] le sens devient le type, l’agent le client, sa copie du code le code, creeLe une date', () => {
     expect(ligneDeDemande('d1', brute({ sens: 'depot' }))).toEqual({
-      id: 'd1', estDemandeAgent: true, sens: 'depot', clientId: 'c1',
+      id: 'd1', estDemandeAgent: true, nature: 'operation', sens: 'depot', clientId: 'c1',
       client: { nom: 'KABORE', prenom: 'Awa' }, code: '70123456',
       type: 'Dépôt', reseau: 'Orange', montant: 75000, createdAt: H(10, 34),
     })
