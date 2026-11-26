@@ -19,7 +19,12 @@ import {
  * dit la raison AVANT l'envoi, dans les mots de la caisse.
  */
 
-export const MONTANT_MINIMUM_REGLEMENT = 500
+/**
+ * 1 FCFA, et non plus 500 : un reste de 300 ne se réglait plus, ni un crédit
+ * de 300 dès le départ, alors que le serveur les accepte (décision de
+ * l'utilisateur, 2026-11-26 : « même 1 F doit passer »).
+ */
+export const MONTANT_MINIMUM_REGLEMENT = 1
 
 /**
  * Les champs qu'une PREMIÈRE tranche de règlement écrit sur une non terminée.
@@ -164,7 +169,7 @@ export const montantProposeDuReglement = (transaction) => transaction.remainingA
 export function verifierMontantReglement({ transaction, action, montant }) {
   const valeur = parseInt(montant, 10)
   if (!valeur || valeur < MONTANT_MINIMUM_REGLEMENT) {
-    return { ok: false, raison: `Montant invalide (minimum ${MONTANT_MINIMUM_REGLEMENT} FCFA, entier)` }
+    return { ok: false, raison: 'Montant invalide (entier supérieur à 0)' }
   }
 
   if (action !== 'rembourser') {
@@ -174,7 +179,7 @@ export function verifierMontantReglement({ transaction, action, montant }) {
     }
   } else if (transaction && transaction.paidAmount != null) {
     // Un remboursement rend au plus ce qui a été payé, net de ce qui a déjà
-    // été rendu. Le montant est d'au moins 500 : un net nul ou négatif est
+    // été rendu. Le montant est d'au moins 1 : un net nul ou négatif est
     // donc refusé ici, avec son chiffre.
     const netPaye = (transaction.paidAmount ?? 0) - (transaction.refundedAmount ?? 0)
     if (valeur > netPaye) {

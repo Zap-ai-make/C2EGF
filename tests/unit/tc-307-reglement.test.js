@@ -35,12 +35,20 @@ describe('TC-307 — verifierMontantReglement', () => {
   const verifier = (montant, transaction = DEPOT, action = 'encaisser') =>
     verifierMontantReglement({ transaction, action, montant })
 
-  it('[RG-03] un entier d’au moins 500 FCFA', () => {
-    expect(verifier('400')).toEqual({ ok: false, raison: 'Montant invalide (minimum 500 FCFA, entier)' })
+  it('[RG-03] un entier supérieur à 0 : même 1 FCFA passe (décision de l’utilisateur, 2026-11-26)', () => {
+    expect(verifier('0')).toEqual({ ok: false, raison: 'Montant invalide (entier supérieur à 0)' })
+    expect(verifier('-5')).toEqual({ ok: false, raison: 'Montant invalide (entier supérieur à 0)' })
     expect(verifier('')).toMatchObject({ ok: false })
     expect(verifier('abc')).toMatchObject({ ok: false })
-    expect(verifier('500')).toEqual({ ok: true, valeur: 500 })
+    expect(verifier('1')).toEqual({ ok: true, valeur: 1 })
+    expect(verifier('400')).toEqual({ ok: true, valeur: 400 })
     expect(verifier(20000)).toEqual({ ok: true, valeur: 20000 })
+  })
+
+  it('[RG-03b] un reste sous 500 FCFA se règle en entier', () => {
+    const presqueSolde = { ...DEPOT, montant: 10300, paidAmount: 10000, remainingAmount: 300 }
+    expect(verifier('300', presqueSolde)).toEqual({ ok: true, valeur: 300 })
+    expect(verifier('301', presqueSolde)).toEqual({ ok: false, raison: 'Maximum : 300 FCFA (reste dû)' })
   })
 
   it('[RG-04] au plus le reste dû, pour encaisser comme pour payer', () => {

@@ -24,7 +24,7 @@ import { ClipboardCheck } from 'lucide-react'
 import OptimisticToast from '../ui/OptimisticToast.jsx'
 import logger from '../../utils/logger.js'
 import { generateIdempotencyKey } from '../../services/settlementService.js'
-import { montantProposeDuReglement, verifierMontantReglement } from '../../utils/reglement.js'
+import { MONTANT_MINIMUM_REGLEMENT, montantProposeDuReglement, verifierMontantReglement } from '../../utils/reglement.js'
 import { prefereMouvementReduit } from '../../hooks/useReducedMotion.js'
 import { natureEnAttente, sommesEnAttente } from '../../utils/caisse.js'
 import { attenteDe } from '../../utils/attente.js'
@@ -1091,7 +1091,7 @@ const TransactionTable = memo(function TransactionTable() {
                     aria-label="Retirer 500 FCFA"
                     onClick={() => {
                       const current = parseInt(settlementAmount, 10) || 0
-                      const next = Math.max(500, current - 500)
+                      const next = Math.max(MONTANT_MINIMUM_REGLEMENT, current - 500)
                       setSettlementAmount(String(next))
                       setAmountError('')
                     }}
@@ -1103,8 +1103,8 @@ const TransactionTable = memo(function TransactionTable() {
                   <input
                     id={idMontantTranche}
                     type="number"
-                    min="500"
-                    step="500"
+                    min={MONTANT_MINIMUM_REGLEMENT}
+                    step="1"
                     value={settlementAmount}
                     onChange={(e) => {
                       setSettlementAmount(e.target.value)
