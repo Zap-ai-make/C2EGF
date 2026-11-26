@@ -26,6 +26,38 @@ export const ETATS_DEMANDE = Object.freeze({
   ANNULEE_AGENT: 'annulee_agent',
 })
 
+/**
+ * Ce que l'agent demande (contrat v10 §11.2). Une demande d'avant ce champ est
+ * une opération : `nature` absent se lit `'operation'`.
+ */
+export const NATURES_DEMANDE = Object.freeze({
+  OPERATION: 'operation',
+  REMBOURSEMENT: 'remboursement',
+  REMB_SIEGE: 'remb_siege',
+})
+
+/** Les modes d'un remboursement : les méthodes de règlement de la caisse. */
+export const MODES_REMBOURSEMENT = Object.freeze(['Orange Money', 'Cash'])
+
+/** La réserve où entre un remboursement siège : l'UV en stock, les espèces en liquidité. */
+export const reserveDuMode = (mode) => (mode === 'Orange Money' ? 'stock' : 'liquidite')
+
+/** Et l'inverse, pour rendre à l'agent le mode d'un « Remb. siège » (§11.4). */
+export const modeDeReserve = (balanceType) =>
+  ({ stock: 'Orange Money', liquidite: 'Cash' })[balanceType] ?? null
+
+/**
+ * Ce que l'agent peut encore rembourser sur une ligne : le reste, moins
+ * l'autre demande en attente (§11.1, règle 4). Deux demandes en attente, une
+ * par mode, ne dépassent donc jamais le reste à elles deux.
+ *
+ * @param {{reste: number, autres: number[]}} p  `autres` : les montants des autres demandes en attente
+ */
+export function plafondRemboursement({ reste, autres = [] }) {
+  const engage = autres.reduce((somme, montant) => somme + (Number(montant) || 0), 0)
+  return Math.max(0, reste - engage)
+}
+
 /** Le sens que l'app envoie, et le type d'opération qu'il devient au CRM. */
 export const TYPE_DU_SENS = Object.freeze({ depot: 'Dépôt', retrait: 'Retrait' })
 
@@ -94,5 +126,8 @@ export function demandeRendue(id, donnees) {
     creeLe: enMs(donnees.creeLe) || null,
     reponduLe: enMs(donnees.reponduLe) || null,
     operationId: donnees.operationId ?? null,
+    nature: donnees.nature ?? NATURES_DEMANDE.OPERATION,
+    ...(donnees.cibleId ? { cibleId: donnees.cibleId } : {}),
+    ...(donnees.mode ? { mode: donnees.mode } : {}),
   }
 }

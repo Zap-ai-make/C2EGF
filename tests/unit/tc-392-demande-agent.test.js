@@ -24,7 +24,7 @@ describe('TC-392 — la demande, hors de Firestore', () => {
       agent: { nom: 'KABORE' }, liaisonId: 'L1',
     })).toEqual({
       id: 'k1', boutiqueId: 'b1', boutiqueNom: 'B1', sens: 'depot', reseau: 'Orange', montant: 5000,
-      etat: 'en_attente', creeLe: 1000, reponduLe: null, operationId: null,
+      etat: 'en_attente', creeLe: 1000, reponduLe: null, operationId: null, nature: 'operation',
     })
     expect(demandeRendue('k2', { etat: 'validee', creeLe: instant(1000), reponduLe: instant(2000), operationId: 'k2' }))
       .toMatchObject({ reponduLe: 2000, operationId: 'k2' })

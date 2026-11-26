@@ -142,6 +142,8 @@ export const c2egfProfile = Object.freeze({
     enabled: true,
     distributeurId: 'c2egf',
     nomDistributeur: 'C2EGF',
+    // Demandé par l'utilisateur le 2026-11-26 (contrat demande-operation v10 §11).
+    remboursement: true,
   }),
 
   // regional : hérité du pilote (Africa/Ouagadougou) — C2EGF est au Burkina Faso.

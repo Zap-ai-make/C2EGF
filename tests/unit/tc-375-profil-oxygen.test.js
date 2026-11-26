@@ -24,7 +24,7 @@ import { generateOxygenProfileFile } from '../../scripts/lib/generateOxygenProfi
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const oxygenProfilePath = resolve(__dirname, '../../functions/src/config/oxygenProfile.js')
 
-const valide = { oxygen: { enabled: true, distributeurId: 'c2egf', nomDistributeur: 'C2EGF' } }
+const valide = { oxygen: { enabled: true, distributeurId: 'c2egf', nomDistributeur: 'C2EGF', remboursement: true } }
 
 describe('TC-375 — profil Oxygen', () => {
   it('[TC-375-01] C2EGF répond pour lui-même, sous l’identifiant « c2egf »', () => {
@@ -61,6 +61,14 @@ describe('TC-375 — profil Oxygen', () => {
       expect(() => generateOxygenProfileFile({ oxygen: { ...valide.oxygen, nomDistributeur } }))
         .toThrow(/oxygen\.nomDistributeur/)
     }
+  })
+
+  it('[TC-375-08] le remboursement depuis l’app : ouvert pour C2EGF, fermé ailleurs, booléen exigé', () => {
+    expect(generateOxygenProfileFile(resolveProfile('c2egf_burkina'))).toContain('export const OXYGEN_REMBOURSEMENT = true')
+    expect(resolveProfile('_pilot').oxygen.remboursement).toBe(false)
+    expect(resolveProfile('taofic_ajagbe').oxygen.remboursement).toBe(false)
+    expect(() => generateOxygenProfileFile({ oxygen: { ...valide.oxygen, remboursement: 'oui' } }))
+      .toThrow(/oxygen\.remboursement/)
   })
 
   it('[TC-375-07] ANTI-DÉRIVE : le fichier commité est celui de C2EGF', () => {

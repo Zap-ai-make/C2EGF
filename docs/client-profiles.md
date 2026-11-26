@@ -49,7 +49,7 @@ la résolution **stricte** (qui lève) est réservée à la génération de règ
 | `collaborations.enabled` | collaborations inter-boutiques + dettes internes on/off | Front + **Functions** |
 | `storeWorkspace` | visibilité progressive des entrées boutique pendant l'accompagnement | Front |
 | `regional.timezone` | fuseau horaire d'affichage des dates | Front |
-| `oxygen` | liaison à l'app agent Oxygen : activée ou non, `distributeurId`, nom annoncé | Front + **Functions** (`oxygenProfile.js`) |
+| `oxygen` | liaison à l'app agent Oxygen : activée ou non, `distributeurId`, nom annoncé, `remboursement` (l'agent rembourse son crédit depuis l'app, contrat demande-operation v10 §11) | Front + **Functions** (`oxygenProfile.js`) |
 | `moneyTransfer.enabled` | transferts d'argent (Western Union, Ria, MoneyGram, autres) proposés ou non ; chaque boutique coche ensuite l'option dans son Profil (`stores/{id}.transfertsArgent`) | Front + **Functions** (`MONEY_TRANSFER_ENABLED`) |
 
 > `collaborations.enabled` est **indépendant du nombre de réseaux** : une boutique sollicite une

@@ -72,7 +72,7 @@ describe('TC-393 — demander', () => {
       ok: true,
       demande: {
         id: 'k-1', boutiqueId: 'b1', boutiqueNom: 'Boutique 1', sens: 'depot', reseau: 'Orange', montant: 5000,
-        etat: 'en_attente', creeLe: T0, reponduLe: null, operationId: null,
+        etat: 'en_attente', creeLe: T0, reponduLe: null, operationId: null, nature: 'operation',
       },
     })
     const doc = (await db.doc('clients/b1/demandesAgent/k-1').get()).data()

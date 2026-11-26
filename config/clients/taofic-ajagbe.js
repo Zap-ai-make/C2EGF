@@ -61,6 +61,7 @@ export const taoficProfile = Object.freeze({
     enabled: false,
     distributeurId: 'taofic',
     nomDistributeur: 'TAOFIC',
+    remboursement: false,
   }),
 
   // regional : hérité du pilote (Africa/Ouagadougou) — même fuseau pour TAOFIC.
