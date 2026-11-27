@@ -1,8 +1,9 @@
-import { useContext, useEffect, useState } from 'react'
+import { useContext, useEffect, useRef, useState } from 'react'
 import { AuthContext } from '../context/AuthContext.jsx'
 import { firestoreService } from '../services/firestore.js'
 import { LIAISON_OXYGEN_ACTIVE } from '../services/liaisonOxygenService.js'
 import { ligneDeDemande, trierDemandes } from '../utils/demandesAgent.js'
+import { sonnerDemande } from '../utils/sonDemande.js'
 import { useEnLigne } from './useEnLigne.js'
 import logger from '../utils/logger.js'
 
@@ -33,6 +34,12 @@ import logger from '../utils/logger.js'
  *
  * ⚠ UNE ÉCOUTE REFUSÉE SE TAIT. Tant que la règle n'est pas déployée, la
  *   caisse marche comme avant, sans demande et sans bandeau d'erreur.
+ *
+ * CE QUI ARRIVE SE SIGNALE (demandé par l'utilisateur le 2026-11-27) : un
+ * petit son, et `arrivees` — l'instant où ce poste a vu chaque demande
+ * arriver — pour que sa ligne pulse. Seul le serveur annonce une arrivée.
+ * Ce qui attendait déjà quand l'écran s'ouvre ne sonne pas ; ce qui est arrivé
+ * pendant une coupure sonne au retour du réseau.
  */
 export const SANS_SERVEUR_MS = 10_000
 
@@ -50,6 +57,11 @@ export function useDemandesAgent() {
   // Les lignes portent la boutique qui les a lues : changer de boutique ne
   // montre jamais, même un instant, les demandes de la précédente.
   const [lues, setLues] = useState({ storeId: null, lignes: [] })
+  const [arrivees, setArrivees] = useState(() => new Map())
+  // Ce que le serveur a montré en dernier, pour cette boutique. Il survit à
+  // une coupure — ce qui arrive entre-temps sonne au retour — mais pas à
+  // l'écran qu'on quitte : ce qui attend à l'ouverture ne sonne pas.
+  const vues = useRef({ storeId: null, ids: null })
 
   useEffect(() => {
     if (!actif) return undefined
@@ -60,11 +72,26 @@ export function useDemandesAgent() {
     const montrer = (documents) => {
       setLues({ storeId, lignes: trierDemandes(documents.map((d) => ligneDeDemande(d.id, d))) })
     }
+    const signalerArrivees = (ids) => {
+      const avant = vues.current.storeId === storeId ? vues.current.ids : null
+      vues.current = { storeId, ids }
+      if (!avant) return
+      const nouvelles = [...ids].filter((id) => !avant.has(id))
+      if (nouvelles.length === 0) return
+      const le = Date.now()
+      setArrivees((precedentes) => {
+        const suivantes = new Map([...precedentes].filter(([id]) => ids.has(id)))
+        for (const id of nouvelles) suivantes.set(id, le)
+        return suivantes
+      })
+      sonnerDemande()
+    }
     const recevoir = (documents, _changements, origine) => {
       if (origine?.depuisServeur === true) {
         clearTimeout(sansServeur)
         sansServeur = null
         confirmees = new Set(documents.map((d) => d.id))
+        signalerArrivees(confirmees)
         montrer(documents)
         return
       }
@@ -85,5 +112,5 @@ export function useDemandesAgent() {
     }
   }, [actif, storeId])
 
-  return { demandes: actif && lues.storeId === storeId ? lues.lignes : [] }
+  return { demandes: actif && lues.storeId === storeId ? lues.lignes : [], arrivees }
 }

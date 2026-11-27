@@ -39,7 +39,7 @@ import { consequenceAnnulationTransfert, estTransfertArgent } from '../../utils/
 import { consequenceAnnulation, estRembSiege, REMB_SIEGE_ACTIF } from '../../utils/rembSiege.js'
 import { libelleVase } from '../../utils/ravitaillement.js'
 import { useDemandesAgent } from '../../hooks/useDemandesAgent.js'
-import { dejaSaisie, encaisseApres } from '../../utils/demandesAgent.js'
+import { dejaSaisie, encaisseApres, vientDArriver } from '../../utils/demandesAgent.js'
 import { accepterDemandeAgent, accepterRemboursementAgent, rejeterDemandeAgent } from '../../services/demandesAgentService.js'
 import LigneDemandeAgent, { LigneRemboursementAgent } from './LigneDemandeAgent.jsx'
 
@@ -114,12 +114,15 @@ function CaseFiltre({ teinte, libelle, nombre, total, choisie, estompee, desacti
   )
 }
 
+const AUCUNE_ARRIVEE = new Map()
+
 const TransactionTable = memo(function TransactionTable() {
   const { pendingTransactions, completedTransactions, getActionButtons, getTransactionStyles, addPaymentTranche, addRefundTranche, startEditTransaction, trashTransaction, envoyerAuSiege, traiterTransfertArgent, loading } = useTransactions()
   // Les demandes des agents (contrat Oxygen v4) : en tête du tableau, quel que
   // soit le filtre, hors des cases et du Total caisse — ce ne sont pas encore
   // des opérations. Vides hors ligne et là où le profil n'ouvre pas Oxygen.
-  const { demandes: demandesEcoutees } = useDemandesAgent()
+  // Celles qui viennent d'arriver pulsent un moment (`arrivees`, TC-423).
+  const { demandes: demandesEcoutees, arrivees = AUCUNE_ARRIVEE } = useDemandesAgent()
   // Les demandes auxquelles la caissière vient de répondre : leur ligne part
   // dès la réponse du serveur, sans attendre que l'écoute la retire.
   const [repondues, setRepondues] = useState(() => new Set())
@@ -989,6 +992,7 @@ const TransactionTable = memo(function TransactionTable() {
                     dejaSaisieMs={demande.nature === 'remboursement' ? undefined : dejaSaisie(demande, operationsSaisies)?.instantMs}
                     enCours={reponsesDemandes[demande.id] ?? null}
                     onRepondre={repondreDemande}
+                    arrivee={vientDArriver(arrivees.get(demande.id), maintenant)}
                   />
                 ))}
                 {/* La ligne qu'un remboursement règle, remontée UNE fois, et ses demandes dessous. */}
@@ -1003,6 +1007,7 @@ const TransactionTable = memo(function TransactionTable() {
                         encaisseLeMs={encaisseApres(demande, ligne)}
                         enCours={reponsesDemandes[demande.id] ?? null}
                         onRepondre={repondreDemande}
+                        arrivee={vientDArriver(arrivees.get(demande.id), maintenant)}
                       />
                     ))}
                   </Fragment>
