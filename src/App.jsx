@@ -6,6 +6,7 @@ import { ThemeProvider } from './context/ThemeContext.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { NetworkConfigProvider } from './context/NetworkConfigContext.jsx'
 import { EnvoisProvider } from './context/EnvoisContext.jsx'
+import { DemandesAgentProvider } from './context/DemandesAgentContext.jsx'
 import { AUTH_ROLES } from './constants/authMessages'
 import { getDefaultRouteForRole } from './utils/roleRouting'
 import RoleGuard from './components/auth/RoleGuard.jsx'
@@ -200,7 +201,11 @@ function App() {
               <ClientsProvider>
                 <TransactionsProvider>
                   <ErrorBoundary>
-                    <AppContent />
+                    {/* Les demandes des agents : une écoute pour toute la
+                        session, que le compteur de la barre lit sur chaque écran. */}
+                    <DemandesAgentProvider>
+                      <AppContent />
+                    </DemandesAgentProvider>
                   </ErrorBoundary>
                 </TransactionsProvider>
               </ClientsProvider>

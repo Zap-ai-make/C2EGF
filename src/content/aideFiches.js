@@ -193,7 +193,7 @@ export const FICHES = Object.freeze([
       'Chaque ligne dit **depuis combien de temps** elle attend. Au-delà de 30 minutes, elle se colore : le client attend trop.',
       'Plusieurs opérations du même client et du même type se replient sur une seule ligne, avec leur **total**. Le bouton « Voir les … » les déplie, {{Masquer}} les replie.',
       "Une opération réglée en partie montre ce qu'il reste à payer.",
-      'Une ligne violette **Demande de l’agent** vient de l’app Oxygen : {{Valider}}, {{Non terminée}} ou {{Rejeter}}. Un petit son annonce chaque nouvelle demande, et son cadre clignote 20 secondes.',
+      'Une ligne violette **Demande de l’agent** vient de l’app Oxygen : {{Valider}}, {{Non terminée}} ou {{Rejeter}}. Un petit son annonce chaque nouvelle demande, et la pastille rouge sur {{Transactions}} compte celles qui attendent. Sa ligne clignote jusqu’à ce que tu reviennes devant l’écran, puis 20 secondes.',
       '**Remboursement demandé par l’agent** : l’agent rembourse son crédit depuis l’app. Sa ligne remonte en tête, la demande juste dessous. {{Accepter}} quand l’argent est reçu (en Orange Money, une fois l’UV arrivée), sinon {{Rejeter}}. Un avertissement orange sous la demande : cet argent a peut-être déjà été reçu au comptoir, ne le compte pas deux fois.',
     ],
   },

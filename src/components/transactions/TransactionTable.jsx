@@ -39,6 +39,7 @@ import { consequenceAnnulationTransfert, estTransfertArgent } from '../../utils/
 import { consequenceAnnulation, estRembSiege, REMB_SIEGE_ACTIF } from '../../utils/rembSiege.js'
 import { libelleVase } from '../../utils/ravitaillement.js'
 import { useDemandesAgent } from '../../hooks/useDemandesAgent.js'
+import { useRegardDeLaCaissiere } from '../../hooks/useRegardDeLaCaissiere.js'
 import { dejaSaisie, encaisseApres, vientDArriver } from '../../utils/demandesAgent.js'
 import { accepterDemandeAgent, accepterRemboursementAgent, rejeterDemandeAgent } from '../../services/demandesAgentService.js'
 import LigneDemandeAgent, { LigneRemboursementAgent } from './LigneDemandeAgent.jsx'
@@ -121,8 +122,10 @@ const TransactionTable = memo(function TransactionTable() {
   // Les demandes des agents (contrat Oxygen v4) : en tête du tableau, quel que
   // soit le filtre, hors des cases et du Total caisse — ce ne sont pas encore
   // des opérations. Vides hors ligne et là où le profil n'ouvre pas Oxygen.
-  // Celles qui viennent d'arriver pulsent un moment (`arrivees`, TC-423).
-  const { demandes: demandesEcoutees, arrivees = AUCUNE_ARRIVEE } = useDemandesAgent()
+  // Celles qui viennent d'arriver pulsent jusqu'à ce que la caissière les ait
+  // vues, puis 20 s (`arrivees`, TC-423).
+  const { demandes: demandesEcoutees, arrivees = AUCUNE_ARRIVEE, marquerVues } = useDemandesAgent()
+  useRegardDeLaCaissiere(arrivees, marquerVues)
   // Les demandes auxquelles la caissière vient de répondre : leur ligne part
   // dès la réponse du serveur, sans attendre que l'écoute la retire.
   const [repondues, setRepondues] = useState(() => new Set())

@@ -14,6 +14,7 @@ import { subscribeStorePendingCount } from '../services/storeAdminDealerService'
 import { safeUnsubscribe } from '../services/resilientOnSnapshot'
 import { subscribePendingSettlementsCount } from '../services/collaborationService'
 import { useIncomingCollaborationsCount } from '../hooks/useIncomingCollaborationsCount'
+import { useDemandesAgent } from '../hooks/useDemandesAgent.js'
 import AidePanel from './aide/AidePanel.jsx'
 import {
   STORE_NAVIGATION_VISIBILITY,
@@ -38,6 +39,10 @@ const TRANSACTIONS_PATH = '/transactions'
  * gérant venant enregistrer une opération atterrirait ailleurs sans l'avoir
  * demandé. Le libellé garde donc sa destination, et c'est le COMPTEUR qui porte
  * le raccourci : deux cibles, deux noms accessibles, un seul objet à l'œil.
+ *
+ * Le compteur des DEMANDES D'AGENT (demandé par l'utilisateur le 2026-11-27)
+ * suit la règle de « Demandes dealer » : ces demandes arrivent en tête de la
+ * transaction client, c'est-à-dire sur la page même. Il reste dans le lien.
  */
 const RACCOURCIS = {
   [TRANSACTIONS_PATH]: '/transactions?tab=collaborations&sub=incoming',
@@ -67,6 +72,13 @@ function libelleCompteur(path) {
   }
   return { noun: 'demande', nounPluriel: 'demandes', testId: 'store-pending-badge' }
 }
+
+/** Les demandes que les agents lancent depuis l'app Oxygen : seules à compter sur ce compteur-là. */
+const LIBELLE_DEMANDES_AGENT = Object.freeze({
+  noun: 'demande d’agent',
+  nounPluriel: 'demandes d’agent',
+  testId: 'store-demandes-agent-badge',
+})
 
 /**
  * Le compteur d'attente.
@@ -191,6 +203,11 @@ function NavBar() {
     STORE_TRANSACTION_VISIBILITY.collaborations,
   )
 
+  // Les demandes des agents en attente, lues dans l'écoute de la session
+  // (`DemandesAgentProvider`) : aucun abonnement de plus pour la barre.
+  const demandesAgentCount = useDemandesAgent().demandes.length
+  const demandesAgentDe = (path) => (path === TRANSACTIONS_PATH ? demandesAgentCount : 0)
+
   // Naviguer referme le panneau. Sans ça, il resterait ouvert par-dessus la page
   // qu'on vient de demander.
   useEffect(() => {
@@ -223,7 +240,7 @@ function NavBar() {
       : {}),
   }
   Object.keys(compteurs).forEach(assertCompteurAutorise)
-  const totalEnAttente = Object.values(compteurs).reduce((somme, n) => somme + n, 0)
+  const totalEnAttente = Object.values(compteurs).reduce((somme, n) => somme + n, demandesAgentCount)
 
   const courant = navItemsOfGroup(NAV_GROUPS.COURANT)
   const referentiel = navItemsOfGroup(NAV_GROUPS.REFERENTIEL)
@@ -241,6 +258,7 @@ function NavBar() {
   const renduBureau = (item) => {
     const compte = compteurs[item.path]
     const raccourci = RACCOURCIS[item.path]
+    const demandesAgent = <PendingBadge count={demandesAgentDe(item.path)} {...LIBELLE_DEMANDES_AGENT} />
 
     // Sans raccourci distinct, la pastille reste DANS le lien : deux cibles vers
     // la même page seraient deux arrêts de tabulation pour rien.
@@ -248,6 +266,7 @@ function NavBar() {
       return (
         <NavLink key={item.path} to={item.path} className={lienBureau}>
           {item.name}
+          {demandesAgent}
           <PendingBadge count={compte} {...libelleCompteur(item.path)} />
         </NavLink>
       )
@@ -258,7 +277,7 @@ function NavBar() {
     // navigateur déferait la structure sans rien dire.
     return (
       <span key={item.path} className="inline-flex items-center">
-        <NavLink to={item.path} className={lienBureau}>{item.name}</NavLink>
+        <NavLink to={item.path} className={lienBureau}>{item.name}{demandesAgent}</NavLink>
         <NavLink
           to={raccourci}
           className="-ml-2 rounded py-3 pr-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70"
@@ -272,11 +291,18 @@ function NavBar() {
   const renduPanneau = (item) => (
     <NavLink key={item.path} to={item.path} className={lienPanneau}>
       <span>{item.name}</span>
-      <PendingBadge
-        count={compteurs[item.path]}
-        {...libelleCompteur(item.path)}
-        testId={`nav-panneau-badge-${item.path}`}
-      />
+      <span className="inline-flex items-center">
+        <PendingBadge
+          count={demandesAgentDe(item.path)}
+          {...LIBELLE_DEMANDES_AGENT}
+          testId={`nav-panneau-badge-agents-${item.path}`}
+        />
+        <PendingBadge
+          count={compteurs[item.path]}
+          {...libelleCompteur(item.path)}
+          testId={`nav-panneau-badge-${item.path}`}
+        />
+      </span>
     </NavLink>
   )
 

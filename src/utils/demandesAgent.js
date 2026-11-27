@@ -94,16 +94,22 @@ export function encaisseApres(demande, cible) {
 }
 
 /**
- * Combien de temps une demande qui vient d'arriver pulse (demandé par
- * l'utilisateur le 2026-11-27). Le son fait lever les yeux ; la pulsation dit
- * laquelle, parmi plusieurs, vient d'entrer. Plus longtemps, la caissière
- * saisirait ses opérations sous un tableau qui clignote.
+ * Combien de temps une demande qui vient d'arriver pulse DEVANT LA CAISSIÈRE
+ * (demandé par l'utilisateur le 2026-11-27). Le son fait lever les yeux ; la
+ * pulsation dit laquelle, parmi plusieurs, vient d'entrer. Plus longtemps, la
+ * caissière saisirait ses opérations sous un tableau qui clignote.
+ *
+ * Le décompte part à son premier geste devant le tableau, pas à l'arrivée :
+ * 20 s sur un écran en veille ne préviennent personne.
  */
 export const PULSATION_MS = 20_000
 
-/** `arriveeMs` : l'instant où CE poste l'a vue arriver (`useDemandesAgent`), ou `undefined`. */
-export const vientDArriver = (arriveeMs, maintenant) =>
-  arriveeMs != null && maintenant - arriveeMs < PULSATION_MS
+/**
+ * `arrivee` : `{ le, vueLe }` (`useEcouteDemandesAgent`), ou `undefined` pour
+ * une demande qui attendait déjà. Pas encore vue, elle pulse.
+ */
+export const vientDArriver = (arrivee, maintenant) =>
+  arrivee != null && (arrivee.vueLe == null || maintenant - arrivee.vueLe < PULSATION_MS)
 
 /** La plus ancienne d'abord : c'est l'agent qui attend depuis le plus longtemps. */
 export const trierDemandes = (lignes) =>
