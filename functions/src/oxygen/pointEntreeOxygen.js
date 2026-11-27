@@ -27,8 +27,8 @@
  *   l'activité se lit par pages de 50 (docs/rester-dans-le-quota-gratuit.md).
  */
 
-import { ligneDeDocument } from '../clients/historiqueClient.js'
-import { STORE_NETWORKS } from '../config/storeProfile.js'
+import { enMillisecondes, ligneDeDocument } from '../clients/historiqueClient.js'
+import { SIEGE_REPAYMENT_ENABLED, STORE_NETWORKS } from '../config/storeProfile.js'
 import { dealerDe, flotteDe } from '../boutiques/numeros.js'
 import { estRembSiege } from '../storeTransactions/rembSiege.js'
 import { estTransfertArgent } from '../storeTransactions/transfertArgent.js'
@@ -36,10 +36,14 @@ import {
   COLLECTION_DEMANDES,
   ETATS_DEMANDE,
   LIMITE_DEMANDES,
+  MODES_REMBOURSEMENT,
+  NATURES_DEMANDE,
   RETENUE_DEMANDES_MS,
   TYPE_DU_SENS,
   codeReseauDeFiche,
   demandeRendue,
+  modeDeReserve,
+  plafondRemboursement,
 } from './demande.js'
 import {
   COLLECTION_CODES,
@@ -408,6 +412,51 @@ async function lirePage({ db, Timestamp }, clientId, curseur, debutMin, debutApp
  * requête. L'app retire donc de son cache toute non terminée absente de la
  * liste, et toute ligne d'historique qu'un `reopenedFromHistoryId` désigne.
  */
+/**
+ * Ce que l'historique de l'agent lit du règlement d'une ligne (contrat
+ * demande-operation v10 §11.4), chaque champ seulement quand la ligne le porte.
+ *
+ * ⚠ `reglements` ABSENT VEUT DIRE « INCONNU », pas « aucune tranche » : les
+ *   lignes d'avant la mise en service ne l'ont pas, et leurs tranches ne sont
+ *   pas recopiées. `paidAmount` et `reste` restent justes.
+ */
+function traceDuReglement(donnees) {
+  return {
+    ...(donnees.paymentMethod ? { mode: donnees.paymentMethod } : {}),
+    ...(donnees.demandeId ? { demandeId: donnees.demandeId } : {}),
+    ...(Array.isArray(donnees.reglements)
+      ? { reglements: donnees.reglements.map((r) => ({ montant: r.montant, mode: r.mode, le: enMs(r.le) || null })) }
+      : {}),
+  }
+}
+
+/**
+ * Un « Remb. siège » tel que l'agent le lit (§11.4) : réglé dès qu'il existe.
+ * Ce qui se passe entre la boutique et le siège ne le concerne pas (règle 7) :
+ * liste blanche, sans reste, ni envoi, ni date d'envoi, ni caissière ; le
+ * statut ne dit que « Validée », ou « Supprimée » si la boutique l'a annulé.
+ */
+function rembSiegeRendu(ligne, donnees) {
+  const annule = Boolean(ligne.deletedAt) || ['supprimee', 'annulee'].includes(plier(donnees.statut))
+  return {
+    id: ligne.id,
+    source: ligne.source,
+    storeId: ligne.storeId,
+    storeName: ligne.storeName,
+    type: ligne.type,
+    montant: ligne.montant,
+    mode: modeDeReserve(donnees.balanceType),
+    statut: annule ? 'Supprimée' : 'Validée',
+    reseau: ligne.reseau,
+    code: ligne.code,
+    date: ligne.date,
+    createdAt: ligne.createdAt,
+    updatedAt: enMs(donnees.updatedAt) || null,
+    deletedAt: ligne.deletedAt,
+    ...(donnees.demandeId ? { demandeId: donnees.demandeId } : {}),
+  }
+}
+
 async function lireActivite(corps, { db, Timestamp, maintenant, oxygen }) {
   validerCles(corps, ['action', 'distributeurId', 'compteOxygen', 'liaison', 'curseur'])
   validerDistributeur(corps, oxygen)
@@ -438,17 +487,18 @@ async function lireActivite(corps, { db, Timestamp, maintenant, oxygen }) {
 
   const enLigne = (doc, source) => {
     const donnees = doc.data() ?? {}
-    // Le contrat validé avec Oxygen ne connaît pas ce type : il n'entre pas dans
-    // le flux avant que l'utilisateur rouvre ce contrat (TC-377-RS).
-    if (estRembSiege(donnees)) return null
-    // Ni le transfert d'argent : son client n'est pas un agent (TC-377-TA).
+    // Le transfert d'argent n'entre pas dans le flux : son client n'est pas un agent (TC-377-TA).
     if (estTransfertArgent(donnees)) return null
     const ligne = ligneDeDocument({ id: doc.id, chemin: doc.ref.path, donnees, source, nomsDeBoutique: new Map() })
     if (!ligne || !dansLesPeriodes(ligne.createdAt, periodes)) return null
+    if (estRembSiege(donnees)) return rembSiegeRendu(ligne, donnees)
+    // Les boutiques partagent un compte : le nom de la caissière ne sort pas (§11.1, règle 8).
+    const { operatorName: _caissiere, ...rendue } = ligne
     return {
-      ...ligne,
+      ...rendue,
       updatedAt: enMs(donnees.updatedAt) || null,
       ...(source === 'draft' ? { reopenedFromHistoryId: donnees.reopenedFromHistoryId ?? null } : {}),
+      ...traceDuReglement(donnees),
     }
   }
 
@@ -586,30 +636,196 @@ async function demander(corps, { db, Timestamp, maintenant, oxygen }) {
     const code = codeReseauDeFiche(fiche.exists ? fiche.data() : null, corps.reseau)
     if (!code) return refus('reseau_invalide')
 
-    const donnees = {
-      distributeurId: oxygen.distributeurId,
-      compteOxygen: ids.compteOxygen,
-      liaisonId: ids.liaisonId,
-      clientId: liaison.clientId,
-      // Une copie, pour que l'écran de la caisse n'ait pas à lire la fiche de
-      // chaque demande. La fiche fait foi à la validation.
-      agent: { nom: fiche.get('nom') ?? '', prenom: fiche.get('prenom') ?? '', code },
-      boutiqueId,
-      boutiqueNom: boutique.get('name') ?? '',
-      sens: corps.sens,
-      reseau: corps.reseau,
-      montant: corps.montant,
-      // L'heure du téléphone, pour l'affichage seulement : l'opération sera
-      // datée de sa validation, côté serveur.
-      saisieLe: Timestamp.fromMillis(corps.saisieLe),
-      etat: ETATS_DEMANDE.EN_ATTENTE,
-      creeLe: heure,
-      reponduLe: null,
-      reponduPar: null,
-      operationId: null,
-    }
+    const donnees = nouvelleDemande({
+      oxygen, ids, liaison, fiche, code, boutiqueId, boutique, heure, Timestamp,
+      sens: corps.sens, reseau: corps.reseau, montant: corps.montant, saisieLe: corps.saisieLe,
+    })
     t.set(ref, donnees)
     return { ok: true, demande: avecDealer(demandeRendue(ref.id, donnees), boutique.data()) }
+  }))
+}
+
+/**
+ * Le document d'une demande, en attente : celle d'une opération comme celle
+ * d'un remboursement (`enPlus` : nature, cible, mode).
+ */
+function nouvelleDemande({ oxygen, ids, liaison, fiche, code, boutiqueId, boutique, heure, Timestamp, sens, reseau, montant, saisieLe, ...enPlus }) {
+  return {
+    distributeurId: oxygen.distributeurId,
+    compteOxygen: ids.compteOxygen,
+    liaisonId: ids.liaisonId,
+    clientId: liaison.clientId,
+    // Une copie, pour que l'écran de la caisse n'ait pas à lire la fiche de
+    // chaque demande. La fiche fait foi à la validation.
+    agent: { nom: fiche.get('nom') ?? '', prenom: fiche.get('prenom') ?? '', code },
+    boutiqueId,
+    boutiqueNom: boutique.get('name') ?? '',
+    sens,
+    reseau,
+    montant,
+    // L'heure du téléphone, pour l'affichage seulement : l'opération sera
+    // datée de sa validation, côté serveur.
+    saisieLe: Timestamp.fromMillis(saisieLe),
+    etat: ETATS_DEMANDE.EN_ATTENTE,
+    creeLe: heure,
+    reponduLe: null,
+    reponduPar: null,
+    operationId: null,
+    ...enPlus,
+  }
+}
+
+// ─── Le remboursement depuis l'app (contrat v10 §11.2) ────────────────────────
+//
+// L'agent propose ; la caissière accepte ou rejette, par `acceptAgentRequest` /
+// `rejectAgentRequest`. Ici, seulement la demande, en attente.
+
+/** Les deux actions, ouvertes par le profil (`oxygen.remboursement`). */
+const ACTIONS_REMBOURSEMENT = Object.freeze(['rembourser', 'rembourserSiege'])
+
+const plier = (valeur) => String(valeur ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
+
+/**
+ * Seul un Dépôt « Non Terminées » se rembourse (§11.1, règle 3) : ni un
+ * retrait — c'est la boutique qui doit —, ni un « Remb. siège », ni un
+ * transfert d'argent. Le type ÉPINGLÉ d'abord, comme `calculerTranche`.
+ */
+const estCreditDeLAgent = (ligne) =>
+  plier(ligne.settlementType ?? ligne.type) === 'depot' && plier(ligne.statut) === 'non terminees'
+
+/** Le reste dû, lu comme `calculerTranche` le lit. */
+const resteDe = (ligne) => ligne.remainingAmount
+  ?? ((ligne.originalAmount ?? ligne.montant) - (ligne.paidAmount ?? 0) + (ligne.refundedAmount ?? 0))
+
+/** La forme commune aux deux actions ; une forme fausse est une panne de l'appelant. */
+function validerRemboursement(corps, cles, oxygen) {
+  const ids = validerCommun(corps, ['boutiqueId', 'montant', 'mode', 'saisieLe', 'cle', ...cles], oxygen)
+  const boutiqueId = valider(corps.boutiqueId, FORMAT_ID, 'Boutique invalide.')
+  const cle = valider(corps.cle, FORMAT_ID, 'Clé invalide.')
+  if (!estInstant(corps.saisieLe)) invalide('Moment de saisie invalide.')
+  return { ids, boutiqueId, cle }
+}
+
+/** Le montant et le mode : des refus métier, en 200. `null` s'ils conviennent. */
+function refusDeSaisie(corps) {
+  if (!Number.isSafeInteger(corps.montant) || corps.montant <= 0) return refus('montant_invalide')
+  if (!MODES_REMBOURSEMENT.includes(corps.mode)) return refus('mode_invalide')
+  return null
+}
+
+/** La même clé rend la même demande, quel que soit son état depuis (comme `demander`). */
+async function rejeuDe(t, ref, ids) {
+  const existante = await t.get(ref)
+  if (!existante.exists) return null
+  if (existante.get('compteOxygen') !== ids.compteOxygen) invalide('Clé déjà prise.')
+  return { ok: true, demande: demandeRendue(ref.id, existante.data()) }
+}
+
+/** La liaison ouverte de ce compte, la boutique active et la fiche ; sinon le refus. */
+async function contexteDuRemboursement(t, db, ids, boutiqueId, oxygen, lecturesEnPlus = []) {
+  const liaison = liaisonDuCompte(await t.get(db.doc(`${COLLECTION_LIAISONS}/${ids.liaisonId}`)), ids, oxygen)
+  if (!liaison) return { refus: refus('liaison_inconnue') }
+  if (liaison.finLe) return { refus: refus('liaison_fermee') }
+  const [boutique, fiche, ...autres] = await t.getAll(
+    db.doc(`stores/${boutiqueId}`), db.doc(`globalClients/${liaison.clientId}`), ...lecturesEnPlus,
+  )
+  if (!boutique.exists || boutique.get('active') !== true) return { refus: refus('boutique_indisponible') }
+  return { liaison, boutique, fiche, autres }
+}
+
+/**
+ * L'agent rembourse son crédit : une demande sur LA ligne « Non Terminées »,
+ * réglée à l'acceptation sans doublon (§11.1, règle 2).
+ *
+ * ⚠ UN AGENT NE REMBOURSE QUE CE QU'IL VOIT. La ligne doit être à lui, et
+ *   créée pendant les périodes de CE compte sur CETTE fiche, comme ce que
+ *   `lireActivite` lui rend ; sinon `operation_inconnue`.
+ */
+async function rembourser(corps, { db, Timestamp, maintenant, oxygen }) {
+  const { ids, boutiqueId, cle } = validerRemboursement(corps, ['operationId'], oxygen)
+  const operationId = valider(corps.operationId, FORMAT_ID, 'Opération invalide.')
+  if (!oxygen.actif) return fermee()
+  const saisie = refusDeSaisie(corps)
+  if (saisie) return repondre(saisie)
+
+  const ref = refDemande(db, boutiqueId, cle)
+  const heure = Timestamp.fromMillis(maintenant())
+
+  return repondre(await db.runTransaction(async (t) => {
+    const rejouee = await rejeuDe(t, ref, ids)
+    if (rejouee) return rejouee
+
+    const contexte = await contexteDuRemboursement(t, db, ids, boutiqueId, oxygen, [db.doc(`clients/${boutiqueId}/drafts/${operationId}`)])
+    if (contexte.refus) return contexte.refus
+    const { liaison, boutique, fiche } = contexte
+    const ligne = contexte.autres[0].exists ? contexte.autres[0].data() : null
+    if (!ligne || ligne.clientId !== liaison.clientId) return refus('operation_inconnue')
+
+    // Toutes les périodes de CE compte sur CETTE fiche, comme `lireActivite`.
+    const periodes = (await t.get(db.collection(COLLECTION_LIAISONS)
+      .where('compteOxygen', '==', ids.compteOxygen)
+      .where('clientId', '==', liaison.clientId))).docs.map((d) => d.data())
+    // La date lue comme `lireActivite` la lit (`ligneDeDocument`), chaînes comprises :
+    // une ligne que l'agent voit, il peut la rembourser.
+    if (!dansLesPeriodes(enMillisecondes(ligne.createdAt), periodes)) return refus('operation_inconnue')
+    if (!estCreditDeLAgent(ligne)) return refus('pas_un_credit')
+
+    // Une seule égalité : l'index automatique suffit, `etat` se filtre ici.
+    const enAttente = (await t.get(db.collection(`clients/${boutiqueId}/${COLLECTION_DEMANDES}`)
+      .where('cibleId', '==', operationId)
+      .limit(LIMITE_DEMANDES))).docs
+      .map((d) => d.data())
+      .filter((d) => d.etat === ETATS_DEMANDE.EN_ATTENTE)
+    if (enAttente.some((d) => d.mode === corps.mode)) return refus('deja_en_attente')
+    if (corps.montant > plafondRemboursement({ reste: resteDe(ligne), autres: enAttente.map((d) => d.montant) })) {
+      return refus('montant_invalide')
+    }
+
+    const reseau = ligne.reseau || STORE_NETWORKS[0]
+    const donnees = nouvelleDemande({
+      oxygen, ids, liaison, fiche, boutiqueId, boutique, heure, Timestamp,
+      code: codeReseauDeFiche(fiche.exists ? fiche.data() : null, reseau),
+      sens: 'depot', reseau, montant: corps.montant, saisieLe: corps.saisieLe,
+      nature: NATURES_DEMANDE.REMBOURSEMENT, cibleId: operationId, mode: corps.mode,
+    })
+    t.set(ref, donnees)
+    return { ok: true, demande: demandeRendue(ref.id, donnees) }
+  }))
+}
+
+/**
+ * L'agent déclare régler dans cette boutique un crédit pris au siège.
+ * Aucun contrôle de dette : le crédit de la nuit n'est saisi nulle part
+ * (§11.1, règle 6). Fermé par le profil, le remboursement siège est refusé ici
+ * plutôt qu'à l'acceptation.
+ */
+async function rembourserSiege(corps, { db, Timestamp, maintenant, oxygen }) {
+  const { ids, boutiqueId, cle } = validerRemboursement(corps, [], oxygen)
+  if (!oxygen.actif) return fermee()
+  const saisie = refusDeSaisie(corps)
+  if (saisie) return repondre(saisie)
+
+  const ref = refDemande(db, boutiqueId, cle)
+  const heure = Timestamp.fromMillis(maintenant())
+
+  return repondre(await db.runTransaction(async (t) => {
+    const rejouee = await rejeuDe(t, ref, ids)
+    if (rejouee) return rejouee
+
+    const contexte = await contexteDuRemboursement(t, db, ids, boutiqueId, oxygen)
+    if (contexte.refus) return contexte.refus
+    if (!SIEGE_REPAYMENT_ENABLED) return refus('boutique_indisponible')
+    const { liaison, boutique, fiche } = contexte
+
+    const reseau = STORE_NETWORKS[0]
+    const donnees = nouvelleDemande({
+      oxygen, ids, liaison, fiche, boutiqueId, boutique, heure, Timestamp,
+      code: codeReseauDeFiche(fiche.exists ? fiche.data() : null, reseau),
+      sens: 'depot', reseau, montant: corps.montant, saisieLe: corps.saisieLe,
+      nature: NATURES_DEMANDE.REMB_SIEGE, mode: corps.mode,
+    })
+    t.set(ref, donnees)
+    return { ok: true, demande: demandeRendue(ref.id, donnees) }
   }))
 }
 
@@ -693,7 +909,8 @@ async function listerBoutiques(corps, { db, oxygen }) {
     .filter((b) => b.exists && b.get('active') === true)
     .map((b) => boutiqueListee(b, { derniereLe: derniere.get(b.id) }))
 
-  const reponse = { ok: true, servies, reseaux: [...STORE_NETWORKS] }
+  // Le drapeau du §11 : sans lui, l'app ne montre rien du remboursement.
+  const reponse = { ok: true, servies, reseaux: [...STORE_NETWORKS], ...(oxygen.remboursement === true ? { remboursement: true } : {}) }
   if (avecToutes) {
     const actives = await db.collection('stores').where('active', '==', true).orderBy('name').get()
     reponse.boutiques = actives.docs.map((b) => boutiqueListee(b, {}, { avecDealer: true }))
@@ -738,6 +955,7 @@ async function lireDemandes(corps, { db, Timestamp, maintenant, oxygen }) {
 const ACTIONS = Object.freeze({
   rechercher, relier, consommerPourCodeSecret, lireActivite,
   listerBoutiques, demander, annuler, lireDemandes, etatDemande,
+  rembourser, rembourserSiege,
 })
 
 /**
@@ -755,6 +973,8 @@ export async function traiterDemandeOxygen(corps, { db, Timestamp, maintenant = 
   try {
     if (!estObjetSimple(corps)) invalide('Corps JSON attendu.')
     if (typeof corps.action !== 'string' || !Object.hasOwn(ACTIONS, corps.action)) invalide('Action inconnue.')
+    // Profil fermé : le serveur répond comme avant ces deux actions.
+    if (ACTIONS_REMBOURSEMENT.includes(corps.action) && oxygen.remboursement !== true) invalide('Action inconnue.')
     return await ACTIONS[corps.action](corps, { db, Timestamp, maintenant, oxygen })
   } catch (erreur) {
     if (erreur instanceof DemandeInvalide) return repondre({ erreur: erreur.message }, 400)

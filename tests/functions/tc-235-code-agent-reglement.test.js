@@ -278,3 +278,31 @@ describe('TC-235 — un règlement en plusieurs tranches', () => {
     expect(await destinations(fin.historyId)).toBe('1111111 + 9999999')
   })
 })
+
+/**
+ * TC-235-RG — les tranches écrites sur la ligne (contrat Oxygen v10 §11.4).
+ * L'historique de l'agent les lit sans la sous-collection, qui coûterait des
+ * lectures ; `le` est l'instant de la caisse quand le geste est parti en retard.
+ */
+describe('TC-235-RG — les tranches sur la ligne', () => {
+  it('[TC-235-RG1] deux tranches : la non terminée puis la ligne d’historique les portent, dans l’ordre', async () => {
+    await payer(base({ amount: 4_000, paymentMethod: 'Orange Money', idempotencyKey: 'rg-1' }))
+    const partielle = (await db.doc(`clients/${STORE}/drafts/${DRAFT}`).get()).data()
+    expect(partielle.reglements.map((r) => [r.montant, r.mode])).toEqual([[4_000, 'Orange Money']])
+
+    const fin = await payer(base({ amount: 6_000, paymentMethod: 'Cash', idempotencyKey: 'rg-2' }))
+    const ligne = await ligneHistorique(fin.historyId)
+    expect(ligne.reglements.map((r) => [r.montant, r.mode])).toEqual([[4_000, 'Orange Money'], [6_000, 'Cash']])
+    expect(typeof ligne.reglements[1].le.toMillis).toBe('function')
+    expect(ligne.statut).toBe('Encaissé par Cash')
+  })
+
+  it('[TC-235-RG2] une tranche partie en retard garde l’instant de la caisse', async () => {
+    const avant = Date.now()
+    await payer(base({ amount: 4_000, idempotencyKey: 'rg-3', ageMs: 3_600_000 }))
+    const [tranche] = (await db.doc(`clients/${STORE}/drafts/${DRAFT}`).get()).data().reglements
+    const ecart = avant - tranche.le.toMillis()
+    expect(ecart).toBeGreaterThan(3_590_000)
+    expect(ecart).toBeLessThan(3_610_000)
+  })
+})

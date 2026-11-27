@@ -81,6 +81,14 @@
   --color-agent:        #5b3ba8;
   --color-agent-soft:   #f1edfb;
   --color-agent-line:   #d9cff3;
+  /* Une demande qui vient d'arriver : son cadre bat, 20 s (PULSATION_MS,
+     utils/demandesAgent.js). Le cadre et non le fond : un fond plus foncé
+     ferait tomber le vert d'un dépôt à 3,6:1. */
+  --animate-arrivee-demande: arrivee-demande 1.2s ease-in-out infinite;
+  @keyframes arrivee-demande {
+    0%, 100% { outline-color: transparent; }
+    50% { outline-color: var(--color-agent); }
+  }
 
   /* ── Signaux ───────────────────────────────────────────────────────────── */
   /* `success` partage aujourd'hui la teinte de `inflow`, et ce n'est pas un

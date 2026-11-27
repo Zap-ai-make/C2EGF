@@ -192,10 +192,13 @@ export const pilotProfile = Object.freeze({
   //                     ⚠ Rien à voir avec `dealerUid` : ici « dealer » désigne le
   //                     fournisseur des boutiques, « distributeur » l'entreprise.
   //   nomDistributeur → le nom que l'agent lit dans son app.
+  //   remboursement   → l'agent rembourse son crédit depuis l'app (contrat
+  //                     demande-operation v10 §11). false = ni actions, ni drapeau.
   oxygen: Object.freeze({
     enabled: true,
     distributeurId: 'akayis',
     nomDistributeur: 'AKAYIS',
+    remboursement: false,
   }),
 
   // ── Régional ────────────────────────────────────────────────────────────────

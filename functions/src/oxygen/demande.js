@@ -11,6 +11,8 @@
  */
 
 import { champsAgentFiche, enMs } from './liaison.js'
+import { STORE_NETWORKS, STORE_PAYMENT_METHODS } from '../config/storeProfile.js'
+import { mapPaymentMethodToNetwork } from '../settlements/financialUtils.js'
 
 /** Une collection par boutique : `clients/{boutiqueId}/demandesAgent/{cle}`. */
 export const COLLECTION_DEMANDES = 'demandesAgent'
@@ -25,6 +27,47 @@ export const ETATS_DEMANDE = Object.freeze({
   REJETEE: 'rejetee',
   ANNULEE_AGENT: 'annulee_agent',
 })
+
+/**
+ * Ce que l'agent demande (contrat v10 §11.2). Une demande d'avant ce champ est
+ * une opération : `nature` absent se lit `'operation'`.
+ */
+export const NATURES_DEMANDE = Object.freeze({
+  OPERATION: 'operation',
+  REMBOURSEMENT: 'remboursement',
+  REMB_SIEGE: 'remb_siege',
+})
+
+/**
+ * Les modes d'un remboursement : les méthodes de règlement du profil, celles
+ * que l'acceptation passe à « Encaisser ». Une liste à part finirait par
+ * accepter des demandes que l'acceptation refuserait.
+ */
+export const MODES_REMBOURSEMENT = Object.freeze([...STORE_PAYMENT_METHODS])
+
+/** La réserve où entre un remboursement siège : les espèces en liquidité, le reste en stock. */
+export const reserveDuMode = (mode) => (mapPaymentMethodToNetwork(mode) === 'Liquidite' ? 'liquidite' : 'stock')
+
+/**
+ * Et l'inverse, pour rendre à l'agent le mode d'un « Remb. siège » (§11.4) :
+ * le stock est celui du premier réseau, où la ligne est rangée.
+ */
+export const modeDeReserve = (balanceType) => {
+  const cible = { stock: STORE_NETWORKS[0], liquidite: 'Liquidite' }[balanceType]
+  return cible ? (STORE_PAYMENT_METHODS.find((mode) => mapPaymentMethodToNetwork(mode) === cible) ?? null) : null
+}
+
+/**
+ * Ce que l'agent peut encore rembourser sur une ligne : le reste, moins
+ * l'autre demande en attente (§11.1, règle 4). Deux demandes en attente, une
+ * par mode, ne dépassent donc jamais le reste à elles deux.
+ *
+ * @param {{reste: number, autres: number[]}} p  `autres` : les montants des autres demandes en attente
+ */
+export function plafondRemboursement({ reste, autres = [] }) {
+  const engage = autres.reduce((somme, montant) => somme + (Number(montant) || 0), 0)
+  return Math.max(0, reste - engage)
+}
 
 /** Le sens que l'app envoie, et le type d'opération qu'il devient au CRM. */
 export const TYPE_DU_SENS = Object.freeze({ depot: 'Dépôt', retrait: 'Retrait' })
@@ -94,5 +137,8 @@ export function demandeRendue(id, donnees) {
     creeLe: enMs(donnees.creeLe) || null,
     reponduLe: enMs(donnees.reponduLe) || null,
     operationId: donnees.operationId ?? null,
+    nature: donnees.nature ?? NATURES_DEMANDE.OPERATION,
+    ...(donnees.cibleId ? { cibleId: donnees.cibleId } : {}),
+    ...(donnees.mode ? { mode: donnees.mode } : {}),
   }
 }

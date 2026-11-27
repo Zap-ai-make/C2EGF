@@ -32,6 +32,7 @@ const accepter = vi.fn()
 const rejeter = vi.fn()
 vi.mock('../../src/services/demandesAgentService.js', () => ({
   accepterDemandeAgent: (...a) => accepter(...a),
+  accepterRemboursementAgent: vi.fn(),
   rejeterDemandeAgent: (...a) => rejeter(...a),
 }))
 // Pour l'écoute elle-même (TC-397-08 à 10).
@@ -182,7 +183,7 @@ describe('TC-397 — les demandes dans le tableau', () => {
 describe('TC-397 — l’écoute des demandes', () => {
   let useDemandesAgent
   beforeEach(async () => {
-    ({ useDemandesAgent } = await vi.importActual('../../src/hooks/useDemandesAgent.js'))
+    ({ useEcouteDemandesAgent: useDemandesAgent } = await vi.importActual('../../src/hooks/useEcouteDemandesAgent.js'))
   })
   const auth = { userProfile: { storeId: 's1' }, activeStore: { id: 's1' } }
   const SERVEUR = { depuisServeur: true }

@@ -28,11 +28,6 @@ import {
   validateInputPayload,
 } from '../dealerRequests/shared.js'
 import {
-  normalizeNetworkBalances,
-  mapPaymentMethodToNetwork,
-  applySettlementImpact,
-} from './financialUtils.js'
-import {
   validateSettlementProfile,
 } from './profileValidation.js'
 import {
@@ -40,38 +35,10 @@ import {
   readIdempotentSettlement,
   readSettlementTransactionContext,
   cleanSettlementAgentCode,
-  accumulerCodesAgent,
-  accumulerCodesParReseau,
-  libelleCodesAgent,
 } from './settlementShared.js'
+import { calculerTranche, ecrireTranche, historyRefDe } from './tranche.js'
 import { STORE_PAYMENT_METHODS } from '../config/storeProfile.js'
 import { instantDeLaCaisse } from '../instantDeLaCaisse.js'
-
-function buildFinalStatus(type, paymentMethod) {
-  const t = String(type || '').trim().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
-  if (t === 'depot')   return `Encaissé par ${paymentMethod}`
-  if (t === 'retrait') return `Payé par ${paymentMethod}`
-  if (t === 'credit')  return `Remboursé par ${paymentMethod}`
-  return `Validée par ${paymentMethod}`
-}
-
-/**
- * Met à jour le settlementSummary du draft pour ce réseau.
- * Le summary est maintenu incrémentalement pour permettre l'annulation exacte.
- */
-function updateSummaryForPayment(prevSummary, network, amount, agentCodes, codesParReseau) {
-  const prev = (prevSummary?.netByNetwork || {})[network] || { paid: 0, refunded: 0 }
-  return {
-    netByNetwork: {
-      ...(prevSummary?.netByNetwork || {}),
-      [network]: { paid: prev.paid + amount, refunded: prev.refunded },
-    },
-    // Absente quand aucune tranche n'a note de destination : un reglement sans
-    // code agent garde la forme de document qu'il avait avant ce champ.
-    ...(agentCodes.length ? { agentCodes } : {}),
-    ...(Object.keys(codesParReseau).length ? { agentCodesByNetwork: codesParReseau } : {}),
-  }
-}
 
 export async function addTransactionPaymentHandler(request, { db, FieldValue, logWriter = write }) {
   // ── 1. Auth ────────────────────────────────────────────────────────────────
@@ -121,9 +88,6 @@ export async function addTransactionPaymentHandler(request, { db, FieldValue, lo
       const {
         txProfile,
         storeId,
-        draftRef,
-        settlementRef,
-        balanceRef,
         draftSnap,
         settlementSnap,
         balanceSnap,
@@ -162,86 +126,16 @@ export async function addTransactionPaymentHandler(request, { db, FieldValue, lo
       if (estRembSiege(draft)) throw new DealerRequestError('STORE_TRANSACTION_INVALID', MESSAGE_GESTE_GENERIQUE)
       if (estTransfertArgent(draft)) throw new DealerRequestError('STORE_TRANSACTION_INVALID', MESSAGE_GESTE_TRANSFERT)
 
-      // ── Type métier ÉPINGLÉ (défense en profondeur, cf. C1) ────────────────
-      // Le signe de l'impact réseau dépend du type (Retrait ⇒ débit). Les règles
-      // Firestore figent déjà draft.type dès qu'un règlement est engagé, mais on
-      // ne s'y fie pas seul : dès la 1re tranche on épingle le type dans un champ
-      // serveur immuable (settlementType, verrouillé côté règles) et on le relit
-      // ensuite — même si le gel des règles était contourné, le signe reste stable.
-      const effectiveType = draft.settlementType ?? draft.type
-
-      // ── Initialisation lazy (backward compat) ─────────────────────────────
-      const originalAmount  = draft.originalAmount  ?? draft.montant
-      const paidAmount      = draft.paidAmount      ?? 0
-      const refundedAmount  = draft.refundedAmount  ?? 0
-      const remainingAmount = draft.remainingAmount ?? (originalAmount - paidAmount + refundedAmount)
-
-      if (remainingAmount <= 0) {
-        throw new DealerRequestError('SETTLEMENT_ALREADY_SETTLED', 'Cette transaction est déjà entièrement réglée.')
-      }
-      if (amount > remainingAmount) {
-        throw new DealerRequestError(
-          'SETTLEMENT_EXCEEDS_REMAINING',
-          `Montant (${amount} FCFA) supérieur au reste dû (${remainingAmount} FCFA).`
-        )
-      }
-
-      // ── Impact financier ──────────────────────────────────────────────────
-      const currentBalances = normalizeNetworkBalances(balanceSnap.exists ? balanceSnap.data() : {})
-      const affectedNetwork = mapPaymentMethodToNetwork(paymentMethod)
-      const nextBalances    = applySettlementImpact(currentBalances, { type: effectiveType, montant: amount }, paymentMethod)
-
-      const previousBalanceEntry = currentBalances[affectedNetwork] ?? { stock: 0, liquidite: 0 }
-      const newBalanceEntry      = nextBalances[affectedNetwork]    ?? { stock: 0, liquidite: 0 }
-
-      const now          = FieldValue.serverTimestamp()
-      const newPaid      = paidAmount + amount
-      const newRemaining = remainingAmount - amount
-      const fullySettled = newRemaining === 0
-
-      // ── settlementSummary incrémental ─────────────────────────────────────
-      const prevSummary  = draft.settlementSummary ?? null
-      const codesAgent   = accumulerCodesAgent(prevSummary, agentCode)
-      const codesParReseau = accumulerCodesParReseau(prevSummary, affectedNetwork, agentCode)
-      const newSummary   = updateSummaryForPayment(prevSummary, affectedNetwork, amount, codesAgent, codesParReseau)
-
-      // ── Document settlement ───────────────────────────────────────────────
-      const settlementData = {
-        // Identité
-        type:              'payment',
-        operationType:     'payment',
-        ...buildSettlementAuditBase({
-          agentCode,
-          settlementId,
-          draftId,
-          storeId,
-          draft,
-          amount,
-          paymentMethod,
-          affectedNetwork,
-          trimmedKey,
-          actorUid,
-          txProfile,
-          paidAmount,
-          refundedAmount,
-          remainingAmount,
-        }),
-        // Après
-        newPaidAmount:       newPaid,
-        newRefundedAmount:   refundedAmount,
-        newRemainingAmount:  newRemaining,
-        newSettlementStatus: fullySettled ? 'settled' : 'partial',
-        // Impact financier
-        affectedNetwork,
-        affectedBalanceField: affectedNetwork === 'Liquidite' ? 'liquidite' : 'stock',
-        previousFinancialBalance: previousBalanceEntry,
-        newFinancialBalance:      newBalanceEntry,
-        financialDelta:           amount,
-        // Finalisation
-        fullySettled,
-        historyId:   null,  // mis à jour ci-dessous si fullySettled
-        createdAt:   now,
-      }
+      // La tranche elle-même, partagée avec l'acceptation d'un remboursement
+      // demandé par l'agent (contrat Oxygen v10 §11.3) : tranche.js.
+      const calcul = calculerTranche({
+        draft,
+        amount,
+        paymentMethod,
+        agentCode,
+        balances: balanceSnap.exists ? balanceSnap.data() : {},
+        le: faitLe ?? new Date(),
+      })
 
       // Déplacée vers l'historique, la ligne prend l'identifiant de la non terminée.
       // Hors connexion, la caissière peut annuler ou corriger un encaissement qui
@@ -251,75 +145,32 @@ export async function addTransactionPaymentHandler(request, { db, FieldValue, lo
       //   que parmi les non terminées. S'il porte déjà une ligne d'historique, l'écrire
       //   l'écraserait (TC-357 [IDEM-14]). Lu AVANT la première écriture, comme toute
       //   lecture de transaction, et seulement quand la ligne part.
-      const historyRef = db.doc(`clients/${storeId}/history/${draftId}`)
-      if (fullySettled && (await t.get(historyRef)).exists) {
+      if (calcul.fullySettled && (await t.get(historyRefDe(db, storeId, draftId))).exists) {
         throw new DealerRequestError('IDEMPOTENCY_CONFLICT', 'Ce numéro de transaction est déjà pris par une autre ligne.')
       }
 
-      // ── Mise à jour des soldes ────────────────────────────────────────────
-      t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
+      const auditBase = buildSettlementAuditBase({
+        agentCode,
+        settlementId,
+        draftId,
+        storeId,
+        draft,
+        amount,
+        paymentMethod,
+        affectedNetwork: calcul.affectedNetwork,
+        trimmedKey,
+        actorUid,
+        txProfile,
+        paidAmount: calcul.paidAmount,
+        refundedAmount: calcul.refundedAmount,
+        remainingAmount: calcul.remainingAmount,
+      })
 
-      if (fullySettled) {
-        const historyId  = historyRef.id
-
-        const finalSummary = {
-          ...newSummary,
-          totalPaid:      newPaid,
-          totalRefunded:  refundedAmount,
-          draftSettlementsPath: `clients/${storeId}/drafts/${draftId}`,
-        }
-
-        t.set(historyRef, {
-          ...draft,
-          originalAmount,
-          paidAmount:          newPaid,
-          refundedAmount,
-          remainingAmount:     0,
-          settlementStatus:    'settled',
-          settlementType:      effectiveType,
-          settlementSummary:   finalSummary,
-          settlementUpdatedAt: now,
-          statut:              buildFinalStatus(effectiveType, paymentMethod),
-          paymentMethod,
-          // ⚠ `settlementAgentCode` ET NON `agentCode` : la ligne d'historique
-          //   porte deja `code`, celui du CLIENT. Les deux repondent a des
-          //   questions differentes — « qui est ce client » et « ou est parti
-          //   l'argent » — et un nom court les aurait confondus a la relecture.
-          //
-          //   TOUTES les tranches, et non la derniere : `agentCode` seul aurait
-          //   attribue le montant entier au dernier compte credite.
-          settlementAgentCode: libelleCodesAgent(codesAgent),
-          effectiveNetwork:    affectedNetwork,
-          settlementAmount:    originalAmount,
-          validatedAt:         faitLe ?? now,
-          ...(faitLe ? { recuLe: now } : {}),
-          updatedAt:           now,
-        })
-        t.delete(draftRef)
-
-        // Copie du settlement sous history pour audit durable
-        const historySettlementRef = db.doc(`clients/${storeId}/history/${historyId}/settlements/${settlementId}`)
-        t.set(settlementRef,        { ...settlementData, historyId })
-        t.set(historySettlementRef, { ...settlementData, historyId })
-
-        return { idempotent: false, fullySettled: true, historyId }
-      } else {
-        // Paiement partiel
-        t.set(settlementRef, settlementData)
-
-        t.update(draftRef, {
-          originalAmount,
-          paidAmount:          newPaid,
-          refundedAmount,
-          remainingAmount:     newRemaining,
-          settlementStatus:    'partial',
-          settlementType:      effectiveType,
-          settlementSummary:   newSummary,
-          settlementUpdatedAt: now,
-        })
-
-        return { idempotent: false, fullySettled: false }
-      }
+      const ecrit = ecrireTranche(t, {
+        db, storeId, draftId, draft, calcul, paymentMethod, settlementId, auditBase, faitLe,
+        now: FieldValue.serverTimestamp(),
+      })
+      return { idempotent: false, ...ecrit }
     })
   } catch (err) {
     // Conflit d'idempotence : log d'audit serveur émis UNE SEULE fois, hors transaction.

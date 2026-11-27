@@ -26,7 +26,7 @@
 import { DealerRequestError } from '../errors.js'
 import { readValidatedProfile, validateAuthUid, validateInputPayload } from '../dealerRequests/shared.js'
 import { validerClientId } from '../clients/listClientHistory.js'
-import { OXYGEN_ENABLED, OXYGEN_DISTRIBUTEUR_ID, OXYGEN_NOM_DISTRIBUTEUR } from '../config/oxygenProfile.js'
+import { OXYGEN_ENABLED, OXYGEN_DISTRIBUTEUR_ID, OXYGEN_NOM_DISTRIBUTEUR, OXYGEN_REMBOURSEMENT } from '../config/oxygenProfile.js'
 import { DUREE_CODE_MS, ECHECS_MAX, cleVerrou, enMs, genererCode, hacherCode } from './liaison.js'
 
 export const COLLECTION_CODES = 'codesLiaisonOxygen'
@@ -38,6 +38,7 @@ export const OXYGEN_DU_PROFIL = Object.freeze({
   actif: OXYGEN_ENABLED,
   distributeurId: OXYGEN_DISTRIBUTEUR_ID,
   nom: OXYGEN_NOM_DISTRIBUTEUR,
+  remboursement: OXYGEN_REMBOURSEMENT,
 })
 
 /**

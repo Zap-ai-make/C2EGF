@@ -48,10 +48,14 @@ import {
 import {
   COLLECTION_DEMANDES,
   ETATS_DEMANDE,
+  NATURES_DEMANDE,
   TYPE_DU_SENS,
   clientDeFiche,
   codeReseauDeFiche,
+  reserveDuMode,
 } from '../oxygen/demande.js'
+import { calculerTranche, ecrireTranche, historyRefDe } from '../settlements/tranche.js'
+import { buildSettlementAuditBase } from '../settlements/settlementShared.js'
 import { dealerDe, flotteDe, numerosSaisis } from '../boutiques/numeros.js'
 import { signalerDemandeFermee } from '../oxygen/signal.js'
 
@@ -417,6 +421,129 @@ function validationDuBrouillon(balances, draft, { amount, paymentMethod, directD
   // branche d'inversion ne rendrait que celle du brouillon.
   const history = { ...draft, storeId, ...(direct ? { directValidation: true, ...splitLiquiditeSiRetraitDirect(reverseInitialTransactionImpact(balances, draft), { ...draft, montant: amount }) } : {}), statut: paymentMethod ? `${String(draft.type).normalize('NFD').replace(/[\u0300-\u036f]/g, '') === 'Depot' ? 'Encaissé' : 'Payé'} par ${paymentMethod}` : 'Validée', paymentMethod, effectiveNetwork: paymentMethod ? mapPaymentMethodToNetwork(paymentMethod) : null, settlementAmount: amount, originalAmount: draft.montant, paidAmount: amount, refundedAmount: 0, remainingAmount: 0, settlementStatus: 'settled', validatedAt, settlementUpdatedAt: now, updatedAt: now }
   return { nextBalances, history }
+}
+
+/**
+ * Le document d'une ligne « Remb. siège » : celle que la caissière saisit, et
+ * celle que crée l'acceptation d'un remboursement siège demandé par l'agent.
+ */
+function donneesRembSiege({ remb, storeId, store, profile, uid, now, datation, faitLe }) {
+  const enAttente = remb.statut === 'Non Terminées'
+  return {
+    ...remb,
+    type: TYPE_REMB_SIEGE,
+    reseau: STORE_NETWORKS[0],
+    // Validée d'un geste : la caissière a envoyé tout de suite.
+    envoyeAuSiege: enAttente ? 0 : remb.montant,
+    resteAuSiege: enAttente ? remb.montant : 0,
+    envoisSiege: [],
+    ...(enAttente ? {} : { directValidation: true, validatedAt: faitLe ?? now }),
+    storeId,
+    storeName: store.name || profile.storeName || '',
+    operatorId: uid,
+    operatorName: profile.name || '',
+    operatorEmail: profile.email || '',
+    ...datation,
+    updatedAt: now,
+  }
+}
+
+/** Accents et casse retirés : l'historique porte des « Dépôt » et des « Depot ». */
+const plierType = (valeur) => String(valeur ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
+
+/**
+ * Accepter le remboursement que l'agent a lancé (contrat v10 §11.3) : la
+ * tranche d'« Encaisser », avec son montant et son mode, sur LA ligne visée.
+ *
+ * ⚠ TOUT SE REVÉRIFIE. Entre la demande et la réponse, la caissière a pu
+ *   encaisser une tranche, ou modifier la ligne (montant, agent, type). La
+ *   demande reste alors en attente, et la boutique la rejette.
+ */
+async function accepterRemboursement(t, { db, storeId, uid, profile, demande, demandeId, demandeRef, balances, now, fermeture }) {
+  const draftId = cleanId(demande.cibleId, 'cibleId')
+  const snap = await t.get(db.doc(`clients/${storeId}/drafts/${draftId}`))
+  if (!snap.exists) fail('STORE_TRANSACTION_INVALID', 'Cette ligne n’est plus en attente.')
+  const draft = snap.data()
+  if (plierType(draft.settlementType ?? draft.type) !== 'depot' || draft.clientId !== demande.clientId) {
+    fail('STORE_TRANSACTION_INVALID', 'Cette ligne a changé depuis la demande : rejetez-la.')
+  }
+  if (!STORE_PAYMENT_METHODS.includes(demande.mode)) fail('STORE_TRANSACTION_INVALID', 'Mode de remboursement inconnu.')
+  const reste = draft.remainingAmount ?? ((draft.originalAmount ?? draft.montant) - (draft.paidAmount ?? 0) + (draft.refundedAmount ?? 0))
+  if (demande.montant > reste) {
+    fail('STORE_TRANSACTION_INVALID', `Montant supérieur au reste dû (${reste.toLocaleString('fr-FR')} FCFA) : rejetez la demande.`)
+  }
+
+  // Jamais par la file : l'instant de la caisse est celui du serveur.
+  const calcul = calculerTranche({ draft, amount: demande.montant, paymentMethod: demande.mode, balances, le: new Date(), demandeId })
+  // Lu AVANT la première écriture, et seulement quand la ligne part (TC-357).
+  if (calcul.fullySettled && (await t.get(historyRefDe(db, storeId, draftId))).exists) {
+    fail('IDEMPOTENCY_CONFLICT', 'Ce numéro de transaction est déjà pris par une autre ligne.')
+  }
+
+  // L'identifiant de la tranche se tire de la demande : le rejeu ne la double pas.
+  const settlementId = `pmt_${draftId}_demande_${demandeId}`
+  const auditBase = buildSettlementAuditBase({
+    agentCode: null,
+    settlementId,
+    draftId,
+    storeId,
+    draft,
+    amount: demande.montant,
+    paymentMethod: demande.mode,
+    affectedNetwork: calcul.affectedNetwork,
+    trimmedKey: demandeId,
+    actorUid: uid,
+    txProfile: profile,
+    paidAmount: calcul.paidAmount,
+    refundedAmount: calcul.refundedAmount,
+    remainingAmount: calcul.remainingAmount,
+  })
+  const ecrit = ecrireTranche(t, { db, storeId, draftId, draft, calcul, paymentMethod: demande.mode, settlementId, auditBase, faitLe: null, now })
+  t.update(demandeRef, { etat: ETATS_DEMANDE.VALIDEE, operationId: draftId, ...fermeture })
+  t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), {
+    action: 'acceptAgentRequest', nature: NATURES_DEMANDE.REMBOURSEMENT, transactionId: draftId, demandeId, uid,
+    beforeBalances: balances, afterBalances: calcul.nextBalances, createdAt: now,
+  })
+  return { accepted: true, operationId: draftId, fullySettled: ecrit.fullySettled }
+}
+
+/**
+ * Accepter le remboursement siège que l'agent a déclaré : une ligne
+ * « Remb. siège » TOUJOURS Non Terminées (§11.1, règle 6), que la boutique
+ * envoie ensuite au siège comme aujourd'hui. La réserve suit le mode.
+ */
+async function accepterRembSiege(t, { db, storeId, store, uid, profile, demande, demandeId, demandeRef, balances, balanceRef, now, fermeture }) {
+  if (!SIEGE_REPAYMENT_ENABLED) fail('STORE_TRANSACTION_INVALID', 'Le remboursement au siège est désactivé.')
+  const ficheSnap = await t.get(db.doc(`globalClients/${demande.clientId}`))
+  if (!ficheSnap.exists) fail('STORE_TRANSACTION_NOT_FOUND', 'Fiche de l’agent introuvable.')
+  const fiche = ficheSnap.data()
+  const ref = db.doc(`clients/${storeId}/drafts/${demandeId}`)
+  if ((await t.get(ref)).exists) fail('IDEMPOTENCY_CONFLICT', 'Ce numéro de transaction est déjà pris par une autre ligne.')
+
+  // Comme une demande d'opération : sans code, la ligne partirait au siège sans
+  // ce qui identifie l'agent. La caissière lit pourquoi, et rejette.
+  const code = codeReseauDeFiche(fiche, STORE_NETWORKS[0])
+  if (!code) fail('STORE_TRANSACTION_INVALID', `La fiche de cet agent n’a pas de code ${STORE_NETWORKS[0]}.`)
+  const remb = cleanRembSiege({
+    client: clientDeFiche(demande.clientId, fiche),
+    clientId: demande.clientId,
+    code,
+    montant: demande.montant,
+    balanceType: reserveDuMode(demande.mode),
+    statut: 'Non Terminées',
+  })
+  const nextBalances = impactSaisie(balances, STORE_NETWORKS[0], remb)
+  t.set(ref, {
+    ...donneesRembSiege({ remb, storeId, store, profile, uid, now, datation: { date: dateFr(), createdAt: now }, faitLe: null }),
+    demandeId,
+  })
+  t.update(demandeRef, { etat: ETATS_DEMANDE.VALIDEE, operationId: demandeId, ...fermeture })
+  t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
+  t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), {
+    action: 'acceptAgentRequest', nature: NATURES_DEMANDE.REMB_SIEGE, transactionId: demandeId, demandeId, uid,
+    balanceType: remb.balanceType, beforeBalances: balances, afterBalances: nextBalances, createdAt: now,
+  })
+  return { accepted: true, operationId: demandeId }
 }
 
 async function readActor(t, db, uid) {
@@ -1055,25 +1182,8 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
       // ⚠ AVANT L'IMPACT, comme `add` : déjà appliquée, la saisie a peut-être
       //   vidé le stock qu'elle demandait.
       if (commandeId && (await t.get(ref)).exists) return { id: ref.id, idempotent: true }
-      const network = STORE_NETWORKS[0]
-      const nextBalances = impactSaisie(balances, network, remb)
-      const data = {
-        ...remb,
-        type: TYPE_REMB_SIEGE,
-        reseau: network,
-        // Validée d'un geste : la caissière a envoyé tout de suite.
-        envoyeAuSiege: enAttente ? 0 : remb.montant,
-        resteAuSiege: enAttente ? remb.montant : 0,
-        envoisSiege: [],
-        ...(enAttente ? {} : { directValidation: true, validatedAt: faitLe ?? now }),
-        storeId,
-        storeName: store.name || profile.storeName || '',
-        operatorId: uid,
-        operatorName: profile.name || '',
-        operatorEmail: profile.email || '',
-        ...datation,
-        updatedAt: now,
-      }
+      const nextBalances = impactSaisie(balances, STORE_NETWORKS[0], remb)
+      const data = donneesRembSiege({ remb, storeId, store, profile, uid, now, datation, faitLe })
       t.set(ref, data)
       t.set(balanceRef, { balances: nextBalances, updatedAt: now }, { merge: true })
       t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, transactionId: ref.id, uid, balanceType: remb.balanceType, beforeBalances: balances, afterBalances: nextBalances, createdAt: now })
@@ -1398,6 +1508,18 @@ export async function storeTransactionCommandHandler(request, { db, FieldValue, 
         t.update(demandeRef, { etat: ETATS_DEMANDE.REJETEE, ...fermeture })
         t.set(db.collection(`clients/${storeId}/auditLogs`).doc(), { action, demandeId, uid, createdAt: now })
         return { rejected: true }
+      }
+
+      // Un remboursement (contrat v10 §11.3) : la nature décide, pas le statut.
+      const nature = demande.nature ?? NATURES_DEMANDE.OPERATION
+      if (nature !== NATURES_DEMANDE.OPERATION) {
+        // Rejouer, c'est redemander l'unique geste possible : Accepter.
+        if (demande.etat === ETATS_DEMANDE.VALIDEE) return { accepted: true, operationId: demande.operationId ?? demandeId, idempotent: true }
+        refuserSiDemandeClose(demande)
+        const contexte = { db, storeId, store, uid, profile, demande, demandeId, demandeRef, balances, balanceRef, now, fermeture }
+        if (nature === NATURES_DEMANDE.REMBOURSEMENT) return accepterRemboursement(t, contexte)
+        if (nature === NATURES_DEMANDE.REMB_SIEGE) return accepterRembSiege(t, contexte)
+        fail('STORE_TRANSACTION_INVALID', 'Demande inconnue.')
       }
 
       const statut = String(payload.statut || '').trim()

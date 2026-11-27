@@ -304,6 +304,30 @@ déjà la function.
    statut HTTP ou le nom de l'erreur : 401 veut dire que l'adresse donnée à Oxygen n'est
    pas la bonne.
 
+### 8.2 Le remboursement depuis l'app (contrat demande-operation v10, §11, 2026-11-26)
+
+L'agent rembourse son crédit, ou un crédit du siège, depuis l'app ; la caissière
+accepte ou rejette. Trois functions et le front, dans cet ordre :
+
+1. **Oxygen d'abord.** Sans le drapeau `remboursement` de `listerBoutiques`, l'app ne
+   montre rien du remboursement.
+2. **Le front, par un push**, Production vérifiée, puis **tous les postes rechargés**.
+   Un poste resté sur l'ancienne version lirait un remboursement comme une demande de
+   dépôt (« Non terminée / Valider »), alors que le serveur ferait bien le remboursement.
+3. **`storeTransactionCommand` et `addTransactionPayment`**, d'abord et seules
+   (guillemets autour de `--only`, §1 ; découverte à 120 s, §2). Attendre que les deux
+   répondent sur la nouvelle version.
+4. **Puis `pointEntreeOxygen`, dans une commande à part.** C'est elle qui lève le
+   drapeau (`oxygen.remboursement` vaut `true` dans le profil C2EGF) et accepte
+   `rembourser`.
+   ⚠ JAMAIS LES TROIS D'UN COUP : `firebase deploy` les publie en parallèle. Si
+   `pointEntreeOxygen` passait avant `storeTransactionCommand`, un remboursement
+   « Validé » sur un poste non rechargé serait traité par l'ancien serveur comme
+   une demande de DÉPÔT : un faux Dépôt validé, et la dette non réglée (relecture
+   du 2026-11-26).
+5. **Prévenir Oxygen.** Vérifier : un remboursement accepté règle la ligne (Non
+   Terminées → historique « Encaissé par … » au reste 0), et l'app de l'agent le voit.
+
 ---
 
 ## Ce qu'il n'y a PAS à déployer

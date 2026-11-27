@@ -32,6 +32,10 @@ export function generateOxygenProfileFile(profile) {
     throw new Error('Profil invalide : oxygen.nomDistributeur doit être un nom non vide, sans apostrophe.')
   }
 
+  if (typeof oxygen.remboursement !== 'boolean') {
+    throw new Error('Profil invalide : oxygen.remboursement doit être un booléen.')
+  }
+
   return `/**
  * oxygenProfile.js — axe OXYGEN du profil client, côté Cloud Functions.
  * ─────────────────────────────────────────────────────────────────────────────
@@ -42,11 +46,15 @@ export function generateOxygenProfileFile(profile) {
  *     d'entrée répond « absent » ou refuse.
  *   • OXYGEN_DISTRIBUTEUR_ID  — l'identifiant sous lequel ce CRM répond à Oxygen.
  *   • OXYGEN_NOM_DISTRIBUTEUR — le nom que l'agent lit dans son app.
+ *   • OXYGEN_REMBOURSEMENT    — l'agent rembourse depuis l'app (contrat
+ *     demande-operation v10 §11) ; false ⇒ ni actions, ni drapeau rendu.
  */
 export const OXYGEN_ENABLED = ${oxygen.enabled}
 
 export const OXYGEN_DISTRIBUTEUR_ID = '${oxygen.distributeurId}'
 
 export const OXYGEN_NOM_DISTRIBUTEUR = '${nom.trim()}'
+
+export const OXYGEN_REMBOURSEMENT = ${oxygen.remboursement}
 `
 }

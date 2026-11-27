@@ -447,21 +447,64 @@ describe('TC-377 — lireActivite', () => {
   })
 
   /**
-   * Le remboursement au siège est rattaché à l'agent, mais le contrat validé
-   * avec Oxygen ne connaît pas ce type : il n'entre pas dans le flux tant que
-   * l'utilisateur n'a pas rouvert ce contrat (spec 2026-11-14, décision 4).
+   * TC-377-RS — les « Remb. siège » de l'agent entrent dans le flux depuis le
+   * contrat demande-operation v10 §11.4 : réglés pour lui dès qu'ils existent.
+   * Ce qui se passe entre la boutique et le siège ne le concerne pas : ni
+   * reste, ni envoi, ni date d'envoi ; `statut` vaut toujours « Validée »,
+   * ou « Supprimée » si la boutique l'a annulé.
    */
-  it('[TC-377-RS] le remboursement au siège n’entre pas dans le flux Oxygen', async () => {
+  it('[TC-377-RS] le remboursement siège se lit réglé, sans rien de l’envoi au siège', async () => {
+    const liaison = await relie()
+    maintenantMs = T0 + 10 * H
+    const siege = { type: 'Remb. siège', operatorName: 'Caissière', code: '1234567', reseau: 'Orange' }
+    await Promise.all([
+      db.doc('clients/store-a/history/rs-valide').set(ligne({ ...siege, balanceType: 'stock', envoyeAuSiege: 1000, resteAuSiege: 0, validatedAt: ts(T0 + 2 * H), demandeId: 'd-9' })),
+      db.doc('clients/store-a/drafts/rs-attente').set(ligne({ ...siege, statut: 'Non Terminées', balanceType: 'liquidite', envoyeAuSiege: 300, resteAuSiege: 700, envoisSiege: [{ id: 'e1', montant: 300 }] })),
+      db.doc('clients/store-a/history/rs-annule').set(ligne({ ...siege, statut: 'Supprimée', balanceType: 'stock', deletedAt: ts(T0 + 3 * H), createdAt: ts(T0 + 2 * H) })),
+    ])
+    const { corps } = await lire(liaison)
+    const parId = new Map([...corps.lignes, ...corps.nonTerminees].map((l) => [l.id, l]))
+
+    expect(parId.get('rs-valide')).toMatchObject({ type: 'Remb. siège', montant: 1000, mode: 'Orange Money', statut: 'Validée', demandeId: 'd-9' })
+    expect(parId.get('rs-attente')).toMatchObject({ type: 'Remb. siège', mode: 'Cash', statut: 'Validée' })
+    expect(parId.get('rs-annule')).toMatchObject({ statut: 'Supprimée', deletedAt: T0 + 3 * H })
+    for (const l of parId.values()) {
+      for (const cle of ['reste', 'validatedAt', 'envoyeAuSiege', 'resteAuSiege', 'envoisSiege', 'operatorName', 'paidAmount', 'settlementStatus', 'typePlie']) {
+        expect(l, `${l.id} : ${cle}`).not.toHaveProperty(cle)
+      }
+    }
+  })
+
+  /** TC-377-42/43 — les tranches, le mode et la demande (contrat v10 §11.4). */
+  it('[TC-377-42] une ligne réglée rend ses tranches en ms, son mode et sa demande ; aucune ne nomme la caissière', async () => {
     const liaison = await relie()
     maintenantMs = T0 + 10 * H
     await Promise.all([
-      db.doc('clients/store-a/history/depot').set(ligne()),
-      db.doc('clients/store-a/history/rs-valide').set(ligne({ type: 'Remb. siège', balanceType: 'stock', envoyeAuSiege: 100, resteAuSiege: 0 })),
-      db.doc('clients/store-a/drafts/rs-attente').set(ligne({ type: 'Remb. siège', statut: 'Non Terminées', balanceType: 'liquidite', envoyeAuSiege: 0, resteAuSiege: 100 })),
+      db.doc('clients/store-a/history/regle').set(ligne({
+        statut: 'Encaissé par Cash', paymentMethod: 'Cash', demandeId: 'd-1', operatorName: 'Caissière',
+        reglements: [{ montant: 400, mode: 'Orange Money', le: ts(T0 + H) }, { montant: 600, mode: 'Cash', le: ts(T0 + 2 * H) }],
+      })),
+      db.doc('clients/store-a/drafts/partielle').set(ligne({
+        statut: 'Non Terminées', operatorName: 'Caissière', paidAmount: 300, remainingAmount: 700,
+        reglements: [{ montant: 300, mode: 'Cash', le: ts(T0 + 4 * H) }],
+      })),
     ])
     const { corps } = await lire(liaison)
-    expect(corps.lignes.map((l) => l.id)).toEqual(['depot'])
-    expect(corps.nonTerminees).toEqual([])
+    expect(corps.lignes[0]).toMatchObject({
+      id: 'regle', mode: 'Cash', demandeId: 'd-1',
+      reglements: [{ montant: 400, mode: 'Orange Money', le: T0 + H }, { montant: 600, mode: 'Cash', le: T0 + 2 * H }],
+    })
+    expect(corps.nonTerminees[0]).toMatchObject({ id: 'partielle', reste: 700, reglements: [{ montant: 300, mode: 'Cash', le: T0 + 4 * H }] })
+    for (const l of [...corps.lignes, ...corps.nonTerminees]) expect(l).not.toHaveProperty('operatorName')
+  })
+
+  it('[TC-377-43] une ligne sans tranches notées n’a pas de `reglements` : inconnu, pas « aucune »', async () => {
+    const liaison = await relie()
+    maintenantMs = T0 + 10 * H
+    await db.doc('clients/store-a/history/ancienne').set(ligne({ statut: 'Encaissé par Cash', paymentMethod: 'Cash', paidAmount: 1000 }))
+    const [l] = (await lire(liaison)).corps.lignes
+    expect(l).not.toHaveProperty('reglements')
+    expect(l).toMatchObject({ mode: 'Cash', paidAmount: 1000 })
   })
 
   /**
