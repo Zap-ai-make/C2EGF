@@ -74,6 +74,15 @@ export function useEcouteDemandesAgent() {
   // réponse, elle, ne sonne pas : ce qui attendait déjà n'est pas nouveau.
   const vues = useRef({ storeId: null, ids: null })
 
+  // Une session qui se ferme (déconnexion, relève de caissière) oublie ce
+  // qu'elle a vu : la suivante s'ouvre sans sonner ni pulser sur ce qui
+  // attendait déjà. Une coupure réseau, non — `storeId` ne tombe pas avec elle.
+  useEffect(() => {
+    if (storeId) return
+    vues.current = { storeId: null, ids: null }
+    setArrivees((precedentes) => (precedentes.size === 0 ? precedentes : new Map()))
+  }, [storeId])
+
   useEffect(() => {
     if (!actif) return undefined
     // Les demandes que le serveur a confirmées en dernier, et l'attente qui

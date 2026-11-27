@@ -28,6 +28,13 @@ describe('TC-417 — une tranche', () => {
     expect(calcul.newSummary.netByNetwork.Liquidite).toEqual({ paid: 20_000, refunded: 0 })
   })
 
+  it('[TC-417-05] la tranche d’une demande acceptée porte cette demande ; celle du comptoir, non', () => {
+    // Sans elle, le second remboursement d'une ligne lirait le premier, accepté,
+    // comme un encaissement au comptoir (« Encaissé à … ? ») et se ferait rejeter.
+    expect(tranche({ demandeId: 'r1' }).reglements).toEqual([{ montant: 20_000, mode: 'Cash', le: LE, demandeId: 'r1' }])
+    expect(tranche().reglements[0]).not.toHaveProperty('demandeId')
+  })
+
   it('[TC-417-02] les tranches s’ajoutent dans l’ordre, au plus cinquante', () => {
     const avant = [{ montant: 1, mode: 'Cash', le: LE }, { montant: 2, mode: 'Orange Money', le: LE }]
     const calcul = tranche({ draft: { ...DEPOT, reglements: avant } })

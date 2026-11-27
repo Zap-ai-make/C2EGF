@@ -73,8 +73,13 @@ export const historyRefDe = (db, storeId, draftId) => db.doc(`clients/${storeId}
  * @param {string|null} [p.agentCode]
  * @param {object} p.balances       les soldes lus (forme Firestore ou normalisée)
  * @param {Date} p.le               l'instant de la caisse, à défaut l'heure du serveur
+ * @param {string|null} [p.demandeId] la demande d'agent acceptée qui fait cette
+ *   tranche. Notée sur l'entrée de `reglements` : sans elle, l'autre demande
+ *   en attente sur la ligne lirait cette tranche comme un encaissement au
+ *   comptoir (« Encaissé à … ? », `encaisseApres`). Oxygen ne la lit pas
+ *   (`lireActivite` ne rend que montant, mode et instant).
  */
-export function calculerTranche({ draft, amount, paymentMethod, agentCode = null, balances, le }) {
+export function calculerTranche({ draft, amount, paymentMethod, agentCode = null, balances, le, demandeId = null }) {
   // ── Type métier ÉPINGLÉ (défense en profondeur, cf. C1) ────────────────
   // Le signe de l'impact réseau dépend du type (Retrait ⇒ débit). Les règles
   // Firestore figent déjà draft.type dès qu'un règlement est engagé, mais on
@@ -129,7 +134,7 @@ export function calculerTranche({ draft, amount, paymentMethod, agentCode = null
     nextBalances,
     newSummary: updateSummaryForPayment(prevSummary, affectedNetwork, amount, codesAgent, codesParReseau),
     codesAgent,
-    reglements: [...deja, { montant: amount, mode: paymentMethod, le }].slice(-REGLEMENTS_MAX),
+    reglements: [...deja, { montant: amount, mode: paymentMethod, le, ...(demandeId ? { demandeId } : {}) }].slice(-REGLEMENTS_MAX),
   }
 }
 

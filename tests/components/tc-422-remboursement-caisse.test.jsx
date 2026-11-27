@@ -172,6 +172,29 @@ describe('TC-422 — le remboursement demandé par l’agent', () => {
     expect(encaisseApres(d, null)).toBeNull()
   })
 
+  it('[TC-422-08b] la tranche d’une demande sœur acceptée n’est pas un encaissement au comptoir', () => {
+    // Une demande par mode : Orange Money acceptée à 11 h, la demande Cash
+    // attend encore dessous. Elle ne doit pas dire « Encaissé à 11:00 ? ».
+    const d = demande('d1')
+    const le = (heure) => new Date(2026, 10, 26, heure, 0)
+    expect(encaisseApres(d, { reglements: [{ le: le(11), demandeId: 'r-om' }] })).toBeNull()
+    expect(encaisseApres(d, { reglements: [{ le: le(11), demandeId: 'r-om' }, { le: le(12) }] })).toBe(le(12).getTime())
+  })
+
+  it('[TC-422-09] la plus ancienne demande d’abord, qu’elle ait sa ligne ou non', () => {
+    const OP2 = { ...CREDIT, id: 'op-2', clientId: 'c2', client: { nom: 'SANOU', prenom: 'Issa' } }
+    contextValue = contexte([CREDIT, OP2])
+    const a = (heure) => ({ creeLe: new Date(2026, 10, 26, heure, 0) })
+    demandesMock = [
+      demande('rA', { cibleId: 'op-1', ...a(10) }),
+      demande('rB', { cibleId: 'op-2', clientId: 'c2', ...a(9) }),
+      demande('dC', { nature: 'operation', cibleId: undefined, mode: undefined, clientId: 'c3', ...a(11) }),
+    ]
+    render(<TransactionTable />)
+    const ordre = rangeesDuCorps().slice(0, 5).map((r) => r.dataset.testid ?? r.textContent.match(/KABORE|SANOU/)?.[0])
+    expect(ordre).toEqual(['SANOU', 'remboursement-agent-rB', 'KABORE', 'remboursement-agent-rA', 'demande-agent-dC'])
+  })
+
   it('[TC-422-06] une demande d’avant ce champ est une opération', () => {
     expect(demande('o2', { nature: undefined }).nature).toBe('operation')
     expect(demande('r9')).toMatchObject({ nature: 'remboursement', cibleId: 'op-1', mode: 'Cash', type: 'Dépôt' })

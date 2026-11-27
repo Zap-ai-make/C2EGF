@@ -27,7 +27,7 @@ import { generateIdempotencyKey } from '../../services/settlementService.js'
 import { MONTANT_MINIMUM_REGLEMENT, montantProposeDuReglement, verifierMontantReglement } from '../../utils/reglement.js'
 import { prefereMouvementReduit } from '../../hooks/useReducedMotion.js'
 import { natureEnAttente, sommesEnAttente } from '../../utils/caisse.js'
-import { attenteDe } from '../../utils/attente.js'
+import { attenteDe, instantDeDepart } from '../../utils/attente.js'
 import { regrouperParClientEtType } from '../../utils/regroupement.js'
 import { placerMenu } from '../../utils/placementMenu.js'
 import { ChevronRight } from 'lucide-react'
@@ -182,6 +182,19 @@ const TransactionTable = memo(function TransactionTable() {
     () => uniquePendingTransactions.filter((t) => !remboursementsParCible.has(t.id)),
     [uniquePendingTransactions, remboursementsParCible],
   )
+  /**
+   * La tête du tableau, en UN ordre : l'agent qui attend depuis le plus
+   * longtemps d'abord, que sa demande soit seule ou sous la ligne qu'elle
+   * règle. Une ligne visée prend la place de sa plus ancienne demande (les
+   * demandes arrivent déjà triées, `trierDemandes`).
+   */
+  const enTete = useMemo(() => [
+    ...demandesSeules.map((demande) => ({ depuis: instantDeDepart(demande), demande })),
+    ...lignesVisees.map((ligne) => {
+      const siennes = remboursementsParCible.get(ligne.id)
+      return { depuis: instantDeDepart(siennes[0]), ligne, demandes: siennes }
+    }),
+  ].sort((a, b) => (a.depuis ?? 0) - (b.depuis ?? 0)), [demandesSeules, lignesVisees, remboursementsParCible])
 
   /**
    * UN SEUL MINUTEUR POUR TOUT LE TABLEAU.
@@ -984,25 +997,12 @@ const TransactionTable = memo(function TransactionTable() {
                 </tr>
               ) : (
                 <>
-                {/* EN TÊTE, ET HORS DU FILTRE : un agent attend la réponse. */}
-                {demandesSeules.map((demande) => (
-                  <LigneDemandeAgent
-                    key={`demande-${demande.id}`}
-                    demande={demande}
-                    styles={getTransactionStyles(demande.type)}
-                    maintenant={maintenant}
-                    // Un remboursement n'est pas une opération que la caissière aurait saisie.
-                    dejaSaisieMs={demande.nature === 'remboursement' ? undefined : dejaSaisie(demande, operationsSaisies)?.instantMs}
-                    enCours={reponsesDemandes[demande.id] ?? null}
-                    onRepondre={repondreDemande}
-                    arrivee={vientDArriver(arrivees.get(demande.id), maintenant)}
-                  />
-                ))}
-                {/* La ligne qu'un remboursement règle, remontée UNE fois, et ses demandes dessous. */}
-                {lignesVisees.map((ligne) => (
+                {/* EN TÊTE, ET HORS DU FILTRE : un agent attend la réponse. La
+                    ligne qu'un remboursement règle remonte UNE fois, ses demandes dessous. */}
+                {enTete.map(({ demande, ligne, demandes: siennes }) => (ligne ? (
                   <Fragment key={`visee-${ligne.id}`}>
                     {renderLigne({ seule: ligne })}
-                    {remboursementsParCible.get(ligne.id).map((demande) => (
+                    {siennes.map((demande) => (
                       <LigneRemboursementAgent
                         key={`remboursement-${demande.id}`}
                         demande={demande}
@@ -1014,7 +1014,19 @@ const TransactionTable = memo(function TransactionTable() {
                       />
                     ))}
                   </Fragment>
-                ))}
+                ) : (
+                  <LigneDemandeAgent
+                    key={`demande-${demande.id}`}
+                    demande={demande}
+                    styles={getTransactionStyles(demande.type)}
+                    maintenant={maintenant}
+                    // Un remboursement n'est pas une opération que la caissière aurait saisie.
+                    dejaSaisieMs={demande.nature === 'remboursement' ? undefined : dejaSaisie(demande, operationsSaisies)?.instantMs}
+                    enCours={reponsesDemandes[demande.id] ?? null}
+                    onRepondre={repondreDemande}
+                    arrivee={vientDArriver(arrivees.get(demande.id), maintenant)}
+                  />
+                )))}
                 {lignesAffichees.map(renderLigne)}
                 </>
               )}

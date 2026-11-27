@@ -474,7 +474,7 @@ async function accepterRemboursement(t, { db, storeId, uid, profile, demande, de
   }
 
   // Jamais par la file : l'instant de la caisse est celui du serveur.
-  const calcul = calculerTranche({ draft, amount: demande.montant, paymentMethod: demande.mode, balances, le: new Date() })
+  const calcul = calculerTranche({ draft, amount: demande.montant, paymentMethod: demande.mode, balances, le: new Date(), demandeId })
   // Lu AVANT la première écriture, et seulement quand la ligne part (TC-357).
   if (calcul.fullySettled && (await t.get(historyRefDe(db, storeId, draftId))).exists) {
     fail('IDEMPOTENCY_CONFLICT', 'Ce numéro de transaction est déjà pris par une autre ligne.')

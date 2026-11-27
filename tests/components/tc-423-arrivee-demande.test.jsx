@@ -143,6 +143,20 @@ describe('TC-423 — l’écoute repère ce qui arrive', () => {
     expect(sonner).not.toHaveBeenCalled()
   })
 
+  it('[TC-423-08c] une autre caissière se connecte sur la même boutique : ce qui attendait ne sonne pas, ne pulse pas', () => {
+    const { result, rerender } = monter()
+    act(() => observateur()([lue('d1', 9)], [], SERVEUR))
+    act(() => observateur()([lue('d1', 9), lue('d2', 10)], [], SERVEUR))
+    expect(sonner).toHaveBeenCalledTimes(1)
+    auth = null
+    rerender()
+    auth = { userProfile: { storeId: 's1' }, activeStore: { id: 's1' } }
+    rerender()
+    act(() => observateur(1)([lue('d1', 9), lue('d2', 10), lue('d3', 10)], [], SERVEUR))
+    expect(sonner).toHaveBeenCalledTimes(1)
+    expect(result.current.arrivees.size).toBe(0)
+  })
+
   it('[TC-423-12] vue par la caissière : le décompte part pour ce qui attendait son regard, pas pour ce qui arrive après', () => {
     const { result } = monter()
     act(() => observateur()([], [], SERVEUR))

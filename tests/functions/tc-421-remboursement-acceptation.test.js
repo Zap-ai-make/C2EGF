@@ -78,6 +78,8 @@ describe('TC-421 — accepter un remboursement', () => {
     const ligne = await lire('drafts/op-1')
     expect(ligne).toMatchObject({ paidAmount: 5000, remainingAmount: 15_000, settlementStatus: 'partial', statut: 'Non Terminées' })
     expect(ligne.reglements.map((r) => [r.montant, r.mode])).toEqual([[5000, 'Cash']])
+    // La tranche dit quelle demande l'a faite : ce n'est pas un encaissement au comptoir.
+    expect(ligne.reglements[0].demandeId).toBe('r1')
     expect(await soldes()).toEqual({ stock: 100_000, liquidite: 55_000 })
     expect(await lire('drafts/op-1/settlements/pmt_op-1_demande_r1')).toMatchObject({ amount: 5000, paymentMethod: 'Cash', actorUid: UID })
   })
@@ -162,6 +164,9 @@ describe('TC-421 — compléments de la relecture', () => {
     const ligneB = await lire('drafts/op-2')
     const sansHeures = (ligne) => ({ ...sansCles(ligne, ['settlementUpdatedAt']), reglements: ligne.reglements.map(({ montant, mode }) => ({ montant, mode })) })
     expect(sansHeures(ligneB)).toEqual(sansHeures(ligneA))
+    // Seule différence voulue : la tranche acceptée nomme sa demande.
+    expect(ligneA.reglements[0]).not.toHaveProperty('demandeId')
+    expect(ligneB.reglements[0].demandeId).toBe('r8')
 
     const [reglementA] = (await db.collection(`clients/${STORE}/drafts/op-1/settlements`).get()).docs.map((d) => d.data())
     const [reglementB] = (await db.collection(`clients/${STORE}/drafts/op-2/settlements`).get()).docs.map((d) => d.data())

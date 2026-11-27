@@ -81,12 +81,21 @@ const enMs = (valeur) => {
  * Rend l'instant de la première de ces tranches, ou `null`. Un signal, jamais
  * un blocage, comme `dejaSaisie`.
  *
+ * Une tranche qui porte `demandeId` vient d'une demande acceptée — l'autre
+ * mode, sur la même ligne — et non du comptoir : elle ne compte pas.
+ *
+ * ⚠ DEUX HORLOGES. La demande est datée par le serveur, la tranche du
+ *   comptoir par le poste (la caisse saisit d'abord en local). Un poste en
+ *   retard de quelques minutes peut taire le signal ; le reste, revérifié au
+ *   serveur, empêche toujours d'accepter plus que la dette.
+ *
  * @returns {number|null}
  */
 export function encaisseApres(demande, cible) {
   const depart = instantDeDepart(demande)
   if (depart === null || !Array.isArray(cible?.reglements)) return null
   for (const tranche of cible.reglements) {
+    if (tranche?.demandeId) continue
     const le = enMs(tranche?.le)
     if (le !== null && le >= depart) return le
   }
