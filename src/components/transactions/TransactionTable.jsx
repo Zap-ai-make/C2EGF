@@ -9,7 +9,7 @@
  * à l'écran n'apportait rien à qui veut seulement défaire sa ligne.
  */
 
-import { useState, useRef, useEffect, useMemo, memo, useCallback, useId } from 'react'
+import { Fragment, useState, useRef, useEffect, useMemo, memo, useCallback, useId } from 'react'
 import { createPortal } from 'react-dom'
 import { useTransactions } from '../../context/transactions.jsx'
 import { useTheme } from '../../context/ThemeContext.jsx'
@@ -39,9 +39,9 @@ import { consequenceAnnulationTransfert, estTransfertArgent } from '../../utils/
 import { consequenceAnnulation, estRembSiege, REMB_SIEGE_ACTIF } from '../../utils/rembSiege.js'
 import { libelleVase } from '../../utils/ravitaillement.js'
 import { useDemandesAgent } from '../../hooks/useDemandesAgent.js'
-import { dejaSaisie } from '../../utils/demandesAgent.js'
+import { dejaSaisie, encaisseApres } from '../../utils/demandesAgent.js'
 import { accepterDemandeAgent, accepterRemboursementAgent, rejeterDemandeAgent } from '../../services/demandesAgentService.js'
-import LigneDemandeAgent from './LigneDemandeAgent.jsx'
+import LigneDemandeAgent, { LigneRemboursementAgent } from './LigneDemandeAgent.jsx'
 
 /** Les règlements d'une ligne qui attendent le réseau, et ceux qu'il a refusés. */
 function ReglementsEnAttente({ reglements, onRetirer }) {
@@ -149,6 +149,35 @@ const TransactionTable = memo(function TransactionTable() {
   }, [pendingTransactions])
 
   /**
+   * LA LIGNE QU'UN REMBOURSEMENT RÈGLE REMONTE ELLE-MÊME (contrat v10 §11.3),
+   * une seule fois, avec ses gestes ; ses demandes se lisent juste dessous.
+   * Elle sort donc de la liste ordinaire — groupes et filtre compris — pour
+   * ne jamais apparaître deux fois. Une demande dont la ligne n'est plus là
+   * reste seule en tête, et le dit.
+   */
+  const { remboursementsParCible, demandesSeules } = useMemo(() => {
+    const enAttente = new Set(uniquePendingTransactions.map((t) => t.id))
+    const parCible = new Map()
+    const seules = []
+    for (const demande of demandes) {
+      if (demande.nature === 'remboursement' && enAttente.has(demande.cibleId)) {
+        parCible.set(demande.cibleId, [...(parCible.get(demande.cibleId) ?? []), demande])
+      } else {
+        seules.push(demande)
+      }
+    }
+    return { remboursementsParCible: parCible, demandesSeules: seules }
+  }, [demandes, uniquePendingTransactions])
+  const lignesVisees = useMemo(
+    () => uniquePendingTransactions.filter((t) => remboursementsParCible.has(t.id)),
+    [uniquePendingTransactions, remboursementsParCible],
+  )
+  const lignesOrdinaires = useMemo(
+    () => uniquePendingTransactions.filter((t) => !remboursementsParCible.has(t.id)),
+    [uniquePendingTransactions, remboursementsParCible],
+  )
+
+  /**
    * UN SEUL MINUTEUR POUR TOUT LE TABLEAU.
    *
    * Chaque ligne affiche depuis combien de temps elle attend, mais toutes
@@ -201,13 +230,15 @@ const TransactionTable = memo(function TransactionTable() {
     (nature) => setFiltre((courant) => (courant === nature ? 'tout' : nature)),
     [],
   )
+  // Les lignes remontées sous une demande ne passent pas par le filtre : elles
+  // sont en tête quoi qu'il arrive, et ne comptent pas parmi les cachées.
   const lignesDuFiltre = useMemo(
     () => (filtreActif === 'tout'
-      ? uniquePendingTransactions
-      : uniquePendingTransactions.filter((transaction) => natureEnAttente(transaction) === filtreActif)),
-    [uniquePendingTransactions, filtreActif],
+      ? lignesOrdinaires
+      : lignesOrdinaires.filter((transaction) => natureEnAttente(transaction) === filtreActif)),
+    [lignesOrdinaires, filtreActif],
   )
-  const lignesCachees = uniquePendingTransactions.length - lignesDuFiltre.length
+  const lignesCachees = lignesOrdinaires.length - lignesDuFiltre.length
 
   const [activeDropdown, setActiveDropdown] = useState(null)
   // Le code agent SUR LEQUEL l'argent part, quand il ne passe pas de la main a
@@ -600,6 +631,194 @@ const TransactionTable = memo(function TransactionTable() {
     )
   }
 
+  const renderLigne = (item) => {
+    if (item.entete) return renderEnteteGroupe(item.entete)
+
+    const transaction = item.seule
+    const enfant = item.enfant === true
+    const actions = getActionButtons(transaction)
+    const styles = getTransactionStyles(transaction.type)
+    const isProcessingTransaction = [...processingActions].some(key => key.startsWith(`${transaction.id}-`))
+    const attente = attenteDe(transaction, maintenant)
+
+    return (
+      <tr
+        key={transaction.id}
+        // La teinte n'est pas décorative : passé une demi-heure,
+        // la ligne se signale d'elle-même au lieu d'attendre
+        // qu'on relise six horodatages pour trouver le plus vieux.
+        className={`border-b border-line/60 transition-colors hover:bg-brand-50/60 ${
+          attente?.enRetard ? 'bg-warn-soft' : ''
+        }`}
+        data-testid={enfant ? 'ligne-de-groupe' : undefined}
+      >
+        <td className={`relative px-4 pb-3 pt-7 text-base ${
+          enfant ? 'border-l-4 border-l-brand-200 pl-6' : ''
+        }`}>
+          {/* LE COMPTEUR EST UNE PASTILLE, PAS UNE COLONNE.
+              Il ne décrit pas la transaction — il décrit ce qui
+              lui arrive pendant qu'on la regarde. Une septième
+              colonne l'aurait rangé avec le montant et le code,
+              des valeurs figées ; posé en relief sur le bord de
+              la rangée, il se lit comme une étiquette collée
+              dessus, et c'est ce qu'il est. */}
+          {attente && (
+            <span
+              className={`absolute left-3 top-1 z-10 inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[11px] font-bold leading-none tabular-nums shadow-sm ${
+                attente.enRetard
+                  ? 'border-warn bg-warn text-white'
+                  : 'border-line bg-surface text-ink-muted'
+              }`}
+              data-testid={`attente-${transaction.id}`}
+            >
+              {attente.texte}
+            </span>
+          )}
+          {formatTransactionDateTime(transaction)}
+          <EtatEnvoi envoi={transaction.envoi} />
+        </td>
+        <td className="px-4 py-3 text-base font-medium">
+          {nomDeLigne(transaction)}
+        </td>
+        <td className={`px-4 py-3 text-base font-medium ${styles.textColor}`}>
+          {libelleDeLigne(transaction)}
+        </td>
+        <td className="px-4 py-3 text-base">
+          {(estTransfertArgent(transaction) ? transaction.codeTransfert : transaction.code) || '-'}
+        </td>
+        <td className={`px-4 py-3 text-right text-base font-medium tabular-nums ${styles.textColor}`}>
+          <span>{(Number(transaction.montant) || 0).toLocaleString('fr-FR')} FCFA</span>
+          {transaction.settlementStatus === 'partial' && transaction.remainingAmount != null && (
+            <div className="mt-0.5 text-xs font-normal tabular-nums text-warn">
+              Reste : {Number(transaction.remainingAmount).toLocaleString('fr-FR')} FCFA
+            </div>
+          )}
+          {estRembSiege(transaction) && (
+            <div className="mt-0.5 text-xs font-normal tabular-nums text-ink-muted">
+              <div>Reçu en {libelleVase(transaction.balanceType)}</div>
+              {(Number(transaction.envoyeAuSiege) || 0) > 0 && (
+                <div>
+                  Envoyé : {Number(transaction.envoyeAuSiege).toLocaleString('fr-FR')} FCFA
+                  {' · '}
+                  <span className="text-warn">Reste : {(Number(transaction.resteAuSiege) || 0).toLocaleString('fr-FR')} FCFA</span>
+                </div>
+              )}
+            </div>
+          )}
+          {estTransfertArgent(transaction) && (
+            <div className="mt-0.5 text-xs font-normal tabular-nums text-ink-muted">
+              <div>{transaction.operation === 'retrait' ? 'Payé' : 'Reçu'} en {libelleVase(transaction.balanceType)}</div>
+              {(Number(transaction.montantTraite) || 0) > 0 && (
+                <div>
+                  {transaction.operation === 'retrait' ? 'Encaissé' : 'Envoyé'} : {Number(transaction.montantTraite).toLocaleString('fr-FR')} FCFA
+                  {' · '}
+                  <span className="text-warn">Reste : {(Number(transaction.resteATraiter) || 0).toLocaleString('fr-FR')} FCFA</span>
+                </div>
+              )}
+            </div>
+          )}
+          <ReglementsEnAttente reglements={transaction.reglementsEnAttente} onRetirer={retirerEnvoi} />
+        </td>
+        <td className="px-4 py-3 text-base">
+          <div className="flex gap-2 justify-center">
+            {actions.modifier && (
+              <button
+                onClick={(e) => handleActionClick(transaction.id, 'modifier', e)}
+                disabled={isProcessingTransaction}
+                className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+              >
+                Modifier
+              </button>
+            )}
+
+            {actions.encaisser && (
+              <button
+                onClick={(e) => handleActionClick(transaction.id, 'encaisser', e)}
+                disabled={isProcessingTransaction}
+                className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 dropdown-trigger"
+              >
+                Encaisser
+              </button>
+            )}
+
+            {actions.payerPar && (
+              <button
+                onClick={(e) => handleActionClick(transaction.id, 'payerPar', e)}
+                disabled={isProcessingTransaction}
+                className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 dropdown-trigger"
+              >
+                Payer par
+              </button>
+            )}
+
+            {actions.rembourser && (
+              <button
+                onClick={(e) => handleActionClick(transaction.id, 'rembourser', e)}
+                disabled={isProcessingTransaction}
+                className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 dropdown-trigger"
+              >
+                Rembourser
+              </button>
+            )}
+
+            {/* « Envoyer au siège », pas « Rembourser » : ce mot
+                rend déjà l'argent au client sur un dépôt réglé. */}
+            {actions.envoyerSiege && (
+              <button
+                onClick={(e) => handleActionClick(transaction.id, 'envoyerSiege', e)}
+                disabled={isProcessingTransaction}
+                className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 dropdown-trigger"
+              >
+                Envoyer au siège
+              </button>
+            )}
+
+            {/* Transfert d'argent : vers le siège ou du siège,
+                toujours en stock ; le mot suit l'opération. */}
+            {actions.trancheTransfert && (
+              <button
+                onClick={(e) => handleActionClick(transaction.id, 'trancheTransfert', e)}
+                disabled={isProcessingTransaction}
+                className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 dropdown-trigger"
+              >
+                {transaction.operation === 'retrait' ? 'Encaisser' : 'Envoyer au siège'}
+              </button>
+            )}
+
+            {/* Refusée par le serveur, la saisie n'existe que
+                sur cet appareil : on la retire de la liste,
+                rien d'autre ne s'y applique (lot G3c). */}
+            {transaction.envoi?.etat === REFUSEE && (
+              <button
+                type="button"
+                onClick={() => retirerEnvoi(transaction.id)}
+                data-testid="retirer-envoi"
+                className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:border-danger hover:text-danger focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+              >
+                Retirer
+              </button>
+            )}
+
+            {/* « Annuler » ferme la rangée, après les gestes
+                qui font avancer la transaction : la défaire
+                n'est pas une étape du flux normal. */}
+            {actions.annuler !== false && (
+            <button
+              type="button"
+              onClick={() => setASupprimer(transaction)}
+              disabled={isProcessingTransaction}
+              data-testid="supprimer-non-terminee"
+              className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink-muted transition-colors hover:border-danger hover:text-danger disabled:cursor-not-allowed disabled:hover:border-line disabled:hover:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+            >
+              Annuler
+            </button>
+            )}
+          </div>
+        </td>
+      </tr>
+    )
+  }
+
   return (
     <div className="mt-8">
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -760,12 +979,10 @@ const TransactionTable = memo(function TransactionTable() {
               ) : (
                 <>
                 {/* EN TÊTE, ET HORS DU FILTRE : un agent attend la réponse. */}
-                {demandes.map((demande) => (
+                {demandesSeules.map((demande) => (
                   <LigneDemandeAgent
                     key={`demande-${demande.id}`}
                     demande={demande}
-                    // La ligne qu'un remboursement règle : son reste se lit sur la demande.
-                    cible={demande.cibleId ? pendingTransactions.find((t) => t.id === demande.cibleId) ?? null : null}
                     styles={getTransactionStyles(demande.type)}
                     maintenant={maintenant}
                     // Un remboursement n'est pas une opération que la caissière aurait saisie.
@@ -774,193 +991,23 @@ const TransactionTable = memo(function TransactionTable() {
                     onRepondre={repondreDemande}
                   />
                 ))}
-                {lignesAffichees.map((item) => {
-                  if (item.entete) return renderEnteteGroupe(item.entete)
-
-                  const transaction = item.seule
-                  const enfant = item.enfant === true
-                  const actions = getActionButtons(transaction)
-                  const styles = getTransactionStyles(transaction.type)
-                  const isProcessingTransaction = [...processingActions].some(key => key.startsWith(`${transaction.id}-`))
-                  const attente = attenteDe(transaction, maintenant)
-
-                  return (
-                    <tr
-                      key={transaction.id}
-                      // La teinte n'est pas décorative : passé une demi-heure,
-                      // la ligne se signale d'elle-même au lieu d'attendre
-                      // qu'on relise six horodatages pour trouver le plus vieux.
-                      className={`border-b border-line/60 transition-colors hover:bg-brand-50/60 ${
-                        attente?.enRetard ? 'bg-warn-soft' : ''
-                      }`}
-                      data-testid={enfant ? 'ligne-de-groupe' : undefined}
-                    >
-                      <td className={`relative px-4 pb-3 pt-7 text-base ${
-                        enfant ? 'border-l-4 border-l-brand-200 pl-6' : ''
-                      }`}>
-                        {/* LE COMPTEUR EST UNE PASTILLE, PAS UNE COLONNE.
-                            Il ne décrit pas la transaction — il décrit ce qui
-                            lui arrive pendant qu'on la regarde. Une septième
-                            colonne l'aurait rangé avec le montant et le code,
-                            des valeurs figées ; posé en relief sur le bord de
-                            la rangée, il se lit comme une étiquette collée
-                            dessus, et c'est ce qu'il est. */}
-                        {attente && (
-                          <span
-                            className={`absolute left-3 top-1 z-10 inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[11px] font-bold leading-none tabular-nums shadow-sm ${
-                              attente.enRetard
-                                ? 'border-warn bg-warn text-white'
-                                : 'border-line bg-surface text-ink-muted'
-                            }`}
-                            data-testid={`attente-${transaction.id}`}
-                          >
-                            {attente.texte}
-                          </span>
-                        )}
-                        {formatTransactionDateTime(transaction)}
-                        <EtatEnvoi envoi={transaction.envoi} />
-                      </td>
-                      <td className="px-4 py-3 text-base font-medium">
-                        {nomDeLigne(transaction)}
-                      </td>
-                      <td className={`px-4 py-3 text-base font-medium ${styles.textColor}`}>
-                        {libelleDeLigne(transaction)}
-                      </td>
-                      <td className="px-4 py-3 text-base">
-                        {(estTransfertArgent(transaction) ? transaction.codeTransfert : transaction.code) || '-'}
-                      </td>
-                      <td className={`px-4 py-3 text-right text-base font-medium tabular-nums ${styles.textColor}`}>
-                        <span>{(Number(transaction.montant) || 0).toLocaleString('fr-FR')} FCFA</span>
-                        {transaction.settlementStatus === 'partial' && transaction.remainingAmount != null && (
-                          <div className="mt-0.5 text-xs font-normal tabular-nums text-warn">
-                            Reste : {Number(transaction.remainingAmount).toLocaleString('fr-FR')} FCFA
-                          </div>
-                        )}
-                        {estRembSiege(transaction) && (
-                          <div className="mt-0.5 text-xs font-normal tabular-nums text-ink-muted">
-                            <div>Reçu en {libelleVase(transaction.balanceType)}</div>
-                            {(Number(transaction.envoyeAuSiege) || 0) > 0 && (
-                              <div>
-                                Envoyé : {Number(transaction.envoyeAuSiege).toLocaleString('fr-FR')} FCFA
-                                {' · '}
-                                <span className="text-warn">Reste : {(Number(transaction.resteAuSiege) || 0).toLocaleString('fr-FR')} FCFA</span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {estTransfertArgent(transaction) && (
-                          <div className="mt-0.5 text-xs font-normal tabular-nums text-ink-muted">
-                            <div>{transaction.operation === 'retrait' ? 'Payé' : 'Reçu'} en {libelleVase(transaction.balanceType)}</div>
-                            {(Number(transaction.montantTraite) || 0) > 0 && (
-                              <div>
-                                {transaction.operation === 'retrait' ? 'Encaissé' : 'Envoyé'} : {Number(transaction.montantTraite).toLocaleString('fr-FR')} FCFA
-                                {' · '}
-                                <span className="text-warn">Reste : {(Number(transaction.resteATraiter) || 0).toLocaleString('fr-FR')} FCFA</span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        <ReglementsEnAttente reglements={transaction.reglementsEnAttente} onRetirer={retirerEnvoi} />
-                      </td>
-                      <td className="px-4 py-3 text-base">
-                        <div className="flex gap-2 justify-center">
-                          {actions.modifier && (
-                            <button
-                              onClick={(e) => handleActionClick(transaction.id, 'modifier', e)}
-                              disabled={isProcessingTransaction}
-                              className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-                            >
-                              Modifier
-                            </button>
-                          )}
-
-                          {actions.encaisser && (
-                            <button
-                              onClick={(e) => handleActionClick(transaction.id, 'encaisser', e)}
-                              disabled={isProcessingTransaction}
-                              className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 dropdown-trigger"
-                            >
-                              Encaisser
-                            </button>
-                          )}
-
-                          {actions.payerPar && (
-                            <button
-                              onClick={(e) => handleActionClick(transaction.id, 'payerPar', e)}
-                              disabled={isProcessingTransaction}
-                              className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 dropdown-trigger"
-                            >
-                              Payer par
-                            </button>
-                          )}
-
-                          {actions.rembourser && (
-                            <button
-                              onClick={(e) => handleActionClick(transaction.id, 'rembourser', e)}
-                              disabled={isProcessingTransaction}
-                              className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 dropdown-trigger"
-                            >
-                              Rembourser
-                            </button>
-                          )}
-
-                          {/* « Envoyer au siège », pas « Rembourser » : ce mot
-                              rend déjà l'argent au client sur un dépôt réglé. */}
-                          {actions.envoyerSiege && (
-                            <button
-                              onClick={(e) => handleActionClick(transaction.id, 'envoyerSiege', e)}
-                              disabled={isProcessingTransaction}
-                              className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 dropdown-trigger"
-                            >
-                              Envoyer au siège
-                            </button>
-                          )}
-
-                          {/* Transfert d'argent : vers le siège ou du siège,
-                              toujours en stock ; le mot suit l'opération. */}
-                          {actions.trancheTransfert && (
-                            <button
-                              onClick={(e) => handleActionClick(transaction.id, 'trancheTransfert', e)}
-                              disabled={isProcessingTransaction}
-                              className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:bg-brand-50 disabled:cursor-not-allowed disabled:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 dropdown-trigger"
-                            >
-                              {transaction.operation === 'retrait' ? 'Encaisser' : 'Envoyer au siège'}
-                            </button>
-                          )}
-
-                          {/* Refusée par le serveur, la saisie n'existe que
-                              sur cet appareil : on la retire de la liste,
-                              rien d'autre ne s'y applique (lot G3c). */}
-                          {transaction.envoi?.etat === REFUSEE && (
-                            <button
-                              type="button"
-                              onClick={() => retirerEnvoi(transaction.id)}
-                              data-testid="retirer-envoi"
-                              className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink transition-colors hover:border-danger hover:text-danger focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-                            >
-                              Retirer
-                            </button>
-                          )}
-
-                          {/* « Annuler » ferme la rangée, après les gestes
-                              qui font avancer la transaction : la défaire
-                              n'est pas une étape du flux normal. */}
-                          {actions.annuler !== false && (
-                          <button
-                            type="button"
-                            onClick={() => setASupprimer(transaction)}
-                            disabled={isProcessingTransaction}
-                            data-testid="supprimer-non-terminee"
-                            className="rounded border border-line bg-surface px-3 py-1 text-xs font-medium text-ink-muted transition-colors hover:border-danger hover:text-danger disabled:cursor-not-allowed disabled:hover:border-line disabled:hover:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-                          >
-                            Annuler
-                          </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
+                {/* La ligne qu'un remboursement règle, remontée UNE fois, et ses demandes dessous. */}
+                {lignesVisees.map((ligne) => (
+                  <Fragment key={`visee-${ligne.id}`}>
+                    {renderLigne({ seule: ligne })}
+                    {remboursementsParCible.get(ligne.id).map((demande) => (
+                      <LigneRemboursementAgent
+                        key={`remboursement-${demande.id}`}
+                        demande={demande}
+                        maintenant={maintenant}
+                        encaisseLeMs={encaisseApres(demande, ligne)}
+                        enCours={reponsesDemandes[demande.id] ?? null}
+                        onRepondre={repondreDemande}
+                      />
+                    ))}
+                  </Fragment>
+                ))}
+                {lignesAffichees.map(renderLigne)}
                 </>
               )}
               {/* SOUS UN FILTRE, LA LISTE DIT CE QU'ELLE CACHE. Une opération

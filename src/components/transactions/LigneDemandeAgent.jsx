@@ -15,10 +15,10 @@ import { getClientName, formatTransactionDateTime } from '../../utils/helpers.js
  *   — Rejeter : d'un geste, sans motif (règle 10 du contrat).
  *
  * Un REMBOURSEMENT (contrat v10 §11.3) n'en a que deux, Accepter et Rejeter :
- * l'agent a déjà dit combien et comment. Celui d'un crédit porte la marque
- * « Remboursement demandé par l’agent » et le reste de la ligne qu'il règle,
- * `cible` — qui reste à sa place dans le tableau, avec ses gestes. Partie
- * entre-temps, la demande le dit ; seul « Rejeter » aboutira.
+ * l'agent a déjà dit combien et comment. Celui d'un crédit se lit sous la
+ * ligne qu'il règle, remontée en tête (`LigneRemboursementAgent`, plus bas) ;
+ * il n'arrive ici que si cette ligne n'est plus dans les non terminées, et le
+ * dit : seul « Rejeter » aboutira.
  *
  * `enCours` : le geste qui part (`'nonTerminee' | 'valider' | 'rejeter' |
  * 'accepter'`), ou `null`. Tous se grisent ensemble : deux réponses à la même
@@ -37,7 +37,7 @@ const fcfa = (n) => (Number(n) || 0).toLocaleString('fr-FR')
 
 const heure = (ms) => new Date(ms).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 
-export default function LigneDemandeAgent({ demande, cible = null, styles, maintenant, dejaSaisieMs, enCours, onRepondre }) {
+export default function LigneDemandeAgent({ demande, styles, maintenant, dejaSaisieMs, enCours, onRepondre }) {
   const attente = attenteDe(demande, maintenant)
   const remboursement = demande.nature === 'remboursement'
   const gestes = demande.nature && demande.nature !== 'operation' ? GESTES_REMBOURSEMENT : GESTES_OPERATION
@@ -63,11 +63,7 @@ export default function LigneDemandeAgent({ demande, cible = null, styles, maint
           {remboursement ? 'Remboursement demandé par l’agent' : 'Demande de l’agent'}
         </div>
         {remboursement && (
-          <div className="mt-0.5 text-xs font-medium text-ink-muted tabular-nums">
-            {cible
-              ? `Reste : ${fcfa(cible.remainingAmount ?? cible.montant)} sur ${fcfa(cible.originalAmount ?? cible.montant)} FCFA`
-              : 'Cette ligne n’est plus en attente.'}
-          </div>
+          <div className="mt-0.5 text-xs font-medium text-ink-muted">Cette ligne n’est plus en attente.</div>
         )}
       </td>
       <td className="px-4 py-3 text-base">{demande.code || '-'}</td>
@@ -81,6 +77,64 @@ export default function LigneDemandeAgent({ demande, cible = null, styles, maint
       <td className="px-4 py-3 text-base">
         <div className="flex justify-center gap-2">
           {gestes.map(({ geste, libelle, classes }) => (
+            <button
+              key={geste}
+              type="button"
+              onClick={() => onRepondre(demande, geste)}
+              disabled={enCours != null}
+              aria-label={enCours === geste ? libelle : undefined}
+              className={`rounded border px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 disabled:cursor-not-allowed disabled:border-line disabled:bg-surface disabled:text-ink-muted ${classes}`}
+            >
+              {enCours === geste ? '…' : libelle}
+            </button>
+          ))}
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+/**
+ * Le remboursement demandé sur une ligne, juste sous elle (contrat v10
+ * §11.3) : la ligne visée remonte en tête UNE fois, avec ses gestes, et
+ * chaque demande en attente se lit dessous — une par mode, au plus deux.
+ * Rien n'est répété de la ligne : ni l'agent, ni le type, ni le code.
+ *
+ * `encaisseLeMs` : une tranche est passée sur la ligne après la demande
+ * (`encaisseApres`). Un signal, pas un blocage.
+ */
+export function LigneRemboursementAgent({ demande, maintenant, encaisseLeMs, enCours, onRepondre }) {
+  const attente = attenteDe(demande, maintenant)
+  return (
+    <tr className="border-b border-agent-line bg-agent-soft" data-testid={`remboursement-agent-${demande.id}`}>
+      <td className="relative border-l-4 border-l-agent px-4 pb-3 pt-7 text-base">
+        {attente && (
+          <span
+            className={`absolute left-3 top-1 z-10 inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[11px] font-bold leading-none tabular-nums shadow-sm ${
+              attente.enRetard ? 'border-warn bg-warn text-white' : 'border-line bg-surface text-ink-muted'
+            }`}
+          >
+            {attente.texte}
+          </span>
+        )}
+        {formatTransactionDateTime(demande)}
+      </td>
+      <td colSpan={3} className="px-4 py-3 text-base">
+        <div className="inline-flex items-center gap-1 text-xs font-bold text-agent">
+          <Smartphone className="h-3 w-3" aria-hidden="true" />
+          Remboursement demandé par l’agent
+        </div>
+        {encaisseLeMs != null && (
+          <div className="mt-0.5 text-xs font-semibold text-warn">Encaissé à {heure(encaisseLeMs)} ?</div>
+        )}
+      </td>
+      <td className="px-4 py-3 text-right text-base font-medium tabular-nums text-ink">
+        <span>{fcfa(demande.montant)} FCFA</span>
+        {demande.mode && <div className="mt-0.5 text-xs font-medium text-ink-muted">en {demande.mode}</div>}
+      </td>
+      <td className="px-4 py-3 text-base">
+        <div className="flex justify-center gap-2">
+          {GESTES_REMBOURSEMENT.map(({ geste, libelle, classes }) => (
             <button
               key={geste}
               type="button"

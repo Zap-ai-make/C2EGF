@@ -5,9 +5,10 @@ import { render, screen, fireEvent, within, waitFor } from '@testing-library/rea
  * TC-422 — La caissière voit le remboursement que l'agent a lancé depuis
  * l'app, et y répond (contrat demande-operation v10 §11.3).
  *
- * Un remboursement remonte en tête avec la marque « Remboursement demandé par
- * l’agent », le montant, le mode, et le reste de la ligne visée ; deux gestes,
- * Accepter et Rejeter. La ligne visée reste à sa place, avec les siens.
+ * LA LIGNE VISÉE REMONTE ELLE-MÊME, une seule fois, avec ses gestes (§11.3 :
+ * « Encaisser » et « Modifier » restent possibles) ; juste sous elle, chaque
+ * remboursement demandé : la marque, le montant, le mode, Accepter et Rejeter.
+ * Pas de doublon de la ligne (demandé par l'utilisateur le 2026-11-27).
  */
 
 let contextValue
@@ -35,7 +36,7 @@ vi.mock('../../src/services/demandesAgentService.js', () => ({
 }))
 
 import TransactionTable from '../../src/components/transactions/TransactionTable.jsx'
-import { ligneDeDemande } from '../../src/utils/demandesAgent.js'
+import { encaisseApres, ligneDeDemande } from '../../src/utils/demandesAgent.js'
 import { getAvailableActions, getTransactionStyles } from '../../src/utils/helpers.js'
 
 // La page sépare les milliers par une espace fine insécable ; Testing Library
@@ -69,6 +70,9 @@ const contexte = (pendingTransactions) => ({
 
 const rangee = (id) => screen.getByTestId(`demande-agent-${id}`)
 const boutons = (id) => within(rangee(id)).getAllByRole('button').map((b) => b.textContent)
+const sousLigne = (id) => screen.getByTestId(`remboursement-agent-${id}`)
+const gestesSousLigne = (id) => within(sousLigne(id)).getAllByRole('button').map((b) => b.textContent)
+const rangeesDuCorps = () => [...document.querySelectorAll('tbody tr')]
 
 beforeEach(() => {
   contextValue = contexte([CREDIT])
@@ -79,27 +83,50 @@ beforeEach(() => {
 })
 
 describe('TC-422 — le remboursement demandé par l’agent', () => {
-  it('[TC-422-01] en tête : la marque, le montant, le mode et le reste de la ligne visée ; Accepter et Rejeter seulement', () => {
+  it('[TC-422-01] la ligne visée remonte en tête, une seule fois, et la demande se lit juste dessous', () => {
+    contextValue = contexte([{ ...CREDIT, id: 'autre', clientId: 'c9', client: { nom: 'SANOU', prenom: 'Issa' } }, CREDIT])
     render(<TransactionTable />)
-    const r = rangee('d1')
-    expect(within(r).getByText('Remboursement demandé par l’agent')).toBeInTheDocument()
-    expect(within(r).getByText(`${fcfa(5000)} FCFA`)).toBeInTheDocument()
-    expect(within(r).getByText('en Cash')).toBeInTheDocument()
-    expect(within(r).getByText(`Reste : ${fcfa(60_000)} sur ${fcfa(100_000)} FCFA`)).toBeInTheDocument()
-    expect(boutons('d1')).toEqual(['Accepter', 'Rejeter'])
-    // La ligne visée reste à sa place, avec ses gestes.
-    expect(screen.getAllByRole('button', { name: 'Encaisser' })).toHaveLength(1)
+    const [premiere, seconde] = rangeesDuCorps()
+    expect(within(premiere).getByText(/KABORE/)).toBeInTheDocument()
+    expect(within(premiere).getByText(`Reste : ${fcfa(60_000)} FCFA`)).toBeInTheDocument()
+    expect(seconde).toBe(sousLigne('d1'))
+
+    const sous = sousLigne('d1')
+    expect(within(sous).getByText('Remboursement demandé par l’agent')).toBeInTheDocument()
+    expect(within(sous).getByText(`${fcfa(5000)} FCFA`)).toBeInTheDocument()
+    expect(within(sous).getByText('en Cash')).toBeInTheDocument()
+    expect(gestesSousLigne('d1')).toEqual(['Accepter', 'Rejeter'])
+
+    // Aucun doublon : la ligne n'apparaît qu'une fois, avec ses gestes à elle.
+    expect(screen.getAllByText(/KABORE/)).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Encaisser' })).toHaveLength(2)
+    expect(screen.queryByTestId('demande-agent-d1')).toBeNull()
+  })
+
+  it('[TC-422-01b] deux remboursements sur la même ligne : la ligne une fois, une demande sous elle par mode', () => {
+    demandesMock = [demande('d1'), demande('d2', { mode: 'Orange Money', montant: 7000 })]
+    render(<TransactionTable />)
+    expect(screen.getAllByText(/KABORE/)).toHaveLength(1)
+    expect(within(sousLigne('d1')).getByText('en Cash')).toBeInTheDocument()
+    expect(within(sousLigne('d2')).getByText('en Orange Money')).toBeInTheDocument()
+  })
+
+  it('[TC-422-01c] sous un filtre, la ligne visée reste en tête, et n’est pas comptée parmi les cachées', () => {
+    contextValue = contexte([CREDIT, { ...CREDIT, id: 'r-1', type: 'Retrait', clientId: 'c9', client: { nom: 'SANOU', prenom: 'Issa' }, paidAmount: undefined, remainingAmount: undefined, settlementStatus: undefined }])
+    render(<TransactionTable />)
+    fireEvent.click(screen.getByTestId('case-retraits-non-terminees'))
+    expect(screen.getByText(/KABORE/)).toBeInTheDocument()
+    expect(sousLigne('d1')).toBeInTheDocument()
+    expect(screen.queryByTestId('lignes-cachees')).toBeNull()
   })
 
   it('[TC-422-02] « Accepter » règle par le serveur ; « Rejeter » rejette', async () => {
+    demandesMock = [demande('d1'), demande('d2', { mode: 'Orange Money' })]
     render(<TransactionTable />)
-    fireEvent.click(within(rangee('d1')).getByRole('button', { name: 'Accepter' }))
+    fireEvent.click(within(sousLigne('d1')).getByRole('button', { name: 'Accepter' }))
     await waitFor(() => expect(accepterRemboursement).toHaveBeenCalledWith('d1'))
     expect(accepter).not.toHaveBeenCalled()
-
-    demandesMock = [demande('d2')]
-    render(<TransactionTable />)
-    fireEvent.click(within(rangee('d2')).getByRole('button', { name: 'Rejeter' }))
+    fireEvent.click(within(sousLigne('d2')).getByRole('button', { name: 'Rejeter' }))
     await waitFor(() => expect(rejeter).toHaveBeenCalledWith('d2'))
   })
 
@@ -125,6 +152,24 @@ describe('TC-422 — le remboursement demandé par l’agent', () => {
     render(<TransactionTable />)
     expect(boutons('o1')).toEqual(['Non terminée', 'Valider', 'Rejeter'])
     expect(within(rangee('o1')).queryByText(/^en /)).toBeNull()
+  })
+
+  it('[TC-422-07] la ligne a reçu une tranche après la demande : « Encaissé à … ? », un signal, pas un blocage', () => {
+    const tranche = (heure, minute) => ({ montant: 5000, mode: 'Cash', le: new Date(2026, 10, 26, heure, minute) })
+    contextValue = contexte([{ ...CREDIT, reglements: [tranche(9, 0), tranche(10, 20)] }])
+    render(<TransactionTable />)
+    expect(within(sousLigne('d1')).getByText('Encaissé à 10:20 ?')).toBeInTheDocument()
+    expect(gestesSousLigne('d1')).toEqual(['Accepter', 'Rejeter'])
+  })
+
+  it('[TC-422-08] encaisseApres : la première tranche venue après la demande, sinon rien', () => {
+    const d = demande('d1')
+    const le = (heure) => new Date(2026, 10, 26, heure, 0)
+    expect(encaisseApres(d, { reglements: [{ le: le(9) }] })).toBeNull()
+    expect(encaisseApres(d, { reglements: [{ le: le(9) }, { le: le(11) }, { le: le(12) }] })).toBe(le(11).getTime())
+    expect(encaisseApres(d, { reglements: [{ le: { toMillis: () => le(11).getTime() } }] })).toBe(le(11).getTime())
+    expect(encaisseApres(d, {})).toBeNull()
+    expect(encaisseApres(d, null)).toBeNull()
   })
 
   it('[TC-422-06] une demande d’avant ce champ est une opération', () => {

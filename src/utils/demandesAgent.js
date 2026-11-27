@@ -64,6 +64,35 @@ export function ligneDeDemande(id, donnees) {
   }
 }
 
+/** Un instant en ms, quelle que soit sa forme (Timestamp, Date, nombre) ; `null` sinon. */
+const enMs = (valeur) => {
+  if (valeur == null) return null
+  if (typeof valeur.toMillis === 'function') return valeur.toMillis()
+  const date = valeur instanceof Date ? valeur : new Date(valeur)
+  return Number.isNaN(date.getTime()) ? null : date.getTime()
+}
+
+/**
+ * La ligne visée par un remboursement a-t-elle reçu une tranche APRÈS la
+ * demande ? La caissière a peut-être encaissé au comptoir l'argent que l'agent
+ * déclare aussi depuis l'app : l'accepter le compterait deux fois. Le reste
+ * revérifié au serveur ne l'arrête pas tant qu'il suffit.
+ *
+ * Rend l'instant de la première de ces tranches, ou `null`. Un signal, jamais
+ * un blocage, comme `dejaSaisie`.
+ *
+ * @returns {number|null}
+ */
+export function encaisseApres(demande, cible) {
+  const depart = instantDeDepart(demande)
+  if (depart === null || !Array.isArray(cible?.reglements)) return null
+  for (const tranche of cible.reglements) {
+    const le = enMs(tranche?.le)
+    if (le !== null && le >= depart) return le
+  }
+  return null
+}
+
 /** La plus ancienne d'abord : c'est l'agent qui attend depuis le plus longtemps. */
 export const trierDemandes = (lignes) =>
   [...lignes].sort((a, b) => (instantDeDepart(a) ?? 0) - (instantDeDepart(b) ?? 0))

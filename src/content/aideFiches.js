@@ -194,7 +194,7 @@ export const FICHES = Object.freeze([
       'Plusieurs opérations du même client et du même type se replient sur une seule ligne, avec leur **total**. Le bouton « Voir les … » les déplie, {{Masquer}} les replie.',
       "Une opération réglée en partie montre ce qu'il reste à payer.",
       'Une ligne violette **Demande de l’agent** vient de l’app Oxygen : {{Valider}}, {{Non terminée}} ou {{Rejeter}}.',
-      '**Remboursement demandé par l’agent** : l’agent rembourse son crédit depuis l’app. {{Accepter}} quand l’argent est reçu (en Orange Money, une fois l’UV arrivée), sinon {{Rejeter}}.',
+      '**Remboursement demandé par l’agent** : l’agent rembourse son crédit depuis l’app. Sa ligne remonte en tête, la demande juste dessous. {{Accepter}} quand l’argent est reçu (en Orange Money, une fois l’UV arrivée), sinon {{Rejeter}}. Un avertissement orange sous la demande : cet argent a peut-être déjà été reçu au comptoir, ne le comptez pas deux fois.',
     ],
   },
   {
