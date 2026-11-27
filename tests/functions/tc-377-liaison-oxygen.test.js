@@ -469,7 +469,7 @@ describe('TC-377 — lireActivite', () => {
     expect(parId.get('rs-attente')).toMatchObject({ type: 'Remb. siège', mode: 'Cash', statut: 'Validée' })
     expect(parId.get('rs-annule')).toMatchObject({ statut: 'Supprimée', deletedAt: T0 + 3 * H })
     for (const l of parId.values()) {
-      for (const cle of ['reste', 'validatedAt', 'envoyeAuSiege', 'resteAuSiege', 'envoisSiege', 'operatorName', 'paidAmount', 'settlementStatus']) {
+      for (const cle of ['reste', 'validatedAt', 'envoyeAuSiege', 'resteAuSiege', 'envoisSiege', 'operatorName', 'paidAmount', 'settlementStatus', 'typePlie']) {
         expect(l, `${l.id} : ${cle}`).not.toHaveProperty(cle)
       }
     }

@@ -27,7 +27,7 @@
  *   l'activité se lit par pages de 50 (docs/rester-dans-le-quota-gratuit.md).
  */
 
-import { ligneDeDocument } from '../clients/historiqueClient.js'
+import { enMillisecondes, ligneDeDocument } from '../clients/historiqueClient.js'
 import { SIEGE_REPAYMENT_ENABLED, STORE_NETWORKS } from '../config/storeProfile.js'
 import { dealerDe, flotteDe } from '../boutiques/numeros.js'
 import { estRembSiege } from '../storeTransactions/rembSiege.js'
@@ -444,7 +444,6 @@ function rembSiegeRendu(ligne, donnees) {
     storeId: ligne.storeId,
     storeName: ligne.storeName,
     type: ligne.type,
-    typePlie: ligne.typePlie,
     montant: ligne.montant,
     mode: modeDeReserve(donnees.balanceType),
     statut: annule ? 'Supprimée' : 'Validée',
@@ -766,7 +765,9 @@ async function rembourser(corps, { db, Timestamp, maintenant, oxygen }) {
     const periodes = (await t.get(db.collection(COLLECTION_LIAISONS)
       .where('compteOxygen', '==', ids.compteOxygen)
       .where('clientId', '==', liaison.clientId))).docs.map((d) => d.data())
-    if (!dansLesPeriodes(enMs(ligne.createdAt), periodes)) return refus('operation_inconnue')
+    // La date lue comme `lireActivite` la lit (`ligneDeDocument`), chaînes comprises :
+    // une ligne que l'agent voit, il peut la rembourser.
+    if (!dansLesPeriodes(enMillisecondes(ligne.createdAt), periodes)) return refus('operation_inconnue')
     if (!estCreditDeLAgent(ligne)) return refus('pas_un_credit')
 
     // Une seule égalité : l'index automatique suffit, `etat` se filtre ici.

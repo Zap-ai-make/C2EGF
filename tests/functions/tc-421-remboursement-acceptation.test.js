@@ -143,3 +143,52 @@ describe('TC-421 — une demande d’opération reste ce qu’elle était', () =
     expect((await refus(accepter('o1')))?.message).toBe('Statut initial non autorisé.')
   })
 })
+
+describe('TC-421 — compléments de la relecture', () => {
+  const sansCles = (objet, cles) => Object.fromEntries(Object.entries(objet).filter(([cle]) => !cles.includes(cle)))
+
+  it('[TC-421-08] accepter fait exactement ce que fait « Encaisser » : même ligne, même règlement, mêmes soldes', async () => {
+    await db.doc(`clients/${STORE}/drafts/op-2`).set(credit())
+    await db.doc(`clients/${STORE}/demandesAgent/r8`).set(demande({ cibleId: 'op-2' }))
+    const avant = await soldes()
+    await encaisser(5000, 'k-8')
+    const apresEncaisser = await soldes()
+    await accepter('r8')
+    const apresAccepter = await soldes()
+    expect(apresAccepter.liquidite - apresEncaisser.liquidite).toBe(apresEncaisser.liquidite - avant.liquidite)
+    expect(apresAccepter.stock).toBe(apresEncaisser.stock)
+
+    const ligneA = await lire('drafts/op-1')
+    const ligneB = await lire('drafts/op-2')
+    const sansHeures = (ligne) => ({ ...sansCles(ligne, ['settlementUpdatedAt']), reglements: ligne.reglements.map(({ montant, mode }) => ({ montant, mode })) })
+    expect(sansHeures(ligneB)).toEqual(sansHeures(ligneA))
+
+    const [reglementA] = (await db.collection(`clients/${STORE}/drafts/op-1/settlements`).get()).docs.map((d) => d.data())
+    const [reglementB] = (await db.collection(`clients/${STORE}/drafts/op-2/settlements`).get()).docs.map((d) => d.data())
+    const identite = ['settlementId', 'draftId', 'idempotencyKey', 'createdAt']
+    expect(sansCles(reglementB, identite)).toEqual(sansCles(reglementA, identite))
+  })
+
+  it('[TC-421-09] la ligne réglée en entier ne prend pas la place d’une autre ligne d’historique', async () => {
+    await db.doc(`clients/${STORE}/history/op-1`).set({ type: 'Retrait', montant: 1, statut: 'Validée' })
+    const erreur = await refus(accepter('r2'))
+    expect(erreur?.code).toBe('IDEMPOTENCY_CONFLICT')
+    expect((await lire('demandesAgent/r2')).etat).toBe('en_attente')
+    expect(await soldes()).toEqual({ stock: 100_000, liquidite: 50_000 })
+  })
+
+  it('[TC-421-10] un remboursement que l’agent a annulé ne s’accepte plus', async () => {
+    await db.doc(`clients/${STORE}/demandesAgent/r1`).update({ etat: 'annulee_agent' })
+    const erreur = await refus(accepter('r1'))
+    expect(erreur?.code).toBe('DEMANDE_CLOSE')
+    expect(erreur.message).toBe('L’agent a annulé cette demande.')
+    expect((await lire('drafts/op-1')).paidAmount).toBeUndefined()
+  })
+
+  it('[TC-421-11] un remboursement siège dont la fiche n’a aucun code se refuse, comme une demande d’opération', async () => {
+    await db.doc('globalClients/c3').set({ nom: 'SANS', prenom: 'Code' })
+    await db.doc(`clients/${STORE}/demandesAgent/s3`).set(demande({ nature: 'remb_siege', cibleId: null, clientId: 'c3', mode: 'Cash' }))
+    expect((await refus(accepter('s3')))?.message).toBe('La fiche de cet agent n’a pas de code Orange.')
+    expect((await lire('demandesAgent/s3')).etat).toBe('en_attente')
+  })
+})

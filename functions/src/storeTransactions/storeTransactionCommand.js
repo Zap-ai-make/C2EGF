@@ -520,10 +520,14 @@ async function accepterRembSiege(t, { db, storeId, store, uid, profile, demande,
   const ref = db.doc(`clients/${storeId}/drafts/${demandeId}`)
   if ((await t.get(ref)).exists) fail('IDEMPOTENCY_CONFLICT', 'Ce numéro de transaction est déjà pris par une autre ligne.')
 
+  // Comme une demande d'opération : sans code, la ligne partirait au siège sans
+  // ce qui identifie l'agent. La caissière lit pourquoi, et rejette.
+  const code = codeReseauDeFiche(fiche, STORE_NETWORKS[0])
+  if (!code) fail('STORE_TRANSACTION_INVALID', `La fiche de cet agent n’a pas de code ${STORE_NETWORKS[0]}.`)
   const remb = cleanRembSiege({
     client: clientDeFiche(demande.clientId, fiche),
     clientId: demande.clientId,
-    code: codeReseauDeFiche(fiche, STORE_NETWORKS[0]),
+    code,
     montant: demande.montant,
     balanceType: reserveDuMode(demande.mode),
     statut: 'Non Terminées',

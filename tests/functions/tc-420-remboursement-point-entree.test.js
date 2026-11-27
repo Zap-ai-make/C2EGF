@@ -175,3 +175,15 @@ describe('TC-420 — les actions communes', () => {
     expect((await appel({ action: 'rembourser', ...commun, boutiqueId: 'b1', operationId: 'op-1', montant: 1, mode: 'Cash', saisieLe: T0, cle: 'x' }, ferme)).statut).toBe(400)
   })
 })
+
+describe('TC-420 — compléments de la relecture', () => {
+  it('[TC-420-08] rembourserSiege sur une liaison fermée : refusé', async () => {
+    await db.doc('liaisonsOxygen/L1').update({ finLe: Timestamp.fromMillis(T0 - 10) })
+    expect((await rembourserSiege()).corps).toEqual({ ok: false, raison: 'liaison_fermee' })
+  })
+
+  it('[TC-420-09] une ligne datée en texte se lit comme lireActivite la lit', async () => {
+    await db.doc('clients/b1/drafts/op-texte').set(ligne({ createdAt: new Date(T0 - 500).toISOString() }))
+    expect((await rembourser({ operationId: 'op-texte' })).corps.ok).toBe(true)
+  })
+})

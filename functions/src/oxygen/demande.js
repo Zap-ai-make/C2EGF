@@ -11,6 +11,8 @@
  */
 
 import { champsAgentFiche, enMs } from './liaison.js'
+import { STORE_NETWORKS, STORE_PAYMENT_METHODS } from '../config/storeProfile.js'
+import { mapPaymentMethodToNetwork } from '../settlements/financialUtils.js'
 
 /** Une collection par boutique : `clients/{boutiqueId}/demandesAgent/{cle}`. */
 export const COLLECTION_DEMANDES = 'demandesAgent'
@@ -36,15 +38,24 @@ export const NATURES_DEMANDE = Object.freeze({
   REMB_SIEGE: 'remb_siege',
 })
 
-/** Les modes d'un remboursement : les méthodes de règlement de la caisse. */
-export const MODES_REMBOURSEMENT = Object.freeze(['Orange Money', 'Cash'])
+/**
+ * Les modes d'un remboursement : les méthodes de règlement du profil, celles
+ * que l'acceptation passe à « Encaisser ». Une liste à part finirait par
+ * accepter des demandes que l'acceptation refuserait.
+ */
+export const MODES_REMBOURSEMENT = Object.freeze([...STORE_PAYMENT_METHODS])
 
-/** La réserve où entre un remboursement siège : l'UV en stock, les espèces en liquidité. */
-export const reserveDuMode = (mode) => (mode === 'Orange Money' ? 'stock' : 'liquidite')
+/** La réserve où entre un remboursement siège : les espèces en liquidité, le reste en stock. */
+export const reserveDuMode = (mode) => (mapPaymentMethodToNetwork(mode) === 'Liquidite' ? 'liquidite' : 'stock')
 
-/** Et l'inverse, pour rendre à l'agent le mode d'un « Remb. siège » (§11.4). */
-export const modeDeReserve = (balanceType) =>
-  ({ stock: 'Orange Money', liquidite: 'Cash' })[balanceType] ?? null
+/**
+ * Et l'inverse, pour rendre à l'agent le mode d'un « Remb. siège » (§11.4) :
+ * le stock est celui du premier réseau, où la ligne est rangée.
+ */
+export const modeDeReserve = (balanceType) => {
+  const cible = { stock: STORE_NETWORKS[0], liquidite: 'Liquidite' }[balanceType]
+  return cible ? (STORE_PAYMENT_METHODS.find((mode) => mapPaymentMethodToNetwork(mode) === cible) ?? null) : null
+}
 
 /**
  * Ce que l'agent peut encore rembourser sur une ligne : le reste, moins

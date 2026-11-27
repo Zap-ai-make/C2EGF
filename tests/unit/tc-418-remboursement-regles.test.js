@@ -7,6 +7,7 @@ import {
   plafondRemboursement,
   reserveDuMode,
 } from '../../functions/src/oxygen/demande.js'
+import { STORE_PAYMENT_METHODS } from '../../functions/src/config/storeProfile.js'
 
 /**
  * TC-418 — Le remboursement depuis l'app Oxygen : les règles pures
@@ -22,6 +23,10 @@ describe('TC-418 — le plafond', () => {
 })
 
 describe('TC-418 — le mode et la réserve', () => {
+  it('[TC-418-02b] les modes sont les méthodes de règlement du profil, pas une liste à part', () => {
+    expect(MODES_REMBOURSEMENT).toEqual(STORE_PAYMENT_METHODS)
+  })
+
   it('[TC-418-02] Orange Money ↔ stock, Cash ↔ liquidité', () => {
     expect(MODES_REMBOURSEMENT).toEqual(['Orange Money', 'Cash'])
     expect(reserveDuMode('Orange Money')).toBe('stock')

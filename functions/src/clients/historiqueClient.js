@@ -47,7 +47,7 @@ export function montantRestant(ligne) {
 }
 
 /** Un Timestamp Firestore, une Date ou une chaîne, ramenés en millisecondes. */
-const enMillisecondes = (brut) => {
+export const enMillisecondes = (brut) => {
   if (!brut) return 0
   if (typeof brut.toMillis === 'function') return brut.toMillis()
   const date = brut instanceof Date ? brut : new Date(brut)
